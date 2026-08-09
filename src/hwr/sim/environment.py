@@ -25,7 +25,13 @@ from hwr.sim.geometry import (
     wrap_angle,
 )
 from hwr.sim.specs import HouseholdTaskSpec, RobotSpec, ZoneSpec
-from hwr.sim.state import SimObjectState, SimRobotState
+from hwr.sim.state import (
+    ObjectSnapshot,
+    RobotSnapshot,
+    SimObjectState,
+    SimRobotState,
+    SimulationSnapshot,
+)
 
 
 class Household2DEnv:
@@ -91,6 +97,52 @@ class Household2DEnv:
     def observe(self) -> ObservationFrame:
         self._require_state()
         return self._observation()
+
+    def snapshot(self) -> SimulationSnapshot:
+        """Return an immutable copy of state for diagnostics and rendering."""
+        robot = self._require_state()
+        end_effector_x, end_effector_y = self._world_end_effector()
+        placed_count = sum(item.placed for item in self.objects.values())
+        stage = (
+            "complete"
+            if placed_count == len(self.objects)
+            else "deliver"
+            if robot.carrying_object_id is not None
+            else "acquire"
+        )
+        robot_snapshot = RobotSnapshot(
+            x=robot.x,
+            y=robot.y,
+            heading=robot.heading,
+            arm_x=robot.arm_x,
+            arm_y=robot.arm_y,
+            end_effector_x=end_effector_x,
+            end_effector_y=end_effector_y,
+            gripper=robot.gripper,
+            carrying_object_id=robot.carrying_object_id,
+        )
+        object_snapshots = tuple(
+            ObjectSnapshot(
+                object_id=item.object_id,
+                label=item.label,
+                x=item.x,
+                y=item.y,
+                radius=item.radius,
+                target_zone_id=item.target_zone_id,
+                placed=item.placed,
+            )
+            for item in self.objects.values()
+        )
+        return SimulationSnapshot(
+            sequence_id=self._sequence,
+            timestamp_ns=self.clock.now_ns(),
+            task_stage=stage,
+            steps=self._steps,
+            collisions=self._collisions,
+            grasps=self._grasp_count,
+            robot=robot_snapshot,
+            objects=object_snapshots,
+        )
 
     def apply(self, action: ActionFrame) -> StepOutcome:
         robot = self._require_state()

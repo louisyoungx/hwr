@@ -20,7 +20,7 @@
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python3 -m pip install -e ".[dev]"
+python3 -m pip install -e ".[dev,video]"
 
 python3 scripts/check_python_size.py
 python3 -m pytest
@@ -38,6 +38,12 @@ hwr-train-scenario tidy_table/v1 \
   --aggregation-episodes 20
 ```
 
+复现三个已训练基准的闭环动作，并输出并排视频（需要系统安装 `ffmpeg`）：
+
+```bash
+hwr-render-benchmarks --output-path artifacts/benchmark-rollouts.mp4
+```
+
 ## 文档
 
 - [平台架构与模块边界](docs/architecture.md)
@@ -48,4 +54,3 @@ hwr-train-scenario tidy_table/v1 \
 ## 当前边界
 
 当前拟真后端是连续二维运动与接触近似，目的是先验证平台抽象、数据闭环和多场景训练，而不是替代三维刚体物理。具体机械臂和硬件尚未选型。下一阶段应在保持核心协议不变的前提下，增加三维 `SimBackend` 适配器、视觉观测和真实硬件系统辨识。
-

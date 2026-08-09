@@ -6,5 +6,6 @@ __pycache__/
 datasets/
 models/
 runs/
+artifacts/
 
 .DS_Store

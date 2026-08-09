@@ -10,15 +10,18 @@ from hwr.sim.specs import (
     SceneSpec,
     ZoneSpec,
 )
+from hwr.sim.state import ObjectSnapshot, RobotSnapshot, SimulationSnapshot
 
 __all__ = [
     "Bounds",
     "Household2DEnv",
     "HouseholdTaskSpec",
     "ObjectSpec",
+    "ObjectSnapshot",
     "ObstacleSpec",
     "RobotSpec",
+    "RobotSnapshot",
     "SceneSpec",
+    "SimulationSnapshot",
     "ZoneSpec",
 ]
-

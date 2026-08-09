@@ -24,6 +24,17 @@ python3 scripts/verify_benchmarks.py
 
 每个模型均独立生成数据、训练和登记，没有把规则专家用于最终评测动作。规则专家只用于初始示范和策略访问状态的纠正标签。
 
+## 视频复现
+
+以下命令读取三个受版本管理的基准报告，加载报告中登记的真实模型检查点，以每个场景的首个隔离评测种子重新运行闭环推理，并生成同步并排视频：
+
+```bash
+PYTHONPATH=src python3 -m hwr.apps.render_benchmarks \
+  --output-path artifacts/benchmark-rollouts.mp4
+```
+
+视频元数据写入同名 `.json`，包含模型版本、种子、闭环结果和视频校验和。渲染只读取不可变仿真快照，不参与策略输入、动作过滤或成功判定。需要 Python `Pillow` 和系统 `ffmpeg`。
+
 ## 可复现训练命令
 
 ```bash
@@ -50,4 +61,3 @@ PYTHONPATH=src python3 -m hwr.apps.train_scenario clear_dishes/v1 \
 ```
 
 数据、模型和运行时产物分别写入 `datasets/`、`models/` 和 `runs/`，这些大文件不提交 Git；可审计的小型结果报告保存在 `benchmarks/results/`。
-
