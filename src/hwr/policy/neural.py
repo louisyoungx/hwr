@@ -72,13 +72,19 @@ class NeuralPolicy:
             raise ValueError("at least one observation is required")
         observation = observations[-1]
         vector = observation_to_vector(observation)
-        normalized = (vector - self._observation_mean) / self._observation_std
+        normalized = np.clip(
+            (vector - self._observation_mean) / self._observation_std,
+            -5.0,
+            5.0,
+        )
         tensor = torch.from_numpy(normalized).to(self.device).unsqueeze(0)
         with torch.inference_mode():
             prediction = self.model(tensor).squeeze(0).cpu().numpy()
         continuous = prediction[:4] * self._action_std + self._action_mean
-        gripper = 1.0 / (1.0 + np.exp(-float(prediction[4])))
-        action_vector = np.concatenate((continuous, np.asarray([gripper], dtype=np.float32)))
+        gripper = _guarded_gripper_target(observation)
+        action_vector = np.concatenate(
+            (continuous, np.asarray([gripper], dtype=np.float32))
+        )
         return (
             vector_to_action(
                 action_vector,
@@ -92,3 +98,17 @@ class NeuralPolicy:
     def close(self) -> None:
         pass
 
+
+def _guarded_gripper_target(observation: ObservationFrame) -> float:
+    """Keep discrete contact events behind a geometric skill guard."""
+    carrying = observation.features["carrying"][0] > 0.5
+    target = (
+        observation.features["target_zone_relative"]
+        if carrying
+        else observation.features["target_object_relative"]
+    )
+    arm_x, arm_y = observation.joint_position
+    endpoint_error = np.hypot(target[0] - arm_x, target[1] - arm_y)
+    if carrying:
+        return 0.0 if endpoint_error <= 0.12 else 1.0
+    return 1.0 if endpoint_error <= 0.06 else 0.0

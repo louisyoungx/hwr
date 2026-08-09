@@ -58,10 +58,10 @@ def _select_device(requested: str) -> str:
 
 def _normalization(observations: np.ndarray, actions: np.ndarray) -> Normalization:
     observation_mean = observations.mean(axis=0)
-    observation_std = np.maximum(observations.std(axis=0), 1e-6)
+    observation_std = np.maximum(observations.std(axis=0), 0.05)
     continuous_actions = actions[:, :4]
     action_mean = continuous_actions.mean(axis=0)
-    action_std = np.maximum(continuous_actions.std(axis=0), 1e-6)
+    action_std = np.maximum(continuous_actions.std(axis=0), 0.05)
     return Normalization(
         observation_mean=tuple(float(value) for value in observation_mean),
         observation_std=tuple(float(value) for value in observation_std),
