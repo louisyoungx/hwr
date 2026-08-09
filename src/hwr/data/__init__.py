@@ -13,6 +13,7 @@ from hwr.data.visual import (
     formal_action_vector,
     verify_visual_dataset,
 )
+from hwr.data.visual_generation import generate_visual_expert_dataset
 
 __all__ = [
     "BehaviorDataset",
@@ -26,5 +27,6 @@ __all__ = [
     "extract_formal_policy_input",
     "formal_action_vector",
     "generate_expert_dataset",
+    "generate_visual_expert_dataset",
     "verify_visual_dataset",
 ]

@@ -25,6 +25,7 @@ hwr-render-benchmarks = "hwr.apps.render_benchmarks:main"
 hwr-render-3d-smoke = "hwr.apps.render_3d_smoke:main"
 hwr-render-formal-scenes = "hwr.apps.render_formal_scenes:main"
 hwr-verify-contact-grasp = "hwr.apps.verify_contact_grasp:main"
+hwr-collect-formal-demos = "hwr.apps.collect_formal_demos:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
