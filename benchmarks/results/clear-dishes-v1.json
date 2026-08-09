@@ -1,0 +1,58 @@
+{
+  "artifacts": {
+    "dataset_path": "datasets/clear-dishes-v1-mps-aggregation-3",
+    "model_path": "models/clear_dishes_v1/clear-dishes-v1-mps"
+  },
+  "dataset": {
+    "checksum": "3d716dd40a5a8de5803b9abaef6daf4a16f1fa30cac85892c49b9b8c50e49385",
+    "dataset_id": "clear-dishes-v1-mps-aggregation-3",
+    "episodes": 155,
+    "samples": 60267
+  },
+  "elapsed_seconds": 48.75205175000883,
+  "evaluation": {
+    "average_collisions": 0.0,
+    "average_steps": 339.95,
+    "episode_count": 20,
+    "reasons": {
+      "completed": 20
+    },
+    "success_count": 20,
+    "success_rate": 1.0,
+    "task_id": "clear_dishes/v1"
+  },
+  "run_id": "clear-dishes-v1-mps",
+  "scene_id": "clear_dishes_room/v1",
+  "schema_version": "hwr.training-run/v1",
+  "task_id": "clear_dishes/v1",
+  "training": {
+    "aggregation": [
+      {
+        "best_validation_loss": 0.011377535603950027,
+        "dataset_id": "clear-dishes-v1-mps-aggregation-1",
+        "episodes": 105,
+        "round": 1,
+        "samples": 42791
+      },
+      {
+        "best_validation_loss": 0.013392573794558982,
+        "dataset_id": "clear-dishes-v1-mps-aggregation-2",
+        "episodes": 130,
+        "round": 2,
+        "samples": 51616
+      },
+      {
+        "best_validation_loss": 0.01660065324294797,
+        "dataset_id": "clear-dishes-v1-mps-aggregation-3",
+        "episodes": 155,
+        "round": 3,
+        "samples": 60267
+      }
+    ],
+    "best_validation_loss": 0.01660065324294797,
+    "device": "mps",
+    "epochs": 50,
+    "first_train_loss": 0.1847690819231129,
+    "last_train_loss": 0.020452470340991753
+  }
+}
