@@ -93,18 +93,27 @@ class MujocoHouseholdBackend(Mujoco3DBackend):
             object_id: GraspContactMonitor(self.model, object_geom=value.collision_geom)
             for object_id, value in binding.objects.items()
         }
+        self._drawer_contact_monitor = (
+            GraspContactMonitor(self.model, object_geom=binding.articulation.handle_geom)
+            if binding.articulation is not None
+            else None
+        )
         self._episode_seed = 0
         self._randomization: dict[str, Any] = {}
         self._severe_collision_count = 0
         self._maximum_forbidden_force = 0.0
+        self._maximum_forbidden_pair: tuple[str, str] | None = None
         self._bilateral_contact_steps = {object_id: 0 for object_id in binding.objects}
+        self._drawer_bilateral_contact_steps = 0
 
     def reset(self, *, seed: int, task_id: str) -> ObservationFrame:
         self._episode_seed = seed
         self._placement.reset()
         self._severe_collision_count = 0
         self._maximum_forbidden_force = 0.0
+        self._maximum_forbidden_pair = None
         self._bilateral_contact_steps = {object_id: 0 for object_id in self.binding.objects}
+        self._drawer_bilateral_contact_steps = 0
         self._prepare_model_randomization(seed)
         return super().reset(seed=seed, task_id=task_id)
 
@@ -244,6 +253,10 @@ class MujocoHouseholdBackend(Mujoco3DBackend):
     def _after_physics_substep(self) -> None:
         for object_id, monitor in self._contact_monitors.items():
             self._bilateral_contact_steps[object_id] += int(monitor.sample(self.data).bilateral)
+        if self._drawer_contact_monitor is not None:
+            self._drawer_bilateral_contact_steps += int(
+                self._drawer_contact_monitor.sample(self.data).bilateral
+            )
         for contact_index in range(self.data.ncon):
             contact = self.data.contact[contact_index]
             pair = (int(contact.geom1), int(contact.geom2))
@@ -257,7 +270,13 @@ class MujocoHouseholdBackend(Mujoco3DBackend):
             force = np.zeros(6, dtype=np.float64)
             mujoco.mj_contactForce(self.model, self.data, contact_index, force)
             normal_force = abs(float(force[0]))
-            self._maximum_forbidden_force = max(self._maximum_forbidden_force, normal_force)
+            if normal_force > self._maximum_forbidden_force:
+                self._maximum_forbidden_force = normal_force
+                self._maximum_forbidden_pair = tuple(
+                    mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
+                    or f"geom_{geom_id}"
+                    for geom_id in pair
+                )
             if normal_force >= self.severe_force_threshold:
                 self._severe_collision_count += 1
 
@@ -320,6 +339,7 @@ class MujocoHouseholdBackend(Mujoco3DBackend):
             "severe_collisions": float(self._severe_collision_count),
             "maximum_forbidden_force": self._maximum_forbidden_force,
             "articulation_satisfied": articulation,
+            "drawer_bilateral_contact_steps": float(self._drawer_bilateral_contact_steps),
             **{
                 f"bilateral_contact_steps.{name}": float(value)
                 for name, value in self._bilateral_contact_steps.items()
@@ -380,7 +400,9 @@ class MujocoHouseholdBackend(Mujoco3DBackend):
             "randomization": self._randomization,
             "objects": objects,
             "articulation_satisfied": self._articulation_satisfied(),
+            "drawer_bilateral_contact_steps": self._drawer_bilateral_contact_steps,
             "severe_collision_count": self._severe_collision_count,
             "maximum_forbidden_force": self._maximum_forbidden_force,
+            "maximum_forbidden_pair": self._maximum_forbidden_pair,
             "stable_steps": self._placement.stable_steps,
         }

@@ -23,9 +23,13 @@ BINDINGS = load_mujoco_task_bindings(
 
 @pytest.mark.parametrize(
     "task_id",
-    ("tidy_living_room_3d/v1", "clear_dining_table_3d/v1"),
+    (
+        "tidy_living_room_3d/v1",
+        "clear_dining_table_3d/v1",
+        "store_kitchen_items_3d/v1",
+    ),
 )
-def test_household_expert_completes_two_contact_only_pick_and_place_cycles(
+def test_household_expert_completes_contact_only_household_task(
     task_id: str,
 ) -> None:
     backend = MujocoHouseholdBackend(
@@ -51,4 +55,7 @@ def test_household_expert_completes_two_contact_only_pick_and_place_cycles(
     assert audit["severe_collision_count"] == 0
     assert all(value["inside_target"] for value in audit["objects"].values())
     assert all(value["bilateral_contact_steps"] > 0 for value in audit["objects"].values())
+    if task_id.startswith("store_kitchen"):
+        assert audit["articulation_satisfied"] is True
+        assert audit["drawer_bilateral_contact_steps"] > 0
     assert backend.model.neq == 0

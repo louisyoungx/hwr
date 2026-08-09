@@ -52,38 +52,38 @@
       <geom name="counter_bank_collision" type="box" pos="0 0 0.90" size="0.54 0.22 0.90" rgba="0 0 0 0" group="3"/>
       <geom name="counter_worktop" type="box" pos="0 -0.02 1.875" size="0.64 0.42 0.035" material="counter_mat"/>
     </body>
-    <body name="island" pos="0.55 0.72 0">
-      <geom name="island_base" type="box" pos="0 0 0.43" size="0.70 0.38 0.43" material="drawer_wood"/>
-      <geom name="island_worktop" type="box" pos="0 0 0.90" size="0.78 0.46 0.045" material="counter_mat"/>
-      <geom name="island_sink" type="box" pos="0.30 0 0.95" size="0.28 0.25 0.03" material="steel"/>
+    <body name="island" pos="0.00 0.72 0">
+      <geom name="island_base" type="box" pos="0 0 0.40" size="0.70 0.38 0.40" material="drawer_wood"/>
+      <geom name="island_worktop" type="box" pos="0 0 0.825" size="0.78 0.46 0.035" material="counter_mat"/>
+      <geom name="island_sink" type="box" pos="0.30 0 0.875" size="0.28 0.25 0.02" material="steel"/>
     </body>
     <body name="kitchen_drawer_frame" pos="1.25 2.32 0">
-      <geom name="drawer_frame_left" type="box" pos="-0.42 0 0.84" size="0.06 0.29 0.50" material="drawer_wood"/>
-      <geom name="drawer_frame_right" type="box" pos="0.42 0 0.84" size="0.06 0.29 0.50" material="drawer_wood"/>
+      <geom name="drawer_frame_left" type="box" pos="-0.50 0 0.84" size="0.06 0.29 0.50" material="drawer_wood"/>
+      <geom name="drawer_frame_right" type="box" pos="0.50 0 0.84" size="0.06 0.29 0.50" material="drawer_wood"/>
       <geom name="drawer_frame_top" type="box" pos="0 0 1.37" size="0.48 0.33 0.035" material="counter_mat"/>
       <geom name="drawer_frame_back" type="box" pos="0 0.27 0.84" size="0.48 0.035 0.50" material="drawer_wood"/>
       <body name="kitchen_drawer" pos="0 0 0.86">
-        <joint name="kitchen_drawer_slide" type="slide" axis="0 -1 0" range="0 0.42" damping="7" frictionloss="0.6"/>
+        <joint name="kitchen_drawer_slide" type="slide" axis="0 -1 0" range="0 0.42" damping="15" frictionloss="4.0"/>
         <geom name="drawer_bottom" type="box" pos="0 -0.04 -0.13" size="0.39 0.25 0.025" material="drawer_inside"/>
-        <geom name="drawer_front" type="box" pos="0 -0.30 0" size="0.43 0.035 0.19" material="drawer_wood"/>
+        <geom name="drawer_front" type="box" pos="0 -0.30 0" size="0.43 0.035 0.125" material="drawer_wood"/>
         <geom name="drawer_back" type="box" pos="0 0.18 -0.02" size="0.39 0.025 0.15" material="drawer_inside"/>
         <geom name="drawer_left" type="box" pos="-0.37 -0.04 -0.02" size="0.025 0.22 0.15" material="drawer_inside"/>
         <geom name="drawer_right" type="box" pos="0.37 -0.04 -0.02" size="0.025 0.22 0.15" material="drawer_inside"/>
         <geom name="drawer_divider" type="box" pos="0 -0.04 -0.03" size="0.018 0.21 0.12" material="drawer_inside"/>
-        <geom name="drawer_handle" type="capsule" fromto="0 -0.39 -0.06 0 -0.39 0.10" size="0.025" material="steel" friction="2.4 0.04 0.004"/>
+        <geom name="drawer_handle" type="capsule" fromto="0 -0.39 -0.06 0 -0.39 0.10" size="0.030" material="steel" friction="2.4 0.04 0.004"/>
         <site name="yellow_target_volume" pos="-0.19 -0.04 0.02" size="0.15 0.17 0.12" rgba="1 0.8 0.1 0.09"/>
         <site name="pink_target_volume" pos="0.19 -0.04 0.02" size="0.15 0.17 0.12" rgba="1 0.2 0.5 0.09"/>
       </body>
     </body>
-    <body name="cleaner_yellow" pos="-0.10 0.72 0.945">
+    <body name="cleaner_yellow" pos="-0.42 0.42 0.86">
       <freejoint name="cleaner_yellow_free"/>
       <geom name="cleaner_yellow_visual" type="mesh" mesh="cleaner_yellow_mesh" material="cleaner_yellow_mat" mass="0" contype="0" conaffinity="0" group="1"/>
       <geom name="cleaner_yellow_collision" type="cylinder" pos="0 0 0.120" size="0.043 0.120" mass="0.32" friction="1.35 0.02 0.002" rgba="0 0 0 0" group="3"/>
     </body>
-    <body name="cleaner_pink" pos="0.18 0.72 0.945">
+    <body name="cleaner_pink" pos="0.66 0.42 0.86">
       <freejoint name="cleaner_pink_free"/>
       <geom name="cleaner_pink_visual" type="mesh" mesh="cleaner_pink_mesh" material="cleaner_pink_mat" mass="0" contype="0" conaffinity="0" group="1"/>
-      <geom name="cleaner_pink_collision" type="box" pos="0 0 0.145" size="0.064 0.047 0.145" mass="0.48" friction="1.30 0.02 0.002" rgba="0 0 0 0" group="3"/>
+      <geom name="cleaner_pink_collision" type="box" pos="0 0 0.120" size="0.064 0.047 0.120" mass="0.48" friction="1.30 0.02 0.002" rgba="0 0 0 0" group="3"/>
     </body>
   </worldbody>
   <contact>
