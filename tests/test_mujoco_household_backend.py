@@ -52,6 +52,10 @@ def test_formal_backend_reset_is_seeded_visual_and_non_privileged(task_id: str) 
     assert [frame.payload for frame in repeated.cameras] == [
         frame.payload for frame in observed_again.cameras
     ]
+    assert all(
+        backend.model.body_mass[body_id] < 1.0
+        for body_id in backend.household_ids.object_bodies.values()
+    )
 
 
 def test_formal_backend_randomizes_physics_and_pose_across_seeds() -> None:

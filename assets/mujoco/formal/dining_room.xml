@@ -63,12 +63,12 @@
     </body>
     <body name="dining_cup" pos="0.94 0.42 0.765">
       <freejoint name="dining_cup_free"/>
-      <geom name="dining_cup_visual" type="mesh" mesh="dining_cup_mesh" material="dining_cup_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="dining_cup_visual" type="mesh" mesh="dining_cup_mesh" material="dining_cup_mat" mass="0" contype="0" conaffinity="0" group="1"/>
       <geom name="dining_cup_collision" type="cylinder" pos="0 0 0.043" size="0.047 0.043" mass="0.18" friction="1.25 0.02 0.002" rgba="0 0 0 0" group="3"/>
     </body>
     <body name="dining_plate" pos="1.38 0.64 0.762">
       <freejoint name="dining_plate_free"/>
-      <geom name="dining_plate_visual" type="mesh" mesh="dining_plate_mesh" material="dining_plate_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="dining_plate_visual" type="mesh" mesh="dining_plate_mesh" material="dining_plate_mat" mass="0" contype="0" conaffinity="0" group="1"/>
       <geom name="dining_plate_collision" type="cylinder" pos="0 0 0.011" size="0.075 0.011" mass="0.18" friction="1.05 0.02 0.002" rgba="0 0 0 0" group="3"/>
     </body>
     <body name="sideboard" pos="2.55 1.92 0">
@@ -80,7 +80,13 @@
       <site name="plate_target_volume" pos="0.25 -0.12 0.77" size="0.13 0.13 0.05" rgba="1 0.4 0.1 0.10"/>
     </body>
   </worldbody>
-  <contact><include file="../common/robot_contacts.xml"/></contact>
+  <contact>
+    <include file="../common/robot_contacts.xml"/>
+    <pair geom1="left_finger_pad" geom2="dining_cup_collision" condim="4" friction="3 3 0.04 0.004 0.004" solref="0.001 1" solimp="0.99 0.999 0.0001"/>
+    <pair geom1="right_finger_pad" geom2="dining_cup_collision" condim="4" friction="3 3 0.04 0.004 0.004" solref="0.001 1" solimp="0.99 0.999 0.0001"/>
+    <pair geom1="left_finger_pad" geom2="dining_plate_collision" condim="4" friction="3 3 0.04 0.004 0.004" solref="0.001 1" solimp="0.99 0.999 0.0001"/>
+    <pair geom1="right_finger_pad" geom2="dining_plate_collision" condim="4" friction="3 3 0.04 0.004 0.004" solref="0.001 1" solimp="0.99 0.999 0.0001"/>
+  </contact>
   <actuator><include file="../common/robot_actuators.xml"/></actuator>
   <sensor><include file="../common/robot_sensors.xml"/></sensor>
 </mujoco>

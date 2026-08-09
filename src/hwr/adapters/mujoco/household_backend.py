@@ -289,10 +289,10 @@ class MujocoHouseholdBackend(Mujoco3DBackend):
         return float(self.data.qpos[self.model.jnt_qposadr[joint_id]]) >= requirement.minimum_position
 
     def _placement_sample(self, object_id: str) -> PlacementSample:
-        body_id = self.household_ids.object_bodies[object_id]
+        geom_id = self.household_ids.object_geoms[object_id]
         joint_id = self.household_ids.object_joints[object_id]
         dof = int(self.model.jnt_dofadr[joint_id])
-        position = tuple(float(value) for value in self.data.xpos[body_id])
+        position = tuple(float(value) for value in self.data.geom_xpos[geom_id])
         velocity = self.data.qvel[dof : dof + 6]
         site_id = self.household_ids.target_sites[object_id]
         center = self.data.site_xpos[site_id]

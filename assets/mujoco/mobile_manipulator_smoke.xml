@@ -105,16 +105,16 @@
                   <body name="gripper_palm" pos="0.07 0 0" gravcomp="1">
                     <geom type="box" size="0.055 0.115 0.035" density="500" material="gripper_material"/>
                     <camera name="wrist_rgb" pos="0.015 0 0.065" xyaxes="0 -1 0 0 0 1" fovy="72"/>
-                    <site name="grasp_center" pos="0.10 0 -0.01" size="0.012" rgba="0 1 0 0"/>
+                  <site name="grasp_center" pos="0.14 0 -0.01" size="0.012" rgba="0 1 0 0"/>
                     <body name="left_finger" pos="0.075 0.110 -0.005" gravcomp="1">
                       <joint name="left_finger_joint" class="finger_joint" type="slide" axis="0 -1 0" range="0 0.075"/>
-                      <geom name="left_finger_pad" class="finger_pad" type="box" size="0.055 0.012 0.060"
-                            pos="0.025 0 -0.035" density="420" material="gripper_material"/>
+                    <geom name="left_finger_pad" class="finger_pad" type="box" size="0.075 0.012 0.060"
+                          pos="0.065 0 -0.035" density="420" material="gripper_material"/>
                     </body>
                     <body name="right_finger" pos="0.075 -0.110 -0.005" gravcomp="1">
                       <joint name="right_finger_joint" class="finger_joint" type="slide" axis="0 1 0" range="0 0.075"/>
-                      <geom name="right_finger_pad" class="finger_pad" type="box" size="0.055 0.012 0.060"
-                            pos="0.025 0 -0.035" density="420" material="gripper_material"/>
+                    <geom name="right_finger_pad" class="finger_pad" type="box" size="0.075 0.012 0.060"
+                          pos="0.065 0 -0.035" density="420" material="gripper_material"/>
                     </body>
                   </body>
                 </body>
