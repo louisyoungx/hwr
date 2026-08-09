@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import torch
 
 from hwr.core.types import ActionFrame, CameraFrame, ObservationFrame
 from hwr.data import (
@@ -10,6 +11,7 @@ from hwr.data import (
     formal_action_vector,
     load_visual_dataset,
 )
+from hwr.policy import HouseholdVisualPolicyModel, VisualModelConfig
 from hwr.train import (
     VisualTrainingConfig,
     load_visual_policy,
@@ -109,3 +111,22 @@ def test_visual_policy_trains_saves_reloads_and_infers(tmp_path) -> None:
     assert len(action.arm_command) == 6
     assert action.source == "learned:visual-policy:v1"
     assert action.policy_version == "visual-policy:v1"
+
+
+def test_formal_visual_model_backpropagates_on_local_device() -> None:
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    config = VisualModelConfig(image_width=48, image_height=36, action_history=8)
+    model = HouseholdVisualPolicyModel(config).to(device)
+    batch = 2
+    prediction = model(
+        torch.zeros(batch, 3, 36, 48, device=device),
+        torch.zeros(batch, 1, 36, 48, device=device),
+        torch.zeros(batch, 3, 36, 48, device=device),
+        torch.zeros(batch, 24, device=device),
+        torch.zeros(batch, 8, 9, device=device),
+        torch.zeros(batch, 1, dtype=torch.int64, device=device),
+    )
+    prediction.square().mean().backward()
+
+    assert prediction.shape == (batch, 9)
+    assert all(parameter.grad is not None for parameter in model.parameters())

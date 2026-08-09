@@ -54,9 +54,10 @@ class HouseholdVisualPolicyModel(nn.Module):
                 )
             )
             channels = output_channels
-        layers.append(nn.AdaptiveAvgPool2d((3, 4)))
         self.visual_encoder = nn.Sequential(*layers)
-        visual_dim = channels * 12
+        feature_height = _stride_two_size(config.image_height, len(config.visual_channels))
+        feature_width = _stride_two_size(config.image_width, len(config.visual_channels))
+        visual_dim = channels * feature_height * feature_width
         self.instruction_embedding = nn.Embedding(config.instruction_count, 8)
         state_dim = config.proprioception_dim + config.action_history * 9 + 8
         self.state_encoder = nn.Sequential(
@@ -88,3 +89,9 @@ class HouseholdVisualPolicyModel(nn.Module):
         state = torch.cat((proprioception, action_history.flatten(1), instruction), dim=1)
         state_features = self.state_encoder(state)
         return self.head(torch.cat((visual_features, state_features), dim=1))
+
+
+def _stride_two_size(size: int, layers: int) -> int:
+    for _ in range(layers):
+        size = (size + 1) // 2
+    return size
