@@ -36,6 +36,7 @@ class CameraFrame:
     height: int
     encoding: str = "rgb8"
     uri: str | None = None
+    payload: bytes | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if not self.camera_id:
@@ -44,6 +45,30 @@ class CameraFrame:
             raise ValueError("camera timestamp and frame index must be non-negative")
         if self.width <= 0 or self.height <= 0:
             raise ValueError("camera dimensions must be positive")
+        if self.payload is not None:
+            payload = bytes(self.payload)
+            expected_sizes = {
+                "rgb8": self.width * self.height * 3,
+                "depth32f": self.width * self.height * 4,
+            }
+            expected = expected_sizes.get(self.encoding)
+            if expected is not None and len(payload) != expected:
+                raise ValueError(
+                    f"{self.encoding} payload has {len(payload)} bytes; expected {expected}"
+                )
+            object.__setattr__(self, "payload", payload)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return persistent metadata; transient pixel bytes are stored separately."""
+        return {
+            "camera_id": self.camera_id,
+            "timestamp_ns": self.timestamp_ns,
+            "frame_index": self.frame_index,
+            "width": self.width,
+            "height": self.height,
+            "encoding": self.encoding,
+            "uri": self.uri,
+        }
 
 
 @dataclass(frozen=True)
@@ -91,6 +116,7 @@ class ObservationFrame:
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
+        value["cameras"] = [camera.to_dict() for camera in self.cameras]
         value["safety_state"] = self.safety_state.value
         return value
 
@@ -228,4 +254,3 @@ class StepRecord:
             proposed_action=ActionFrame.from_dict(value["proposed_action"]),
             applied_action=ActionFrame.from_dict(value["applied_action"]),
         )
-

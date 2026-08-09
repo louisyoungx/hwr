@@ -23,8 +23,20 @@ source .venv/bin/activate
 python3 -m pip install -e ".[dev,video]"
 
 python3 scripts/check_python_size.py
+python3 scripts/check_architecture.py
 python3 -m pytest
 python3 scripts/verify_benchmarks.py
+```
+
+三维开发环境与机器人模型验证：
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e ".[dev,video,sim3d]"
+.venv/bin/python scripts/verify_robot_model.py
+.venv/bin/python -m pytest tests/test_mujoco_backend.py
+.venv/bin/python -m hwr.apps.render_3d_smoke \
+  --output-path artifacts/3d-smoke.png
 ```
 
 训练一个场景：

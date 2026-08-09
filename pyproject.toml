@@ -15,11 +15,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "Pillow>=11.0"]
+sim3d = ["mujoco==3.10.0"]
 video = ["Pillow>=11.0"]
 
 [project.scripts]
 hwr-train-scenario = "hwr.apps.train_scenario:main"
 hwr-render-benchmarks = "hwr.apps.render_benchmarks:main"
+hwr-render-3d-smoke = "hwr.apps.render_3d_smoke:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -28,4 +30,3 @@ where = ["src"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "-q"
-asyncio_default_fixture_loop_scope = "function"
