@@ -207,6 +207,8 @@ class PrivilegedHouseholdExpert:
             target = self._object_position(stage.object_id)
             yaw = self._object_approach_yaw(stage.object_id)
             standoff = self._object_spec(stage.object_id).standoff_m
+            if self.task.task_id.startswith("clear_dining"):
+                standoff -= 0.12
         else:
             target = self._target_position(stage.object_id)
             yaw = self._target_approach_yaw()
@@ -239,7 +241,7 @@ class PrivilegedHouseholdExpert:
             1299
             if self.task.task_id.startswith("store_kitchen")
             and self.stage.kind in {"nav_object", "nav_target"}
-            else 899
+            else (1199 if self.task.task_id.startswith("clear_dining") else 899)
         )
         if self.stage_step >= navigation_timeout:
             self.failed = True
@@ -391,17 +393,23 @@ class PrivilegedHouseholdExpert:
         relaxed_target = self.task.task_id.startswith("store_kitchen") and stage.kind.startswith(
             "arm_target"
         )
-        tolerance = 0.07 if self.task.task_id.startswith("clear_dining") or relaxed_target else 0.035
+        relaxed_dining_target = self.task.task_id.startswith(
+            "clear_dining"
+        ) and stage.kind != "arm_object_descend"
+        tolerance = 0.07 if relaxed_dining_target or relaxed_target else 0.035
+        if (
+            self.task.task_id.startswith("clear_dining")
+            and stage.kind == "arm_object_descend"
+            and stage.object_id == "plate"
+        ):
+            tolerance = 0.012
         failure_error = (
-            0.12 if self.task.task_id.startswith("clear_dining") or relaxed_target else 0.08
+            0.12 if relaxed_dining_target or relaxed_target else 0.08
         )
         if (self.stage_step >= 25 and error < tolerance) or self.stage_step >= 179:
             physically_validated_later = (
                 stage.kind.startswith("arm_target")
-                or (
-                    self.task.task_id.startswith("store_kitchen")
-                    and stage.kind == "arm_object_descend"
-                )
+                or stage.kind == "arm_object_descend"
             )
             if (
                 self.stage_step >= 179
