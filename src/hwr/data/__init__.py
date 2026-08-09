@@ -14,12 +14,14 @@ from hwr.data.visual import (
     verify_visual_dataset,
 )
 from hwr.data.visual_generation import generate_visual_expert_dataset
+from hwr.data.visual_loading import LoadedVisualDataset, load_visual_dataset
 
 __all__ = [
     "BehaviorDataset",
     "EpisodeReader",
     "EpisodeRecorder",
     "FormalPolicyInput",
+    "LoadedVisualDataset",
     "POLICY_INPUT_FIELDS",
     "VisualBehaviorSample",
     "VisualDatasetBuilder",
@@ -28,5 +30,6 @@ __all__ = [
     "formal_action_vector",
     "generate_expert_dataset",
     "generate_visual_expert_dataset",
+    "load_visual_dataset",
     "verify_visual_dataset",
 ]
