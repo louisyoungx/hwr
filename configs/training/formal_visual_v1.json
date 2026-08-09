@@ -1,0 +1,59 @@
+{
+  "schema_version": "hwr.formal-visual-training-plan/v1",
+  "policy_input_schema": "hwr.formal-policy-input/v1",
+  "policy_input_fields": [
+    "head_rgb",
+    "head_depth",
+    "wrist_rgb",
+    "proprioception",
+    "instruction_id",
+    "action_history"
+  ],
+  "image_size": [48, 36],
+  "action_history": 8,
+  "training": {
+    "epochs": 30,
+    "batch_size": 128,
+    "learning_rate": 0.0005,
+    "device": "auto",
+    "seed": 0
+  },
+  "datasets": [
+    {
+      "task_id": "clear_dining_table_3d/v1",
+      "path": "datasets/formal-v1-r4/clear_dining_table_3d_v1-expert-s1000",
+      "episode_count": 3,
+      "sample_count": 2485,
+      "seeds": [1000, 1001, 1002],
+      "shards": [
+        {"path": "clear_dining_table_3d_v1-expert-s1000-00000.npz", "sha256": "084ebe8459ab803996cbf049fa78c1bd43b122a98cfe3716b275c7c46442a3f1"},
+        {"path": "clear_dining_table_3d_v1-expert-s1000-00001.npz", "sha256": "95fdd749be0dfddbd5bb0c01dce24ba052cb7aa75bac175af855db970416a5f9"},
+        {"path": "clear_dining_table_3d_v1-expert-s1000-00002.npz", "sha256": "8663065f5f992e2405dbe4f132a63c679470f1166adeab31441fe181abb67124"}
+      ]
+    },
+    {
+      "task_id": "tidy_living_room_3d/v1",
+      "path": "datasets/formal-v1-r5/tidy_living_room_3d_v1-expert-s2000",
+      "episode_count": 3,
+      "sample_count": 2198,
+      "seeds": [2000, 2001, 2002],
+      "shards": [
+        {"path": "tidy_living_room_3d_v1-expert-s2000-00000.npz", "sha256": "6dc2aa2164673fb63604bb426255cfe750394f4142e3afbb2e33196704e44006"},
+        {"path": "tidy_living_room_3d_v1-expert-s2000-00001.npz", "sha256": "086bfeaf1e9860ef65d00a71a9c8023bebb2bd31a8e16cfa6145ae8b46eb9bc1"},
+        {"path": "tidy_living_room_3d_v1-expert-s2000-00002.npz", "sha256": "c2077cb4f8ba5288c6ec1134b07368a27c393ff6623dae4fa16fa65c12d195db"}
+      ]
+    },
+    {
+      "task_id": "store_kitchen_items_3d/v1",
+      "path": "datasets/formal-v1-r6/store_kitchen_items_3d_v1-expert-s3000",
+      "episode_count": 3,
+      "sample_count": 4059,
+      "seeds": [3000, 3001, 3002],
+      "shards": [
+        {"path": "store_kitchen_items_3d_v1-expert-s3000-00000.npz", "sha256": "18d3caece944d1bd18cb3ed23404283991d5dffbbb2cb48745ac4a4a295aa714"},
+        {"path": "store_kitchen_items_3d_v1-expert-s3000-00001.npz", "sha256": "46b96fcebc6b1bc04062c0761928e2215447dda2164b46b88f1470f99df654c1"},
+        {"path": "store_kitchen_items_3d_v1-expert-s3000-00002.npz", "sha256": "e9533f24e4527e1c187e554a06d6bd21c66c777eefd407157198f844c692081f"}
+      ]
+    }
+  ]
+}

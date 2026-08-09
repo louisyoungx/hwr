@@ -1,0 +1,47 @@
+# 正式三维视觉训练运行说明
+
+> 状态：数据采集完成，实际训练执行中  
+> 配置：[formal_visual_v1.json](../configs/training/formal_visual_v1.json)
+
+## 数据边界
+
+三个任务分别使用 3 条接触有效的专家 Episode。正式策略输入固定为头部 RGB、头部深度、腕部 RGB、24 维本体状态、任务指令 ID 和 8 步动作历史；引擎真值位姿、目标位置、专家阶段和成功状态只作为标签或审计信息，不进入训练张量。
+
+| 任务 | 训练种子 | 样本数 | 数据目录 |
+|---|---:|---:|---|
+| 餐桌清理 | 1000–1002 | 2485 | `datasets/formal-v1-r4/clear_dining_table_3d_v1-expert-s1000` |
+| 起居室收纳 | 2000–2002 | 2198 | `datasets/formal-v1-r5/tidy_living_room_3d_v1-expert-s2000` |
+| 厨房入柜 | 3000–3002 | 4059 | `datasets/formal-v1-r6/store_kitchen_items_3d_v1-expert-s3000` |
+
+数据目录由 Git 忽略；受版本管理的训练配置保存每个 shard 的 SHA-256。训练前加载器会再次检查 manifest、字段白名单和 shard 哈希。
+
+## 本机训练命令
+
+每个任务独立训练、登记和重载，避免不同任务的动作分布互相掩盖：
+
+```bash
+.venv/bin/python -m hwr.apps.train_formal_visual \
+  --dataset datasets/formal-v1-r4/clear_dining_table_3d_v1-expert-s1000 \
+  --run-id formal-v1-dining-s0 --epochs 30 --batch-size 128 --seed 0
+
+.venv/bin/python -m hwr.apps.train_formal_visual \
+  --dataset datasets/formal-v1-r5/tidy_living_room_3d_v1-expert-s2000 \
+  --run-id formal-v1-living-s0 --epochs 30 --batch-size 128 --seed 0
+
+.venv/bin/python -m hwr.apps.train_formal_visual \
+  --dataset datasets/formal-v1-r6/store_kitchen_items_3d_v1-expert-s3000 \
+  --run-id formal-v1-kitchen-s0 --epochs 30 --batch-size 128 --seed 0
+```
+
+训练器在本机自动选择 MPS、CUDA 或 CPU，保存最佳验证 checkpoint，并立即从磁盘重载一次。`models/` 和 `runs/` 中的大文件由 Git 忽略；完成训练后需把模型哈希、设备、损失和评测种子写入受版本管理的运行清单。
+
+## 闭环评测门槛
+
+- 每个任务使用与训练集合不相交的 20 个种子；
+- 推理动作来源必须以 `learned:` 开头；
+- 成功率至少 70%；
+- 严重碰撞总数为 0；
+- 每个成功 Episode 的目标状态连续稳定至少 2 秒；
+- 视频必须来自同一个 checkpoint、种子和未剪辑 Episode。
+
+离线损失下降只证明训练器工作，不代表家务任务完成。只有 checkpoint 重载后的闭环报告满足上述门槛，训练阶段才算通过。
