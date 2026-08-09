@@ -103,6 +103,8 @@ def test_visual_dataset_round_trip_and_checksum(tmp_path) -> None:
     assert manifest["sample_count"] == 1
     assert manifest["seeds"] == [11]
     assert manifest["policy_input_fields"] == sorted(POLICY_INPUT_FIELDS)
+    assert manifest["label_fields"] == ["action", "phase"]
+    assert manifest["phase_names"] == ["default"]
 
 
 def test_visual_dataset_verifier_rejects_manifest_input_leak(tmp_path) -> None:

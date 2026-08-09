@@ -76,6 +76,7 @@ class LearnedVisualPolicy:
         policy_version: str,
         control_hz: float,
         task_instructions: Mapping[str, tuple[int, str]],
+        phase_names: Sequence[str],
         device: str = "cpu",
     ) -> None:
         self.model = model.to(device).eval()
@@ -83,9 +84,14 @@ class LearnedVisualPolicy:
         self.policy_version = policy_version
         self.control_hz = control_hz
         self.task_instructions = dict(task_instructions)
+        self.phase_names = tuple(phase_names)
+        if len(self.phase_names) != model.config.phase_count:
+            raise ValueError("phase vocabulary does not match the visual model")
         self.device = torch.device(device)
         self._history = [np.zeros(9, dtype=np.float32) for _ in range(model.config.action_history)]
         self._task_id: str | None = None
+        self._phase_index = 0
+        self._phase_candidate_steps = 0
 
     def spec(self) -> PolicySpec:
         return PolicySpec(self.policy_version, 1, 1, self.control_hz, 6)
@@ -98,6 +104,8 @@ class LearnedVisualPolicy:
         self._history = [
             np.zeros(9, dtype=np.float32) for _ in range(self.model.config.action_history)
         ]
+        self._phase_index = 0
+        self._phase_candidate_steps = 0
 
     def infer(self, observations: Sequence[ObservationFrame]) -> tuple[ActionFrame, ...]:
         if not observations or self._task_id is None:
@@ -118,7 +126,9 @@ class LearnedVisualPolicy:
             item.to(self.device) for item in visual_input_tensors(batch, self.normalization)
         )
         with torch.inference_mode():
-            prediction = self.model(*tensors).squeeze(0).cpu().numpy()
+            output = self.model(*tensors)
+        phase_index = self._select_phase(output.phase_logits.squeeze(0))
+        prediction = output.actions[0, phase_index].cpu().numpy()
         action = self._action(prediction, observation)
         vector = np.asarray(
             (action.base_linear, action.base_angular, *action.arm_command, action.gripper_target),
@@ -126,6 +136,19 @@ class LearnedVisualPolicy:
         )
         self._history = [*self._history[1:], vector]
         return (action,)
+
+    def _select_phase(self, logits: torch.Tensor) -> int:
+        next_index = self._phase_index + 1
+        if next_index >= len(self.phase_names):
+            return self._phase_index
+        if float(logits[next_index].cpu()) > float(logits[self._phase_index].cpu()):
+            self._phase_candidate_steps += 1
+        else:
+            self._phase_candidate_steps = 0
+        if self._phase_candidate_steps >= 3:
+            self._phase_index = next_index
+            self._phase_candidate_steps = 0
+        return self._phase_index
 
     def _action(self, prediction: np.ndarray, observation: ObservationFrame) -> ActionFrame:
         mean = np.asarray(self.normalization.action_mean, dtype=np.float32)

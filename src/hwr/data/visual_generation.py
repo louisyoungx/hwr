@@ -26,6 +26,7 @@ class VisualTaskSpec(Protocol):
 
 class PrivilegedExpertOutput(Protocol):
     action: ActionFrame
+    stage: str
     privileged_label: bool
 
 
@@ -118,7 +119,12 @@ def _collect_episode(
             applied_vector = formal_action_vector(applied)
             if policy_input is not None:
                 samples.append(
-                    VisualBehaviorSample(step_index, policy_input, applied_vector)
+                    VisualBehaviorSample(
+                        step_index,
+                        policy_input,
+                        applied_vector,
+                        phase=output.stage,
+                    )
                 )
             history = [*history[1:], applied_vector]
             observation = outcome.observation

@@ -16,6 +16,9 @@ class LoadedVisualDataset:
     manifest: dict[str, object]
     inputs: dict[str, np.ndarray]
     actions: np.ndarray
+    phases: np.ndarray
+    phase_names: tuple[str, ...]
+    phase_indices: np.ndarray
     step_indices: np.ndarray
     episode_ids: np.ndarray
 
@@ -46,6 +49,7 @@ def load_visual_dataset(path: Path) -> LoadedVisualDataset:
     manifest = verify_visual_dataset(path)
     input_parts = {name: [] for name in POLICY_INPUT_FIELDS}
     action_parts: list[np.ndarray] = []
+    phase_parts: list[np.ndarray] = []
     step_parts: list[np.ndarray] = []
     episode_parts: list[np.ndarray] = []
     for shard in manifest["shards"]:
@@ -53,16 +57,24 @@ def load_visual_dataset(path: Path) -> LoadedVisualDataset:
             for name in POLICY_INPUT_FIELDS:
                 input_parts[name].append(arrays[f"input__{name}"].copy())
             actions = arrays["label__action"].astype(np.float32, copy=True)
+            phases = arrays["label__phase"].astype(str, copy=True)
             steps = arrays["step_index"].astype(np.int32, copy=True)
         count = int(shard["sample_count"])
         action_parts.append(actions)
+        phase_parts.append(phases)
         step_parts.append(steps)
         episode_parts.append(np.full(count, shard["episode_id"], dtype=object))
+    phase_names = tuple(str(value) for value in manifest["phase_names"])
+    phase_lookup = {name: index for index, name in enumerate(phase_names)}
+    phases = np.concatenate(phase_parts)
     return LoadedVisualDataset(
         path=path,
         manifest=manifest,
         inputs={name: np.concatenate(parts) for name, parts in input_parts.items()},
         actions=np.concatenate(action_parts),
+        phases=phases,
+        phase_names=phase_names,
+        phase_indices=np.asarray([phase_lookup[value] for value in phases], dtype=np.int64),
         step_indices=np.concatenate(step_parts),
         episode_ids=np.concatenate(episode_parts).astype(str),
     )

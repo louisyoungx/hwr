@@ -14,7 +14,7 @@ import numpy as np
 from hwr.core.types import ActionFrame, CameraFrame, ObservationFrame
 
 
-VISUAL_DATASET_SCHEMA = "hwr.visual-behavior-dataset/v1"
+VISUAL_DATASET_SCHEMA = "hwr.visual-behavior-dataset/v2"
 POLICY_INPUT_SCHEMA = "hwr.formal-policy-input/v1"
 POLICY_INPUT_FIELDS = frozenset(
     {
@@ -27,7 +27,12 @@ POLICY_INPUT_FIELDS = frozenset(
     }
 )
 SHARD_ARRAYS = frozenset(
-    {*(f"input__{name}" for name in POLICY_INPUT_FIELDS), "label__action", "step_index"}
+    {
+        *(f"input__{name}" for name in POLICY_INPUT_FIELDS),
+        "label__action",
+        "label__phase",
+        "step_index",
+    }
 )
 CAMERA_LAYOUT = {
     "head_rgb": "rgb8",
@@ -113,6 +118,7 @@ class VisualBehaviorSample:
     step_index: int
     policy_input: FormalPolicyInput
     action: np.ndarray
+    phase: str = "default"
 
 
 def extract_formal_policy_input(
@@ -186,6 +192,7 @@ class VisualDatasetBuilder:
         self.action_history = action_history
         self.metadata = dict(metadata or {})
         self.shards: list[dict[str, Any]] = []
+        self.phase_names: list[str] = []
         self._sealed = False
 
     def write_episode(
@@ -203,6 +210,13 @@ class VisualDatasetBuilder:
             for name in POLICY_INPUT_FIELDS
         }
         arrays["label__action"] = np.stack([sample.action for sample in samples])
+        phases = [sample.phase for sample in samples]
+        if any(not phase for phase in phases):
+            raise ValueError("visual behavior phase labels must be non-empty")
+        for phase in phases:
+            if phase not in self.phase_names:
+                self.phase_names.append(phase)
+        arrays["label__phase"] = np.asarray(phases, dtype=np.str_)
         arrays["step_index"] = np.asarray([sample.step_index for sample in samples], dtype=np.int32)
         _validate_shard_arrays(arrays, self.image_size, self.action_history)
         filename = f"{episode_id}.npz"
@@ -229,7 +243,8 @@ class VisualDatasetBuilder:
             "task_id": self.task_id,
             "instruction": self.instruction,
             "policy_input_fields": sorted(POLICY_INPUT_FIELDS),
-            "label_fields": ["action"],
+            "label_fields": ["action", "phase"],
+            "phase_names": self.phase_names,
             "image_size": list(self.image_size),
             "action_history": self.action_history,
             "episode_count": len(self.shards),
@@ -262,6 +277,7 @@ def _validate_shard_arrays(
         "input__instruction_id": (count, 1),
         "input__action_history": (count, action_history, 9),
         "label__action": (count, 9),
+        "label__phase": (count,),
         "step_index": (count,),
     }
     mismatches = {
@@ -271,6 +287,9 @@ def _validate_shard_arrays(
     }
     if mismatches:
         raise ValueError(f"visual shard tensor shapes are invalid: {mismatches}")
+    phases = arrays["label__phase"]
+    if phases.dtype.kind != "U" or any(not str(value) for value in phases):
+        raise ValueError("visual shard phase labels must be non-empty unicode strings")
 
 
 def verify_visual_dataset(path: Path) -> dict[str, Any]:
@@ -279,6 +298,11 @@ def verify_visual_dataset(path: Path) -> dict[str, Any]:
         raise ValueError("visual dataset schema mismatch")
     if frozenset(manifest.get("policy_input_fields", ())) != POLICY_INPUT_FIELDS:
         raise ValueError("visual dataset manifest violates the policy input whitelist")
+    if set(manifest.get("label_fields", ())) != {"action", "phase"}:
+        raise ValueError("visual dataset label fields are invalid")
+    phase_names = tuple(manifest.get("phase_names", ()))
+    if not phase_names or len(set(phase_names)) != len(phase_names):
+        raise ValueError("visual dataset phase vocabulary is invalid")
     image_size = tuple(int(value) for value in manifest["image_size"])
     history = int(manifest["action_history"])
     for shard in manifest["shards"]:
@@ -287,4 +311,6 @@ def verify_visual_dataset(path: Path) -> dict[str, Any]:
             raise ValueError(f"visual dataset shard checksum mismatch: {shard['path']}")
         with np.load(shard_path, allow_pickle=False) as arrays:
             _validate_shard_arrays(arrays, image_size, history)
+            if not set(arrays["label__phase"].tolist()).issubset(phase_names):
+                raise ValueError("visual shard uses an undeclared phase label")
     return manifest

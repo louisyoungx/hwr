@@ -79,7 +79,8 @@ def _dataset(tmp_path):
                 image_height=8,
             )
             action = formal_action_vector(_action(step))
-            samples.append(VisualBehaviorSample(step, policy_input, action))
+            phase = "navigate" if step < 4 else "manipulate"
+            samples.append(VisualBehaviorSample(step, policy_input, action, phase=phase))
             history = [history[-1], action]
         builder.write_episode(f"episode-{episode}", episode, samples)
     return load_visual_dataset(builder.seal())
@@ -107,6 +108,8 @@ def test_visual_policy_trains_saves_reloads_and_infers(tmp_path) -> None:
     action = policy.infer((_observation(9),))[0]
 
     assert len(dataset) == 16
+    assert dataset.phase_names == ("navigate", "manipulate")
+    assert result.model_config.phase_count == 2
     assert len(result.history) == 2
     assert np.isfinite(result.best_validation_loss)
     assert len(action.arm_command) == 6
@@ -119,7 +122,7 @@ def test_formal_visual_model_backpropagates_on_local_device() -> None:
     config = VisualModelConfig(image_width=48, image_height=36, action_history=8)
     model = HouseholdVisualPolicyModel(config).to(device)
     batch = 2
-    prediction = model(
+    output = model(
         torch.zeros(batch, 3, 36, 48, device=device),
         torch.zeros(batch, 1, 36, 48, device=device),
         torch.zeros(batch, 3, 36, 48, device=device),
@@ -127,7 +130,8 @@ def test_formal_visual_model_backpropagates_on_local_device() -> None:
         torch.zeros(batch, 8, 9, device=device),
         torch.zeros(batch, 1, dtype=torch.int64, device=device),
     )
-    prediction.square().mean().backward()
+    (output.actions.square().mean() + output.phase_logits.square().mean()).backward()
 
-    assert prediction.shape == (batch, 9)
+    assert output.actions.shape == (batch, 1, 9)
+    assert output.phase_logits.shape == (batch, 1)
     assert all(parameter.grad is not None for parameter in model.parameters())

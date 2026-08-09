@@ -12,7 +12,11 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from hwr.data.visual_loading import LoadedVisualDataset
-from hwr.policy.visual_model import HouseholdVisualPolicyModel, VisualModelConfig
+from hwr.policy.visual_model import (
+    HouseholdVisualPolicyModel,
+    VisualModelConfig,
+    VisualModelOutput,
+)
 from hwr.policy.visual_policy import VisualNormalization, visual_input_tensors
 
 
@@ -78,23 +82,33 @@ def _tensor_dataset(
     mean = np.asarray(normalization.action_mean, dtype=np.float32)
     std = np.asarray(normalization.action_std, dtype=np.float32)
     actions[:, :8] = (actions[:, :8] - mean) / std
-    return TensorDataset(*inputs, torch.from_numpy(actions))
+    phases = dataset.phase_indices[indices].astype(np.int64, copy=True)
+    return TensorDataset(*inputs, torch.from_numpy(actions), torch.from_numpy(phases))
 
 
-def _loss(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+def _loss(
+    output: VisualModelOutput,
+    target: torch.Tensor,
+    phases: torch.Tensor,
+    phase_weights: torch.Tensor,
+) -> torch.Tensor:
+    batch_indices = torch.arange(phases.shape[0], device=phases.device)
+    prediction = output.actions[batch_indices, phases]
     continuous = nn.functional.smooth_l1_loss(
         prediction[:, :8].contiguous(), target[:, :8].contiguous()
     )
     gripper = nn.functional.binary_cross_entropy_with_logits(
         prediction[:, 8], target[:, 8]
     )
-    return continuous + 0.30 * gripper
+    phase = nn.functional.cross_entropy(output.phase_logits, phases, weight=phase_weights)
+    return continuous + 0.30 * gripper + 0.50 * phase
 
 
 def _evaluate(
     model: HouseholdVisualPolicyModel,
     loader: DataLoader,
     device: torch.device,
+    phase_weights: torch.Tensor,
 ) -> float:
     model.eval()
     total = 0.0
@@ -102,9 +116,9 @@ def _evaluate(
     with torch.inference_mode():
         for batch in loader:
             values = tuple(item.to(device) for item in batch)
-            loss = _loss(model(*values[:-1]), values[-1])
-            total += float(loss.cpu()) * values[-1].shape[0]
-            count += values[-1].shape[0]
+            loss = _loss(model(*values[:-2]), values[-2], values[-1], phase_weights)
+            total += float(loss.cpu()) * values[-2].shape[0]
+            count += values[-2].shape[0]
     return total / max(1, count)
 
 
@@ -137,11 +151,20 @@ def train_visual_policy(
         image_width=int(image_width),
         image_height=int(image_height),
         action_history=int(dataset.manifest["action_history"]),
+        phase_count=len(dataset.phase_names),
     )
     model = HouseholdVisualPolicyModel(model_config).to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay
     )
+    phase_counts = np.bincount(
+        dataset.phase_indices[train_indices], minlength=len(dataset.phase_names)
+    )
+    phase_weights = torch.from_numpy(
+        (phase_counts.sum() / np.maximum(phase_counts, 1) / len(phase_counts)).astype(
+            np.float32
+        )
+    ).to(device)
     history: list[dict[str, float]] = []
     best_loss = float("inf")
     best_state: dict[str, torch.Tensor] | None = None
@@ -152,12 +175,14 @@ def train_visual_policy(
         for batch in train_loader:
             values = tuple(item.to(device) for item in batch)
             optimizer.zero_grad(set_to_none=True)
-            loss = _loss(model(*values[:-1]), values[-1])
+            loss = _loss(
+                model(*values[:-2]), values[-2], values[-1], phase_weights
+            )
             loss.backward()
             optimizer.step()
-            train_total += float(loss.detach().cpu()) * values[-1].shape[0]
-            train_count += values[-1].shape[0]
-        validation_loss = _evaluate(model, validation_loader, device)
+            train_total += float(loss.detach().cpu()) * values[-2].shape[0]
+            train_count += values[-2].shape[0]
+        validation_loss = _evaluate(model, validation_loader, device, phase_weights)
         train_loss = train_total / max(1, train_count)
         history.append(
             {

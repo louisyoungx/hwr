@@ -72,6 +72,7 @@ class _Environment:
 @dataclass(frozen=True)
 class _Output:
     action: ActionFrame
+    stage: str = "test_phase"
     privileged_label: bool = True
 
 

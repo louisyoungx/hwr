@@ -15,7 +15,7 @@ from hwr.policy.visual_policy import LearnedVisualPolicy, VisualNormalization
 from hwr.train.visual_trainer import VisualTrainingResult
 
 
-VISUAL_MODEL_SCHEMA = "hwr.visual-policy-model/v1"
+VISUAL_MODEL_SCHEMA = "hwr.visual-policy-model/v2"
 
 
 def _sha256(path: Path) -> str:
@@ -60,6 +60,7 @@ def save_visual_training_result(
         "history": result.history,
         "training_device": result.device,
         "dataset": dict(dataset_manifest),
+        "phase_names": list(dataset_manifest["phase_names"]),
         "task_instructions": {
             task_id: {"instruction_id": value[0], "text": value[1]}
             for task_id, value in task_instructions.items()
@@ -84,6 +85,7 @@ def load_visual_policy(path: Path, *, device: str = "cpu") -> LearnedVisualPolic
         image_height=int(values["image_height"]),
         action_history=int(values["action_history"]),
         instruction_count=int(values["instruction_count"]),
+        phase_count=int(values["phase_count"]),
         proprioception_dim=int(values["proprioception_dim"]),
         action_dim=int(values["action_dim"]),
         visual_channels=tuple(values["visual_channels"]),
@@ -102,5 +104,6 @@ def load_visual_policy(path: Path, *, device: str = "cpu") -> LearnedVisualPolic
         policy_version=f"{manifest['model_id']}:{manifest['version']}",
         control_hz=float(manifest["control_hz"]),
         task_instructions=instructions,
+        phase_names=tuple(manifest["phase_names"]),
         device=device,
     )

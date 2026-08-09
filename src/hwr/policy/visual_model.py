@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import NamedTuple
 
 import torch
 from torch import nn
@@ -14,6 +15,7 @@ class VisualModelConfig:
     image_height: int
     action_history: int
     instruction_count: int = 1
+    phase_count: int = 1
     proprioception_dim: int = 24
     action_dim: int = 9
     visual_channels: tuple[int, ...] = (16, 32, 48)
@@ -25,6 +27,7 @@ class VisualModelConfig:
             self.image_height,
             self.action_history,
             self.instruction_count,
+            self.phase_count,
             self.proprioception_dim,
             self.action_dim,
             self.hidden_dim,
@@ -66,12 +69,15 @@ class HouseholdVisualPolicyModel(nn.Module):
             nn.Linear(128, 128),
             nn.SiLU(),
         )
-        self.head = nn.Sequential(
+        self.fusion = nn.Sequential(
             nn.Linear(visual_dim + 128, config.hidden_dim),
             nn.SiLU(),
             nn.Linear(config.hidden_dim, config.hidden_dim),
             nn.SiLU(),
-            nn.Linear(config.hidden_dim, config.action_dim),
+        )
+        self.phase_head = nn.Linear(config.hidden_dim, config.phase_count)
+        self.action_head = nn.Linear(
+            config.hidden_dim, config.phase_count * config.action_dim
         )
 
     def forward(
@@ -82,13 +88,22 @@ class HouseholdVisualPolicyModel(nn.Module):
         proprioception: torch.Tensor,
         action_history: torch.Tensor,
         instruction_id: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> "VisualModelOutput":
         visual = torch.cat((head_rgb, head_depth, wrist_rgb), dim=1)
         visual_features = self.visual_encoder(visual).flatten(1)
         instruction = self.instruction_embedding(instruction_id.flatten().long())
         state = torch.cat((proprioception, action_history.flatten(1), instruction), dim=1)
         state_features = self.state_encoder(state)
-        return self.head(torch.cat((visual_features, state_features), dim=1))
+        fused = self.fusion(torch.cat((visual_features, state_features), dim=1))
+        actions = self.action_head(fused).reshape(
+            -1, self.config.phase_count, self.config.action_dim
+        )
+        return VisualModelOutput(actions=actions, phase_logits=self.phase_head(fused))
+
+
+class VisualModelOutput(NamedTuple):
+    actions: torch.Tensor
+    phase_logits: torch.Tensor
 
 
 def _stride_two_size(size: int, layers: int) -> int:
