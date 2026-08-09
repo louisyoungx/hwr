@@ -1,0 +1,58 @@
+{
+  "artifacts": {
+    "dataset_path": "datasets/sort-laundry-v2-mps-aggregation-3",
+    "model_path": "models/sort_laundry_v1/sort-laundry-v2-mps"
+  },
+  "dataset": {
+    "checksum": "81ee31831413a1e581e968a9be869f1ab4e98698dd73b193f48e4c267ee58305",
+    "dataset_id": "sort-laundry-v2-mps-aggregation-3",
+    "episodes": 155,
+    "samples": 55413
+  },
+  "elapsed_seconds": 45.3176424580015,
+  "evaluation": {
+    "average_collisions": 0.0,
+    "average_steps": 323.95,
+    "episode_count": 20,
+    "reasons": {
+      "completed": 20
+    },
+    "success_count": 20,
+    "success_rate": 1.0,
+    "task_id": "sort_laundry/v1"
+  },
+  "run_id": "sort-laundry-v2-mps",
+  "scene_id": "sort_laundry_room/v1",
+  "schema_version": "hwr.training-run/v1",
+  "task_id": "sort_laundry/v1",
+  "training": {
+    "aggregation": [
+      {
+        "best_validation_loss": 0.01989194338869942,
+        "dataset_id": "sort-laundry-v2-mps-aggregation-1",
+        "episodes": 105,
+        "round": 1,
+        "samples": 39378
+      },
+      {
+        "best_validation_loss": 0.015204848807721582,
+        "dataset_id": "sort-laundry-v2-mps-aggregation-2",
+        "episodes": 130,
+        "round": 2,
+        "samples": 47302
+      },
+      {
+        "best_validation_loss": 0.018791586957585378,
+        "dataset_id": "sort-laundry-v2-mps-aggregation-3",
+        "episodes": 155,
+        "round": 3,
+        "samples": 55413
+      }
+    ],
+    "best_validation_loss": 0.018791586957585378,
+    "device": "mps",
+    "epochs": 50,
+    "first_train_loss": 0.15880915454637873,
+    "last_train_loss": 0.018529840865579683
+  }
+}
