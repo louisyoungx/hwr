@@ -21,8 +21,13 @@ BINDINGS = load_mujoco_task_bindings(
 )
 
 
-def test_living_room_expert_completes_two_contact_only_pick_and_place_cycles() -> None:
-    task_id = "tidy_living_room_3d/v1"
+@pytest.mark.parametrize(
+    "task_id",
+    ("tidy_living_room_3d/v1", "clear_dining_table_3d/v1"),
+)
+def test_household_expert_completes_two_contact_only_pick_and_place_cycles(
+    task_id: str,
+) -> None:
     backend = MujocoHouseholdBackend(
         TASKS[task_id], BINDINGS[task_id], camera_width=2, camera_height=2
     )

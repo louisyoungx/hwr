@@ -63,12 +63,12 @@
                   <site name="grasp_center" pos="0.14 0 -0.01" size="0.012" rgba="0 1 0 0"/>
                   <body name="left_finger" pos="0.075 0.110 -0.005" gravcomp="1">
                     <joint name="left_finger_joint" class="finger_joint" type="slide" axis="0 -1 0" range="0 0.075"/>
-                    <geom name="left_finger_pad" class="finger_pad" type="box" size="0.075 0.012 0.060"
+                    <geom name="left_finger_pad" class="finger_pad" type="box" size="0.075 0.012 0.040"
                           pos="0.065 0 -0.035" density="420" material="gripper_material"/>
                   </body>
                   <body name="right_finger" pos="0.075 -0.110 -0.005" gravcomp="1">
                     <joint name="right_finger_joint" class="finger_joint" type="slide" axis="0 1 0" range="0 0.075"/>
-                    <geom name="right_finger_pad" class="finger_pad" type="box" size="0.075 0.012 0.060"
+                    <geom name="right_finger_pad" class="finger_pad" type="box" size="0.075 0.012 0.040"
                           pos="0.065 0 -0.035" density="420" material="gripper_material"/>
                   </body>
                 </body>

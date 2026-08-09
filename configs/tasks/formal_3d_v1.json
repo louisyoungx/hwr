@@ -29,8 +29,8 @@
       "max_steps": 6000,
       "initial_base": {"x": [-1.90, -1.72], "y": [-1.45, -1.25], "z": [0.22, 0.22], "yaw": [-0.10, 0.10]},
       "objects": [
-        {"object_id": "cup", "target_id": "cup_holder", "reset": {"x": [0.88, 1.00], "y": [0.36, 0.48], "z": [0.765, 0.765], "yaw": [-0.25, 0.25]}, "grasp_site_z_offset": 0.10, "grip_fraction": 0.38, "standoff_m": 0.72},
-        {"object_id": "plate", "target_id": "plate_holder", "reset": {"x": [1.32, 1.44], "y": [0.58, 0.70], "z": [0.760, 0.760], "yaw": [-0.30, 0.30]}, "grasp_site_z_offset": 0.07, "grip_fraction": 0.28, "standoff_m": 0.72}
+        {"object_id": "cup", "target_id": "cup_holder", "reset": {"x": [0.88, 1.00], "y": [0.36, 0.48], "z": [0.765, 0.765], "yaw": [-0.25, 0.25]}, "grasp_site_z_offset": 0.075, "grip_fraction": 1.0, "standoff_m": 0.72},
+        {"object_id": "plate", "target_id": "plate_holder", "reset": {"x": [1.32, 1.44], "y": [0.32, 0.44], "z": [0.760, 0.760], "yaw": [-0.30, 0.30]}, "grasp_site_z_offset": 0.071, "grip_fraction": 1.0, "standoff_m": 0.72}
       ]
     },
     {

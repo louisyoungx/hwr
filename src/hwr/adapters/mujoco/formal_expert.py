@@ -15,6 +15,7 @@ from hwr.core.types import ActionFrame, ObservationFrame
 
 
 ARM_STOW = (0.0, -0.90, -1.00, 0.0, 1.70, 0.0)
+ARM_READY_TABLE = (0.0, -1.30, 0.70, 0.0, 0.60, 0.0)
 
 
 @dataclass(frozen=True)
@@ -224,11 +225,11 @@ class PrivilegedHouseholdExpert:
         return self._action(observation, linear=linear, angular=angular, gripper=self._gripper())
 
     def _unstow_action(self, observation: ObservationFrame) -> ActionFrame:
-        error = np.asarray(ARM_HOME) - np.asarray(observation.joint_position)
-        if float(np.max(np.abs(error))) <= 0.05:
+        error = np.asarray(self._operation_ready()) - np.asarray(observation.joint_position)
+        if float(np.max(np.abs(error))) <= 0.04 and self._base_is_settled(observation):
             self._advance()
             return self._stop(observation)
-        arm_command = tuple(float(value) for value in np.clip(2.0 * error, -1.0, 1.0))
+        arm_command = tuple(float(value) for value in np.clip(2.0 * error, -0.5, 0.5))
         return self._action(
             observation,
             linear=0.0,
@@ -236,6 +237,16 @@ class PrivilegedHouseholdExpert:
             gripper=self._gripper(),
             arm_command=arm_command,
         )
+
+    def _operation_ready(self) -> tuple[float, ...]:
+        if self.task.task_id.startswith("clear_dining"):
+            return ARM_READY_TABLE
+        return ARM_HOME
+
+    def _base_is_settled(self, observation: ObservationFrame) -> bool:
+        rotation = self.backend.data.xmat[self.backend.bundle.ids.base_body].reshape(3, 3)
+        upright = float(rotation[2, 2]) >= 0.995
+        return upright and max(abs(value) for value in observation.base_twist) <= 0.02
 
     def _stow_action(self, observation: ObservationFrame) -> ActionFrame | None:
         if self.holding_object is not None or self.drawer_holding:
@@ -263,15 +274,17 @@ class PrivilegedHouseholdExpert:
             gripper_target=grip,
         )
         if (
-            stage.kind in {"arm_target_above", "arm_target_lower"}
+            stage.kind in {"arm_target_above", "arm_target_lower", "arm_target_retract"}
             and self.stage_step >= 4
             and self._object_inside_target(stage.object_id)
         ):
             self._advance()
             return action
         error = np.linalg.norm(np.asarray(self.stage_target) - np.asarray(self.cartesian.site_position()))
-        if (self.stage_step >= 25 and error < 0.035) or self.stage_step >= 179:
-            if self.stage_step >= 179 and error >= 0.08:
+        tolerance = 0.07 if self.task.task_id.startswith("clear_dining") else 0.035
+        failure_error = 0.12 if self.task.task_id.startswith("clear_dining") else 0.08
+        if (self.stage_step >= 25 and error < tolerance) or self.stage_step >= 179:
+            if self.stage_step >= 179 and error >= failure_error:
                 self.failed = True
             self._advance()
         return action
@@ -313,7 +326,8 @@ class PrivilegedHouseholdExpert:
             if stage.kind.endswith("descend"):
                 return grasp
             site = self.cartesian.site_position()
-            return (site[0] - 0.05, site[1], site[2] + 0.35)
+            lift = 0.20 if self.task.task_id.startswith("clear_dining") else 0.35
+            return (site[0] - 0.05, site[1], site[2] + lift)
         target = self._target_position(stage.object_id)
         lower = (target[0], target[1], target[2] + spec.grasp_site_z_offset)
         if stage.kind.endswith("above"):
@@ -334,8 +348,12 @@ class PrivilegedHouseholdExpert:
             return []
         if task.startswith("clear_dining"):
             if stage.kind == "nav_object":
-                return [(2.75, 0.35), (1.75, -0.35)] if object_id == "plate" else [(0.30, -0.95)]
-            return [(1.80, -0.35), (2.80, 0.45)]
+                return (
+                    [(2.85, 1.10), (2.85, -0.35), (1.75, -0.35)]
+                    if object_id == "plate"
+                    else [(0.30, -0.95)]
+                )
+            return [(1.80, -0.35), (2.75, -0.35), (2.85, 0.30)]
         if stage.kind == "nav_drawer":
             return [(1.70, -0.70), (1.70, 1.35)]
         if stage.kind == "nav_object":
