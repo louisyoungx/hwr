@@ -28,6 +28,7 @@ BINDINGS = load_mujoco_task_bindings(
         ("tidy_living_room_3d/v1", 1000),
         ("clear_dining_table_3d/v1", 301),
         ("clear_dining_table_3d/v1", 1000),
+        ("clear_dining_table_3d/v1", 1001),
         ("store_kitchen_items_3d/v1", 301),
     ),
 )

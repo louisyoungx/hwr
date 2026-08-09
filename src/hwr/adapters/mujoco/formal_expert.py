@@ -383,7 +383,7 @@ class PrivilegedHouseholdExpert:
             gripper_target=grip,
         )
         if (
-            stage.kind in {"arm_target_above", "arm_target_lower", "arm_target_retract"}
+            stage.kind in {"arm_target_above", "arm_target_lower"}
             and self.stage_step >= 4
             and self._object_inside_target(stage.object_id)
         ):
@@ -494,7 +494,17 @@ class PrivilegedHouseholdExpert:
             lift = 0.20 if self.task.task_id.startswith("clear_dining") else 0.35
             return (site[0] - 0.05, site[1], site[2] + lift)
         target = self._target_position(stage.object_id)
-        lower = (target[0], target[1], target[2] + spec.grasp_site_z_offset)
+        if self.task.task_id.startswith("clear_dining"):
+            placement = self.backend._placement_sample(stage.object_id).position  # noqa: SLF001
+            site = self.cartesian.site_position()
+            grasp_offset = tuple(site[index] - placement[index] for index in range(3))
+            lower = (
+                target[0] + grasp_offset[0],
+                target[1] + grasp_offset[1] - 0.07,
+                target[2] + grasp_offset[2],
+            )
+        else:
+            lower = (target[0], target[1], target[2] + spec.grasp_site_z_offset)
         if stage.kind.endswith("raise"):
             site = self.cartesian.site_position()
             clearance = 0.35 if self.task.task_id.startswith("store_kitchen") else 0.15
