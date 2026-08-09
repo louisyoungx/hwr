@@ -397,10 +397,10 @@ class PrivilegedHouseholdExpert:
         )
         if (self.stage_step >= 25 and error < tolerance) or self.stage_step >= 179:
             physically_validated_later = (
-                self.task.task_id.startswith("store_kitchen")
-                and (
-                    stage.kind == "arm_object_descend"
-                    or stage.kind.startswith("arm_target")
+                stage.kind.startswith("arm_target")
+                or (
+                    self.task.task_id.startswith("store_kitchen")
+                    and stage.kind == "arm_object_descend"
                 )
             )
             if (

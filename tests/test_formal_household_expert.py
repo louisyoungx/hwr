@@ -22,21 +22,22 @@ BINDINGS = load_mujoco_task_bindings(
 
 
 @pytest.mark.parametrize(
-    "task_id",
+    ("task_id", "seed"),
     (
-        "tidy_living_room_3d/v1",
-        "clear_dining_table_3d/v1",
-        "store_kitchen_items_3d/v1",
+        ("tidy_living_room_3d/v1", 301),
+        ("tidy_living_room_3d/v1", 1000),
+        ("clear_dining_table_3d/v1", 301),
+        ("store_kitchen_items_3d/v1", 301),
     ),
 )
 def test_household_expert_completes_contact_only_household_task(
-    task_id: str,
+    task_id: str, seed: int,
 ) -> None:
     backend = MujocoHouseholdBackend(
         TASKS[task_id], BINDINGS[task_id], camera_width=2, camera_height=2
     )
     try:
-        observation = backend.reset(seed=301, task_id=task_id)
+        observation = backend.reset(seed=seed, task_id=task_id)
         expert = PrivilegedHouseholdExpert(backend)
         for _ in range(TASKS[task_id].max_steps):
             output = expert.action(observation)
