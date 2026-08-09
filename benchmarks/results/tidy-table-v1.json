@@ -1,0 +1,51 @@
+{
+  "artifacts": {
+    "dataset_path": "datasets/tidy-table-v3-mps-aggregation-2",
+    "model_path": "models/tidy_table_v1/tidy-table-v3-mps"
+  },
+  "dataset": {
+    "checksum": "19781211b88e3fef740e747c1e299684c3a93073ce868943989ac7211c632121",
+    "dataset_id": "tidy-table-v3-mps-aggregation-2",
+    "episodes": 100,
+    "samples": 36374
+  },
+  "elapsed_seconds": 21.637419457998476,
+  "evaluation": {
+    "average_collisions": 0.0,
+    "average_steps": 317.55,
+    "episode_count": 20,
+    "reasons": {
+      "completed": 20
+    },
+    "success_count": 20,
+    "success_rate": 1.0,
+    "task_id": "tidy_table/v1"
+  },
+  "run_id": "tidy-table-v3-mps",
+  "scene_id": "tidy_table_room/v1",
+  "schema_version": "hwr.training-run/v1",
+  "task_id": "tidy_table/v1",
+  "training": {
+    "aggregation": [
+      {
+        "best_validation_loss": 0.03108622007240627,
+        "dataset_id": "tidy-table-v3-mps-aggregation-1",
+        "episodes": 80,
+        "round": 1,
+        "samples": 28794
+      },
+      {
+        "best_validation_loss": 0.04448690587840486,
+        "dataset_id": "tidy-table-v3-mps-aggregation-2",
+        "episodes": 100,
+        "round": 2,
+        "samples": 36374
+      }
+    ],
+    "best_validation_loss": 0.04448690587840486,
+    "device": "mps",
+    "epochs": 40,
+    "first_train_loss": 0.26765986720737983,
+    "last_train_loss": 0.020357054415242867
+  }
+}

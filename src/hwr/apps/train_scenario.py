@@ -99,6 +99,7 @@ def run_training(arguments: argparse.Namespace) -> dict[str, object]:
             range(aggregation_start, aggregation_start + arguments.aggregation_episodes),
             expert_action_probability=arguments.expert_action_probability,
         )
+        dataset_path = aggregated_path
         dataset = BehaviorDataset.load(aggregated_path)
         training_result = train_behavior_policy(dataset, training_config)
         aggregation_history.append(
