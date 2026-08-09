@@ -1,0 +1,964 @@
+{
+  "products": [
+    {
+      "bounds_m": [
+        [
+          -0.91697026,
+          -0.41493318,
+          0.0
+        ],
+        [
+          0.91697026,
+          0.41493318,
+          0.72
+        ]
+      ],
+      "directory": "assets/household_v1/living_sofa",
+      "extents_m": [
+        1.83394052,
+        0.82986636,
+        0.72
+      ],
+      "faces": 2728,
+      "files": [
+        {
+          "bytes": 188,
+          "path": "assets/household_v1/living_sofa/living_sofa.mtl",
+          "sha256": "c492c3db73676227529669470fdb5e083dec9728cca30484d6b9886f4e9180e1"
+        },
+        {
+          "bytes": 188847,
+          "path": "assets/household_v1/living_sofa/living_sofa.obj",
+          "sha256": "1b82907cfdd4cc4a4a50d5427232eaa656bc5808843e068262caadd37e96a1ea"
+        },
+        {
+          "bytes": 644464,
+          "path": "assets/household_v1/living_sofa/sofa_02.png",
+          "sha256": "6c0d65bde7012d62fca218aa7b9011559b1dc297455c7e8fb548acf54baa327b"
+        }
+      ],
+      "id": "living_sofa",
+      "obj": "assets/household_v1/living_sofa/living_sofa.obj",
+      "uv_coordinates": 1828,
+      "vertices": 1828
+    },
+    {
+      "bounds_m": [
+        [
+          -0.40493171,
+          -0.40219167,
+          0.0
+        ],
+        [
+          0.40493171,
+          0.40219167,
+          0.48
+        ]
+      ],
+      "directory": "assets/household_v1/living_tea_table",
+      "extents_m": [
+        0.80986342,
+        0.80438335,
+        0.48
+      ],
+      "faces": 2508,
+      "files": [
+        {
+          "bytes": 1031481,
+          "path": "assets/household_v1/living_tea_table/chinese_tea_table.png",
+          "sha256": "d8b642ab646f2e59ac7afc476ab7c1e5499ff75de2e9a8e67088e1cab99e586b"
+        },
+        {
+          "bytes": 208,
+          "path": "assets/household_v1/living_tea_table/living_tea_table.mtl",
+          "sha256": "7590c03a1045fdb893632f0bffb77cfe646d1ac42d8434d8b4efc71cc856d9b1"
+        },
+        {
+          "bytes": 195693,
+          "path": "assets/household_v1/living_tea_table/living_tea_table.obj",
+          "sha256": "ee511738d3d29e5a1f4f5ea32461958189c4d5376285710e34ab51ba28db1483"
+        }
+      ],
+      "id": "living_tea_table",
+      "obj": "assets/household_v1/living_tea_table/living_tea_table.obj",
+      "uv_coordinates": 1992,
+      "vertices": 1992
+    },
+    {
+      "bounds_m": [
+        [
+          -0.275,
+          -0.20170222,
+          0.0
+        ],
+        [
+          0.275,
+          0.20170222,
+          0.31780474
+        ]
+      ],
+      "directory": "assets/household_v1/living_storage_basket",
+      "extents_m": [
+        0.55,
+        0.40340443,
+        0.31780474
+      ],
+      "faces": 17850,
+      "files": [
+        {
+          "bytes": 206,
+          "path": "assets/household_v1/living_storage_basket/living_storage_basket.mtl",
+          "sha256": "8702d2b5ab95ca6cd5653614eb62bec3ac8b89e0e41135fc8cc92502d3f5ac0e"
+        },
+        {
+          "bytes": 1181577,
+          "path": "assets/household_v1/living_storage_basket/living_storage_basket.obj",
+          "sha256": "0ec5579fca3e78692630539f46e8499fd2034ea2b19d09d008662a733ce028ab"
+        },
+        {
+          "bytes": 1781310,
+          "path": "assets/household_v1/living_storage_basket/wicker_basket_02.png",
+          "sha256": "0ea3d2f1c36874b25cebd881ef93e78b1971db7b3555fde22d8629eeaf548298"
+        }
+      ],
+      "id": "living_storage_basket",
+      "obj": "assets/household_v1/living_storage_basket/living_storage_basket.obj",
+      "uv_coordinates": 10171,
+      "vertices": 10171
+    },
+    {
+      "bounds_m": [
+        [
+          -0.05982143,
+          -0.08405693,
+          0.0
+        ],
+        [
+          0.05982143,
+          0.08405693,
+          0.16
+        ]
+      ],
+      "directory": "assets/household_v1/toy_duck",
+      "extents_m": [
+        0.11964286,
+        0.16811386,
+        0.16
+      ],
+      "faces": 4288,
+      "files": [
+        {
+          "bytes": 636482,
+          "path": "assets/household_v1/toy_duck/rubber_duck_toy.png",
+          "sha256": "f6dc640bd62d82276d3310d8a7cf7b7e60bc3e13038c980ebc28e0a20ce209aa"
+        },
+        {
+          "bytes": 204,
+          "path": "assets/household_v1/toy_duck/toy_duck.mtl",
+          "sha256": "110d34149a7ea704b8cb9e53169c24c72f86d367351c2745ab979354ea94d264"
+        },
+        {
+          "bytes": 279184,
+          "path": "assets/household_v1/toy_duck/toy_duck.obj",
+          "sha256": "f0b362067e2827b4a00ab209856e6ddc4b8a0d4536499c51dc4866465778b7c3"
+        }
+      ],
+      "id": "toy_duck",
+      "obj": "assets/household_v1/toy_duck/toy_duck.obj",
+      "uv_coordinates": 2489,
+      "vertices": 2489
+    },
+    {
+      "bounds_m": [
+        [
+          -0.10922305,
+          -0.10935659,
+          0.0
+        ],
+        [
+          0.10922305,
+          0.10935659,
+          0.22
+        ]
+      ],
+      "directory": "assets/household_v1/toy_football",
+      "extents_m": [
+        0.2184461,
+        0.21871318,
+        0.22
+      ],
+      "faces": 1920,
+      "files": [
+        {
+          "bytes": 1629332,
+          "path": "assets/household_v1/toy_football/football.png",
+          "sha256": "88f74f710d8a7a5958be53f632c2e582c1c2f51a0b9495211fd1c8adb20b174a"
+        },
+        {
+          "bytes": 190,
+          "path": "assets/household_v1/toy_football/toy_football.mtl",
+          "sha256": "1fe6652192553bbeb3c2cdbcf131359d9713a7677ddc7d98a90bc854ff0e8252"
+        },
+        {
+          "bytes": 122451,
+          "path": "assets/household_v1/toy_football/toy_football.obj",
+          "sha256": "00104ed5febc97563a7311c9c136d5c7d4676aa7129704ce120995725d2ced95"
+        }
+      ],
+      "id": "toy_football",
+      "obj": "assets/household_v1/toy_football/toy_football.obj",
+      "uv_coordinates": 1187,
+      "vertices": 1187
+    },
+    {
+      "bounds_m": [
+        [
+          -0.52909581,
+          -0.52909579,
+          0.0
+        ],
+        [
+          0.52909581,
+          0.52909579,
+          0.76
+        ]
+      ],
+      "directory": "assets/household_v1/dining_table",
+      "extents_m": [
+        1.05819162,
+        1.05819158,
+        0.76
+      ],
+      "faces": 8640,
+      "files": [
+        {
+          "bytes": 216,
+          "path": "assets/household_v1/dining_table/dining_table.mtl",
+          "sha256": "a216460704cd1c3d1493a29ad258b30392cabda4d597d31502057227d12872fb"
+        },
+        {
+          "bytes": 633700,
+          "path": "assets/household_v1/dining_table/dining_table.obj",
+          "sha256": "a123a4945dcf7faf30591a82e29aaa312b7da31565c18faf44a0477db52f6cd2"
+        },
+        {
+          "bytes": 779572,
+          "path": "assets/household_v1/dining_table/round_wooden_table_01.png",
+          "sha256": "d77e9779fa0d6b635073b0c47c48826116ac7ec418457cae970106f7cce35bc2"
+        }
+      ],
+      "id": "dining_table",
+      "obj": "assets/household_v1/dining_table/dining_table.obj",
+      "uv_coordinates": 5964,
+      "vertices": 5964
+    },
+    {
+      "bounds_m": [
+        [
+          -0.21826027,
+          -0.29017087,
+          0.0
+        ],
+        [
+          0.21826027,
+          0.29017087,
+          0.98
+        ]
+      ],
+      "directory": "assets/household_v1/dining_chair",
+      "extents_m": [
+        0.43652054,
+        0.58034175,
+        0.98
+      ],
+      "faces": 22013,
+      "files": [
+        {
+          "bytes": 204,
+          "path": "assets/household_v1/dining_chair/dining_chair.mtl",
+          "sha256": "2f361349caf7ca204f12d1ff2cf70aa8037878cd0e13929633d98c416357c806"
+        },
+        {
+          "bytes": 1506541,
+          "path": "assets/household_v1/dining_chair/dining_chair.obj",
+          "sha256": "e1e0a7fa363a484f3b5315d753669f4d8b55461b0379761b41bf3a6c4ccf64aa"
+        },
+        {
+          "bytes": 621533,
+          "path": "assets/household_v1/dining_chair/dining_chair_02.png",
+          "sha256": "d41d8f3411b61c59e883f6cb2ee5e70fe4eecf1902f834b7f1c4b8ee13fa633b"
+        }
+      ],
+      "id": "dining_chair",
+      "obj": "assets/household_v1/dining_chair/dining_chair.obj",
+      "uv_coordinates": 12891,
+      "vertices": 12891
+    },
+    {
+      "bounds_m": [
+        [
+          -0.07143717,
+          -0.08884036,
+          0.0
+        ],
+        [
+          0.07143717,
+          0.08884036,
+          0.09
+        ]
+      ],
+      "directory": "assets/household_v1/dining_cup",
+      "extents_m": [
+        0.14287434,
+        0.17768071,
+        0.09
+      ],
+      "faces": 4156,
+      "files": [
+        {
+          "bytes": 194,
+          "path": "assets/household_v1/dining_cup/dining_cup.mtl",
+          "sha256": "ab2ce0bb9be385b03cdeaeb385679d931cb6d1ddb9e39f478be9c7ca7c62f89a"
+        },
+        {
+          "bytes": 264115,
+          "path": "assets/household_v1/dining_cup/dining_cup.obj",
+          "sha256": "0a312fe817ca12bc3b5e2b37b8f7dd03512e64e933c07f1c55745c3b1dc94492"
+        },
+        {
+          "bytes": 1134478,
+          "path": "assets/household_v1/dining_cup/tea_set_01.png",
+          "sha256": "cb7c388e30f3211ad4998707fc6444f7add8d74dc882d3f180a3967fadd5236e"
+        }
+      ],
+      "id": "dining_cup",
+      "obj": "assets/household_v1/dining_cup/dining_cup.obj",
+      "uv_coordinates": 2328,
+      "vertices": 2328
+    },
+    {
+      "bounds_m": [
+        [
+          -0.12,
+          -0.11865296,
+          0.0
+        ],
+        [
+          0.12,
+          0.11865296,
+          0.03364784
+        ]
+      ],
+      "directory": "assets/household_v1/dining_plate",
+      "extents_m": [
+        0.24,
+        0.23730591,
+        0.03364784
+      ],
+      "faces": 2112,
+      "files": [
+        {
+          "bytes": 1181241,
+          "path": "assets/household_v1/dining_plate/carved_wooden_plate.png",
+          "sha256": "dadd716601e093b0b681718b7e1f0c2baacfd34f10f669c422debd39d33420ef"
+        },
+        {
+          "bytes": 212,
+          "path": "assets/household_v1/dining_plate/dining_plate.mtl",
+          "sha256": "d4a68c2af30d725fda50e0c6eda0f70d7805a664b0af627c844dcf146c43ee70"
+        },
+        {
+          "bytes": 131607,
+          "path": "assets/household_v1/dining_plate/dining_plate.obj",
+          "sha256": "1601adcbf75643596da3fc8481b138d13107a2bcbf08aab1c2a1b54b5e5ed689"
+        }
+      ],
+      "id": "dining_plate",
+      "obj": "assets/household_v1/dining_plate/dining_plate.obj",
+      "uv_coordinates": 1234,
+      "vertices": 1234
+    },
+    {
+      "bounds_m": [
+        [
+          -0.56106037,
+          -0.23998799,
+          0.0
+        ],
+        [
+          0.56106037,
+          0.23998799,
+          1.85
+        ]
+      ],
+      "directory": "assets/household_v1/kitchen_cabinet",
+      "extents_m": [
+        1.12212073,
+        0.47997597,
+        1.85
+      ],
+      "faces": 26406,
+      "files": [
+        {
+          "bytes": 839152,
+          "path": "assets/household_v1/kitchen_cabinet/drawer_cabinet.png",
+          "sha256": "2c631e8c6a33a6828413fb784bb136dfe829cdb0d4ae0536566179f895a7cdd6"
+        },
+        {
+          "bytes": 202,
+          "path": "assets/household_v1/kitchen_cabinet/kitchen_cabinet.mtl",
+          "sha256": "d2c27593ee4d94d6f6a423ef9ddebd16d2909179bfba1c86ae42b720661c376a"
+        },
+        {
+          "bytes": 2141562,
+          "path": "assets/household_v1/kitchen_cabinet/kitchen_cabinet.obj",
+          "sha256": "0cbc89507be27bf792050bbc699e05cd2b2d6b4a7f4da0795da5a71b98cd9d3f"
+        }
+      ],
+      "id": "kitchen_cabinet",
+      "obj": "assets/household_v1/kitchen_cabinet/kitchen_cabinet.obj",
+      "uv_coordinates": 20013,
+      "vertices": 20013
+    },
+    {
+      "bounds_m": [
+        [
+          -0.04644962,
+          -0.04712128,
+          0.0
+        ],
+        [
+          0.04644962,
+          0.04712128,
+          0.24
+        ]
+      ],
+      "directory": "assets/household_v1/cleaner_yellow",
+      "extents_m": [
+        0.09289925,
+        0.09424256,
+        0.24
+      ],
+      "faces": 6792,
+      "files": [
+        {
+          "bytes": 214,
+          "path": "assets/household_v1/cleaner_yellow/cleaner_yellow.mtl",
+          "sha256": "0ce90270c5fa3ac8fc04aaaf5ad0216552df31389915da33ccc05b9b80454167"
+        },
+        {
+          "bytes": 449811,
+          "path": "assets/household_v1/cleaner_yellow/cleaner_yellow.obj",
+          "sha256": "e598e97e3acc5cce88886fa848e436ea4010b7eccb0dc69bb5f46688e9f27907"
+        },
+        {
+          "bytes": 751989,
+          "path": "assets/household_v1/cleaner_yellow/multi_cleaner_bottle.png",
+          "sha256": "9b942fd95ed6d629a5db0617fd62c077a109777199498352d3f1c4e4aca495d5"
+        }
+      ],
+      "id": "cleaner_yellow",
+      "obj": "assets/household_v1/cleaner_yellow/cleaner_yellow.obj",
+      "uv_coordinates": 4003,
+      "vertices": 4003
+    },
+    {
+      "bounds_m": [
+        [
+          -0.07357237,
+          -0.05508213,
+          0.0
+        ],
+        [
+          0.07357237,
+          0.05508213,
+          0.3
+        ]
+      ],
+      "directory": "assets/household_v1/cleaner_pink",
+      "extents_m": [
+        0.14714474,
+        0.11016427,
+        0.3
+      ],
+      "faces": 4624,
+      "files": [
+        {
+          "bytes": 807415,
+          "path": "assets/household_v1/cleaner_pink/all_purpose_cleaner.png",
+          "sha256": "275644a0ed478a61831c77f4040a978a8a44421d555225c8211d30e79ec98bc6"
+        },
+        {
+          "bytes": 212,
+          "path": "assets/household_v1/cleaner_pink/cleaner_pink.mtl",
+          "sha256": "7f80baffb8444cb53e0860586a7b93848d9711c2b66bc0c2084421f13f6959d2"
+        },
+        {
+          "bytes": 309596,
+          "path": "assets/household_v1/cleaner_pink/cleaner_pink.obj",
+          "sha256": "97b53b28c42fcd411fcb180972099adca208867316d2e59a2fda3d0608ba7b6a"
+        }
+      ],
+      "id": "cleaner_pink",
+      "obj": "assets/household_v1/cleaner_pink/cleaner_pink.obj",
+      "uv_coordinates": 2796,
+      "vertices": 2796
+    }
+  ],
+  "provider": {
+    "api_url": "https://api.polyhaven.com/files/{source_id}",
+    "base_url": "https://polyhaven.com",
+    "license": "CC0-1.0",
+    "license_url": "https://polyhaven.com/license",
+    "name": "Poly Haven",
+    "resolution": "1k"
+  },
+  "schema_version": "hwr.household-assets-lock/v1",
+  "spec_sha256": "9ac02e4231cfc55864ad3c602b52ea8d253e3e8407eb6d1c568f830f1d30c9b3",
+  "upstreams": [
+    {
+      "api_url": "https://api.polyhaven.com/files/all_purpose_cleaner",
+      "downloads": [
+        {
+          "md5": "c5edb27b703201445cbae47e47bed07b",
+          "relative_path": "all_purpose_cleaner_1k.gltf",
+          "size": 3211,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/all_purpose_cleaner/all_purpose_cleaner_1k.gltf"
+        },
+        {
+          "md5": "2a246d2def6557c4b97a1acddec7909d",
+          "relative_path": "all_purpose_cleaner.bin",
+          "size": 117216,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/all_purpose_cleaner/all_purpose_cleaner.bin"
+        },
+        {
+          "md5": "1565e255630205029322614f8e661407",
+          "relative_path": "textures/all_purpose_cleaner_arm_1k.jpg",
+          "size": 432313,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/all_purpose_cleaner/all_purpose_cleaner_arm_1k.jpg"
+        },
+        {
+          "md5": "12f1d13a4dbbb0ddddd190cc7c3ed95d",
+          "relative_path": "textures/all_purpose_cleaner_diff_1k.jpg",
+          "size": 355694,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/all_purpose_cleaner/all_purpose_cleaner_diff_1k.jpg"
+        },
+        {
+          "md5": "6ab9c098fa44bc8c7228a3eec7ca21ba",
+          "relative_path": "textures/all_purpose_cleaner_nor_gl_1k.jpg",
+          "size": 146701,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/all_purpose_cleaner/all_purpose_cleaner_nor_gl_1k.jpg"
+        }
+      ],
+      "primary": "all_purpose_cleaner_1k.gltf",
+      "source_id": "all_purpose_cleaner"
+    },
+    {
+      "api_url": "https://api.polyhaven.com/files/carved_wooden_plate",
+      "downloads": [
+        {
+          "md5": "c4866bc4fcdf070b992f9b35acf8d13e",
+          "relative_path": "carved_wooden_plate_1k.gltf",
+          "size": 2836,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/carved_wooden_plate/carved_wooden_plate_1k.gltf"
+        },
+        {
+          "md5": "70499c8019359d859577d9f7eef46091",
+          "relative_path": "carved_wooden_plate.bin",
+          "size": 52160,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/carved_wooden_plate/carved_wooden_plate.bin"
+        },
+        {
+          "md5": "e9a523f6b0a9851b7b9e9855fa83f896",
+          "relative_path": "textures/carved_wooden_plate_arm_1k.jpg",
+          "size": 450417,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/carved_wooden_plate/carved_wooden_plate_arm_1k.jpg"
+        },
+        {
+          "md5": "f4c0f569c128db22906a209905cf3e90",
+          "relative_path": "textures/carved_wooden_plate_diff_1k.jpg",
+          "size": 476516,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/carved_wooden_plate/carved_wooden_plate_diff_1k.jpg"
+        },
+        {
+          "md5": "b492a0465ff80fc5aff3433991fdc554",
+          "relative_path": "textures/carved_wooden_plate_nor_gl_1k.jpg",
+          "size": 582309,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/carved_wooden_plate/carved_wooden_plate_nor_gl_1k.jpg"
+        }
+      ],
+      "primary": "carved_wooden_plate_1k.gltf",
+      "source_id": "carved_wooden_plate"
+    },
+    {
+      "api_url": "https://api.polyhaven.com/files/chinese_tea_table",
+      "downloads": [
+        {
+          "md5": "742112f24cdcf8c357aacc8f255664e5",
+          "relative_path": "chinese_tea_table_1k.gltf",
+          "size": 2793,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/chinese_tea_table/chinese_tea_table_1k.gltf"
+        },
+        {
+          "md5": "8dcb405bff1e509e3c846278ce2f3ad9",
+          "relative_path": "chinese_tea_table.bin",
+          "size": 78792,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/chinese_tea_table/chinese_tea_table.bin"
+        },
+        {
+          "md5": "c87805fa83058c7d08056446b0589f7e",
+          "relative_path": "textures/chinese_tea_table_arm_1k.jpg",
+          "size": 504125,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/chinese_tea_table/chinese_tea_table_arm_1k.jpg"
+        },
+        {
+          "md5": "eec9f6e3d2c3f7335abd4760e3a30ba2",
+          "relative_path": "textures/chinese_tea_table_diff_1k.jpg",
+          "size": 447131,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/chinese_tea_table/chinese_tea_table_diff_1k.jpg"
+        },
+        {
+          "md5": "f3398ab803461ee8247b05ad9b9992ba",
+          "relative_path": "textures/chinese_tea_table_nor_gl_1k.jpg",
+          "size": 548449,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/chinese_tea_table/chinese_tea_table_nor_gl_1k.jpg"
+        }
+      ],
+      "primary": "chinese_tea_table_1k.gltf",
+      "source_id": "chinese_tea_table"
+    },
+    {
+      "api_url": "https://api.polyhaven.com/files/dining_chair_02",
+      "downloads": [
+        {
+          "md5": "5aff75016e0943e84161de89dcc3ceb8",
+          "relative_path": "dining_chair_02_1k.gltf",
+          "size": 2723,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/dining_chair_02/dining_chair_02_1k.gltf"
+        },
+        {
+          "md5": "b7f8a91c0a5249d02de7885f3b242c4e",
+          "relative_path": "dining_chair_02.bin",
+          "size": 544592,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/dining_chair_02/dining_chair_02.bin"
+        },
+        {
+          "md5": "2b16c9ddb3ea83d200b02de54a4fdcb8",
+          "relative_path": "textures/dining_chair_02_arm_1k.jpg",
+          "size": 162630,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dining_chair_02/dining_chair_02_arm_1k.jpg"
+        },
+        {
+          "md5": "6b7b8e4ac0a3aad9ecdf314a97b0ef75",
+          "relative_path": "textures/dining_chair_02_diff_1k.jpg",
+          "size": 91518,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dining_chair_02/dining_chair_02_diff_1k.jpg"
+        },
+        {
+          "md5": "9c0e1003f9c8859a2e5c2c7f92a8f238",
+          "relative_path": "textures/dining_chair_02_nor_gl_1k.jpg",
+          "size": 119612,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/dining_chair_02/dining_chair_02_nor_gl_1k.jpg"
+        }
+      ],
+      "primary": "dining_chair_02_1k.gltf",
+      "source_id": "dining_chair_02"
+    },
+    {
+      "api_url": "https://api.polyhaven.com/files/drawer_cabinet",
+      "downloads": [
+        {
+          "md5": "4ee75e02d0a2c383c61950c614d78cf8",
+          "relative_path": "drawer_cabinet_1k.gltf",
+          "size": 8031,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/drawer_cabinet/drawer_cabinet_1k.gltf"
+        },
+        {
+          "md5": "1f0d93118e12628d0b79c7dd8d11b80e",
+          "relative_path": "drawer_cabinet.bin",
+          "size": 798852,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/drawer_cabinet/drawer_cabinet.bin"
+        },
+        {
+          "md5": "ce7a177bd99d4aa87a95f84dab5eb7a6",
+          "relative_path": "textures/drawer_cabinet_arm_1k.jpg",
+          "size": 124942,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/drawer_cabinet/drawer_cabinet_arm_1k.jpg"
+        },
+        {
+          "md5": "bb0311ae77d1779bc5b37396a029f6f3",
+          "relative_path": "textures/drawer_cabinet_diff_1k.jpg",
+          "size": 150011,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/drawer_cabinet/drawer_cabinet_diff_1k.jpg"
+        },
+        {
+          "md5": "151891cdd9db147046f951525f849f7f",
+          "relative_path": "textures/drawer_cabinet_nor_gl_1k.jpg",
+          "size": 61593,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/drawer_cabinet/drawer_cabinet_nor_gl_1k.jpg"
+        }
+      ],
+      "primary": "drawer_cabinet_1k.gltf",
+      "source_id": "drawer_cabinet"
+    },
+    {
+      "api_url": "https://api.polyhaven.com/files/football",
+      "downloads": [
+        {
+          "md5": "ed4244d26380b21489d5366dc420c42b",
+          "relative_path": "football_1k.gltf",
+          "size": 4366,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/football/football_1k.gltf"
+        },
+        {
+          "md5": "20f38f11c0051a66b151f90d679ec53e",
+          "relative_path": "football.bin",
+          "size": 109648,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/football/football.bin"
+        },
+        {
+          "md5": "0c9658d79b805698fc2a3e0a8068906e",
+          "relative_path": "textures/football_arm_1k.jpg",
+          "size": 965640,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/football/football_arm_1k.jpg"
+        },
+        {
+          "md5": "22d15d332c83c73b2b68581a5d8148b1",
+          "relative_path": "textures/football_diff_1k.jpg",
+          "size": 743366,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/football/football_diff_1k.jpg"
+        },
+        {
+          "md5": "c5c9378d732920c8cc85379baced244d",
+          "relative_path": "textures/football_nor_gl_1k.jpg",
+          "size": 939017,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/football/football_nor_gl_1k.jpg"
+        }
+      ],
+      "primary": "football_1k.gltf",
+      "source_id": "football"
+    },
+    {
+      "api_url": "https://api.polyhaven.com/files/multi_cleaner_bottle",
+      "downloads": [
+        {
+          "md5": "dd3d295d11354307b37de077aa0354c7",
+          "relative_path": "multi_cleaner_bottle_1k.gltf",
+          "size": 4289,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/multi_cleaner_bottle/multi_cleaner_bottle_1k.gltf"
+        },
+        {
+          "md5": "6b1f06fdd8a785cc2df490836b1fe4b0",
+          "relative_path": "multi_cleaner_bottle.bin",
+          "size": 168848,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/multi_cleaner_bottle/multi_cleaner_bottle.bin"
+        },
+        {
+          "md5": "eeb08388d78c175394c8e0bfa0705fda",
+          "relative_path": "textures/multi_cleaner_bottle_arm_1k.jpg",
+          "size": 519524,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/multi_cleaner_bottle/multi_cleaner_bottle_arm_1k.jpg"
+        },
+        {
+          "md5": "67ebca3e44b07a6b8532f84a06345fe8",
+          "relative_path": "textures/multi_cleaner_bottle_diff_1k.jpg",
+          "size": 376440,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/multi_cleaner_bottle/multi_cleaner_bottle_diff_1k.jpg"
+        },
+        {
+          "md5": "d6f0cffc0f834947ebf3b990d6b811d1",
+          "relative_path": "textures/multi_cleaner_bottle_nor_gl_1k.jpg",
+          "size": 311193,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/multi_cleaner_bottle/multi_cleaner_bottle_nor_gl_1k.jpg"
+        }
+      ],
+      "primary": "multi_cleaner_bottle_1k.gltf",
+      "source_id": "multi_cleaner_bottle"
+    },
+    {
+      "api_url": "https://api.polyhaven.com/files/round_wooden_table_01",
+      "downloads": [
+        {
+          "md5": "9a2ad4a55a88ee7493a842026d944abc",
+          "relative_path": "round_wooden_table_01_1k.gltf",
+          "size": 4089,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/round_wooden_table_01/round_wooden_table_01_1k.gltf"
+        },
+        {
+          "md5": "b907851fab9d7552cef8a12858acc869",
+          "relative_path": "round_wooden_table_01.bin",
+          "size": 242688,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/round_wooden_table_01/round_wooden_table_01.bin"
+        },
+        {
+          "md5": "2dc3f86e564b407141c6c216760d8bb6",
+          "relative_path": "textures/round_wooden_table_01_arm_1k.jpg",
+          "size": 134854,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/round_wooden_table_01/round_wooden_table_01_arm_1k.jpg"
+        },
+        {
+          "md5": "4be9c5bc6b73f42541fb461c19169c56",
+          "relative_path": "textures/round_wooden_table_01_diff_1k.jpg",
+          "size": 117911,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/round_wooden_table_01/round_wooden_table_01_diff_1k.jpg"
+        },
+        {
+          "md5": "3d0f124a495db5eeca16db53c188729d",
+          "relative_path": "textures/round_wooden_table_01_nor_gl_1k.jpg",
+          "size": 50832,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/round_wooden_table_01/round_wooden_table_01_nor_gl_1k.jpg"
+        }
+      ],
+      "primary": "round_wooden_table_01_1k.gltf",
+      "source_id": "round_wooden_table_01"
+    },
+    {
+      "api_url": "https://api.polyhaven.com/files/rubber_duck_toy",
+      "downloads": [
+        {
+          "md5": "da655b3c5bd4dcf29bc60a7b7bfe903c",
+          "relative_path": "rubber_duck_toy_1k.gltf",
+          "size": 3180,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/rubber_duck_toy/rubber_duck_toy_1k.gltf"
+        },
+        {
+          "md5": "2ab5ea380067b76e3ba7e8db8ad0844a",
+          "relative_path": "rubber_duck_toy.bin",
+          "size": 105376,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/rubber_duck_toy/rubber_duck_toy.bin"
+        },
+        {
+          "md5": "6128a89af1c8e20e432b54abf30c9371",
+          "relative_path": "textures/rubber_duck_toy_arm_1k.jpg",
+          "size": 346707,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rubber_duck_toy/rubber_duck_toy_arm_1k.jpg"
+        },
+        {
+          "md5": "49b9676f8d253baf6c054771fd023608",
+          "relative_path": "textures/rubber_duck_toy_diff_1k.jpg",
+          "size": 231027,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rubber_duck_toy/rubber_duck_toy_diff_1k.jpg"
+        },
+        {
+          "md5": "fb224351ee15cb9c0607d3a28a49ce1d",
+          "relative_path": "textures/rubber_duck_toy_nor_gl_1k.jpg",
+          "size": 48768,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/rubber_duck_toy/rubber_duck_toy_nor_gl_1k.jpg"
+        }
+      ],
+      "primary": "rubber_duck_toy_1k.gltf",
+      "source_id": "rubber_duck_toy"
+    },
+    {
+      "api_url": "https://api.polyhaven.com/files/sofa_02",
+      "downloads": [
+        {
+          "md5": "ec2590dc8433a523d0fe9e507766c16f",
+          "relative_path": "sofa_02_1k.gltf",
+          "size": 4183,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/sofa_02/sofa_02_1k.gltf"
+        },
+        {
+          "md5": "024d6f57a7c2ee7915430cd6e1c2651e",
+          "relative_path": "sofa_02.bin",
+          "size": 74864,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/sofa_02/sofa_02.bin"
+        },
+        {
+          "md5": "78799d978a1117ba83dbffed9af0fa33",
+          "relative_path": "textures/sofa_02_arm_1k.jpg",
+          "size": 121752,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/sofa_02/sofa_02_arm_1k.jpg"
+        },
+        {
+          "md5": "0452c7d8dd3ef414d5ed3055085028a1",
+          "relative_path": "textures/sofa_02_diff_1k.jpg",
+          "size": 86514,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/sofa_02/sofa_02_diff_1k.jpg"
+        },
+        {
+          "md5": "968528a369bced172d34275dba5aebf1",
+          "relative_path": "textures/sofa_02_nor_gl_1k.jpg",
+          "size": 139858,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/sofa_02/sofa_02_nor_gl_1k.jpg"
+        }
+      ],
+      "primary": "sofa_02_1k.gltf",
+      "source_id": "sofa_02"
+    },
+    {
+      "api_url": "https://api.polyhaven.com/files/tea_set_01",
+      "downloads": [
+        {
+          "md5": "157b3a5ace1f2dfd4419789ff4180c59",
+          "relative_path": "tea_set_01_1k.gltf",
+          "size": 15836,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/tea_set_01/tea_set_01_1k.gltf"
+        },
+        {
+          "md5": "9f26672d452e5d155da484951b6277ae",
+          "relative_path": "tea_set_01.bin",
+          "size": 941776,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/tea_set_01/tea_set_01.bin"
+        },
+        {
+          "md5": "119115b0c556d85ec257f480b0dc58a6",
+          "relative_path": "textures/tea_set_01_arm_1k.jpg",
+          "size": 559750,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tea_set_01/tea_set_01_arm_1k.jpg"
+        },
+        {
+          "md5": "e6a77ef283da8541a67cddc2ff698830",
+          "relative_path": "textures/tea_set_01_diff_1k.jpg",
+          "size": 509631,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tea_set_01/tea_set_01_diff_1k.jpg"
+        },
+        {
+          "md5": "5618e35b021585a23b2e2f04faa92f9b",
+          "relative_path": "textures/tea_set_01_nor_gl_1k.jpg",
+          "size": 255598,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/tea_set_01/tea_set_01_nor_gl_1k.jpg"
+        }
+      ],
+      "primary": "tea_set_01_1k.gltf",
+      "source_id": "tea_set_01"
+    },
+    {
+      "api_url": "https://api.polyhaven.com/files/wicker_basket_02",
+      "downloads": [
+        {
+          "md5": "aed62a99730dec42ef32e51c36187f37",
+          "relative_path": "wicker_basket_02_1k.gltf",
+          "size": 4497,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/wicker_basket_02/wicker_basket_02_1k.gltf"
+        },
+        {
+          "md5": "2967de2f99b85ee52d6bab63978c003a",
+          "relative_path": "textures/wicker_basket_02_arm_1k.jpg",
+          "size": 718943,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wicker_basket_02/wicker_basket_02_arm_1k.jpg"
+        },
+        {
+          "md5": "61471823114f02ca04197e7e2af13e8f",
+          "relative_path": "textures/wicker_basket_02_diff_1k.jpg",
+          "size": 867277,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wicker_basket_02/wicker_basket_02_diff_1k.jpg"
+        },
+        {
+          "md5": "502447f7dc5687b386f8c417c31feb07",
+          "relative_path": "textures/wicker_basket_02_nor_gl_1k.jpg",
+          "size": 1041220,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wicker_basket_02/wicker_basket_02_nor_gl_1k.jpg"
+        },
+        {
+          "md5": "32a855c75791b16826530611f9199e82",
+          "relative_path": "wicker_basket_02.bin",
+          "size": 432572,
+          "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/wicker_basket_02/wicker_basket_02.bin"
+        }
+      ],
+      "primary": "wicker_basket_02_1k.gltf",
+      "source_id": "wicker_basket_02"
+    }
+  ]
+}

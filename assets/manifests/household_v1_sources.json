@@ -1,0 +1,112 @@
+{
+  "schema_version": "hwr.household-assets/v1",
+  "provider": {
+    "name": "Poly Haven",
+    "base_url": "https://polyhaven.com",
+    "api_url": "https://api.polyhaven.com/files/{source_id}",
+    "license": "CC0-1.0",
+    "license_url": "https://polyhaven.com/license",
+    "resolution": "1k"
+  },
+  "coordinate_conversion": "Poly Haven glTF Y-up to HWR Z-up; center XY; rest base on Z=0",
+  "assets": [
+    {
+      "id": "living_sofa",
+      "source_id": "sofa_02",
+      "source_page": "https://polyhaven.com/a/sofa_02",
+      "authors": ["Kirill Sannikov"],
+      "scale_axis": "z",
+      "target_m": 0.72
+    },
+    {
+      "id": "living_tea_table",
+      "source_id": "chinese_tea_table",
+      "source_page": "https://polyhaven.com/a/chinese_tea_table",
+      "authors": ["Kirill Sannikov"],
+      "scale_axis": "z",
+      "target_m": 0.48
+    },
+    {
+      "id": "living_storage_basket",
+      "source_id": "wicker_basket_02",
+      "source_page": "https://polyhaven.com/a/wicker_basket_02",
+      "authors": ["Kuutti Siitonen"],
+      "scale_axis": "max",
+      "target_m": 0.55
+    },
+    {
+      "id": "toy_duck",
+      "source_id": "rubber_duck_toy",
+      "source_page": "https://polyhaven.com/a/rubber_duck_toy",
+      "authors": ["Plat251"],
+      "scale_axis": "z",
+      "target_m": 0.16
+    },
+    {
+      "id": "toy_football",
+      "source_id": "football",
+      "source_page": "https://polyhaven.com/a/football",
+      "authors": ["Amal Kumar"],
+      "include_geometries": ["Football_01_inflated"],
+      "scale_axis": "max",
+      "target_m": 0.22
+    },
+    {
+      "id": "dining_table",
+      "source_id": "round_wooden_table_01",
+      "source_page": "https://polyhaven.com/a/round_wooden_table_01",
+      "authors": ["Ulan Cabanilla"],
+      "scale_axis": "z",
+      "target_m": 0.76
+    },
+    {
+      "id": "dining_chair",
+      "source_id": "dining_chair_02",
+      "source_page": "https://polyhaven.com/a/dining_chair_02",
+      "authors": ["James Ray Cock"],
+      "scale_axis": "z",
+      "target_m": 0.98
+    },
+    {
+      "id": "dining_cup",
+      "source_id": "tea_set_01",
+      "source_page": "https://polyhaven.com/a/tea_set_01",
+      "authors": ["James Ray Cock", "Jurita Burger", "Rico Cilliers"],
+      "include_geometries": ["Circle.012"],
+      "scale_axis": "z",
+      "target_m": 0.09
+    },
+    {
+      "id": "dining_plate",
+      "source_id": "carved_wooden_plate",
+      "source_page": "https://polyhaven.com/a/carved_wooden_plate",
+      "authors": ["Jan Martens"],
+      "scale_axis": "max",
+      "target_m": 0.24
+    },
+    {
+      "id": "kitchen_cabinet",
+      "source_id": "drawer_cabinet",
+      "source_page": "https://polyhaven.com/a/drawer_cabinet",
+      "authors": ["Ulan Cabanilla"],
+      "scale_axis": "z",
+      "target_m": 1.85
+    },
+    {
+      "id": "cleaner_yellow",
+      "source_id": "multi_cleaner_bottle",
+      "source_page": "https://polyhaven.com/a/multi_cleaner_bottle",
+      "authors": ["James Ray Cock"],
+      "scale_axis": "z",
+      "target_m": 0.24
+    },
+    {
+      "id": "cleaner_pink",
+      "source_id": "all_purpose_cleaner",
+      "source_page": "https://polyhaven.com/a/all_purpose_cleaner",
+      "authors": ["Kuutti Siitonen"],
+      "scale_axis": "z",
+      "target_m": 0.30
+    }
+  ]
+}

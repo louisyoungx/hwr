@@ -94,6 +94,9 @@ flowchart TB
 │   ├── randomization/
 │   └── training/
 ├── assets/                     # 小型、可版本管理的源资产
+│   ├── manifests/              # 来源、许可、上游/处理后哈希锁
+│   ├── household_v1/           # 米制、Z-up、带 UV 的正式场景网格
+│   └── mujoco/                 # MJCF 场景与机器人装配
 ├── scripts/                    # 仓库检查和开发脚本
 ├── tests/
 │   ├── unit/
@@ -137,6 +140,11 @@ flowchart TB
 当前 `Household2DEnv` 仅保留为运行时 smoke test，不计入三维拟真、家务任务训练或视频验收。
 正式 V1 后端位于 `hwr.adapters.mujoco`，引擎依赖不得泄漏到 `core`、`data`、`policy`、
 `train` 或引擎无关的 `scenarios`。
+
+正式三维资产也有单向边界：`assets/manifests` 保存与引擎无关的来源、许可、尺度和哈希，
+`scripts/fetch_3d_assets.py` 只负责可重复的下载与坐标归一化；MuJoCo 的 mesh/material 声明
+位于 `assets/mujoco`。场景不得从网络临时拉取未锁定模型，也不得把渲染缩略图贴到基础碰撞体上
+冒充三维家具。可见网格与简化碰撞体必须分别声明。
 
 ### `hwr.policy`
 
