@@ -494,13 +494,14 @@ class PrivilegedHouseholdExpert:
             lift = 0.20 if self.task.task_id.startswith("clear_dining") else 0.35
             return (site[0] - 0.05, site[1], site[2] + lift)
         target = self._target_position(stage.object_id)
-        if self.task.task_id.startswith("clear_dining"):
+        if self.task.task_id.startswith(("clear_dining", "tidy_living")):
             placement = self.backend._placement_sample(stage.object_id).position  # noqa: SLF001
             site = self.cartesian.site_position()
             grasp_offset = tuple(site[index] - placement[index] for index in range(3))
+            lateral_bias = -0.07 if self.task.task_id.startswith("clear_dining") else 0.0
             lower = (
                 target[0] + grasp_offset[0],
-                target[1] + grasp_offset[1] - 0.07,
+                target[1] + grasp_offset[1] + lateral_bias,
                 target[2] + grasp_offset[2],
             )
         else:
@@ -513,6 +514,8 @@ class PrivilegedHouseholdExpert:
             clearance = 0.35 if self.task.task_id.startswith("store_kitchen") else 0.25
             return (lower[0], lower[1], lower[2] + clearance)
         if stage.kind.endswith("lower"):
+            if self.task.task_id.startswith("tidy_living"):
+                return (lower[0], lower[1], lower[2] + 0.22)
             if self.task.task_id.startswith("store_kitchen"):
                 # Open above the drawer front and let gravity complete the placement.
                 # Driving the fingers down to the target centre would collide with
