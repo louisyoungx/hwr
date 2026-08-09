@@ -1,0 +1,14 @@
+<mujocoinclude>
+  <velocity name="wheel_front_left_velocity" joint="wheel_front_left_joint" kv="18" forcerange="-30 30"/>
+  <velocity name="wheel_rear_left_velocity" joint="wheel_rear_left_joint" kv="18" forcerange="-30 30"/>
+  <velocity name="wheel_front_right_velocity" joint="wheel_front_right_joint" kv="18" forcerange="-30 30"/>
+  <velocity name="wheel_rear_right_velocity" joint="wheel_rear_right_joint" kv="18" forcerange="-30 30"/>
+  <position name="arm_joint_1_position" joint="arm_joint_1" kp="180" kv="24" forcerange="-75 75"/>
+  <position name="arm_joint_2_position" joint="arm_joint_2" kp="180" kv="24" forcerange="-75 75"/>
+  <position name="arm_joint_3_position" joint="arm_joint_3" kp="160" kv="20" forcerange="-60 60"/>
+  <position name="arm_joint_4_position" joint="arm_joint_4" kp="100" kv="14" forcerange="-35 35"/>
+  <position name="arm_joint_5_position" joint="arm_joint_5" kp="90" kv="12" forcerange="-30 30"/>
+  <position name="arm_joint_6_position" joint="arm_joint_6" kp="70" kv="10" forcerange="-22 22"/>
+  <position name="left_finger_position" joint="left_finger_joint" kp="260" kv="14" forcerange="-35 35"/>
+  <position name="right_finger_position" joint="right_finger_joint" kp="260" kv="14" forcerange="-35 35"/>
+</mujocoinclude>

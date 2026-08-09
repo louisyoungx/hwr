@@ -74,6 +74,14 @@ def verify(spec_path: Path, lock_path: Path) -> dict[str, Any]:
         "license": provider.get("license"),
         "errors": errors,
     }
+    try:
+        from scripts.verify_formal_scenes import verify as verify_scenes
+    except ModuleNotFoundError:  # direct `python scripts/...` invocation
+        from verify_formal_scenes import verify as verify_scenes
+
+    scenes = verify_scenes()
+    result["formal_scene_count"] = scenes["scene_count"]
+    result["formal_scenes_valid"] = scenes["valid"]
     if errors:
         raise SystemExit(json.dumps(result, indent=2))
     return result

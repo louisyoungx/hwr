@@ -1,0 +1,86 @@
+<mujoco model="hwr_dining_room_v1">
+  <compiler angle="radian" autolimits="true" inertiafromgeom="true" meshdir="../../household_v1" texturedir="../../household_v1"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"><flag multiccd="enable"/></option>
+  <size memory="128M"/>
+  <visual>
+    <global offwidth="960" offheight="640"/>
+    <quality shadowsize="4096"/>
+    <headlight ambient="0.18 0.18 0.17" diffuse="0.50 0.48 0.44" specular="0.20 0.20 0.20"/>
+  </visual>
+  <asset>
+    <include file="../common/robot_assets.xml"/>
+    <texture name="dining_floor_tex" type="2d" builtin="checker" width="1024" height="1024" rgb1="0.18 0.20 0.20" rgb2="0.34 0.36 0.35" mark="cross" markrgb="0.72 0.68 0.55"/>
+    <texture name="dining_wall_tex" type="2d" builtin="gradient" width="512" height="512" rgb1="0.74 0.68 0.56" rgb2="0.35 0.30 0.25"/>
+    <material name="dining_floor" texture="dining_floor_tex" texrepeat="14 11" reflectance="0.10" roughness="0.58"/>
+    <material name="dining_wall" texture="dining_wall_tex" texrepeat="3 3" roughness="0.88"/>
+    <material name="sideboard_mat" rgba="0.21 0.095 0.035 1" roughness="0.44"/>
+    <material name="cup_target_mat" rgba="0.20 0.53 0.72 1" roughness="0.36"/>
+    <material name="plate_target_mat" rgba="0.72 0.33 0.16 1" roughness="0.42"/>
+    <mesh name="dining_table_mesh" file="dining_table/dining_table.obj"/>
+    <texture name="dining_table_tex" type="2d" file="dining_table/round_wooden_table_01.png"/>
+    <material name="dining_table_mat" texture="dining_table_tex" roughness="0.48"/>
+    <mesh name="dining_chair_mesh" file="dining_chair/dining_chair.obj"/>
+    <texture name="dining_chair_tex" type="2d" file="dining_chair/dining_chair_02.png"/>
+    <material name="dining_chair_mat" texture="dining_chair_tex" roughness="0.66"/>
+    <mesh name="dining_cup_mesh" file="dining_cup/dining_cup.obj"/>
+    <texture name="dining_cup_tex" type="2d" file="dining_cup/tea_set_01.png"/>
+    <material name="dining_cup_mat" texture="dining_cup_tex" roughness="0.20" specular="0.55"/>
+    <mesh name="dining_plate_mesh" file="dining_plate/dining_plate.obj"/>
+    <texture name="dining_plate_tex" type="2d" file="dining_plate/carved_wooden_plate.png"/>
+    <material name="dining_plate_mat" texture="dining_plate_tex" roughness="0.60"/>
+  </asset>
+  <default><include file="../common/robot_defaults.xml"/></default>
+  <worldbody>
+    <geom name="floor" type="plane" size="3.2 2.7 0.1" material="dining_floor" friction="0.95 0.01 0.001"/>
+    <geom name="wall_north" type="box" pos="0 2.68 1.4" size="3.2 0.04 1.4" material="dining_wall"/>
+    <geom name="wall_west" type="box" pos="-3.18 0 1.4" size="0.04 2.7 1.4" material="dining_wall"/>
+    <light name="dining_key" pos="0.7 -0.4 3.5" dir="-0.1 0.2 -1" directional="true" castshadow="true" diffuse="0.92 0.79 0.61"/>
+    <light name="dining_fill" pos="-2.4 -1.7 2.1" dir="0.6 0.3 -0.5" directional="true" castshadow="true" diffuse="0.42 0.55 0.72"/>
+    <light name="dining_pendant" pos="1.2 0.7 2.6" diffuse="0.72 0.55 0.35" castshadow="true"/>
+    <camera name="third_person" pos="4.9 -5.0 3.6" xyaxes="0.715 0.699 0 -0.351 0.359 0.865" fovy="46"/>
+    <camera name="room_overview" pos="0 0 6.2" xyaxes="1 0 0 0 1 0" fovy="54"/>
+    <include file="../common/robot_body.xml"/>
+    <body name="dining_table" pos="1.15 0.55 0">
+      <geom name="dining_table_visual" type="mesh" mesh="dining_table_mesh" material="dining_table_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="dining_table_top_collision" type="cylinder" pos="0 0 0.715" size="0.52 0.045" rgba="0 0 0 0" group="3"/>
+      <geom name="dining_table_pedestal_collision" type="cylinder" pos="0 0 0.36" size="0.13 0.36" rgba="0 0 0 0" group="3"/>
+      <geom name="dining_table_base_collision" type="cylinder" pos="0 0 0.07" size="0.36 0.07" rgba="0 0 0 0" group="3"/>
+    </body>
+    <body name="chair_west" pos="0.05 0.58 0" euler="0 0 -1.5708">
+      <geom name="chair_west_visual" type="mesh" mesh="dining_chair_mesh" material="dining_chair_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="chair_west_seat_collision" type="box" pos="0 0 0.47" size="0.20 0.22 0.035" rgba="0 0 0 0" group="3"/>
+      <geom name="chair_west_back_collision" type="box" pos="0 0.24 0.73" size="0.20 0.035 0.25" rgba="0 0 0 0" group="3"/>
+    </body>
+    <body name="chair_north" pos="1.15 1.73 0" euler="0 0 3.14159">
+      <geom name="chair_north_visual" type="mesh" mesh="dining_chair_mesh" material="dining_chair_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="chair_north_seat_collision" type="box" pos="0 0 0.47" size="0.20 0.22 0.035" rgba="0 0 0 0" group="3"/>
+      <geom name="chair_north_back_collision" type="box" pos="0 0.24 0.73" size="0.20 0.035 0.25" rgba="0 0 0 0" group="3"/>
+    </body>
+    <body name="chair_east" pos="2.25 0.58 0" euler="0 0 1.5708">
+      <geom name="chair_east_visual" type="mesh" mesh="dining_chair_mesh" material="dining_chair_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="chair_east_seat_collision" type="box" pos="0 0 0.47" size="0.20 0.22 0.035" rgba="0 0 0 0" group="3"/>
+      <geom name="chair_east_back_collision" type="box" pos="0 0.24 0.73" size="0.20 0.035 0.25" rgba="0 0 0 0" group="3"/>
+    </body>
+    <body name="dining_cup" pos="0.94 0.42 0.765">
+      <freejoint name="dining_cup_free"/>
+      <geom name="dining_cup_visual" type="mesh" mesh="dining_cup_mesh" material="dining_cup_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="dining_cup_collision" type="cylinder" pos="0 0 0.043" size="0.047 0.043" mass="0.18" friction="1.25 0.02 0.002" rgba="0 0 0 0" group="3"/>
+    </body>
+    <body name="dining_plate" pos="1.38 0.64 0.762">
+      <freejoint name="dining_plate_free"/>
+      <geom name="dining_plate_visual" type="mesh" mesh="dining_plate_mesh" material="dining_plate_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="dining_plate_collision" type="cylinder" pos="0 0 0.014" size="0.112 0.014" mass="0.24" friction="1.05 0.02 0.002" rgba="0 0 0 0" group="3"/>
+    </body>
+    <body name="sideboard" pos="2.55 1.92 0">
+      <geom name="sideboard_top" type="box" pos="0 0 0.67" size="0.54 0.30 0.035" material="sideboard_mat"/>
+      <geom name="sideboard_body" type="box" pos="0 0.16 0.34" size="0.52 0.12 0.31" material="sideboard_mat"/>
+      <geom name="cup_holder" type="cylinder" pos="-0.25 -0.12 0.715" size="0.11 0.025" material="cup_target_mat"/>
+      <geom name="plate_holder" type="cylinder" pos="0.25 -0.12 0.715" size="0.15 0.025" material="plate_target_mat"/>
+      <site name="cup_target_volume" pos="-0.25 -0.12 0.80" size="0.08 0.08 0.08" rgba="0.1 0.6 1 0.10"/>
+      <site name="plate_target_volume" pos="0.25 -0.12 0.77" size="0.13 0.13 0.05" rgba="1 0.4 0.1 0.10"/>
+    </body>
+  </worldbody>
+  <contact><include file="../common/robot_contacts.xml"/></contact>
+  <actuator><include file="../common/robot_actuators.xml"/></actuator>
+  <sensor><include file="../common/robot_sensors.xml"/></sensor>
+</mujoco>

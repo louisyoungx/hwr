@@ -1,0 +1,11 @@
+<mujocoinclude>
+  <exclude body1="robot_base" body2="shoulder_pan_link"/>
+  <exclude body1="shoulder_pan_link" body2="upper_arm_link"/>
+  <exclude body1="upper_arm_link" body2="forearm_link"/>
+  <exclude body1="forearm_link" body2="wrist_roll_link"/>
+  <exclude body1="wrist_roll_link" body2="wrist_pitch_link"/>
+  <exclude body1="wrist_pitch_link" body2="wrist_yaw_link"/>
+  <exclude body1="wrist_yaw_link" body2="gripper_palm"/>
+  <exclude body1="gripper_palm" body2="left_finger"/>
+  <exclude body1="gripper_palm" body2="right_finger"/>
+</mujocoinclude>

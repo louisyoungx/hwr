@@ -14,6 +14,8 @@
 - 策略访问状态的数据聚合和专家纠正；
 - 带校验和的本地模型注册表；
 - 三个独立家务场景的闭环训练基准。
+- 三个正式三维家庭场景的 12 个 CC0 纹理网格、许可/哈希锁和可重复转换工具；
+- 客厅、餐厅、厨房 MJCF 装配，含独立视觉/碰撞几何与无执行器物理抽屉。
 
 ## 快速开始
 
@@ -32,7 +34,9 @@ python3 scripts/verify_benchmarks.py
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -e ".[dev,video,sim3d]"
+.venv/bin/python -m pip install -e ".[dev,video,sim3d,assets3d]"
+.venv/bin/python scripts/fetch_3d_assets.py
+.venv/bin/python scripts/verify_3d_assets.py
 .venv/bin/python scripts/verify_robot_model.py
 .venv/bin/python scripts/verify_physics_integrity.py
 .venv/bin/python -m pytest tests/test_mujoco_backend.py
@@ -40,6 +44,8 @@ python3 -m venv .venv
   --output-path artifacts/3d-smoke.png
 .venv/bin/python -m hwr.apps.verify_contact_grasp \
   --output-path artifacts/contact-grasp-smoke.mp4
+.venv/bin/python -m hwr.apps.render_formal_scenes \
+  --output artifacts/formal-scenes.png
 ```
 
 训练一个场景：
@@ -67,6 +73,7 @@ hwr-render-benchmarks --output-path artifacts/benchmark-rollouts.mp4
 - [训练基准与复现命令](benchmarks/README.md)
 - [三维拟真 V1 实施与验收合同](docs/three-dimensional-v1-acceptance.md)
 - [三维引擎架构决策](docs/adr/0001-mujoco-3d-backend.md)
+- [正式三维场景与复现命令](docs/formal-scenes.md)
 
 ## 当前边界
 

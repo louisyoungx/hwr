@@ -1,0 +1,92 @@
+<mujoco model="hwr_kitchen_v1">
+  <compiler angle="radian" autolimits="true" inertiafromgeom="true" meshdir="../../household_v1" texturedir="../../household_v1"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"><flag multiccd="enable"/></option>
+  <size memory="160M"/>
+  <visual>
+    <global offwidth="960" offheight="640"/>
+    <quality shadowsize="4096"/>
+    <headlight ambient="0.20 0.20 0.19" diffuse="0.52 0.51 0.48" specular="0.22 0.22 0.22"/>
+  </visual>
+  <asset>
+    <include file="../common/robot_assets.xml"/>
+    <texture name="kitchen_floor_tex" type="2d" builtin="checker" width="1024" height="1024" rgb1="0.74 0.73 0.68" rgb2="0.42 0.46 0.47" mark="edge" markrgb="0.18 0.19 0.19"/>
+    <texture name="kitchen_wall_tex" type="2d" builtin="checker" width="512" height="512" rgb1="0.84 0.82 0.75" rgb2="0.70 0.73 0.72"/>
+    <texture name="counter_tex" type="2d" builtin="gradient" width="512" height="512" rgb1="0.65 0.66 0.63" rgb2="0.17 0.20 0.21" mark="random" markrgb="0.88 0.86 0.79"/>
+    <material name="kitchen_floor" texture="kitchen_floor_tex" texrepeat="18 14" reflectance="0.12" roughness="0.50"/>
+    <material name="kitchen_wall" texture="kitchen_wall_tex" texrepeat="9 7" roughness="0.82"/>
+    <material name="counter_mat" texture="counter_tex" texrepeat="4 2" reflectance="0.18" roughness="0.30"/>
+    <material name="drawer_wood" rgba="0.38 0.16 0.055 1" roughness="0.46"/>
+    <material name="drawer_inside" rgba="0.22 0.10 0.035 1" roughness="0.60"/>
+    <material name="steel" rgba="0.34 0.38 0.40 1" metallic="0.82" roughness="0.22"/>
+    <mesh name="kitchen_cabinet_mesh" file="kitchen_cabinet/kitchen_cabinet.obj"/>
+    <texture name="kitchen_cabinet_tex" type="2d" file="kitchen_cabinet/drawer_cabinet.png"/>
+    <material name="kitchen_cabinet_mat" texture="kitchen_cabinet_tex" roughness="0.49"/>
+    <mesh name="cleaner_yellow_mesh" file="cleaner_yellow/cleaner_yellow.obj"/>
+    <texture name="cleaner_yellow_tex" type="2d" file="cleaner_yellow/multi_cleaner_bottle.png"/>
+    <material name="cleaner_yellow_mat" texture="cleaner_yellow_tex" roughness="0.40"/>
+    <mesh name="cleaner_pink_mesh" file="cleaner_pink/cleaner_pink.obj"/>
+    <texture name="cleaner_pink_tex" type="2d" file="cleaner_pink/all_purpose_cleaner.png"/>
+    <material name="cleaner_pink_mat" texture="cleaner_pink_tex" roughness="0.38"/>
+  </asset>
+  <default><include file="../common/robot_defaults.xml"/></default>
+  <worldbody>
+    <geom name="floor" type="plane" size="3.4 2.8 0.1" material="kitchen_floor" friction="0.92 0.01 0.001"/>
+    <geom name="wall_north" type="box" pos="0 2.78 1.45" size="3.4 0.04 1.45" material="kitchen_wall"/>
+    <geom name="wall_west" type="box" pos="-3.38 0 1.45" size="0.04 2.8 1.45" material="kitchen_wall"/>
+    <light name="kitchen_key" pos="0 -0.4 3.7" dir="0 0.2 -1" directional="true" castshadow="true" diffuse="0.86 0.84 0.77"/>
+    <light name="kitchen_window" pos="-2.8 -1.6 2.3" dir="0.7 0.5 -0.5" directional="true" castshadow="true" diffuse="0.45 0.63 0.83"/>
+    <light name="kitchen_task" pos="1.9 1.4 2.35" diffuse="0.82 0.68 0.48" castshadow="true"/>
+    <camera name="third_person" pos="5.1 -5.4 3.8" xyaxes="0.727 0.687 0 -0.362 0.383 0.850" fovy="46"/>
+    <camera name="room_overview" pos="0 0 6.5" xyaxes="1 0 0 0 1 0" fovy="54"/>
+    <include file="../common/robot_body.xml"/>
+    <body name="cabinet_main" pos="2.25 2.28 0" euler="0 0 3.14159">
+      <geom name="cabinet_main_visual" type="mesh" mesh="kitchen_cabinet_mesh" material="kitchen_cabinet_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="cabinet_main_collision" type="box" pos="0 0 0.90" size="0.54 0.22 0.90" rgba="0 0 0 0" group="3"/>
+    </body>
+    <body name="cabinet_left" pos="-2.45 2.28 0" euler="0 0 3.14159">
+      <geom name="cabinet_left_visual" type="mesh" mesh="kitchen_cabinet_mesh" material="kitchen_cabinet_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="cabinet_left_collision" type="box" pos="0 0 0.90" size="0.54 0.22 0.90" rgba="0 0 0 0" group="3"/>
+    </body>
+    <body name="counter_bank" pos="-0.75 2.32 0">
+      <geom name="counter_bank_visual" type="mesh" mesh="kitchen_cabinet_mesh" material="kitchen_cabinet_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="counter_bank_collision" type="box" pos="0 0 0.90" size="0.54 0.22 0.90" rgba="0 0 0 0" group="3"/>
+      <geom name="counter_worktop" type="box" pos="0 -0.02 1.875" size="0.64 0.42 0.035" material="counter_mat"/>
+    </body>
+    <body name="island" pos="0.55 0.72 0">
+      <geom name="island_base" type="box" pos="0 0 0.43" size="0.70 0.38 0.43" material="drawer_wood"/>
+      <geom name="island_worktop" type="box" pos="0 0 0.90" size="0.78 0.46 0.045" material="counter_mat"/>
+      <geom name="island_sink" type="box" pos="0.30 0 0.95" size="0.28 0.25 0.03" material="steel"/>
+    </body>
+    <body name="kitchen_drawer_frame" pos="1.25 2.32 0">
+      <geom name="drawer_frame_left" type="box" pos="-0.42 0 0.84" size="0.06 0.29 0.50" material="drawer_wood"/>
+      <geom name="drawer_frame_right" type="box" pos="0.42 0 0.84" size="0.06 0.29 0.50" material="drawer_wood"/>
+      <geom name="drawer_frame_top" type="box" pos="0 0 1.37" size="0.48 0.33 0.035" material="counter_mat"/>
+      <geom name="drawer_frame_back" type="box" pos="0 0.27 0.84" size="0.48 0.035 0.50" material="drawer_wood"/>
+      <body name="kitchen_drawer" pos="0 0 0.86">
+        <joint name="kitchen_drawer_slide" type="slide" axis="0 -1 0" range="0 0.42" damping="7" frictionloss="0.6"/>
+        <geom name="drawer_bottom" type="box" pos="0 -0.04 -0.13" size="0.39 0.25 0.025" material="drawer_inside"/>
+        <geom name="drawer_front" type="box" pos="0 -0.30 0" size="0.43 0.035 0.19" material="drawer_wood"/>
+        <geom name="drawer_back" type="box" pos="0 0.18 -0.02" size="0.39 0.025 0.15" material="drawer_inside"/>
+        <geom name="drawer_left" type="box" pos="-0.37 -0.04 -0.02" size="0.025 0.22 0.15" material="drawer_inside"/>
+        <geom name="drawer_right" type="box" pos="0.37 -0.04 -0.02" size="0.025 0.22 0.15" material="drawer_inside"/>
+        <geom name="drawer_divider" type="box" pos="0 -0.04 -0.03" size="0.018 0.21 0.12" material="drawer_inside"/>
+        <geom name="drawer_handle" type="capsule" fromto="-0.18 -0.39 0.03 0.18 -0.39 0.03" size="0.025" material="steel" friction="1.8 0.03 0.003"/>
+        <site name="yellow_target_volume" pos="-0.19 -0.04 0.02" size="0.15 0.17 0.12" rgba="1 0.8 0.1 0.09"/>
+        <site name="pink_target_volume" pos="0.19 -0.04 0.02" size="0.15 0.17 0.12" rgba="1 0.2 0.5 0.09"/>
+      </body>
+    </body>
+    <body name="cleaner_yellow" pos="-0.92 2.05 1.91">
+      <freejoint name="cleaner_yellow_free"/>
+      <geom name="cleaner_yellow_visual" type="mesh" mesh="cleaner_yellow_mesh" material="cleaner_yellow_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="cleaner_yellow_collision" type="cylinder" pos="0 0 0.120" size="0.043 0.120" mass="0.32" friction="1.35 0.02 0.002" rgba="0 0 0 0" group="3"/>
+    </body>
+    <body name="cleaner_pink" pos="-0.58 2.05 1.91">
+      <freejoint name="cleaner_pink_free"/>
+      <geom name="cleaner_pink_visual" type="mesh" mesh="cleaner_pink_mesh" material="cleaner_pink_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="cleaner_pink_collision" type="box" pos="0 0 0.145" size="0.064 0.047 0.145" mass="0.48" friction="1.30 0.02 0.002" rgba="0 0 0 0" group="3"/>
+    </body>
+  </worldbody>
+  <contact><include file="../common/robot_contacts.xml"/></contact>
+  <actuator><include file="../common/robot_actuators.xml"/></actuator>
+  <sensor><include file="../common/robot_sensors.xml"/></sensor>
+</mujoco>

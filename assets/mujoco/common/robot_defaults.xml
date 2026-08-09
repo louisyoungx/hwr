@@ -1,0 +1,13 @@
+<mujocoinclude>
+  <joint damping="1.0" armature="0.02" frictionloss="0.05"/>
+  <geom condim="4" friction="0.9 0.01 0.001" solref="0.006 1" solimp="0.9 0.95 0.001"/>
+  <default class="arm_joint">
+    <joint damping="2.0" armature="0.05"/>
+  </default>
+  <default class="finger_joint">
+    <joint damping="3.0" armature="0.01"/>
+  </default>
+  <default class="finger_pad">
+    <geom condim="4" friction="1.6 0.02 0.002" solref="0.004 1"/>
+  </default>
+</mujocoinclude>

@@ -12,6 +12,16 @@ from typing import Sequence
 from hwr.adapters.mujoco.model import MujocoModelBundle
 
 
+RESET_STATE_WRITE_ALLOWLIST = {
+    ("src/hwr/adapters/mujoco/backend.py", "_reset_base", "qpos"),
+    ("src/hwr/adapters/mujoco/backend.py", "_reset_base", "qvel"),
+    ("src/hwr/adapters/mujoco/backend.py", "_reset_arm", "qpos"),
+    ("src/hwr/adapters/mujoco/backend.py", "_reset_object", "qpos"),
+    ("src/hwr/adapters/mujoco/backend.py", "_reset_object", "qvel"),
+    ("src/hwr/adapters/mujoco/scene_preview.py", "_reset_preview_robot", "qpos"),
+}
+
+
 @dataclass(frozen=True)
 class StateWriteViolation:
     path: str
@@ -54,7 +64,8 @@ class _StateWriteVisitor(ast.NodeVisitor):
         if field is None:
             return
         function = self.functions[-1] if self.functions else "<module>"
-        if function.startswith("_reset") and field in {"qpos", "qvel"}:
+        key = (self.path.as_posix(), function, field)
+        if key in RESET_STATE_WRITE_ALLOWLIST:
             return
         self.violations.append(
             StateWriteViolation(str(self.path), target.lineno, function, field)

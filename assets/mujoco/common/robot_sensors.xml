@@ -1,0 +1,4 @@
+<mujocoinclude>
+  <gyro name="base_gyro" site="base_imu"/>
+  <accelerometer name="base_accelerometer" site="base_imu"/>
+</mujocoinclude>

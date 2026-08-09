@@ -4,6 +4,7 @@ from hwr.adapters.mujoco.backend import Mujoco3DBackend, Mujoco3DConfig
 from hwr.adapters.mujoco.contact import GraspContactMonitor, GraspContactSample
 from hwr.adapters.mujoco.expert import PrivilegedCartesianExpert
 from hwr.adapters.mujoco.inspection import RobotModelReport, inspect_robot_model
+from hwr.adapters.mujoco.scene_preview import ScenePreview, render_scene_preview
 from hwr.adapters.mujoco.smoke_trial import ContactGraspReport, run_contact_grasp_trial
 
 __all__ = [
@@ -14,6 +15,8 @@ __all__ = [
     "ContactGraspReport",
     "PrivilegedCartesianExpert",
     "RobotModelReport",
+    "ScenePreview",
     "inspect_robot_model",
+    "render_scene_preview",
     "run_contact_grasp_trial",
 ]

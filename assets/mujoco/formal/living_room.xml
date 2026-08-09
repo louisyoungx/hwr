@@ -1,0 +1,91 @@
+<mujoco model="hwr_living_room_v1">
+  <compiler angle="radian" autolimits="true" inertiafromgeom="true" meshdir="../../household_v1" texturedir="../../household_v1"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast">
+    <flag multiccd="enable"/>
+  </option>
+  <size memory="128M"/>
+  <visual>
+    <global offwidth="960" offheight="640"/>
+    <quality shadowsize="4096"/>
+    <headlight ambient="0.20 0.20 0.20" diffuse="0.50 0.50 0.48" specular="0.18 0.18 0.18"/>
+  </visual>
+  <asset>
+    <include file="../common/robot_assets.xml"/>
+    <texture name="living_floor_tex" type="2d" builtin="checker" width="1024" height="1024" rgb1="0.23 0.17 0.12" rgb2="0.36 0.27 0.18" mark="edge" markrgb="0.08 0.06 0.04"/>
+    <texture name="living_wall_tex" type="2d" builtin="gradient" width="512" height="512" rgb1="0.80 0.78 0.71" rgb2="0.55 0.61 0.64"/>
+    <texture name="rug_tex" type="2d" builtin="checker" width="512" height="512" rgb1="0.14 0.27 0.31" rgb2="0.68 0.47 0.25"/>
+    <material name="living_floor" texture="living_floor_tex" texrepeat="10 8" reflectance="0.06" roughness="0.72"/>
+    <material name="living_wall" texture="living_wall_tex" texrepeat="2 2" roughness="0.85"/>
+    <material name="rug" texture="rug_tex" texrepeat="7 5" roughness="0.95"/>
+    <mesh name="living_sofa_mesh" file="living_sofa/living_sofa.obj"/>
+    <texture name="living_sofa_tex" type="2d" file="living_sofa/sofa_02.png"/>
+    <material name="living_sofa_mat" texture="living_sofa_tex" roughness="0.62"/>
+    <mesh name="living_table_mesh" file="living_tea_table/living_tea_table.obj"/>
+    <texture name="living_table_tex" type="2d" file="living_tea_table/chinese_tea_table.png"/>
+    <material name="living_table_mat" texture="living_table_tex" roughness="0.48"/>
+    <mesh name="living_basket_mesh" file="living_storage_basket/living_storage_basket.obj"/>
+    <texture name="living_basket_tex" type="2d" file="living_storage_basket/wicker_basket_02.png"/>
+    <material name="living_basket_mat" texture="living_basket_tex" roughness="0.84"/>
+    <mesh name="toy_duck_mesh" file="toy_duck/toy_duck.obj"/>
+    <texture name="toy_duck_tex" type="2d" file="toy_duck/rubber_duck_toy.png"/>
+    <material name="toy_duck_mat" texture="toy_duck_tex" roughness="0.42"/>
+    <mesh name="toy_football_mesh" file="toy_football/toy_football.obj"/>
+    <texture name="toy_football_tex" type="2d" file="toy_football/football.png"/>
+    <material name="toy_football_mat" texture="toy_football_tex" roughness="0.68"/>
+  </asset>
+  <default>
+    <include file="../common/robot_defaults.xml"/>
+  </default>
+  <worldbody>
+    <geom name="floor" type="plane" size="3 2.5 0.1" material="living_floor" friction="1.0 0.01 0.001"/>
+    <geom name="wall_north" type="box" pos="0 2.48 1.35" size="3 0.04 1.35" material="living_wall"/>
+    <geom name="wall_west" type="box" pos="-2.98 0 1.35" size="0.04 2.5 1.35" material="living_wall"/>
+    <geom name="rug_visual" type="box" pos="0.10 0.55 0.008" size="1.45 1.05 0.008" material="rug" contype="0" conaffinity="0"/>
+    <light name="living_key" pos="-1.4 -1.2 2.8" dir="0.3 0.4 -1" directional="true" castshadow="true" diffuse="0.88 0.75 0.60"/>
+    <light name="living_window" pos="2.3 -1.7 1.9" dir="-0.8 0.4 -0.4" directional="true" castshadow="true" diffuse="0.48 0.62 0.82"/>
+    <light name="living_lamp" pos="-1.9 1.6 2.0" diffuse="0.68 0.46 0.27" castshadow="true"/>
+    <camera name="third_person" pos="4.6 -5.2 3.7" xyaxes="0.747 0.665 0 -0.354 0.398 0.846" fovy="47"/>
+    <camera name="room_overview" pos="0 -0.5 5.8" xyaxes="1 0 0 0 1 0" fovy="55"/>
+    <include file="../common/robot_body.xml"/>
+    <body name="sofa" pos="-1.55 1.45 0" euler="0 0 3.14159">
+      <geom name="sofa_visual" type="mesh" mesh="living_sofa_mesh" material="living_sofa_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="sofa_seat_collision" type="box" pos="0 0.04 0.34" size="0.80 0.30 0.16" rgba="0 0 0 0" group="3"/>
+      <geom name="sofa_back_collision" type="box" pos="0 0.34 0.53" size="0.88 0.10 0.30" rgba="0 0 0 0" group="3"/>
+      <geom name="sofa_left_arm_collision" type="box" pos="0.83 0 0.43" size="0.09 0.36 0.28" rgba="0 0 0 0" group="3"/>
+      <geom name="sofa_right_arm_collision" type="box" pos="-0.83 0 0.43" size="0.09 0.36 0.28" rgba="0 0 0 0" group="3"/>
+    </body>
+    <body name="tea_table" pos="0.18 0.56 0">
+      <geom name="tea_table_visual" type="mesh" mesh="living_table_mesh" material="living_table_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="tea_table_top_collision" type="box" pos="0 0 0.445" size="0.39 0.38 0.035" rgba="0 0 0 0" group="3"/>
+      <geom name="tea_table_base_collision" type="box" pos="0 0 0.20" size="0.27 0.27 0.20" rgba="0 0 0 0" group="3"/>
+    </body>
+    <body name="storage_basket" pos="2.15 1.73 0">
+      <geom name="storage_basket_visual" type="mesh" mesh="living_basket_mesh" material="living_basket_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="basket_bottom_collision" type="box" pos="0 0 0.022" size="0.275 0.20 0.022" rgba="0 0 0 0" group="3"/>
+      <geom name="basket_front_collision" type="box" pos="0 -0.19 0.16" size="0.275 0.018 0.16" rgba="0 0 0 0" group="3"/>
+      <geom name="basket_back_collision" type="box" pos="0 0.19 0.16" size="0.275 0.018 0.16" rgba="0 0 0 0" group="3"/>
+      <geom name="basket_left_collision" type="box" pos="-0.26 0 0.16" size="0.018 0.18 0.16" rgba="0 0 0 0" group="3"/>
+      <geom name="basket_right_collision" type="box" pos="0.26 0 0.16" size="0.018 0.18 0.16" rgba="0 0 0 0" group="3"/>
+      <site name="living_target_volume" pos="0 0 0.20" size="0.21 0.14 0.12" rgba="0.1 0.8 0.2 0.08"/>
+    </body>
+    <body name="toy_duck" pos="1.55 -0.65 0.0">
+      <freejoint name="toy_duck_free"/>
+      <geom name="toy_duck_visual" type="mesh" mesh="toy_duck_mesh" material="toy_duck_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="toy_duck_collision" type="box" pos="0 0 0.070" size="0.050 0.065 0.070" mass="0.11" friction="1.4 0.02 0.002" rgba="0 0 0 0" group="3"/>
+    </body>
+    <body name="toy_football" pos="-0.65 -1.35 0.11">
+      <freejoint name="toy_football_free"/>
+      <geom name="toy_football_visual" type="mesh" mesh="toy_football_mesh" material="toy_football_mat" contype="0" conaffinity="0" group="1"/>
+      <geom name="toy_football_collision" type="sphere" size="0.105" mass="0.19" friction="1.25 0.018 0.001" rgba="0 0 0 0" group="3"/>
+    </body>
+  </worldbody>
+  <contact>
+    <include file="../common/robot_contacts.xml"/>
+  </contact>
+  <actuator>
+    <include file="../common/robot_actuators.xml"/>
+  </actuator>
+  <sensor>
+    <include file="../common/robot_sensors.xml"/>
+  </sensor>
+</mujoco>

@@ -1,0 +1,42 @@
+{
+  "schema_version": "hwr.formal-scenes/v1",
+  "policy_cameras": ["head_rgb", "head_depth", "wrist_rgb"],
+  "evidence_cameras": ["third_person", "room_overview"],
+  "scenes": [
+    {
+      "scene_id": "living_room_3d/v1",
+      "task_id": "tidy_living_room_3d/v1",
+      "model": "assets/mujoco/formal/living_room.xml",
+      "furniture_bodies": ["sofa", "tea_table", "storage_basket"],
+      "textured_visual_geoms": ["sofa_visual", "tea_table_visual", "storage_basket_visual", "toy_duck_visual", "toy_football_visual"],
+      "manipulated_free_joints": ["toy_duck_free", "toy_football_free"],
+      "object_collision_geoms": {"toy_duck_free": "toy_duck_collision", "toy_football_free": "toy_football_collision"},
+      "target_sites": ["living_target_volume"],
+      "required_collision_geoms": ["sofa_seat_collision", "tea_table_top_collision", "basket_bottom_collision", "toy_duck_collision", "toy_football_collision"]
+    },
+    {
+      "scene_id": "dining_room_3d/v1",
+      "task_id": "clear_dining_table_3d/v1",
+      "model": "assets/mujoco/formal/dining_room.xml",
+      "furniture_bodies": ["dining_table", "chair_west", "chair_north", "chair_east", "sideboard"],
+      "textured_visual_geoms": ["dining_table_visual", "chair_west_visual", "chair_north_visual", "chair_east_visual", "dining_cup_visual", "dining_plate_visual"],
+      "manipulated_free_joints": ["dining_cup_free", "dining_plate_free"],
+      "object_collision_geoms": {"dining_cup_free": "dining_cup_collision", "dining_plate_free": "dining_plate_collision"},
+      "target_sites": ["cup_target_volume", "plate_target_volume"],
+      "required_collision_geoms": ["dining_table_top_collision", "chair_west_seat_collision", "dining_cup_collision", "dining_plate_collision", "cup_holder", "plate_holder"]
+    },
+    {
+      "scene_id": "kitchen_3d/v1",
+      "task_id": "store_kitchen_items_3d/v1",
+      "model": "assets/mujoco/formal/kitchen.xml",
+      "furniture_bodies": ["cabinet_main", "cabinet_left", "counter_bank", "island", "kitchen_drawer_frame"],
+      "textured_visual_geoms": ["cabinet_main_visual", "cabinet_left_visual", "counter_bank_visual", "cleaner_yellow_visual", "cleaner_pink_visual"],
+      "manipulated_free_joints": ["cleaner_yellow_free", "cleaner_pink_free"],
+      "object_collision_geoms": {"cleaner_yellow_free": "cleaner_yellow_collision", "cleaner_pink_free": "cleaner_pink_collision"},
+      "target_sites": ["yellow_target_volume", "pink_target_volume"],
+      "articulated_furniture_joint": "kitchen_drawer_slide",
+      "articulated_handle_geom": "drawer_handle",
+      "required_collision_geoms": ["cabinet_main_collision", "counter_bank_collision", "drawer_bottom", "drawer_handle", "cleaner_yellow_collision", "cleaner_pink_collision"]
+    }
+  ]
+}
