@@ -11,6 +11,7 @@ from hwr.adapters.mujoco import (  # noqa: E402
     Mujoco3DBackend,
     Mujoco3DConfig,
     inspect_robot_model,
+    run_contact_grasp_trial,
 )
 from hwr.core.types import ActionFrame  # noqa: E402
 
@@ -84,3 +85,26 @@ def test_four_wheel_actuation_moves_physical_base_forward() -> None:
     assert observation.base_pose[0] > start_x + 0.015
     assert outcome.info["physics_contacts"] > 0
     assert outcome.info["applied_action"].source == "test_policy"
+
+
+def test_gripper_lifts_object_using_bilateral_contacts_without_weld() -> None:
+    backend = Mujoco3DBackend(
+        Mujoco3DConfig(
+            model_path=MODEL_PATH,
+            camera_width=32,
+            camera_height=24,
+            max_steps=400,
+        )
+    )
+    try:
+        report = run_contact_grasp_trial(backend, seed=11)
+    finally:
+        backend.close()
+
+    assert report.success
+    assert report.equality_constraint_count == 0
+    assert report.bilateral_contact_steps >= 20
+    assert report.maximum_left_normal_force > 0
+    assert report.maximum_right_normal_force > 0
+    assert report.final_object_position[2] - report.initial_object_position[2] >= 0.25
+    assert report.action_source == "privileged_3d_expert"

@@ -34,9 +34,12 @@ python3 scripts/verify_benchmarks.py
 python3 -m venv .venv
 .venv/bin/python -m pip install -e ".[dev,video,sim3d]"
 .venv/bin/python scripts/verify_robot_model.py
+.venv/bin/python scripts/verify_physics_integrity.py
 .venv/bin/python -m pytest tests/test_mujoco_backend.py
 .venv/bin/python -m hwr.apps.render_3d_smoke \
   --output-path artifacts/3d-smoke.png
+.venv/bin/python -m hwr.apps.verify_contact_grasp \
+  --output-path artifacts/contact-grasp-smoke.mp4
 ```
 
 训练一个场景：

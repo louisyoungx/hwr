@@ -165,7 +165,7 @@ class Mujoco3DBackend:
         self.data.qpos[address : address + 7] = (
             object_x,
             object_y,
-            0.12,
+            0.09,
             math.cos(yaw / 2),
             0.0,
             0.0,

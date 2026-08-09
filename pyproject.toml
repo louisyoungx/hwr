@@ -22,6 +22,7 @@ video = ["Pillow>=11.0"]
 hwr-train-scenario = "hwr.apps.train_scenario:main"
 hwr-render-benchmarks = "hwr.apps.render_benchmarks:main"
 hwr-render-3d-smoke = "hwr.apps.render_3d_smoke:main"
+hwr-verify-contact-grasp = "hwr.apps.verify_contact_grasp:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
