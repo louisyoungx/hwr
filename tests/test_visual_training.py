@@ -87,9 +87,10 @@ def _dataset(tmp_path):
 
 def test_visual_policy_trains_saves_reloads_and_infers(tmp_path) -> None:
     dataset = _dataset(tmp_path)
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
     result = train_visual_policy(
         dataset,
-        VisualTrainingConfig(epochs=2, batch_size=4, device="cpu"),
+        VisualTrainingConfig(epochs=2, batch_size=4, device=device),
     )
     model_path = save_visual_training_result(
         tmp_path / "models",

@@ -82,7 +82,9 @@ def _tensor_dataset(
 
 
 def _loss(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    continuous = nn.functional.smooth_l1_loss(prediction[:, :8], target[:, :8])
+    continuous = nn.functional.smooth_l1_loss(
+        prediction[:, :8].contiguous(), target[:, :8].contiguous()
+    )
     gripper = nn.functional.binary_cross_entropy_with_logits(
         prediction[:, 8], target[:, 8]
     )
