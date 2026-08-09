@@ -1,7 +1,8 @@
 # 正式三维视觉训练运行说明
 
-> 状态：数据采集完成，实际训练执行中  
+> 状态：数据采集与首轮实际训练完成，闭环评测待执行
 > 配置：[formal_visual_v1.json](../configs/training/formal_visual_v1.json)
+> 训练结果：[formal_visual_v1_results.json](../configs/training/formal_visual_v1_results.json)
 
 ## 数据边界
 
@@ -34,6 +35,8 @@
 ```
 
 训练器在本机自动选择 MPS、CUDA 或 CPU，保存最佳验证 checkpoint，并立即从磁盘重载一次。`models/` 和 `runs/` 中的大文件由 Git 忽略；完成训练后需把模型哈希、设备、损失和评测种子写入受版本管理的运行清单。
+
+首轮三套策略已在本机 MPS 上各训练 30 epoch 并完成磁盘重载。受版本管理的结果清单记录训练代码提交、训练种子、损失和 checkpoint SHA-256；模型文件仍保存在 `models/formal-v1/`。这些结果只证明本机训练链路跑通，不代表闭环门槛已经达成。
 
 ## 闭环评测门槛
 

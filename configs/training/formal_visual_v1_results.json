@@ -1,0 +1,47 @@
+{
+  "schema_version": "hwr.formal-visual-training-results/v1",
+  "source_commit": "3871189d1e043c2be3c28635843f91dac875c9a8",
+  "training_device": "mps",
+  "checkpoint_reloaded": true,
+  "runs": [
+    {
+      "run_id": "formal-v1-dining-s0",
+      "task_id": "clear_dining_table_3d/v1",
+      "dataset_id": "clear_dining_table_3d_v1-expert-s1000",
+      "training_seeds": [1000, 1001, 1002],
+      "dataset_samples": 2485,
+      "epochs": 30,
+      "first_train_loss": 0.3514195820271681,
+      "last_train_loss": 0.013696429108220023,
+      "best_validation_loss": 0.041548207856094595,
+      "model_path": "models/formal-v1/clear_dining_table_3d_v1/formal-v1-dining-s0",
+      "checkpoint_sha256": "b24637f5913589e8c33f74378951a49161c7206de8755b3bfac397e678969952"
+    },
+    {
+      "run_id": "formal-v1-living-s0",
+      "task_id": "tidy_living_room_3d/v1",
+      "dataset_id": "tidy_living_room_3d_v1-expert-s2000",
+      "training_seeds": [2000, 2001, 2002],
+      "dataset_samples": 2198,
+      "epochs": 30,
+      "first_train_loss": 0.39702366111548504,
+      "last_train_loss": 0.006969351254436626,
+      "best_validation_loss": 0.009725566785477225,
+      "model_path": "models/formal-v1/tidy_living_room_3d_v1/formal-v1-living-s0",
+      "checkpoint_sha256": "67433c58697f178c15147a89cf8c1af822a7e79cc6cd6897c3cdbea2576f6140"
+    },
+    {
+      "run_id": "formal-v1-kitchen-s0",
+      "task_id": "store_kitchen_items_3d/v1",
+      "dataset_id": "store_kitchen_items_3d_v1-expert-s3000",
+      "training_seeds": [3000, 3001, 3002],
+      "dataset_samples": 4059,
+      "epochs": 30,
+      "first_train_loss": 0.31184522316723473,
+      "last_train_loss": 0.013008916117141594,
+      "best_validation_loss": 0.03237112554521017,
+      "model_path": "models/formal-v1/store_kitchen_items_3d_v1/formal-v1-kitchen-s0",
+      "checkpoint_sha256": "59fa376fee8d765aaa0e771964cd961f7b00ecb42c1e6cb8f7957ed8c8edb36c"
+    }
+  ]
+}
