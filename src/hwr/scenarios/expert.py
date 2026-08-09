@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import math
+from typing import Sequence
 
+from hwr.core.runtime import PolicySpec
 from hwr.core.types import ActionFrame, ObservationFrame
 from hwr.sim.geometry import clamp
 from hwr.sim.specs import RobotSpec
@@ -58,3 +60,30 @@ class PickPlaceExpert:
             arm_command=arm_command,
             gripper_target=gripper,
         )
+
+
+class ExpertPolicy:
+    """Expose a privileged rule expert through the common Policy contract."""
+
+    def __init__(self, expert: PickPlaceExpert) -> None:
+        self.expert = expert
+
+    def spec(self) -> PolicySpec:
+        return PolicySpec(
+            policy_id="rule-expert/v1",
+            observation_history=1,
+            action_horizon=1,
+            control_hz=self.expert.robot_spec.control_hz,
+            arm_dof=2,
+        )
+
+    def reset(self, *, task_id: str, seed: int) -> None:
+        del task_id, seed
+
+    def infer(self, observations: Sequence[ObservationFrame]) -> tuple[ActionFrame, ...]:
+        if not observations:
+            raise ValueError("expert policy requires an observation")
+        return (self.expert.action(observations[-1]),)
+
+    def close(self) -> None:
+        pass
