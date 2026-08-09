@@ -3,6 +3,11 @@
 > 版本：V0.1  
 > 日期：2026-08-09
 
+三维拟真实施的冻结决策与验收门槛见：
+
+- [ADR-0001：三维物理后端采用 MuJoCo 适配器](adr/0001-mujoco-3d-backend.md)
+- [三维拟真训练平台 V1 实施与验收合同](three-dimensional-v1-acceptance.md)
+
 ## 1. 架构目标
 
 平台核心不绑定机器人型号、仿真引擎、训练算法、计算设备或外部数据格式。真实机器人与拟真环境共同实现同一运行时协议，训练、评测和数据工具只依赖项目自己的 schema。
@@ -128,6 +133,10 @@ flowchart TB
 - 参数化机器人、物体、传感器和动力学；
 - 固定种子重放、随机化和系统辨识参数；
 - 不保存训练数据，不实现模型优化。
+
+当前 `Household2DEnv` 仅保留为运行时 smoke test，不计入三维拟真、家务任务训练或视频验收。
+正式 V1 后端位于 `hwr.adapters.mujoco`，引擎依赖不得泄漏到 `core`、`data`、`policy`、
+`train` 或引擎无关的 `scenarios`。
 
 ### `hwr.policy`
 

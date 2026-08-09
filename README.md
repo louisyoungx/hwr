@@ -1,6 +1,6 @@
 # Housework Robot Training Platform
 
-自有抽象、厂商无关的家务具身智能训练平台。目前已完成连续二维移动操作拟真环境、Episode 数据、行为策略训练、模型注册、闭环评测和三个家务场景的实际训练。
+自有抽象、厂商无关的家务具身智能训练平台。现有连续二维环境只作为软件链路 smoke test；正式工作已转入带刚体接触、视觉观察和真实三维家庭资产的 V1 平台，二维结果不计入三维拟真验收。
 
 ## 已实现
 
@@ -50,7 +50,9 @@ hwr-render-benchmarks --output-path artifacts/benchmark-rollouts.mp4
 - [训练与拟真环境方案](docs/training-and-simulation-plan.md)
 - [万元内平台方案](docs/low-cost-platform-proposal.md)
 - [训练基准与复现命令](benchmarks/README.md)
+- [三维拟真 V1 实施与验收合同](docs/three-dimensional-v1-acceptance.md)
+- [三维引擎架构决策](docs/adr/0001-mujoco-3d-backend.md)
 
 ## 当前边界
 
-当前拟真后端是连续二维运动与接触近似，目的是先验证平台抽象、数据闭环和多场景训练，而不是替代三维刚体物理。具体机械臂和硬件尚未选型。下一阶段应在保持核心协议不变的前提下，增加三维 `SimBackend` 适配器、视觉观测和真实硬件系统辨识。
+二维后端不代表家务仿真能力。三维 V1 尚在实施中；在三个带纹理家庭场景、六轴移动机械臂、非特权视觉策略、真实接触操作和隔离种子评测全部通过前，项目不会宣称完成拟真家务训练平台。
