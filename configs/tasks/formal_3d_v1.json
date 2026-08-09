@@ -1,0 +1,49 @@
+{
+  "schema_version": "hwr.formal-tasks/v1",
+  "control_hz": 20.0,
+  "hold_seconds": 2.0,
+  "randomization": {
+    "mass_scale": [0.90, 1.10],
+    "friction_scale": [0.90, 1.10],
+    "light_scale": [0.85, 1.15],
+    "material_tint": [0.94, 1.06],
+    "rgb_noise_std": [0.0, 1.5],
+    "depth_dropout": [0.0, 0.01]
+  },
+  "tasks": [
+    {
+      "task_id": "tidy_living_room_3d/v1",
+      "scene_id": "living_room_3d/v1",
+      "instruction": "绕开茶几，将橡皮鸭和迷你足球依次拾起并放入藤编收纳篮。",
+      "max_steps": 2000,
+      "initial_base": {"x": [-0.10, 0.10], "y": [-2.15, -1.95], "z": [0.22, 0.22], "yaw": [-0.10, 0.10]},
+      "objects": [
+        {"object_id": "duck", "target_id": "living_bin", "reset": {"x": [1.45, 1.62], "y": [-0.74, -0.56], "z": [0.0, 0.0], "yaw": [1.45, 1.69]}, "grasp_site_z_offset": 0.13, "grip_fraction": 0.75, "standoff_m": 0.72},
+        {"object_id": "football", "target_id": "living_bin", "reset": {"x": [-0.72, -0.58], "y": [-1.43, -1.27], "z": [0.077, 0.077], "yaw": [-3.14, 3.14]}, "grasp_site_z_offset": 0.11, "grip_fraction": 0.48, "standoff_m": 0.72}
+      ]
+    },
+    {
+      "task_id": "clear_dining_table_3d/v1",
+      "scene_id": "dining_room_3d/v1",
+      "instruction": "清理餐桌，将茶杯放入蓝色杯托，将木盘放入橙色盘托。",
+      "max_steps": 2200,
+      "initial_base": {"x": [-1.90, -1.72], "y": [-1.45, -1.25], "z": [0.22, 0.22], "yaw": [-0.10, 0.10]},
+      "objects": [
+        {"object_id": "cup", "target_id": "cup_holder", "reset": {"x": [0.88, 1.00], "y": [0.36, 0.48], "z": [0.765, 0.765], "yaw": [-0.25, 0.25]}, "grasp_site_z_offset": 0.10, "grip_fraction": 0.48, "standoff_m": 0.72},
+        {"object_id": "plate", "target_id": "plate_holder", "reset": {"x": [1.32, 1.44], "y": [0.58, 0.70], "z": [0.760, 0.760], "yaw": [-0.30, 0.30]}, "grasp_site_z_offset": 0.07, "grip_fraction": 0.45, "standoff_m": 0.72}
+      ]
+    },
+    {
+      "task_id": "store_kitchen_items_3d/v1",
+      "scene_id": "kitchen_3d/v1",
+      "instruction": "先拉开木质抽屉，再将黄色和粉色清洁剂分别放入抽屉左右分仓。",
+      "max_steps": 2800,
+      "initial_base": {"x": [-0.10, 0.10], "y": [-1.80, -1.60], "z": [0.22, 0.22], "yaw": [1.47, 1.67]},
+      "articulation": {"articulation_id": "drawer", "minimum_position": 0.30},
+      "objects": [
+        {"object_id": "cleaner_yellow", "target_id": "yellow_bin", "reset": {"x": [-0.16, -0.04], "y": [0.66, 0.78], "z": [0.945, 0.945], "yaw": [-0.20, 0.20]}, "grasp_site_z_offset": 0.16, "grip_fraction": 0.72, "standoff_m": 0.72},
+        {"object_id": "cleaner_pink", "target_id": "pink_bin", "reset": {"x": [0.12, 0.24], "y": [0.66, 0.78], "z": [0.945, 0.945], "yaw": [-0.20, 0.20]}, "grasp_site_z_offset": 0.20, "grip_fraction": 0.64, "standoff_m": 0.72}
+      ]
+    }
+  ]
+}

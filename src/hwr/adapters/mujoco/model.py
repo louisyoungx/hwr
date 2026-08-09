@@ -29,7 +29,7 @@ def _ids(model: mujoco.MjModel, object_type: mujoco.mjtObj, names: tuple[str, ..
 class MujocoEntityIds:
     base_joint: int
     base_body: int
-    object_joint: int
+    object_joint: int | None
     wheel_joints: tuple[int, ...]
     wheel_actuators: tuple[int, ...]
     arm_joints: tuple[int, ...]
@@ -38,11 +38,17 @@ class MujocoEntityIds:
     finger_actuators: tuple[int, ...]
 
     @classmethod
-    def resolve(cls, model: mujoco.MjModel) -> "MujocoEntityIds":
+    def resolve(
+        cls, model: mujoco.MjModel, object_joint_name: str | None
+    ) -> "MujocoEntityIds":
         return cls(
             base_joint=_ids(model, mujoco.mjtObj.mjOBJ_JOINT, ("base_free",))[0],
             base_body=_ids(model, mujoco.mjtObj.mjOBJ_BODY, ("robot_base",))[0],
-            object_joint=_ids(model, mujoco.mjtObj.mjOBJ_JOINT, ("smoke_object_free",))[0],
+            object_joint=(
+                _ids(model, mujoco.mjtObj.mjOBJ_JOINT, (object_joint_name,))[0]
+                if object_joint_name is not None
+                else None
+            ),
             wheel_joints=_ids(model, mujoco.mjtObj.mjOBJ_JOINT, WHEEL_JOINTS),
             wheel_actuators=_ids(model, mujoco.mjtObj.mjOBJ_ACTUATOR, WHEEL_ACTUATORS),
             arm_joints=_ids(model, mujoco.mjtObj.mjOBJ_JOINT, ARM_JOINTS),
@@ -59,9 +65,13 @@ class MujocoModelBundle:
     ids: MujocoEntityIds
 
     @classmethod
-    def load(cls, model_path: Path) -> "MujocoModelBundle":
+    def load(
+        cls,
+        model_path: Path,
+        object_joint_name: str | None = "smoke_object_free",
+    ) -> "MujocoModelBundle":
         resolved = model_path.resolve()
         if not resolved.is_file():
             raise FileNotFoundError(f"MuJoCo model is unavailable: {resolved}")
         model = mujoco.MjModel.from_xml_path(str(resolved))
-        return cls(resolved, model, MujocoEntityIds.resolve(model))
+        return cls(resolved, model, MujocoEntityIds.resolve(model, object_joint_name))

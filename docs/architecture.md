@@ -146,6 +146,13 @@ flowchart TB
 位于 `assets/mujoco`。场景不得从网络临时拉取未锁定模型，也不得把渲染缩略图贴到基础碰撞体上
 冒充三维家具。可见网格与简化碰撞体必须分别声明。
 
+正式任务也拆成两份配置，禁止把引擎对象名泄漏到策略或任务层：
+
+- `configs/tasks/formal_3d_v1.json`：项目自有的 task/scene/object/target ID、指令、重置范围、随机化和成功门槛；
+- `configs/adapters/mujoco/formal_3d_v1.json`：只在适配器侧把这些 ID 绑定到 MJCF body/joint/geom/site。
+
+`MujocoHouseholdBackend` 对上仍只实现 `RuntimeBackend`。真值实体位姿、目标 site、接触力和抽屉关节只用于 reset、示范标签与只读审计，不进入 `ObservationFrame.features`；在线观察固定为三路相机 payload 与本体状态。
+
 ### `hwr.policy`
 
 - 观测编码、动作解码和 `Policy` 插件；

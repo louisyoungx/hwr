@@ -19,6 +19,12 @@ RESET_STATE_WRITE_ALLOWLIST = {
     ("src/hwr/adapters/mujoco/backend.py", "_reset_object", "qpos"),
     ("src/hwr/adapters/mujoco/backend.py", "_reset_object", "qvel"),
     ("src/hwr/adapters/mujoco/scene_preview.py", "_reset_preview_robot", "qpos"),
+    ("src/hwr/adapters/mujoco/household_backend.py", "_reset_base", "qpos"),
+    ("src/hwr/adapters/mujoco/household_backend.py", "_reset_base", "qvel"),
+    ("src/hwr/adapters/mujoco/household_backend.py", "_reset_object", "qpos"),
+    ("src/hwr/adapters/mujoco/household_backend.py", "_reset_object", "qvel"),
+    ("src/hwr/adapters/mujoco/household_backend.py", "_reset_articulation", "qpos"),
+    ("src/hwr/adapters/mujoco/household_backend.py", "_reset_articulation", "qvel"),
 }
 
 

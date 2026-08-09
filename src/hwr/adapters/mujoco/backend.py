@@ -29,6 +29,7 @@ class Mujoco3DConfig:
     max_base_linear: float = 0.45
     max_base_angular: float = 1.0
     max_arm_velocity: float = 1.2
+    primary_object_joint_name: str | None = "smoke_object_free"
 
     def __post_init__(self) -> None:
         numeric = (
@@ -49,7 +50,10 @@ class Mujoco3DBackend:
 
     def __init__(self, config: Mujoco3DConfig) -> None:
         self.config = config
-        self.bundle = MujocoModelBundle.load(config.model_path)
+        self.bundle = MujocoModelBundle.load(
+            config.model_path,
+            object_joint_name=config.primary_object_joint_name,
+        )
         self.model = self.bundle.model
         self.data = mujoco.MjData(self.model)
         self.renderer = MujocoCameraRenderer(
@@ -110,18 +114,19 @@ class Mujoco3DBackend:
         self._set_controls(applied)
         for _ in range(self._substeps):
             mujoco.mj_step(self.model, self.data)
+            self._after_physics_substep()
         self._steps += 1
         self._sequence += 1
-        truncated = self._steps >= self.config.max_steps
+        self._after_control_step(applied)
+        self._result = self._task_result_after_step()
+        terminated = self._result is not None
+        truncated = not terminated and self._steps >= self.config.max_steps
         if truncated:
-            self._result = EpisodeResult(
-                success=False,
-                reason="smoke_timeout",
-                ended_at_ns=self._timestamp_ns(),
-                metrics={"steps": self._steps, "contacts": self.data.ncon},
-            )
+            self._result = self._timeout_result()
         return StepOutcome(
             observation=self._observation(),
+            reward=1.0 if self._result is not None and self._result.success else 0.0,
+            terminated=terminated,
             truncated=truncated,
             events=events,
             info={"applied_action": applied, "physics_contacts": int(self.data.ncon)},
@@ -158,6 +163,8 @@ class Mujoco3DBackend:
             self.data.qpos[self.model.jnt_qposadr[joint_id]] = 0.0
 
     def _reset_object(self) -> None:
+        if self.bundle.ids.object_joint is None:
+            return
         address = self.model.jnt_qposadr[self.bundle.ids.object_joint]
         object_x = 0.88 + self._rng.uniform(-0.04, 0.04)
         object_y = self._rng.uniform(-0.12, 0.12)
@@ -173,6 +180,24 @@ class Mujoco3DBackend:
         )
         dof_address = self.model.jnt_dofadr[self.bundle.ids.object_joint]
         self.data.qvel[dof_address : dof_address + 6] = 0.0
+
+    def _after_control_step(self, action: ActionFrame) -> None:
+        """Adapter hook for read-only task audits after a completed control step."""
+
+    def _after_physics_substep(self) -> None:
+        """Adapter hook for contacts that may exist for only one physics substep."""
+
+    def _task_result_after_step(self) -> EpisodeResult | None:
+        """Adapter hook for task-specific physical success criteria."""
+        return None
+
+    def _timeout_result(self) -> EpisodeResult:
+        return EpisodeResult(
+            success=False,
+            reason="episode_timeout",
+            ended_at_ns=self._timestamp_ns(),
+            metrics={"steps": self._steps, "contacts": self.data.ncon},
+        )
 
     def _set_controls(self, action: ActionFrame) -> None:
         left = (action.base_linear - action.base_angular * TRACK_WIDTH / 2) / WHEEL_RADIUS
