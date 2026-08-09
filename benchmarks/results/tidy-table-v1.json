@@ -3,6 +3,30 @@
     "dataset_path": "datasets/tidy-table-v3-mps-aggregation-2",
     "model_path": "models/tidy_table_v1/tidy-table-v3-mps"
   },
+  "configuration": {
+    "aggregation_episodes": 20,
+    "aggregation_rounds": 2,
+    "batch_size": 512,
+    "device": "mps",
+    "episodes": 60,
+    "epochs": 40,
+    "eval_episodes": 20,
+    "evaluation_seeds": [
+      10300,
+      10319
+    ],
+    "expert_action_probability": 0.3,
+    "hidden_dims": [
+      128,
+      128
+    ],
+    "learning_rate": 0.001,
+    "seed": 300,
+    "training_seeds": [
+      300,
+      359
+    ]
+  },
   "dataset": {
     "checksum": "19781211b88e3fef740e747c1e299684c3a93073ce868943989ac7211c632121",
     "dataset_id": "tidy-table-v3-mps-aggregation-2",

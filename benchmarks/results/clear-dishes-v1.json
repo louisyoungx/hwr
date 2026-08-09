@@ -3,6 +3,30 @@
     "dataset_path": "datasets/clear-dishes-v1-mps-aggregation-3",
     "model_path": "models/clear_dishes_v1/clear-dishes-v1-mps"
   },
+  "configuration": {
+    "aggregation_episodes": 25,
+    "aggregation_rounds": 3,
+    "batch_size": 512,
+    "device": "mps",
+    "episodes": 80,
+    "epochs": 50,
+    "eval_episodes": 20,
+    "evaluation_seeds": [
+      10600,
+      10619
+    ],
+    "expert_action_probability": 0.35,
+    "hidden_dims": [
+      128,
+      128
+    ],
+    "learning_rate": 0.001,
+    "seed": 600,
+    "training_seeds": [
+      600,
+      679
+    ]
+  },
   "dataset": {
     "checksum": "3d716dd40a5a8de5803b9abaef6daf4a16f1fa30cac85892c49b9b8c50e49385",
     "dataset_id": "clear-dishes-v1-mps-aggregation-3",

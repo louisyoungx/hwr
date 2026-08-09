@@ -1,0 +1,11 @@
+{
+  "schema_version": "hwr.benchmark-thresholds/v1",
+  "required_tasks": [
+    "clear_dishes/v1",
+    "sort_laundry/v1",
+    "tidy_table/v1"
+  ],
+  "minimum_episode_count": 20,
+  "minimum_success_rate": 0.7,
+  "maximum_average_collisions": 0.0
+}

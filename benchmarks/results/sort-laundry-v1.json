@@ -3,6 +3,30 @@
     "dataset_path": "datasets/sort-laundry-v2-mps-aggregation-3",
     "model_path": "models/sort_laundry_v1/sort-laundry-v2-mps"
   },
+  "configuration": {
+    "aggregation_episodes": 25,
+    "aggregation_rounds": 3,
+    "batch_size": 512,
+    "device": "mps",
+    "episodes": 80,
+    "epochs": 50,
+    "eval_episodes": 20,
+    "evaluation_seeds": [
+      10500,
+      10519
+    ],
+    "expert_action_probability": 0.35,
+    "hidden_dims": [
+      128,
+      128
+    ],
+    "learning_rate": 0.001,
+    "seed": 500,
+    "training_seeds": [
+      500,
+      579
+    ]
+  },
   "dataset": {
     "checksum": "81ee31831413a1e581e968a9be869f1ab4e98698dd73b193f48e4c267ee58305",
     "dataset_id": "sort-laundry-v2-mps-aggregation-3",
