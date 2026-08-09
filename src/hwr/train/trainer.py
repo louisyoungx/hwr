@@ -86,8 +86,14 @@ def _tensor_dataset(
 
 
 def _loss(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    continuous = nn.functional.smooth_l1_loss(prediction[:, :4], target[:, :4])
-    gripper = nn.functional.binary_cross_entropy_with_logits(prediction[:, 4], target[:, 4])
+    continuous = nn.functional.smooth_l1_loss(
+        prediction[:, :4].contiguous(),
+        target[:, :4].contiguous(),
+    )
+    gripper = nn.functional.binary_cross_entropy_with_logits(
+        prediction[:, 4].contiguous(),
+        target[:, 4].contiguous(),
+    )
     return continuous + 0.25 * gripper
 
 
@@ -173,4 +179,3 @@ def train_behavior_policy(
         best_validation_loss=best_loss,
         device=device_name,
     )
-
