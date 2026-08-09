@@ -23,6 +23,7 @@ flowchart TB
     A[apps / CLI] --> B[eval]
     A --> C[train]
     A --> D[scenarios]
+    A --> L[render]
     B --> E[policy]
     B --> F[sim]
     B --> G[data]
@@ -37,6 +38,8 @@ flowchart TB
     H --> J
     K[hardware adapters] --> H
     K --> I
+    L --> F
+    L --> E
 ```
 
 依赖只能由上向下：
@@ -75,6 +78,7 @@ flowchart TB
 │   ├── policy/                 # Policy 协议和模型插件
 │   ├── train/                  # 训练循环和实验产物
 │   ├── eval/                   # 离线与闭环评测
+│   ├── render/                 # 回放采集、二维渲染和视频编码
 │   ├── scenarios/              # 家务场景、任务和专家
 │   ├── adapters/               # 物理引擎、硬件、数据格式适配器
 │   └── apps/                   # CLI 和端到端装配
@@ -143,6 +147,28 @@ flowchart TB
 - 模型准入门槛与评测报告；
 - 通过运行时协议操作环境。
 
+### `hwr.render`
+
+- 调用已保存的 `Policy` 做闭环推理，采集只读仿真快照；
+- 将快照光栅化为帧，并通过外部编码器输出标准视频；
+- 只负责观察和呈现，不修改环境动力学、策略动作或任务判定；
+- 当前二维渲染器依赖参考 `Household2DEnv`，未来三维引擎提供各自的渲染适配器。
+
+回放链路按以下边界组织：
+
+```mermaid
+flowchart LR
+    A[保存的策略检查点] --> B[闭环采集器]
+    C[Household2DEnv] <--> B
+    C --> D[只读 SimulationSnapshot]
+    D --> E[二维帧渲染器]
+    E --> F[FFmpeg 视频编码器]
+```
+
+`SimulationSnapshot` 是仿真状态的不可变副本。渲染器不得直接持有或修改
+`SimRobotState`、`SimObjectState`；这样开启视频录制不会改变控制循环结果，也能用测试验证
+“录制前后轨迹一致”。
+
 ### `hwr.scenarios`
 
 - SceneSpec、TaskSpec、随机化范围和规则专家；
@@ -188,4 +214,3 @@ flowchart TB
 7. 闭环评测；
 8. 三个家务场景训练；
 9. 真实硬件适配器。
-
