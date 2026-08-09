@@ -159,7 +159,7 @@ class Mujoco3DBackend:
 
     def _reset_object(self) -> None:
         address = self.model.jnt_qposadr[self.bundle.ids.object_joint]
-        object_x = 1.05 + self._rng.uniform(-0.08, 0.08)
+        object_x = 0.88 + self._rng.uniform(-0.04, 0.04)
         object_y = self._rng.uniform(-0.12, 0.12)
         yaw = self._rng.uniform(-math.pi, math.pi)
         self.data.qpos[address : address + 7] = (

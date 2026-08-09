@@ -171,21 +171,21 @@
     {
       "bounds_m": [
         [
-          -0.10922305,
-          -0.10935659,
+          -0.07943494,
+          -0.07953206,
           0.0
         ],
         [
-          0.10922305,
-          0.10935659,
-          0.22
+          0.07943494,
+          0.07953206,
+          0.16
         ]
       ],
       "directory": "assets/household_v1/toy_football",
       "extents_m": [
-        0.2184461,
-        0.21871318,
-        0.22
+        0.15886989,
+        0.15906413,
+        0.16
       ],
       "faces": 1920,
       "files": [
@@ -202,7 +202,7 @@
         {
           "bytes": 122451,
           "path": "assets/household_v1/toy_football/toy_football.obj",
-          "sha256": "00104ed5febc97563a7311c9c136d5c7d4676aa7129704ce120995725d2ced95"
+          "sha256": "b4a585117bdeb338fc52663ef7a3ae82f3b193810662d75416812145287001ba"
         }
       ],
       "id": "toy_football",
@@ -339,21 +339,21 @@
     {
       "bounds_m": [
         [
-          -0.12,
-          -0.11865296,
+          -0.08,
+          -0.07910197,
           0.0
         ],
         [
-          0.12,
-          0.11865296,
-          0.03364784
+          0.08,
+          0.07910197,
+          0.0224319
         ]
       ],
       "directory": "assets/household_v1/dining_plate",
       "extents_m": [
-        0.24,
-        0.23730591,
-        0.03364784
+        0.16,
+        0.15820394,
+        0.0224319
       ],
       "faces": 2112,
       "files": [
@@ -370,7 +370,7 @@
         {
           "bytes": 131607,
           "path": "assets/household_v1/dining_plate/dining_plate.obj",
-          "sha256": "1601adcbf75643596da3fc8481b138d13107a2bcbf08aab1c2a1b54b5e5ed689"
+          "sha256": "79c8fcb2ecb8bc46c51a5bcb1f4f8175a678b871b383eb0aa1ed9d261632e444"
         }
       ],
       "id": "dining_plate",
@@ -514,7 +514,7 @@
     "resolution": "1k"
   },
   "schema_version": "hwr.household-assets-lock/v1",
-  "spec_sha256": "9ac02e4231cfc55864ad3c602b52ea8d253e3e8407eb6d1c568f830f1d30c9b3",
+  "spec_sha256": "d0a961df22559c501da1183e77edb686c4c1c09e47d8d7e183be3de8ca4ad0b7",
   "upstreams": [
     {
       "api_url": "https://api.polyhaven.com/files/all_purpose_cleaner",

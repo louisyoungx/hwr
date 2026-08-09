@@ -41,6 +41,9 @@ def test_compiled_robot_has_required_dynamics_and_sensors() -> None:
     assert report.wheel_joint_count == 4
     assert report.arm_joint_count == 6
     assert report.finger_joint_count == 2
+    assert report.finger_joint_travel_m == pytest.approx((0.075, 0.075))
+    assert report.gripper_open_gap_m == pytest.approx(0.196)
+    assert report.gripper_closed_gap_m == pytest.approx(0.046)
     assert report.policy_cameras == ("head_rgb", "head_depth", "wrist_rgb")
     assert report.invalid_dynamic_bodies == ()
     assert report.equality_constraint_count == 0
@@ -87,7 +90,8 @@ def test_four_wheel_actuation_moves_physical_base_forward() -> None:
     assert outcome.info["applied_action"].source == "test_policy"
 
 
-def test_gripper_lifts_object_using_bilateral_contacts_without_weld() -> None:
+@pytest.mark.parametrize("seed", [0, 1, 2, 11, 17])
+def test_gripper_lifts_object_using_bilateral_contacts_without_weld(seed: int) -> None:
     backend = Mujoco3DBackend(
         Mujoco3DConfig(
             model_path=MODEL_PATH,
@@ -97,7 +101,7 @@ def test_gripper_lifts_object_using_bilateral_contacts_without_weld() -> None:
         )
     )
     try:
-        report = run_contact_grasp_trial(backend, seed=11)
+        report = run_contact_grasp_trial(backend, seed=seed)
     finally:
         backend.close()
 

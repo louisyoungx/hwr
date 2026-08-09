@@ -49,7 +49,7 @@
       "authors": ["Amal Kumar"],
       "include_geometries": ["Football_01_inflated"],
       "scale_axis": "max",
-      "target_m": 0.22
+      "target_m": 0.16
     },
     {
       "id": "dining_table",
@@ -82,7 +82,7 @@
       "source_page": "https://polyhaven.com/a/carved_wooden_plate",
       "authors": ["Jan Martens"],
       "scale_axis": "max",
-      "target_m": 0.24
+      "target_m": 0.16
     },
     {
       "id": "kitchen_cabinet",

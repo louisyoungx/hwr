@@ -8,6 +8,6 @@
     <joint damping="3.0" armature="0.01"/>
   </default>
   <default class="finger_pad">
-    <geom condim="4" friction="1.6 0.02 0.002" solref="0.004 1"/>
+    <geom condim="4" friction="3.0 0.04 0.004" solref="0.004 1"/>
   </default>
 </mujocoinclude>

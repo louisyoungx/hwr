@@ -23,6 +23,9 @@ class RobotModelReport:
     wheel_joint_count: int
     arm_joint_count: int
     finger_joint_count: int
+    finger_joint_travel_m: tuple[float, ...]
+    gripper_open_gap_m: float
+    gripper_closed_gap_m: float
     policy_cameras: tuple[str, ...]
     dynamic_body_count: int
     invalid_dynamic_bodies: tuple[str, ...]
@@ -45,6 +48,23 @@ def inspect_robot_model(model: mujoco.MjModel) -> RobotModelReport:
     wheel_count = sum(name in joint_names for name in WHEEL_JOINTS)
     arm_count = sum(name in joint_names for name in ARM_JOINTS)
     finger_count = sum(name in joint_names for name in FINGER_JOINTS)
+    finger_ids = [
+        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+        for name in FINGER_JOINTS
+    ]
+    finger_travel = tuple(
+        float(np.ptp(model.jnt_range[joint_id])) for joint_id in finger_ids if joint_id >= 0
+    )
+    left_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_finger")
+    right_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "right_finger")
+    left_pad = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "left_finger_pad")
+    right_pad = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "right_finger_pad")
+    if min(left_body, right_body, left_pad, right_pad) >= 0:
+        center_distance = abs(float(model.body_pos[left_body, 1] - model.body_pos[right_body, 1]))
+        open_gap = center_distance - float(model.geom_size[left_pad, 1] + model.geom_size[right_pad, 1])
+    else:
+        open_gap = 0.0
+    closed_gap = open_gap - sum(finger_travel)
     invalid_bodies: list[str] = []
     dynamic_count = 0
     for body_id in range(1, model.nbody):
@@ -64,6 +84,10 @@ def inspect_robot_model(model: mujoco.MjModel) -> RobotModelReport:
         errors.append(f"expected 6 arm joints, found {arm_count}")
     if finger_count != 2:
         errors.append(f"expected 2 finger joints, found {finger_count}")
+    if open_gap < 0.18 or not 0.02 <= closed_gap <= 0.07:
+        errors.append(
+            f"gripper gap is not household-object capable: open={open_gap}, closed={closed_gap}"
+        )
     missing_cameras = tuple(name for name in POLICY_CAMERAS if name not in camera_names)
     if missing_cameras:
         errors.append(f"missing policy cameras: {', '.join(missing_cameras)}")
@@ -77,6 +101,9 @@ def inspect_robot_model(model: mujoco.MjModel) -> RobotModelReport:
         wheel_joint_count=wheel_count,
         arm_joint_count=arm_count,
         finger_joint_count=finger_count,
+        finger_joint_travel_m=finger_travel,
+        gripper_open_gap_m=open_gap,
+        gripper_closed_gap_m=closed_gap,
         policy_cameras=tuple(name for name in POLICY_CAMERAS if name in camera_names),
         dynamic_body_count=dynamic_count,
         invalid_dynamic_bodies=tuple(invalid_bodies),

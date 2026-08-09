@@ -73,10 +73,10 @@
       <geom name="toy_duck_visual" type="mesh" mesh="toy_duck_mesh" material="toy_duck_mat" contype="0" conaffinity="0" group="1"/>
       <geom name="toy_duck_collision" type="box" pos="0 0 0.070" size="0.050 0.065 0.070" mass="0.11" friction="1.4 0.02 0.002" rgba="0 0 0 0" group="3"/>
     </body>
-    <body name="toy_football" pos="-0.65 -1.35 0.11">
+    <body name="toy_football" pos="-0.65 -1.35 0.077">
       <freejoint name="toy_football_free"/>
       <geom name="toy_football_visual" type="mesh" mesh="toy_football_mesh" material="toy_football_mat" contype="0" conaffinity="0" group="1"/>
-      <geom name="toy_football_collision" type="sphere" size="0.105" mass="0.19" friction="1.25 0.018 0.001" rgba="0 0 0 0" group="3"/>
+      <geom name="toy_football_collision" type="sphere" size="0.077" mass="0.13" friction="1.25 0.018 0.001" rgba="0 0 0 0" group="3"/>
     </body>
   </worldbody>
   <contact>

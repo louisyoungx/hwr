@@ -60,8 +60,8 @@ def run_contact_grasp_trial(
     object_x, object_y, _ = initial_position
     stages = (
         ("approach_above", (object_x, object_y, 0.32), 0.0, 100),
-        ("descend_open", (object_x, object_y, 0.12), 0.0, 100),
-        ("close_on_contact", (object_x, object_y, 0.12), 1.0, 50),
+        ("descend_open", (object_x, object_y, 0.15), 0.0, 100),
+        ("close_on_contact", (object_x, object_y, 0.15), 1.0, 50),
         ("lift_while_closed", (object_x - 0.05, object_y, 0.50), 1.0, 100),
     )
     maximum_height = initial_position[2]
