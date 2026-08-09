@@ -54,6 +54,8 @@ class PrivilegedHouseholdExpert:
         self.drawer_holding = False
         self.drawer_bilateral_steps = 0
         self.object_bilateral_steps = 0
+        self.drawer_contact_start_substeps = 0
+        self.object_contact_start_substeps = 0
         self.holding_contact_loss_steps = 0
         self.failed = False
         self._enter_stage()
@@ -87,10 +89,11 @@ class PrivilegedHouseholdExpert:
             action = self._unstow_action(observation)
         elif stage.kind == "grip_object":
             action = self._hold_action(observation, self._grip_fraction(stage.object_id))
-            monitor = self.backend._contact_monitors[stage.object_id]  # noqa: SLF001
-            bilateral = monitor.sample(self.backend.data).bilateral
-            self.object_bilateral_steps = self.object_bilateral_steps + 1 if bilateral else 0
-            if self.object_bilateral_steps >= 10:
+            contact_substeps = (
+                self.backend._bilateral_contact_steps[stage.object_id]  # noqa: SLF001
+                - self.object_contact_start_substeps
+            )
+            if contact_substeps >= 150:
                 self.holding_object = stage.object_id
                 self.holding_contact_loss_steps = 0
                 self._advance()
@@ -107,11 +110,16 @@ class PrivilegedHouseholdExpert:
                     self.failed = True
                     self._advance()
         elif stage.kind == "grip_drawer":
-            action = self._hold_action(observation, 1.0)
-            monitor = self.backend._drawer_contact_monitor  # noqa: SLF001
-            bilateral = monitor is not None and monitor.sample(self.backend.data).bilateral
-            self.drawer_bilateral_steps = self.drawer_bilateral_steps + 1 if bilateral else 0
-            if self.drawer_bilateral_steps >= 10:
+            action = self.cartesian.action(
+                observation,
+                target_position=self._drawer_grasp_target(),
+                gripper_target=1.0,
+            )
+            contact_substeps = (
+                self.backend._drawer_bilateral_contact_steps  # noqa: SLF001
+                - self.drawer_contact_start_substeps
+            )
+            if contact_substeps >= 150:
                 self.drawer_holding = True
                 self._advance()
             elif self.stage_step >= 279:
@@ -185,8 +193,14 @@ class PrivilegedHouseholdExpert:
         self.nav_aligning = False
         if self.stage.kind == "grip_drawer":
             self.drawer_bilateral_steps = 0
+            self.drawer_contact_start_substeps = (
+                self.backend._drawer_bilateral_contact_steps  # noqa: SLF001
+            )
         elif self.stage.kind == "grip_object":
             self.object_bilateral_steps = 0
+            self.object_contact_start_substeps = (
+                self.backend._bilateral_contact_steps[self.stage.object_id]  # noqa: SLF001
+            )
         stage = self.stage
         if stage.kind.startswith("nav_"):
             self.nav_targets = self._navigation_targets(stage)
@@ -209,6 +223,11 @@ class PrivilegedHouseholdExpert:
             standoff = self._object_spec(stage.object_id).standoff_m
             if self.task.task_id.startswith("clear_dining"):
                 standoff -= 0.12
+            elif (
+                self.task.task_id.startswith("store_kitchen")
+                and stage.object_id == "cleaner_yellow"
+            ):
+                standoff += 0.15
         else:
             target = self._target_position(stage.object_id)
             yaw = self._target_approach_yaw()
@@ -372,7 +391,7 @@ class PrivilegedHouseholdExpert:
         ):
             self.stage_target = self._cartesian_target(stage)
         grip = (
-            0.55
+            (0.0 if stage.object_id == "cleaner_pink" else 0.55)
             if self.task.task_id.startswith("store_kitchen")
             and stage.kind == "arm_object_descend"
             else self._gripper()
@@ -388,7 +407,7 @@ class PrivilegedHouseholdExpert:
             and self._object_inside_target(stage.object_id)
         ):
             self._advance()
-            return action
+            return self._stop(observation)
         error = np.linalg.norm(np.asarray(self.stage_target) - np.asarray(self.cartesian.site_position()))
         relaxed_target = self.task.task_id.startswith("store_kitchen") and stage.kind.startswith(
             "arm_target"
@@ -403,13 +422,15 @@ class PrivilegedHouseholdExpert:
             and stage.object_id == "plate"
         ):
             tolerance = 0.012
+        if stage.kind == "arm_drawer_descend":
+            tolerance = 0.012
         failure_error = (
             0.12 if relaxed_dining_target or relaxed_target else 0.08
         )
         if (self.stage_step >= 25 and error < tolerance) or self.stage_step >= 179:
             physically_validated_later = (
                 stage.kind.startswith("arm_target")
-                or stage.kind == "arm_object_descend"
+                or stage.kind.startswith("arm_object")
             )
             if (
                 self.stage_step >= 179
@@ -418,6 +439,7 @@ class PrivilegedHouseholdExpert:
             ):
                 self.failed = True
             self._advance()
+            return self._stop(observation)
         return action
 
     def _object_inside_target(self, object_id: str | None) -> bool:
@@ -437,8 +459,22 @@ class PrivilegedHouseholdExpert:
         if monitor.sample(self.backend.data).bilateral:
             self.holding_contact_loss_steps = 0
             return False
+        if self._held_object_tracks_gripper(self.holding_object):
+            # A rigid object can alternate between finger contacts while it is
+            # still physically trapped in the gripper.  Initial acquisition is
+            # gated by bilateral contact; during transport, reject a real drop
+            # by checking separation instead of requiring both pads at every
+            # 20 Hz observation boundary.
+            self.holding_contact_loss_steps = 0
+            return False
         self.holding_contact_loss_steps += 1
         return self.holding_contact_loss_steps >= 20
+
+    def _held_object_tracks_gripper(self, object_id: str) -> bool:
+        position = np.asarray(self._object_position(object_id), dtype=np.float64)
+        position[2] += self._object_spec(object_id).grasp_site_z_offset
+        gripper = np.asarray(self.cartesian.site_position(), dtype=np.float64)
+        return float(np.linalg.norm(position - gripper)) <= 0.18
 
     def _pull_drawer_action(self, observation: ObservationFrame) -> ActionFrame:
         joint_id = self.backend.household_ids.articulation_joint
@@ -476,7 +512,7 @@ class PrivilegedHouseholdExpert:
             if stage.kind.endswith("above"):
                 return (handle[0], handle[1], handle[2] + 0.23)
             if stage.kind.endswith("descend"):
-                return (handle[0] - 0.020, handle[1] - 0.020, handle[2] + 0.03)
+                return self._drawer_grasp_target()
             site = self.cartesian.site_position()
             return (site[0], site[1] - 0.05, site[2] + 0.24)
         spec = self._object_spec(stage.object_id)
@@ -547,7 +583,10 @@ class PrivilegedHouseholdExpert:
         if stage.kind == "nav_object":
             if object_id == "cleaner_pink":
                 return [(1.35, -0.20), (1.35, 0.45)]
-            return [(1.35, -0.20), (-0.42, -0.20)]
+            # Clear the island's south-east corner before turning west.  A
+            # closer waypoint lets the differential drive cut the corner and
+            # puts its front-right wheel into the island under some seeds.
+            return [(1.55, -0.45), (-0.42, -0.45)]
         start_x = 1.35 if object_id == "cleaner_pink" else -0.42
         return [(start_x, -0.45), (1.90, -0.45), (1.90, 1.20)]
 
@@ -585,6 +624,10 @@ class PrivilegedHouseholdExpert:
             self.backend.model, mujoco.mjtObj.mjOBJ_GEOM, binding.handle_geom
         )
         return tuple(float(value) for value in self.backend.data.geom_xpos[geom_id])
+
+    def _drawer_grasp_target(self) -> tuple[float, float, float]:
+        handle = self._drawer_handle_position()
+        return (handle[0] - 0.020, handle[1] - 0.040, handle[2] + 0.03)
 
     def _object_spec(self, object_id: str | None):
         return next(obj for obj in self.task.objects if obj.object_id == object_id)

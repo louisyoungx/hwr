@@ -70,7 +70,8 @@
         <geom name="drawer_left" type="box" pos="-0.37 -0.04 -0.02" size="0.025 0.22 0.15" material="drawer_inside"/>
         <geom name="drawer_right" type="box" pos="0.37 -0.04 -0.02" size="0.025 0.22 0.15" material="drawer_inside"/>
         <geom name="drawer_divider" type="box" pos="0 -0.04 -0.03" size="0.018 0.21 0.12" material="drawer_inside"/>
-        <geom name="drawer_handle" type="capsule" fromto="0 -0.39 -0.06 0 -0.39 0.10" size="0.030" material="steel" friction="2.4 0.04 0.004"/>
+        <geom name="drawer_handle_visual" type="capsule" fromto="0 -0.39 -0.06 0 -0.39 0.10" size="0.025" material="steel" contype="0" conaffinity="0" group="1"/>
+        <geom name="drawer_handle" type="capsule" fromto="0 -0.39 -0.06 0 -0.39 0.10" size="0.040" friction="2.4 0.04 0.004" rgba="0 0 0 0" group="3"/>
         <site name="yellow_target_volume" pos="-0.19 -0.04 0.02" size="0.15 0.17 0.12" rgba="1 0.8 0.1 0.09"/>
         <site name="pink_target_volume" pos="0.19 -0.04 0.02" size="0.15 0.17 0.12" rgba="1 0.2 0.5 0.09"/>
       </body>

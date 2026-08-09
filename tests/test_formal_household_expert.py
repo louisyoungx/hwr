@@ -32,6 +32,9 @@ BINDINGS = load_mujoco_task_bindings(
         ("clear_dining_table_3d/v1", 1000),
         ("clear_dining_table_3d/v1", 1001),
         ("store_kitchen_items_3d/v1", 301),
+        ("store_kitchen_items_3d/v1", 3000),
+        ("store_kitchen_items_3d/v1", 3001),
+        ("store_kitchen_items_3d/v1", 3002),
     ),
 )
 def test_household_expert_completes_contact_only_household_task(

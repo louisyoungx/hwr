@@ -29,6 +29,7 @@ class Mujoco3DConfig:
     max_base_linear: float = 0.45
     max_base_angular: float = 1.0
     max_arm_velocity: float = 1.2
+    max_arm_servo_error: float = 0.30
     primary_object_joint_name: str | None = "smoke_object_free"
 
     def __post_init__(self) -> None:
@@ -40,6 +41,7 @@ class Mujoco3DConfig:
             self.max_base_linear,
             self.max_base_angular,
             self.max_arm_velocity,
+            self.max_arm_servo_error,
         )
         if not self.task_id or min(numeric) <= 0:
             raise ValueError("MuJoCo backend configuration values must be positive")
@@ -208,7 +210,12 @@ class Mujoco3DBackend:
         self._arm_targets += np.asarray(action.arm_command, dtype=np.float64) * control_dt
         for index, joint_id in enumerate(self.bundle.ids.arm_joints):
             low, high = self.model.jnt_range[joint_id]
-            self._arm_targets[index] = np.clip(self._arm_targets[index], low, high)
+            actual = float(self.data.qpos[self.model.jnt_qposadr[joint_id]])
+            servo_low = max(float(low), actual - self.config.max_arm_servo_error)
+            servo_high = min(float(high), actual + self.config.max_arm_servo_error)
+            self._arm_targets[index] = np.clip(
+                self._arm_targets[index], servo_low, servo_high
+            )
         self.data.ctrl[list(self.bundle.ids.arm_actuators)] = self._arm_targets
         finger_target = action.gripper_target * FINGER_TRAVEL
         self.data.ctrl[list(self.bundle.ids.finger_actuators)] = finger_target
