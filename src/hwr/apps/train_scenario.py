@@ -9,10 +9,11 @@ import time
 from pathlib import Path
 from typing import Sequence
 
-from hwr.data import BehaviorDataset, generate_expert_dataset
+from hwr.data import BehaviorDataset, aggregate_policy_dataset, generate_expert_dataset
 from hwr.eval import evaluate_policy
 from hwr.scenarios import PickPlaceExpert, household_task_registry
 from hwr.sim import Household2DEnv, RobotSpec
+from hwr.policy import NeuralPolicy
 from hwr.train import TrainingConfig, load_policy, save_training_result, train_behavior_policy
 
 
@@ -30,6 +31,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hidden-dims", type=int, nargs="+", default=(128, 128))
     parser.add_argument("--device", default="auto")
     parser.add_argument("--seed", type=int, default=100)
+    parser.add_argument("--aggregation-rounds", type=int, default=0)
+    parser.add_argument("--aggregation-episodes", type=int, default=20)
+    parser.add_argument("--expert-action-probability", type=float, default=0.2)
     return parser
 
 
@@ -73,6 +77,39 @@ def run_training(arguments: argparse.Namespace) -> dict[str, object]:
         device=arguments.device,
     )
     training_result = train_behavior_policy(dataset, training_config)
+    aggregation_history: list[dict[str, object]] = []
+    for round_index in range(arguments.aggregation_rounds):
+        aggregation_policy = NeuralPolicy(
+            training_result.model,
+            training_result.normalization,
+            policy_version=f"{arguments.run_id}:aggregation-{round_index + 1}",
+            control_hz=robot.control_hz,
+            device="cpu",
+        )
+        aggregation_start = arguments.seed + 20_000 + round_index * arguments.aggregation_episodes
+        aggregated_id = f"{arguments.run_id}-aggregation-{round_index + 1}"
+        aggregated_path = aggregate_policy_dataset(
+            datasets_root,
+            aggregated_id,
+            dataset,
+            task,
+            lambda: Household2DEnv(robot, task),
+            PickPlaceExpert(robot),
+            aggregation_policy,
+            range(aggregation_start, aggregation_start + arguments.aggregation_episodes),
+            expert_action_probability=arguments.expert_action_probability,
+        )
+        dataset = BehaviorDataset.load(aggregated_path)
+        training_result = train_behavior_policy(dataset, training_config)
+        aggregation_history.append(
+            {
+                "round": round_index + 1,
+                "dataset_id": dataset.manifest["dataset_id"],
+                "episodes": dataset.manifest["episode_count"],
+                "samples": dataset.manifest["sample_count"],
+                "best_validation_loss": training_result.best_validation_loss,
+            }
+        )
     model_path = save_training_result(
         models_root,
         arguments.task_id.replace("/", "_"),
@@ -109,6 +146,7 @@ def run_training(arguments: argparse.Namespace) -> dict[str, object]:
             "best_validation_loss": training_result.best_validation_loss,
             "first_train_loss": training_result.history[0]["train_loss"],
             "last_train_loss": training_result.history[-1]["train_loss"],
+            "aggregation": aggregation_history,
         },
         "evaluation": evaluation.to_dict(),
         "artifacts": {
@@ -133,4 +171,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
