@@ -26,6 +26,10 @@ class AsymmetricRLConfig:
     target_update_rate: float = 0.005
     behavior_regularization: float = 0.02
     policy_delay: int = 2
+    target_action_noise: float = 0.15
+    target_noise_clip: float = 0.30
+    action_magnitude_penalty: float = 0.08
+    action_slew_penalty: float = 0.04
     base_linear_scale: float = 0.45
     base_angular_scale: float = 1.0
     arm_velocity_scale: float = 1.2
@@ -45,6 +49,14 @@ class AsymmetricRLConfig:
             raise ValueError("target update rate must be in (0, 1]")
         if self.behavior_regularization < 0.0 or self.policy_delay <= 0:
             raise ValueError("asymmetric RL regularization or delay is invalid")
+        regularizers = (
+            self.target_action_noise,
+            self.target_noise_clip,
+            self.action_magnitude_penalty,
+            self.action_slew_penalty,
+        )
+        if min(regularizers) < 0.0:
+            raise ValueError("TD3 smoothing and action penalties cannot be negative")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -70,13 +82,37 @@ class AsymmetricRLBatch:
     actor_weights: torch.Tensor | None = None
 
 
-def _action_representation(
-    output: VLAActorOutput, config: AsymmetricRLConfig
+def _action_scales(config: AsymmetricRLConfig, reference: torch.Tensor) -> torch.Tensor:
+    return torch.tensor(
+        (
+            config.base_linear_scale,
+            config.base_angular_scale,
+            *(config.arm_velocity_scale,) * 12,
+            1.0,
+            1.0,
+        ),
+        dtype=reference.dtype,
+        device=reference.device,
+    )
+
+
+def _smoothed_target_action(
+    output: VLAActorOutput,
+    config: AsymmetricRLConfig,
 ) -> torch.Tensor:
-    stop = torch.sigmoid(output.stop_logits).unsqueeze(-1)
-    return torch.cat(
-        (bounded_vla_actions(output, config.action_scaling()), stop), dim=2
-    ).flatten(1)
+    bounded = bounded_vla_actions(output, config.action_scaling())
+    scales = _action_scales(config, bounded)
+    noise = torch.randn_like(bounded) * config.target_action_noise * scales
+    noise = torch.clamp(
+        noise,
+        min=-config.target_noise_clip * scales,
+        max=config.target_noise_clip * scales,
+    )
+    value = bounded + noise
+    value[..., :14] = torch.clamp(value[..., :14], min=-scales[:14], max=scales[:14])
+    value[..., 14:] = value[..., 14:].clamp(0.0, 1.0)
+    stop = torch.zeros_like(output.stop_logits).unsqueeze(-1)
+    return torch.cat((value, stop), dim=2).flatten(1)
 
 
 def _executed_action_representation(batch: AsymmetricRLBatch) -> torch.Tensor:
@@ -146,7 +182,7 @@ class AsymmetricActorCriticTrainer:
     def _update_critic(self, batch: AsymmetricRLBatch) -> torch.Tensor:
         with torch.no_grad():
             next_output = self.target_actor(batch.next_actor_inputs)
-            next_action = _action_representation(next_output, self.config)
+            next_action = _smoothed_target_action(next_output, self.config)
             target_q1, target_q2 = self.target_critic(
                 batch.next_privileged_state, next_action
             )
@@ -166,17 +202,26 @@ class AsymmetricActorCriticTrainer:
         _set_requires_grad(self.critic, False)
         output = self.actor(batch.actor_inputs)
         bounded = bounded_vla_actions(output, self.config.action_scaling())
-        stop = torch.sigmoid(output.stop_logits).unsqueeze(-1)
+        stop = torch.zeros_like(output.stop_logits).unsqueeze(-1)
         action = torch.cat((bounded, stop), dim=2).flatten(1)
         q1, _ = self.critic(batch.privileged_state, action)
-        behavior = nn.functional.smooth_l1_loss(
-            bounded, batch.action_chunks, reduction="none"
-        ).mean(dim=(1, 2))
-        behavior += nn.functional.binary_cross_entropy_with_logits(
-            output.stop_logits,
-            batch.stop_decisions.to(output.stop_logits.dtype),
-            reduction="none",
-        ).mean(dim=1)
+        behavior = torch.zeros_like(q1)
+        if self.config.behavior_regularization > 0.0:
+            behavior = nn.functional.smooth_l1_loss(
+                bounded, batch.action_chunks, reduction="none"
+            ).mean(dim=(1, 2))
+            behavior += nn.functional.binary_cross_entropy_with_logits(
+                output.stop_logits,
+                batch.stop_decisions.to(output.stop_logits.dtype),
+                reduction="none",
+            ).mean(dim=1)
+        scales = _action_scales(self.config, bounded)
+        magnitude = (bounded[..., :14] / scales[:14]).square().mean(dim=(1, 2))
+        previous = batch.actor_inputs["action_history"][:, -1:, :]
+        trajectory = torch.cat((previous, bounded), dim=1)
+        slew = (
+            (trajectory[:, 1:] - trajectory[:, :-1]) / scales
+        ).square().mean(dim=(1, 2))
         weights = (
             batch.actor_weights
             if batch.actor_weights is not None
@@ -184,7 +229,13 @@ class AsymmetricActorCriticTrainer:
         ).to(q1.dtype)
         denominator = weights.sum().clamp_min(1.0)
         loss = (
-            weights * (-q1 + self.config.behavior_regularization * behavior)
+            weights
+            * (
+                -q1
+                + self.config.behavior_regularization * behavior
+                + self.config.action_magnitude_penalty * magnitude
+                + self.config.action_slew_penalty * slew
+            )
         ).sum() / denominator
         self.actor_optimizer.zero_grad(set_to_none=True)
         loss.backward()

@@ -93,6 +93,33 @@ def test_asymmetric_update_changes_actor_using_separate_privileged_critic() -> N
     assert not any("critic" in name for name, _ in trainer.actor.named_parameters())
 
 
+def test_td3_target_smoothing_and_action_regularization_are_enabled() -> None:
+    config = _trainer().config
+
+    assert config.target_action_noise > 0
+    assert config.target_noise_clip > config.target_action_noise
+    assert config.action_magnitude_penalty > 0
+    assert config.action_slew_penalty > 0
+
+
+def test_unsupervised_actor_does_not_optimize_unused_stop_head() -> None:
+    trainer = _trainer()
+    trainer.config = AsymmetricRLConfig(
+        policy_delay=1,
+        behavior_regularization=0.0,
+    )
+    before = [value.detach().clone() for value in trainer.actor.stop_head.parameters()]
+
+    trainer.update(_batch())
+
+    assert all(
+        torch.equal(previous, current)
+        for previous, current in zip(
+            before, trainer.actor.stop_head.parameters(), strict=True
+        )
+    )
+
+
 def test_asymmetric_actor_rejects_privileged_field_even_during_rl() -> None:
     trainer = _trainer()
     batch = _batch()
