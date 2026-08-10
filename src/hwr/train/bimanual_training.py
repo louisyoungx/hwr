@@ -182,6 +182,7 @@ class BimanualTrainingRunner:
         np.random.seed(config.seed)
         torch.manual_seed(config.seed)
         self.rng = np.random.default_rng(config.seed)
+        self.rl_config = AsymmetricRLConfig(behavior_regularization=0.0)
         self.explorer = TemporalActionExplorer(
             TemporalExplorationConfig(
                 noise_standard_deviation=config.exploration_noise,
@@ -189,6 +190,9 @@ class BimanualTrainingRunner:
                 action_smoothing=config.action_smoothing,
                 gripper_epsilon=config.gripper_exploration_probability,
                 gripper_hold_steps=config.gripper_exploration_hold_steps,
+                base_linear_scale=self.rl_config.base_linear_scale,
+                base_angular_scale=self.rl_config.base_angular_scale,
+                arm_twist_scale=self.rl_config.arm_velocity_scale,
             ),
             self.rng,
         )
@@ -214,7 +218,6 @@ class BimanualTrainingRunner:
             attention_heads=config.attention_heads,
             transformer_layers=config.transformer_layers,
         )
-        self.rl_config = AsymmetricRLConfig(behavior_regularization=0.0)
         actor = VLAActorModel(self.actor_config)
         self.trainer = AsymmetricActorCriticTrainer(
             actor,

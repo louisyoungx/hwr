@@ -39,7 +39,7 @@ def test_continuous_noise_is_correlated_bounded_and_resettable() -> None:
     second = explorer.perturb(np.zeros(16))
     explorer.reset()
 
-    assert np.all(np.abs(first[:2]) <= (0.45, 1.0))
-    assert np.all(np.abs(second[2:14]) <= 1.2)
+    assert np.all(np.abs(first[:2]) <= (0.18, 0.50))
+    assert np.all(np.abs(second[2:14]) <= 0.35)
     assert not np.array_equal(first[:14], second[:14])
     assert explorer.audit()["privileged_fields"] == []

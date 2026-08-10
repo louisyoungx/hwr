@@ -16,6 +16,9 @@ class TemporalExplorationConfig:
     action_smoothing: float = 0.65
     gripper_epsilon: float = 0.35
     gripper_hold_steps: int = 16
+    base_linear_scale: float = 0.18
+    base_angular_scale: float = 0.50
+    arm_twist_scale: float = 0.35
 
     def __post_init__(self) -> None:
         fractions = (
@@ -28,12 +31,16 @@ class TemporalExplorationConfig:
             raise ValueError("temporal exploration fractions must be in [0, 1]")
         if self.gripper_hold_steps <= 0:
             raise ValueError("gripper exploration hold must be positive")
+        if min(
+            self.base_linear_scale,
+            self.base_angular_scale,
+            self.arm_twist_scale,
+        ) <= 0.0:
+            raise ValueError("temporal exploration action scales must be positive")
 
 
 class TemporalActionExplorer:
     """Perturb actions without observations, task truth, goals, or action labels."""
-
-    _CONTINUOUS_SCALES = np.asarray((0.45, 1.0, *(1.0,) * 12))
 
     def __init__(
         self,
@@ -42,6 +49,13 @@ class TemporalActionExplorer:
     ) -> None:
         self.config = config
         self.rng = rng
+        self.motion_scales = np.asarray(
+            (
+                config.base_linear_scale,
+                config.base_angular_scale,
+                *(config.arm_twist_scale,) * 12,
+            )
+        )
         self._noise = np.zeros(14, dtype=np.float64)
         self._previous: np.ndarray | None = None
         self._gripper_mask = np.zeros(2, dtype=bool)
@@ -65,9 +79,9 @@ class TemporalActionExplorer:
             0.0, self.config.noise_standard_deviation, 14
         )
         value[:14] = np.clip(
-            value[:14] + self._noise * self._CONTINUOUS_SCALES,
-            -self._CONTINUOUS_SCALES,
-            self._CONTINUOUS_SCALES,
+            value[:14] + self._noise * self.motion_scales,
+            -self.motion_scales,
+            self.motion_scales,
         )
         if self._previous is not None:
             smoothing = self.config.action_smoothing

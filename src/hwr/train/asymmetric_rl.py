@@ -31,9 +31,9 @@ class AsymmetricRLConfig:
     target_noise_clip: float = 0.30
     action_magnitude_penalty: float = 0.08
     action_slew_penalty: float = 0.04
-    base_linear_scale: float = 0.45
-    base_angular_scale: float = 1.0
-    arm_velocity_scale: float = 1.0
+    base_linear_scale: float = 0.18
+    base_angular_scale: float = 0.50
+    arm_velocity_scale: float = 0.35
 
     def __post_init__(self) -> None:
         if min(
