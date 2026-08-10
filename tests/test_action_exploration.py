@@ -45,6 +45,28 @@ def test_continuous_noise_is_correlated_bounded_and_resettable() -> None:
     assert explorer.audit()["privileged_fields"] == []
 
 
+def test_policy_gripper_sample_is_held_for_physical_servo_time() -> None:
+    explorer = TemporalActionExplorer(
+        TemporalExplorationConfig(
+            noise_standard_deviation=0.0,
+            action_smoothing=0.0,
+            gripper_epsilon=0.0,
+            policy_gripper_hold_steps=3,
+        ),
+        np.random.default_rng(12),
+    )
+    requested = [
+        np.asarray((*([0.0] * 14), value, 1.0 - value))
+        for value in (0.1, 0.2, 0.3, 0.9)
+    ]
+
+    actions = [explorer.perturb(value) for value in requested]
+
+    assert all(np.array_equal(action[14:], actions[0][14:]) for action in actions[:3])
+    assert np.array_equal(actions[3][14:], requested[3][14:])
+    assert explorer.audit()["policy_gripper_hold_steps"] == 3
+
+
 def test_reflection_coupling_is_embodiment_only_and_preserves_independent_mode() -> None:
     coupled = TemporalActionExplorer(
         TemporalExplorationConfig(

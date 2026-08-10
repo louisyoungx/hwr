@@ -19,6 +19,7 @@ class TemporalExplorationConfig:
     action_smoothing: float = 0.65
     gripper_epsilon: float = 0.35
     gripper_hold_steps: int = 16
+    policy_gripper_hold_steps: int = 12
     reflection_coupled_probability: float = 0.60
     paired_gripper_probability: float = 0.60
     global_random_burst_probability: float = 0.0
@@ -39,7 +40,11 @@ class TemporalExplorationConfig:
         )
         if not all(0.0 <= value <= 1.0 for value in fractions):
             raise ValueError("temporal exploration fractions must be in [0, 1]")
-        if min(self.gripper_hold_steps, self.global_random_burst_steps) <= 0:
+        if min(
+            self.gripper_hold_steps,
+            self.policy_gripper_hold_steps,
+            self.global_random_burst_steps,
+        ) <= 0:
             raise ValueError("exploration hold durations must be positive")
         if min(
             self.base_linear_scale,
@@ -71,6 +76,8 @@ class TemporalActionExplorer:
         self._gripper_mask = np.zeros(2, dtype=bool)
         self._gripper_values = np.zeros(2, dtype=np.float64)
         self._gripper_remaining = 0
+        self._policy_gripper_values = np.zeros(2, dtype=np.float64)
+        self._policy_gripper_remaining = 0
         self._burst_action: np.ndarray | None = None
         self._burst_remaining = 0
         self._reflection_signs = np.asarray(
@@ -83,6 +90,8 @@ class TemporalActionExplorer:
         self._gripper_mask.fill(False)
         self._gripper_values.fill(0.0)
         self._gripper_remaining = 0
+        self._policy_gripper_values.fill(0.0)
+        self._policy_gripper_remaining = 0
         self._burst_action = None
         self._burst_remaining = 0
 
@@ -106,8 +115,13 @@ class TemporalActionExplorer:
         if self._previous is not None:
             smoothing = self.config.action_smoothing
             value[:14] = smoothing * self._previous[:14] + (1.0 - smoothing) * value[:14]
-        self._refresh_grippers()
         value[14:] = np.clip(value[14:], 0.0, 1.0)
+        if self._policy_gripper_remaining <= 0:
+            self._policy_gripper_values = value[14:].copy()
+            self._policy_gripper_remaining = self.config.policy_gripper_hold_steps
+        value[14:] = self._policy_gripper_values
+        self._policy_gripper_remaining -= 1
+        self._refresh_grippers()
         value[14:] = np.where(
             self._gripper_mask, self._gripper_values, value[14:]
         )
@@ -187,6 +201,7 @@ class TemporalActionExplorer:
             "action_labels": False,
             "noise_process": "first-order-correlated-gaussian",
             "gripper_process": "persistent-mixed-paired-independent-epsilon",
+            "policy_gripper_hold_steps": self.config.policy_gripper_hold_steps,
             "embodiment_prior": "stochastic-left-right-reflection-coupling",
             "global_random_bursts": {
                 "probability": self.config.global_random_burst_probability,

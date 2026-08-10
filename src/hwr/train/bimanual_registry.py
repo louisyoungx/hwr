@@ -241,6 +241,7 @@ def resume_bimanual_training_run(
         "paired_gripper_exploration_probability",
         "global_random_burst_probability",
         "global_random_burst_steps",
+        "policy_gripper_hold_steps",
     ):
         saved.setdefault(name, requested[name])
     saved.pop("episodes")

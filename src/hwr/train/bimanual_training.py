@@ -58,6 +58,7 @@ class BimanualRLTrainingConfig:
     action_smoothing: float = 0.65
     gripper_exploration_probability: float = 0.35
     gripper_exploration_hold_steps: int = 16
+    policy_gripper_hold_steps: int = 12
     reflection_coupled_exploration_probability: float = 0.60
     paired_gripper_exploration_probability: float = 0.60
     global_random_burst_probability: float = 0.01
@@ -87,6 +88,7 @@ class BimanualRLTrainingConfig:
             self.learning_starts,
             self.random_action_hold_steps,
             self.gripper_exploration_hold_steps,
+            self.policy_gripper_hold_steps,
             self.global_random_burst_steps,
             self.raw_image_width,
             self.raw_image_height,
@@ -160,7 +162,8 @@ class TrainingEpisodeRecord:
     mean_actor_motion_ratio: float = 0.0
     maximum_actor_motion_ratio: float = 0.0
     mean_actor_entropy: float = 0.0
-    mean_actor_log_standard_deviation: float = 0.0
+    mean_actor_motion_log_standard_deviation: float = 0.0
+    mean_actor_gripper_log_standard_deviation: float = 0.0
 
 
 @dataclass
@@ -228,6 +231,7 @@ class BimanualTrainingRunner:
                 action_smoothing=config.action_smoothing,
                 gripper_epsilon=config.gripper_exploration_probability,
                 gripper_hold_steps=config.gripper_exploration_hold_steps,
+                policy_gripper_hold_steps=config.policy_gripper_hold_steps,
                 reflection_coupled_probability=(
                     config.reflection_coupled_exploration_probability
                 ),
@@ -475,8 +479,11 @@ class BimanualTrainingRunner:
                 "maximum_actor_motion_ratio"
             ],
             mean_actor_entropy=update_summary["mean_actor_entropy"],
-            mean_actor_log_standard_deviation=update_summary[
-                "mean_actor_log_standard_deviation"
+            mean_actor_motion_log_standard_deviation=update_summary[
+                "mean_actor_motion_log_standard_deviation"
+            ],
+            mean_actor_gripper_log_standard_deviation=update_summary[
+                "mean_actor_gripper_log_standard_deviation"
             ],
         )
 
@@ -623,8 +630,11 @@ def _summarize_updates(metrics: list[Mapping[str, float]]) -> dict[str, float]:
             (item["actor_motion_max_ratio"] for item in actor), default=0.0
         ),
         "mean_actor_entropy": mean(actor, "actor_entropy"),
-        "mean_actor_log_standard_deviation": mean(
-            actor, "actor_log_standard_deviation"
+        "mean_actor_motion_log_standard_deviation": mean(
+            actor, "actor_motion_log_standard_deviation"
+        ),
+        "mean_actor_gripper_log_standard_deviation": mean(
+            actor, "actor_gripper_log_standard_deviation"
         ),
     }
 

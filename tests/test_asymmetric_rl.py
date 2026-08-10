@@ -142,9 +142,18 @@ def test_maximum_entropy_actor_and_action_regularization_are_enabled() -> None:
 
     assert config.entropy_temperature > 0
     assert (
-        config.minimum_log_standard_deviation
-        < config.initial_log_standard_deviation
-        < config.maximum_log_standard_deviation
+        config.minimum_motion_log_standard_deviation
+        < config.initial_motion_log_standard_deviation
+        < config.maximum_motion_log_standard_deviation
+    )
+    assert (
+        config.minimum_gripper_log_standard_deviation
+        < config.initial_gripper_log_standard_deviation
+        < config.maximum_gripper_log_standard_deviation
+    )
+    assert (
+        config.initial_gripper_log_standard_deviation
+        > config.initial_motion_log_standard_deviation
     )
     assert config.action_magnitude_penalty > 0
     assert config.action_slew_penalty > 0
@@ -174,6 +183,14 @@ def test_stochastic_actor_samples_bounded_actions_and_finite_density() -> None:
     assert torch.all((0.0 <= first.values[..., 14:]) & (first.values[..., 14:] <= 1.0))
     assert torch.equal(deterministic.values, repeated.values)
 
+    expanded = type(output)(
+        output.action_chunks.repeat(1024, 1, 1),
+        output.stop_logits.repeat(1024, 1),
+    )
+    grippers = trainer._sample_action(expanded).values[..., 14:]
+    assert (grippers < 0.2).float().mean() > 0.01
+    assert (grippers > 0.8).float().mean() > 0.01
+
 
 def test_entropy_update_learns_action_distribution_scale() -> None:
     trainer = _trainer()
@@ -182,7 +199,8 @@ def test_entropy_update_learns_action_distribution_scale() -> None:
     metrics = trainer.update(_batch())
 
     assert metrics["actor_entropy"] != 0.0
-    assert np.isfinite(metrics["actor_log_standard_deviation"])
+    assert np.isfinite(metrics["actor_motion_log_standard_deviation"])
+    assert np.isfinite(metrics["actor_gripper_log_standard_deviation"])
     assert not torch.equal(before, trainer.actor_log_standard_deviation)
 
 

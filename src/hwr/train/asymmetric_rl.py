@@ -34,9 +34,12 @@ class AsymmetricRLConfig:
     actor_warmup_updates: int = 2000
     reward_scale: float = 0.25
     entropy_temperature: float = 0.02
-    initial_log_standard_deviation: float = -1.5
-    minimum_log_standard_deviation: float = -4.0
-    maximum_log_standard_deviation: float = -0.3
+    initial_motion_log_standard_deviation: float = -1.5
+    minimum_motion_log_standard_deviation: float = -4.0
+    maximum_motion_log_standard_deviation: float = -0.3
+    initial_gripper_log_standard_deviation: float = 0.2
+    minimum_gripper_log_standard_deviation: float = -2.0
+    maximum_gripper_log_standard_deviation: float = 0.8
     action_magnitude_penalty: float = 0.08
     action_slew_penalty: float = 0.04
     safety_learning_rate: float = 3e-4
@@ -78,16 +81,31 @@ class AsymmetricRLConfig:
         )
         if min(regularizers) < 0.0:
             raise ValueError("entropy and action penalties cannot be negative")
-        log_std = (
-            self.minimum_log_standard_deviation,
-            self.initial_log_standard_deviation,
-            self.maximum_log_standard_deviation,
-        )
-        if not all(math.isfinite(value) for value in log_std) or not (
-            log_std[0] < log_std[2]
-            and log_std[0] <= log_std[1] <= log_std[2]
+        for name, log_std in (
+            (
+                "motion",
+                (
+                    self.minimum_motion_log_standard_deviation,
+                    self.initial_motion_log_standard_deviation,
+                    self.maximum_motion_log_standard_deviation,
+                ),
+            ),
+            (
+                "gripper",
+                (
+                    self.minimum_gripper_log_standard_deviation,
+                    self.initial_gripper_log_standard_deviation,
+                    self.maximum_gripper_log_standard_deviation,
+                ),
+            ),
         ):
-            raise ValueError("stochastic Actor log standard deviations are invalid")
+            if not all(math.isfinite(value) for value in log_std) or not (
+                log_std[0] < log_std[2]
+                and log_std[0] <= log_std[1] <= log_std[2]
+            ):
+                raise ValueError(
+                    f"stochastic Actor {name} log standard deviations are invalid"
+                )
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -180,11 +198,15 @@ class AsymmetricActorCriticTrainer:
         self.critic_config = critic_config
         self.config = config
         self.actor_log_standard_deviation = nn.Parameter(
-            torch.full(
-                (1, actor.config.action_chunk_size, actor.config.action_dim),
-                config.initial_log_standard_deviation,
+            torch.tensor(
+                (
+                    *(config.initial_motion_log_standard_deviation,) * 14,
+                    *(config.initial_gripper_log_standard_deviation,) * 2,
+                ),
                 device=self.device,
-            )
+            )[None, None].expand(
+                1, actor.config.action_chunk_size, actor.config.action_dim
+            ).clone()
         )
         self.actor_optimizer = torch.optim.AdamW(
             (*self.actor.parameters(), self.actor_log_standard_deviation),
@@ -212,7 +234,8 @@ class AsymmetricActorCriticTrainer:
             "actor_motion_mean_ratio": 0.0,
             "actor_motion_max_ratio": 0.0,
             "actor_entropy": 0.0,
-            "actor_log_standard_deviation": 0.0,
+            "actor_motion_log_standard_deviation": 0.0,
+            "actor_gripper_log_standard_deviation": 0.0,
         }
         actor_updated = (
             self.update_count >= self.config.actor_warmup_updates
@@ -430,8 +453,11 @@ class AsymmetricActorCriticTrainer:
             "actor_entropy": float(
                 -sample.log_probability.mean().detach().cpu()
             ),
-            "actor_log_standard_deviation": float(
-                self.actor_log_standard_deviation.mean().detach().cpu()
+            "actor_motion_log_standard_deviation": float(
+                self.actor_log_standard_deviation[..., :14].mean().detach().cpu()
+            ),
+            "actor_gripper_log_standard_deviation": float(
+                self.actor_log_standard_deviation[..., 14:].mean().detach().cpu()
             ),
         }
         return loss, metrics
@@ -457,11 +483,13 @@ class AsymmetricActorCriticTrainer:
             output,
             self.actor_log_standard_deviation,
             self.config.action_scaling(),
-            minimum_log_standard_deviation=(
-                self.config.minimum_log_standard_deviation
+            motion_log_standard_deviation_bounds=(
+                self.config.minimum_motion_log_standard_deviation,
+                self.config.maximum_motion_log_standard_deviation,
             ),
-            maximum_log_standard_deviation=(
-                self.config.maximum_log_standard_deviation
+            gripper_log_standard_deviation_bounds=(
+                self.config.minimum_gripper_log_standard_deviation,
+                self.config.maximum_gripper_log_standard_deviation,
             ),
             deterministic=deterministic,
         )

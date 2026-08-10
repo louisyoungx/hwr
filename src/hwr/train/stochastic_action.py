@@ -25,8 +25,8 @@ def sample_squashed_gaussian_action(
     log_standard_deviation: torch.Tensor,
     scaling: VLAActionScaling,
     *,
-    minimum_log_standard_deviation: float,
-    maximum_log_standard_deviation: float,
+    motion_log_standard_deviation_bounds: tuple[float, float],
+    gripper_log_standard_deviation_bounds: tuple[float, float],
     deterministic: bool = False,
 ) -> SquashedGaussianAction:
     """Sample motion through tanh and grippers through sigmoid."""
@@ -35,15 +35,20 @@ def sample_squashed_gaussian_action(
     expected = (1, mean.shape[1], mean.shape[2])
     if tuple(log_standard_deviation.shape) != expected:
         raise ValueError("stochastic Actor log standard deviation shape differs")
-    if not (
-        math.isfinite(minimum_log_standard_deviation)
-        and math.isfinite(maximum_log_standard_deviation)
-        and minimum_log_standard_deviation < maximum_log_standard_deviation
+    bounds = (
+        *motion_log_standard_deviation_bounds,
+        *gripper_log_standard_deviation_bounds,
+    )
+    if not all(math.isfinite(value) for value in bounds) or not (
+        bounds[0] < bounds[1] and bounds[2] < bounds[3]
     ):
         raise ValueError("stochastic Actor log standard deviation bounds are invalid")
-    bounded_log_std = log_standard_deviation.clamp(
-        minimum_log_standard_deviation,
-        maximum_log_standard_deviation,
+    bounded_log_std = torch.cat(
+        (
+            log_standard_deviation[..., :14].clamp(bounds[0], bounds[1]),
+            log_standard_deviation[..., 14:].clamp(bounds[2], bounds[3]),
+        ),
+        dim=-1,
     )
     standard_deviation = bounded_log_std.exp()
     pre_transform = (
