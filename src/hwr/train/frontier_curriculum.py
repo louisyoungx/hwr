@@ -18,6 +18,8 @@ class FrontierCurriculumConfig:
     discovery_reach_meters: float = 0.06
     bilateral_reach_meters: float = 0.10
     score_distance_scale_meters: float = 0.08
+    maximum_payload_linear_speed: float = 0.05
+    maximum_payload_angular_speed: float = 0.15
 
     def __post_init__(self) -> None:
         if self.capacity_per_task <= 0:
@@ -28,6 +30,8 @@ class FrontierCurriculumConfig:
             self.discovery_reach_meters,
             self.bilateral_reach_meters,
             self.score_distance_scale_meters,
+            self.maximum_payload_linear_speed,
+            self.maximum_payload_angular_speed,
         ) <= 0.0:
             raise ValueError("frontier distance scales must be positive")
         if self.bilateral_reach_meters < self.discovery_reach_meters:
@@ -41,11 +45,19 @@ class FrontierOutcome:
     left_contact: bool
     right_contact: bool
     severe_collision: bool = False
+    support_contact: bool = True
+    payload_linear_speed: float = 0.0
+    payload_angular_speed: float = 0.0
 
     def __post_init__(self) -> None:
-        distances = (self.left_reach_distance, self.right_reach_distance)
-        if min(distances) < 0.0 or not all(math.isfinite(item) for item in distances):
-            raise ValueError("frontier reach distances must be finite and non-negative")
+        physical = (
+            self.left_reach_distance,
+            self.right_reach_distance,
+            self.payload_linear_speed,
+            self.payload_angular_speed,
+        )
+        if min(physical) < 0.0 or not all(math.isfinite(item) for item in physical):
+            raise ValueError("frontier physical values must be finite and non-negative")
 
 
 @dataclass(frozen=True)
@@ -83,10 +95,24 @@ class OutcomeFrontierCurriculum:
             left_contact=float(metrics["left_contact"]) > 0.5,
             right_contact=float(metrics["right_contact"]) > 0.5,
             severe_collision=float(metrics["severe_collisions"]) > 0.0,
+            support_contact=float(metrics["support_contact"]) > 0.5,
+            payload_linear_speed=float(metrics["payload_linear_speed"]),
+            payload_angular_speed=float(metrics["payload_angular_speed"]),
         )
 
     def qualifies(self, outcome: FrontierOutcome) -> bool:
-        return not outcome.severe_collision and (
+        physically_supported = (
+            outcome.support_contact
+            or outcome.left_contact
+            or outcome.right_contact
+        )
+        settled = (
+            outcome.payload_linear_speed
+            <= self.config.maximum_payload_linear_speed
+            and outcome.payload_angular_speed
+            <= self.config.maximum_payload_angular_speed
+        )
+        return not outcome.severe_collision and physically_supported and settled and (
             outcome.left_contact
             or outcome.right_contact
             or min(
@@ -160,6 +186,15 @@ class OutcomeFrontierCurriculum:
             "selection": "uniform_among_top_score_half",
             "score": "exp(-max(left_reach,right_reach)/scale)",
             "contact_affects_score": False,
+            "physical_stability_filter": {
+                "requires_support_or_arm_contact": True,
+                "maximum_payload_linear_speed": (
+                    self.config.maximum_payload_linear_speed
+                ),
+                "maximum_payload_angular_speed": (
+                    self.config.maximum_payload_angular_speed
+                ),
+            },
         }
 
     def state_dict(self) -> dict[str, object]:

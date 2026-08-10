@@ -51,6 +51,60 @@ def test_frontier_rejects_ordinary_and_unsafe_states_without_action_outputs() ->
     assert audit["task_stages"] is False
 
 
+def test_frontier_rejects_unsupported_or_moving_instantaneous_near_states() -> None:
+    frontier = OutcomeFrontierCurriculum(("tray",))
+
+    assert not frontier.consider(
+        "tray",
+        _snapshot("tray", 0.0),
+        FrontierOutcome(
+            0.04,
+            0.05,
+            False,
+            False,
+            support_contact=False,
+        ),
+        source_episode=0,
+        source_step=0,
+    )
+    assert not frontier.consider(
+        "tray",
+        _snapshot("tray", 1.0),
+        FrontierOutcome(
+            0.04,
+            0.05,
+            False,
+            False,
+            support_contact=True,
+            payload_linear_speed=0.051,
+        ),
+        source_episode=0,
+        source_step=1,
+    )
+    assert frontier.consider(
+        "tray",
+        _snapshot("tray", 2.0),
+        FrontierOutcome(
+            0.04,
+            0.05,
+            True,
+            False,
+            support_contact=False,
+            payload_linear_speed=0.01,
+            payload_angular_speed=0.02,
+        ),
+        source_episode=0,
+        source_step=2,
+    )
+
+    audit = frontier.audit()
+    assert audit["physical_stability_filter"] == {
+        "requires_support_or_arm_contact": True,
+        "maximum_payload_linear_speed": 0.05,
+        "maximum_payload_angular_speed": 0.15,
+    }
+
+
 def test_frontier_preserves_side_diversity_and_round_trips_checkpoint() -> None:
     config = FrontierCurriculumConfig(
         capacity_per_task=4, reset_probability=1.0
