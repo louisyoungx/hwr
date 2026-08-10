@@ -140,6 +140,7 @@ def save_bimanual_training_run(
         "schema_version": "hwr.goal-replay/v1",
         "size": result.replay.size,
         "failure_size": result.replay.failure_size,
+        "discovery_size": result.replay.discovery_size,
         "episode_count": result.replay.episode_count,
         "hindsight_transition_count": result.replay.hindsight_count,
         "mirror_transition_count": result.replay.mirror_count,
@@ -218,6 +219,9 @@ def resume_bimanual_training_run(
     manifest = verify_bimanual_training_run(path)
     saved = dict(manifest["training_config"])
     requested = runner.config.to_dict()
+    saved.setdefault(
+        "discovery_replay_fraction", requested["discovery_replay_fraction"]
+    )
     saved.pop("episodes")
     requested.pop("episodes")
     if saved != requested:

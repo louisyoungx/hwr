@@ -249,6 +249,9 @@ class GoalConditionedReplayBuffer:
     def __init__(self, capacity: int, *, seed: int = 0) -> None:
         self.regular = AsymmetricReplayBuffer(capacity, seed=seed)
         self.failures = AsymmetricReplayBuffer(capacity, seed=seed ^ 0xFA17)
+        self.discoveries = AsymmetricReplayBuffer(
+            max(1, capacity // 8), seed=seed ^ 0xD15C
+        )
         self._generator = torch.Generator().manual_seed(seed ^ 0x4E2)
         self.episode_count = 0
         self.hindsight_count = 0
@@ -262,6 +265,10 @@ class GoalConditionedReplayBuffer:
     def failure_size(self) -> int:
         return self.failures.size
 
+    @property
+    def discovery_size(self) -> int:
+        return self.discoveries.size
+
     def add_episode(self, episode: GoalEpisode) -> GoalReplayAddResult:
         original = _with_actor_weights(episode.batch, 1.0)
         hindsight = hindsight_relabel(episode, self._generator)
@@ -274,6 +281,9 @@ class GoalConditionedReplayBuffer:
             self.regular.add(batch)
             if not episode.success:
                 self.failures.add(batch)
+        self._add_discoveries(original)
+        if episode.mirrorable:
+            self._add_discoveries(mirror_batch(original))
         count = original.rewards.shape[0]
         self.episode_count += 1
         self.hindsight_count += count
@@ -288,22 +298,52 @@ class GoalConditionedReplayBuffer:
         )
 
     def sample(
-        self, batch_size: int, *, failure_fraction: float = 0.5
+        self,
+        batch_size: int,
+        *,
+        failure_fraction: float = 0.35,
+        discovery_fraction: float = 0.35,
     ) -> AsymmetricRLBatch:
-        if not 0.0 <= failure_fraction <= 1.0:
-            raise ValueError("failure replay fraction must be in [0, 1]")
-        requested = min(round(batch_size * failure_fraction), self.failure_size)
-        requested = min(requested, max(0, batch_size - 1))
-        regular_count = batch_size - requested
+        if not 0.0 <= failure_fraction <= 1.0 or not 0.0 <= discovery_fraction <= 1.0:
+            raise ValueError("replay fractions must be in [0, 1]")
+        discovery_count = min(
+            round(batch_size * discovery_fraction), self.discovery_size
+        )
+        discovery_count = min(discovery_count, max(0, batch_size - 1))
+        failure_count = min(round(batch_size * failure_fraction), self.failure_size)
+        failure_count = min(
+            failure_count, max(0, batch_size - discovery_count - 1)
+        )
+        regular_count = batch_size - discovery_count - failure_count
         regular = self.regular.sample(regular_count)
-        if requested == 0:
-            return regular
-        return _concat_batches(regular, self.failures.sample(requested))
+        result = regular
+        if failure_count:
+            result = _concat_batches(result, self.failures.sample(failure_count))
+        if discovery_count:
+            result = _concat_batches(result, self.discoveries.sample(discovery_count))
+        return result
+
+    def _add_discoveries(self, batch: AsymmetricRLBatch) -> None:
+        state = batch.next_privileged_state
+        any_contact = (state[:, 7] > 0.5) | (state[:, 8] > 0.5)
+        jointly_near = (state[:, 24] < 0.08) & (state[:, 25] < 0.08)
+        safe = state[:, 11] < 0.5
+        actor_eligible = (
+            batch.actor_weights > 0
+            if batch.actor_weights is not None
+            else torch.ones_like(safe)
+        )
+        indices = torch.nonzero(
+            (any_contact | jointly_near) & safe & actor_eligible
+        ).flatten()
+        if indices.numel():
+            self.discoveries.add(_slice_batch(batch, indices))
 
     def state_dict(self) -> dict[str, object]:
         return {
             "regular": self.regular.state_dict(),
             "failures": self.failures.state_dict(),
+            "discoveries": self.discoveries.state_dict(),
             "generator_state": self._generator.get_state(),
             "episode_count": self.episode_count,
             "hindsight_count": self.hindsight_count,
@@ -313,6 +353,10 @@ class GoalConditionedReplayBuffer:
     def load_state_dict(self, value: Mapping[str, object]) -> None:
         self.regular.load_state_dict(value["regular"])
         self.failures.load_state_dict(value["failures"])
+        if "discoveries" in value:
+            self.discoveries.load_state_dict(value["discoveries"])
+        elif self.regular.size:
+            self._add_discoveries(self.regular.all())
         self._generator.set_state(value["generator_state"])
         self.episode_count = int(value["episode_count"])
         self.hindsight_count = int(value["hindsight_count"])

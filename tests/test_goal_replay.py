@@ -102,6 +102,7 @@ def test_failed_episode_returns_original_her_and_mirrors_to_priority_replay() ->
     assert result.mirror_count == 8
     assert result.failure_return_count == 16
     assert replay.size == replay.failure_size == 16
+    assert replay.discovery_size == 8
     assert sampled.rewards.shape == (8,)
     assert sampled.actor_weights is not None
     assert set(sampled.actor_weights.tolist()).issubset({0.0, 1.0})

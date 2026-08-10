@@ -74,6 +74,10 @@ def test_training_run_resumes_at_next_episode_with_replay_and_rng(tmp_path) -> N
     path = save_bimanual_training_run(
         tmp_path, "resume-run", result, source_commit="b" * 40
     )
+    manifest_path = path / "manifest.json"
+    legacy_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    legacy_manifest["training_config"].pop("discovery_replay_fraction")
+    manifest_path.write_text(json.dumps(legacy_manifest), encoding="utf-8")
     tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
     config_values = result.config.to_dict()
     config_values["episodes"] = 2
