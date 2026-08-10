@@ -90,6 +90,7 @@ def test_asymmetric_update_changes_actor_using_separate_privileged_critic() -> N
 
     assert metrics["actor_updated"] == 1.0
     assert np.isfinite(metrics["critic_loss"])
+    assert np.isfinite(metrics["conservative_loss"])
     assert np.isfinite(metrics["actor_loss"])
     assert any(
         not torch.equal(previous, current)
@@ -105,6 +106,9 @@ def test_td3_target_smoothing_and_action_regularization_are_enabled() -> None:
     assert config.target_noise_clip > config.target_action_noise
     assert config.action_magnitude_penalty > 0
     assert config.action_slew_penalty > 0
+    assert 0 < config.reward_scale < 1
+    assert config.conservative_critic_weight > 0
+    assert config.conservative_action_samples > 1
 
 
 def test_unsupervised_actor_does_not_optimize_unused_stop_head() -> None:

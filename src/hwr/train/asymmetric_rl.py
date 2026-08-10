@@ -27,12 +27,15 @@ class AsymmetricRLConfig:
     behavior_regularization: float = 0.02
     policy_delay: int = 2
     actor_warmup_updates: int = 2000
+    reward_scale: float = 0.10
     target_action_noise: float = 0.15
     target_noise_clip: float = 0.30
     action_magnitude_penalty: float = 0.08
     action_slew_penalty: float = 0.04
     safety_learning_rate: float = 3e-4
     safety_actor_penalty: float = 3.0
+    conservative_critic_weight: float = 0.10
+    conservative_action_samples: int = 4
     base_linear_scale: float = 0.18
     base_angular_scale: float = 0.50
     arm_velocity_scale: float = 0.35
@@ -45,6 +48,7 @@ class AsymmetricRLConfig:
             self.base_angular_scale,
             self.arm_velocity_scale,
             self.safety_learning_rate,
+            self.reward_scale,
         ) <= 0:
             raise ValueError("asymmetric RL learning rates must be positive")
         if not 0.0 <= self.discount <= 1.0:
@@ -55,6 +59,7 @@ class AsymmetricRLConfig:
             self.behavior_regularization < 0.0
             or self.policy_delay <= 0
             or self.actor_warmup_updates < 0
+            or self.conservative_action_samples <= 0
         ):
             raise ValueError("asymmetric RL regularization or delay is invalid")
         regularizers = (
@@ -63,6 +68,7 @@ class AsymmetricRLConfig:
             self.action_magnitude_penalty,
             self.action_slew_penalty,
             self.safety_actor_penalty,
+            self.conservative_critic_weight,
         )
         if min(regularizers) < 0.0:
             raise ValueError("TD3 smoothing and action penalties cannot be negative")
@@ -189,7 +195,7 @@ class AsymmetricActorCriticTrainer:
     def update(self, batch: AsymmetricRLBatch) -> dict[str, float]:
         batch = self._to_device(batch)
         self._validate_batch(batch)
-        critic_loss = self._update_critic(batch)
+        critic_loss, conservative_loss = self._update_critic(batch)
         safety_loss = self._update_safety_critic(batch)
         actor_loss = torch.zeros((), device=self.device)
         actor_updated = (
@@ -203,30 +209,96 @@ class AsymmetricActorCriticTrainer:
         self.update_count += 1
         return {
             "critic_loss": float(critic_loss.detach().cpu()),
+            "conservative_loss": float(conservative_loss.detach().cpu()),
             "safety_loss": float(safety_loss.detach().cpu()),
             "actor_loss": float(actor_loss.detach().cpu()),
             "actor_updated": float(actor_updated),
             "update": float(self.update_count),
         }
 
-    def _update_critic(self, batch: AsymmetricRLBatch) -> torch.Tensor:
+    def _update_critic(
+        self, batch: AsymmetricRLBatch
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         with torch.no_grad():
             next_output = self.target_actor(batch.next_actor_inputs)
             next_action = _smoothed_target_action(next_output, self.config)
             target_q1, target_q2 = self.target_critic(
                 batch.next_privileged_state, next_action
             )
-            target_q = batch.rewards + (
+            target_q = batch.rewards * self.config.reward_scale + (
                 1.0 - batch.done
             ) * self.config.discount * torch.minimum(target_q1, target_q2)
         executed = _executed_action_representation(batch)
         q1, q2 = self.critic(batch.privileged_state, executed)
-        loss = nn.functional.mse_loss(q1, target_q) + nn.functional.mse_loss(q2, target_q)
+        temporal_difference = nn.functional.mse_loss(
+            q1, target_q
+        ) + nn.functional.mse_loss(q2, target_q)
+        conservative = self._conservative_critic_loss(batch, q1, q2)
+        loss = (
+            temporal_difference
+            + self.config.conservative_critic_weight * conservative
+        )
         self.critic_optimizer.zero_grad(set_to_none=True)
         loss.backward()
         nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
         self.critic_optimizer.step()
-        return loss
+        return loss, conservative
+
+    def _conservative_critic_loss(
+        self,
+        batch: AsymmetricRLBatch,
+        data_q1: torch.Tensor,
+        data_q2: torch.Tensor,
+    ) -> torch.Tensor:
+        count = self.config.conservative_action_samples
+        batch_size = batch.rewards.shape[0]
+        state = batch.privileged_state[:, None, :].expand(
+            -1, count, -1
+        ).reshape(batch_size * count, -1)
+        action = self._random_action_representations(batch_size, count)
+        random_q1, random_q2 = self.critic(state, action)
+        random_q1 = random_q1.reshape(batch_size, count)
+        random_q2 = random_q2.reshape(batch_size, count)
+        with torch.no_grad():
+            output = self.actor(batch.actor_inputs)
+            bounded = bounded_vla_actions(output, self.config.action_scaling())
+            stop = torch.zeros_like(output.stop_logits).unsqueeze(-1)
+            policy_action = torch.cat((bounded, stop), dim=2).flatten(1)
+        policy_q1, policy_q2 = self.critic(
+            batch.privileged_state, policy_action
+        )
+        candidates_q1 = torch.cat((random_q1, policy_q1[:, None]), dim=1)
+        candidates_q2 = torch.cat((random_q2, policy_q2[:, None]), dim=1)
+        normalizer = torch.log(
+            torch.tensor(
+                candidates_q1.shape[1],
+                dtype=candidates_q1.dtype,
+                device=candidates_q1.device,
+            )
+        )
+        first = torch.logsumexp(candidates_q1, dim=1) - normalizer - data_q1
+        second = torch.logsumexp(candidates_q2, dim=1) - normalizer - data_q2
+        return torch.relu(first).mean() + torch.relu(second).mean()
+
+    def _random_action_representations(
+        self, batch_size: int, count: int
+    ) -> torch.Tensor:
+        shape = (
+            batch_size,
+            count,
+            self.actor.config.action_chunk_size,
+            self.actor.config.action_dim,
+        )
+        value = torch.rand(shape, device=self.device) * 2.0 - 1.0
+        scales = _action_scales(self.config, value)
+        value[..., :14] *= scales[:14]
+        value[..., 14:] = (value[..., 14:] + 1.0) / 2.0
+        stop = torch.zeros(
+            (*shape[:-1], 1), dtype=value.dtype, device=value.device
+        )
+        return torch.cat((value, stop), dim=3).flatten(2).reshape(
+            batch_size * count, -1
+        )
 
     def _update_safety_critic(self, batch: AsymmetricRLBatch) -> torch.Tensor:
         if batch.proposed_action_chunks is None or batch.safety_costs is None:
