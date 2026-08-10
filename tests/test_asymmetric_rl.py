@@ -118,6 +118,7 @@ def test_actor_optimizes_the_pessimistic_twin_critic_value() -> None:
         actor_warmup_updates=0,
         behavior_regularization=0.0,
         entropy_temperature=0.0,
+        gripper_entropy_temperature=0.0,
         action_magnitude_penalty=0.0,
         action_slew_penalty=0.0,
         safety_actor_penalty=0.0,
@@ -141,6 +142,7 @@ def test_maximum_entropy_actor_and_action_regularization_are_enabled() -> None:
     defaults = AsymmetricRLConfig()
 
     assert config.entropy_temperature > 0
+    assert 0 < config.gripper_entropy_temperature < config.entropy_temperature
     assert (
         config.minimum_motion_log_standard_deviation
         < config.initial_motion_log_standard_deviation
@@ -177,6 +179,10 @@ def test_stochastic_actor_samples_bounded_actions_and_finite_density() -> None:
 
     assert not torch.equal(first.values, second.values)
     assert torch.isfinite(first.log_probability).all()
+    assert torch.equal(
+        first.log_probability,
+        first.motion_log_probability + first.gripper_log_probability,
+    )
     assert torch.all(first.values[..., 0].abs() <= trainer.config.base_linear_scale)
     assert torch.all(first.values[..., 1].abs() <= trainer.config.base_angular_scale)
     assert torch.all(first.values[..., 2:14].abs() <= trainer.config.arm_velocity_scale)

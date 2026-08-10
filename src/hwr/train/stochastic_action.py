@@ -17,7 +17,12 @@ class SquashedGaussianAction:
     """One differentiable action sample and its transform-corrected density."""
 
     values: torch.Tensor
-    log_probability: torch.Tensor
+    motion_log_probability: torch.Tensor
+    gripper_log_probability: torch.Tensor
+
+    @property
+    def log_probability(self) -> torch.Tensor:
+        return self.motion_log_probability + self.gripper_log_probability
 
 
 def sample_squashed_gaussian_action(
@@ -76,7 +81,11 @@ def sample_squashed_gaussian_action(
     transform_log_jacobian = torch.cat(
         (motion_log_jacobian, gripper_log_jacobian), dim=-1
     )
-    log_probability = (gaussian_log_probability - transform_log_jacobian).sum(
+    component_log_probability = gaussian_log_probability - transform_log_jacobian
+    motion_log_probability = component_log_probability[..., :14].sum(dim=(1, 2))
+    gripper_log_probability = component_log_probability[..., 14:].sum(
         dim=(1, 2)
     )
-    return SquashedGaussianAction(values, log_probability)
+    return SquashedGaussianAction(
+        values, motion_log_probability, gripper_log_probability
+    )

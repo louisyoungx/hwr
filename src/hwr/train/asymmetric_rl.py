@@ -34,12 +34,13 @@ class AsymmetricRLConfig:
     actor_warmup_updates: int = 2000
     reward_scale: float = 0.25
     entropy_temperature: float = 0.02
+    gripper_entropy_temperature: float = 0.002
     initial_motion_log_standard_deviation: float = -1.5
     minimum_motion_log_standard_deviation: float = -4.0
     maximum_motion_log_standard_deviation: float = -0.3
-    initial_gripper_log_standard_deviation: float = 0.2
-    minimum_gripper_log_standard_deviation: float = -2.0
-    maximum_gripper_log_standard_deviation: float = 0.8
+    initial_gripper_log_standard_deviation: float = -0.5
+    minimum_gripper_log_standard_deviation: float = -3.0
+    maximum_gripper_log_standard_deviation: float = 0.2
     action_magnitude_penalty: float = 0.08
     action_slew_penalty: float = 0.04
     safety_learning_rate: float = 3e-4
@@ -74,6 +75,7 @@ class AsymmetricRLConfig:
             raise ValueError("asymmetric RL regularization or delay is invalid")
         regularizers = (
             self.entropy_temperature,
+            self.gripper_entropy_temperature,
             self.action_magnitude_penalty,
             self.action_slew_penalty,
             self.safety_actor_penalty,
@@ -276,8 +278,7 @@ class AsymmetricActorCriticTrainer:
                 + bootstrap
                 * (
                     torch.minimum(target_q1, target_q2)
-                    - self.config.entropy_temperature
-                    * next_sample.log_probability
+                    - self._weighted_log_probability(next_sample)
                 )
             )
         executed = _executed_action_representation(batch)
@@ -422,7 +423,7 @@ class AsymmetricActorCriticTrainer:
             weights
             * (
                 -reward_value
-                + self.config.entropy_temperature * sample.log_probability
+                + self._weighted_log_probability(sample)
                 + self.config.behavior_regularization * behavior
                 + self.config.action_magnitude_penalty * magnitude
                 + self.config.action_slew_penalty * slew
@@ -461,6 +462,15 @@ class AsymmetricActorCriticTrainer:
             ),
         }
         return loss, metrics
+
+    def _weighted_log_probability(
+        self, sample: SquashedGaussianAction
+    ) -> torch.Tensor:
+        return (
+            self.config.entropy_temperature * sample.motion_log_probability
+            + self.config.gripper_entropy_temperature
+            * sample.gripper_log_probability
+        )
 
     def sample_actor_action(
         self,
