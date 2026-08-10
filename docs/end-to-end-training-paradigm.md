@@ -216,6 +216,15 @@ Actor 每个控制时刻联合输出 16 维基础动作：
 
 旧专家调试不再阻塞上述顺序，也不能作为任何阶段完成证据。
 
+本机闭环验收命令（训练完成后）为：
+
+```bash
+hwr-evaluate-bimanual-rl runs/bimanual-rl/<run-id> \
+  --seed-count 20 --video-seed-count 1
+```
+
+该命令默认对三个场景分别执行正常、锁左臂、锁右臂三组评测；第三人称、头部、左腕和右腕视频由同一评测进程逐控制帧同步写出，不做剪辑或补帧。`report.json`、`acceptance.json` 和 `manifest.json` 保存逐 Episode 结果、固定门槛、训练 manifest 哈希、Actor 哈希、未见种子及视频哈希。
+
 ## 8. 阶段验收
 
 一个训练阶段只有同时满足以下条件才算完成：
