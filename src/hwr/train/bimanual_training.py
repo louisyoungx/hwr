@@ -154,6 +154,8 @@ class TrainingEpisodeRecord:
     curriculum_level: float
     replay_size: int
     updates: int
+    bilateral_near_steps: int = 0
+    maximum_bilateral_near_steps: int = 0
     safety_interventions: int = 0
     sampling_probability: float = 1.0 / 3.0
     actor_updates: int = 0
@@ -518,6 +520,9 @@ class BimanualTrainingRunner:
                 min(max(state[24], state[25]) for state in buffers.states),
             ),
         )
+        bilateral_near_steps, maximum_bilateral_near_steps = (
+            _bilateral_near_statistics(buffers.states)
+        )
         return TrainingEpisodeRecord(
             episode=episode_index,
             task_id=task_id,
@@ -539,6 +544,8 @@ class BimanualTrainingRunner:
             curriculum_level=level,
             replay_size=self.replay.size,
             updates=self.trainer.update_count,
+            bilateral_near_steps=bilateral_near_steps,
+            maximum_bilateral_near_steps=maximum_bilateral_near_steps,
             safety_interventions=safety_interventions,
             sampling_probability=sampling_probability,
             actor_updates=int(update_summary["actor_updates"]),
@@ -690,6 +697,20 @@ class BimanualTrainingRunner:
             )
             metrics.append(self.trainer.update(batch))
         return _summarize_updates(metrics)
+
+
+def _bilateral_near_statistics(
+    states: list[tuple[float, ...]], threshold: float = 0.10
+) -> tuple[int, int]:
+    total = 0
+    current = 0
+    longest = 0
+    for state in states:
+        near = max(state[24], state[25]) <= threshold
+        total += int(near)
+        current = current + 1 if near else 0
+        longest = max(longest, current)
+    return total, longest
 
 
 def _summarize_updates(metrics: list[Mapping[str, float]]) -> dict[str, float]:

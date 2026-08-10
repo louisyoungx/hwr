@@ -13,6 +13,7 @@ from hwr.train import (
     BimanualTrainingRunner,
     FrontierOutcome,
 )
+from hwr.train.bimanual_training import _bilateral_near_statistics
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -82,6 +83,25 @@ def test_task_schedule_rng_is_independent_from_action_exploration() -> None:
     assert first.frontier_rng is not first.exploration_rng
 
 
+def test_bilateral_near_statistics_require_both_sides_in_same_state() -> None:
+    def state(left: float, right: float) -> tuple[float, ...]:
+        return (*([0.0] * 24), left, right)
+
+    total, longest = _bilateral_near_statistics(
+        [
+            state(0.05, 0.20),
+            state(0.20, 0.05),
+            state(0.08, 0.09),
+            state(0.07, 0.10),
+            state(0.08, 0.11),
+            state(0.09, 0.09),
+        ]
+    )
+
+    assert total == 3
+    assert longest == 2
+
+
 def test_local_training_collects_all_three_tasks_without_action_labels() -> None:
     tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
     config = BimanualRLTrainingConfig(
@@ -123,6 +143,10 @@ def test_local_training_collects_all_three_tasks_without_action_labels() -> None
             record.minimum_left_reach_distance,
             record.minimum_right_reach_distance,
         )
+        for record in result.records
+    )
+    assert all(
+        record.bilateral_near_steps >= record.maximum_bilateral_near_steps
         for record in result.records
     )
 
