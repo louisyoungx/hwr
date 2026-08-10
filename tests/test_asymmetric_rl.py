@@ -160,7 +160,6 @@ def test_maximum_entropy_actor_and_action_regularization_are_enabled() -> None:
     )
     assert config.action_magnitude_penalty > 0
     assert config.action_slew_penalty > 0
-    assert config.gripper_head_learning_rate_scale > 1.0
     assert config.reward_scale == 0.25
     assert config.conservative_critic_weight == 0.05
     assert config.conservative_action_samples > 1
@@ -169,42 +168,15 @@ def test_maximum_entropy_actor_and_action_regularization_are_enabled() -> None:
     assert defaults.policy_delay >= 5
 
 
-def test_gripper_head_uses_faster_optimizer_group_only() -> None:
-    actor = VLAActorModel(
-        VLAActorConfig(
-            visual_history=2,
-            action_history=2,
-            proprioception_dim=37,
-            language_dim=12,
-            point_count=8,
-            action_chunk_size=3,
-            hidden_dim=32,
-            attention_heads=4,
-            transformer_layers=1,
-            separate_gripper_head=True,
-        )
-    )
-    config = AsymmetricRLConfig()
-    trainer = AsymmetricActorCriticTrainer(
-        actor, PrivilegedCriticConfig(10, 3, hidden_dim=32), config
-    )
-    slow, fast = trainer.actor_optimizer.param_groups
-    fast_ids = {id(parameter) for parameter in fast["params"]}
-    slow_ids = {id(parameter) for parameter in slow["params"]}
+def test_actor_uses_one_learning_rate_for_all_action_dimensions() -> None:
+    trainer = _trainer()
+    groups = trainer.actor_optimizer.param_groups
+    parameter_ids = {id(parameter) for parameter in groups[0]["params"]}
 
-    assert fast["lr"] == pytest.approx(config.actor_learning_rate)
-    assert slow["lr"] == pytest.approx(config.actor_learning_rate)
-    assert {id(parameter) for parameter in actor.gripper_head.parameters()} == fast_ids
-    assert id(actor.motion_head.weight) in slow_ids
-    assert id(actor.output_norm.weight) in slow_ids
-    assert id(trainer.actor_log_standard_deviation) in slow_ids
-
-    trainer.update_count = config.gripper_head_acceleration_updates
-    trainer._schedule_actor_learning_rates()
-
-    assert fast["lr"] == pytest.approx(
-        config.actor_learning_rate * config.gripper_head_learning_rate_scale
-    )
+    assert len(groups) == 1
+    assert groups[0]["lr"] == pytest.approx(trainer.config.actor_learning_rate)
+    assert id(trainer.actor.action_head.weight) in parameter_ids
+    assert id(trainer.actor_log_standard_deviation) in parameter_ids
 
 
 def test_motion_slew_penalty_does_not_hold_grippers_open() -> None:
