@@ -193,7 +193,17 @@ class VisualDatasetBuilder:
         self.metadata = dict(metadata or {})
         self.shards: list[dict[str, Any]] = []
         self.phase_names: list[str] = []
+        self._declared_phase_order: tuple[str, ...] = ()
+        self._observed_phases: set[str] = set()
         self._sealed = False
+
+    def declare_phase_order(self, phase_names: Sequence[str]) -> None:
+        values = tuple(phase_names)
+        if not values or any(not name for name in values) or len(set(values)) != len(values):
+            raise ValueError("declared phase order must contain unique non-empty names")
+        if self._declared_phase_order and self._declared_phase_order != values:
+            raise ValueError("expert phase order changed between episodes")
+        self._declared_phase_order = values
 
     def write_episode(
         self,
@@ -214,7 +224,10 @@ class VisualDatasetBuilder:
         if any(not phase for phase in phases):
             raise ValueError("visual behavior phase labels must be non-empty")
         for phase in phases:
-            if phase not in self.phase_names:
+            if self._declared_phase_order and phase not in self._declared_phase_order:
+                raise ValueError(f"sample uses undeclared phase: {phase}")
+            self._observed_phases.add(phase)
+            if not self._declared_phase_order and phase not in self.phase_names:
                 self.phase_names.append(phase)
         arrays["label__phase"] = np.asarray(phases, dtype=np.str_)
         arrays["step_index"] = np.asarray([sample.step_index for sample in samples], dtype=np.int32)
@@ -236,6 +249,10 @@ class VisualDatasetBuilder:
     def seal(self) -> Path:
         if self._sealed or not self.shards:
             raise ValueError("dataset must contain unsealed episode shards")
+        if self._declared_phase_order:
+            self.phase_names = [
+                name for name in self._declared_phase_order if name in self._observed_phases
+            ]
         manifest = {
             "schema_version": VISUAL_DATASET_SCHEMA,
             "policy_input_schema": POLICY_INPUT_SCHEMA,

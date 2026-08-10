@@ -91,20 +91,26 @@ def test_visual_dataset_round_trip_and_checksum(tmp_path) -> None:
         image_size=(2, 2),
         action_history=2,
     )
+    builder.declare_phase_order(("never_sampled", "unused", "default"))
     builder.write_episode(
         "episode-000",
         11,
-        [VisualBehaviorSample(0, policy_input, formal_action_vector(_action()))],
+        [
+            VisualBehaviorSample(0, policy_input, formal_action_vector(_action())),
+            VisualBehaviorSample(
+                1, policy_input, formal_action_vector(_action()), phase="unused"
+            ),
+        ],
     )
     path = builder.seal()
 
     manifest = verify_visual_dataset(path)
 
-    assert manifest["sample_count"] == 1
+    assert manifest["sample_count"] == 2
     assert manifest["seeds"] == [11]
     assert manifest["policy_input_fields"] == sorted(POLICY_INPUT_FIELDS)
     assert manifest["label_fields"] == ["action", "phase"]
-    assert manifest["phase_names"] == ["default"]
+    assert manifest["phase_names"] == ["unused", "default"]
 
 
 def test_visual_dataset_verifier_rejects_manifest_input_leak(tmp_path) -> None:

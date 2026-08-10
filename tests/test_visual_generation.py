@@ -78,6 +78,7 @@ class _Output:
 
 class _Expert:
     failed = False
+    phase_names = ("test_phase",)
 
     def action(self, observation: ObservationFrame) -> _Output:
         return _Output(

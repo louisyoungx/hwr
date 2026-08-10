@@ -68,6 +68,10 @@ class PrivilegedHouseholdExpert:
     def done(self) -> bool:
         return self.stage_index >= len(self.stages)
 
+    @property
+    def phase_names(self) -> tuple[str, ...]:
+        return tuple(stage.name for stage in self.stages)
+
     def action(self, observation: ObservationFrame) -> FormalExpertOutput:
         if self.done:
             return FormalExpertOutput(self._stop(observation), "done", self.stage_step)

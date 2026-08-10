@@ -32,6 +32,7 @@ class PrivilegedExpertOutput(Protocol):
 
 class VisualExpert(Protocol):
     failed: bool
+    phase_names: Sequence[str]
 
     def action(self, observation: ObservationFrame) -> PrivilegedExpertOutput: ...
 
@@ -99,6 +100,7 @@ def _collect_episode(
     try:
         observation = environment.reset(seed=seed, task_id=task.task_id)
         expert = expert_factory(environment)
+        builder.declare_phase_order(expert.phase_names)
         for step_index in range(task.max_steps):
             output = expert.action(observation)
             if not output.privileged_label:
