@@ -100,8 +100,8 @@ def test_one_action_updates_left_and_right_arm_and_gripper_targets() -> None:
 
     assert np.all(left_control > initial_left)
     assert np.all(right_control < initial_right)
-    assert left_gripper == pytest.approx((0.02125, 0.02125))
-    assert right_gripper == pytest.approx((0.06375, 0.06375))
+    assert left_gripper == pytest.approx((0.02375, 0.02375))
+    assert right_gripper == pytest.approx((0.07125, 0.07125))
     assert outcome.info["applied_action"].source == "test_actor"
     assert outcome.observation.sequence_id == 1
 

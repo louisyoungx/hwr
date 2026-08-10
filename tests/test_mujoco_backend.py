@@ -47,9 +47,9 @@ def test_compiled_robot_has_required_dynamics_and_sensors() -> None:
     assert report.top_camera_present
     assert report.overall_height_m == pytest.approx(1.60)
     assert report.arm_mount_y_m == pytest.approx((-0.31, 0.31))
-    assert report.finger_joint_travel_m == pytest.approx((0.085,) * 4)
+    assert report.finger_joint_travel_m == pytest.approx((0.095,) * 4)
     assert report.gripper_open_gaps_m == pytest.approx((0.22, 0.22))
-    assert report.gripper_closed_gaps_m == pytest.approx((0.05, 0.05))
+    assert report.gripper_closed_gaps_m == pytest.approx((0.03, 0.03))
     assert report.policy_cameras == ("head_rgb", "head_depth", "wrist_rgb")
     assert report.invalid_dynamic_bodies == ()
     assert report.equality_constraint_count == 0

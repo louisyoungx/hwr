@@ -78,6 +78,62 @@ def test_kitchen_drawer_is_passively_sprung_and_unactuated() -> None:
     assert model.neq == 0
 
 
+@pytest.mark.parametrize(
+    ("task_id", "left_posture", "right_posture", "handle_prefix"),
+    (
+        (
+            "carry_living_room_basket/v1",
+            (0.0, 1.037, -0.453, 0.0, -0.524, 0.0),
+            (0.0, 1.037, -0.453, 0.0, -0.524, 0.0),
+            "basket",
+        ),
+        (
+            "carry_dining_tray/v1",
+            (0.153, 1.011, -0.596, -0.019, -0.647, 0.008),
+            (-0.153, 1.011, -0.596, 0.019, -0.647, -0.008),
+            "tray",
+        ),
+    ),
+)
+def test_closed_physical_pincers_can_contact_both_sides_of_both_handles(
+    task_id: str,
+    left_posture: tuple[float, ...],
+    right_posture: tuple[float, ...],
+    handle_prefix: str,
+) -> None:
+    model = mujoco.MjModel.from_xml_path(str(BINDINGS[task_id].model_path))
+    data = mujoco.MjData(model)
+    for side, posture in (("left", left_posture), ("right", right_posture)):
+        for index, value in enumerate(posture, 1):
+            joint = mujoco.mj_name2id(
+                model, mujoco.mjtObj.mjOBJ_JOINT, f"{side}_arm_joint_{index}"
+            )
+            data.qpos[model.jnt_qposadr[joint]] = value
+        for finger in ("left", "right"):
+            joint = mujoco.mj_name2id(
+                model,
+                mujoco.mjtObj.mjOBJ_JOINT,
+                f"{side}_gripper_{finger}_finger_joint",
+            )
+            data.qpos[model.jnt_qposadr[joint]] = 0.095
+    mujoco.mj_forward(model, data)
+    pairs = {
+        frozenset(
+            (
+                mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, int(contact.geom1)),
+                mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, int(contact.geom2)),
+            )
+        )
+        for contact in data.contact[: data.ncon]
+    }
+
+    for side in ("left", "right"):
+        handle = f"{handle_prefix}_{side}_handle"
+        for finger in ("left", "right"):
+            pad = f"{side}_gripper_{finger}_pad"
+            assert frozenset((handle, pad)) in pairs
+
+
 def test_procedural_reset_is_seeded_and_changes_continuous_physics() -> None:
     task_id = "carry_dining_tray/v1"
     backend = _backend(task_id)
