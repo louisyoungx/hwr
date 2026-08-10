@@ -90,9 +90,11 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     }
     assert replay["action_exploration"]["actuator_dwell"] == {
         "probability": 0.0,
+        "initial_probability": 0.0,
         "hold_steps": 240,
+        "closed_probability": 0.5,
         "motion": "zero",
-        "grippers": "paired-or-independent-uniform-binary",
+        "grippers": "paired-or-independent-bernoulli-binary",
     }
     assert replay["random_streams"]["shared"] is False
     assert "task_rng_state" in checkpoint

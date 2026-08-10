@@ -70,6 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--global-random-burst-steps", type=int, default=8)
     parser.add_argument("--actuator-dwell", type=float, default=0.0)
     parser.add_argument("--actuator-dwell-steps", type=int, default=240)
+    parser.add_argument("--actuator-initial-dwell", type=float, default=0.0)
+    parser.add_argument("--actuator-dwell-closed", type=float, default=0.50)
     parser.add_argument("--frontier-reset", type=float, default=0.50)
     parser.add_argument("--frontier-capacity", type=int, default=16)
     parser.add_argument("--frontier-signature-uniform", type=float, default=0.20)
@@ -131,6 +133,8 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         global_random_burst_steps=arguments.global_random_burst_steps,
         actuator_dwell_probability=arguments.actuator_dwell,
         actuator_dwell_steps=arguments.actuator_dwell_steps,
+        actuator_initial_dwell_probability=arguments.actuator_initial_dwell,
+        actuator_dwell_closed_probability=arguments.actuator_dwell_closed,
         frontier_reset_probability=arguments.frontier_reset,
         frontier_capacity_per_task=arguments.frontier_capacity,
         frontier_signature_uniform_fraction=(

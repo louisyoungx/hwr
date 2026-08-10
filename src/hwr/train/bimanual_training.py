@@ -64,6 +64,8 @@ class BimanualRLTrainingConfig:
     global_random_burst_steps: int = 8
     actuator_dwell_probability: float = 0.0
     actuator_dwell_steps: int = 240
+    actuator_initial_dwell_probability: float = 0.0
+    actuator_dwell_closed_probability: float = 0.50
     frontier_reset_probability: float = 0.50
     frontier_capacity_per_task: int = 16
     frontier_signature_uniform_fraction: float = 0.20
@@ -128,6 +130,8 @@ class BimanualRLTrainingConfig:
             self.paired_gripper_exploration_probability,
             self.global_random_burst_probability,
             self.actuator_dwell_probability,
+            self.actuator_initial_dwell_probability,
+            self.actuator_dwell_closed_probability,
             self.frontier_reset_probability,
             self.frontier_signature_uniform_fraction,
             self.failure_replay_fraction,
@@ -297,6 +301,12 @@ class BimanualTrainingRunner:
                 global_random_burst_steps=config.global_random_burst_steps,
                 actuator_dwell_probability=config.actuator_dwell_probability,
                 actuator_dwell_steps=config.actuator_dwell_steps,
+                actuator_initial_dwell_probability=(
+                    config.actuator_initial_dwell_probability
+                ),
+                actuator_dwell_closed_probability=(
+                    config.actuator_dwell_closed_probability
+                ),
                 base_linear_scale=self.rl_config.base_linear_scale,
                 base_angular_scale=self.rl_config.base_angular_scale,
                 arm_twist_scale=self.rl_config.arm_velocity_scale,

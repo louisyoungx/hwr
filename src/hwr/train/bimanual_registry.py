@@ -36,6 +36,8 @@ FORKABLE_TRAINING_FIELDS = frozenset(
         "global_random_burst_steps",
         "actuator_dwell_probability",
         "actuator_dwell_steps",
+        "actuator_initial_dwell_probability",
+        "actuator_dwell_closed_probability",
         "frontier_signature_uniform_fraction",
         "frontier_max_entries_per_source_signature",
     }
@@ -300,6 +302,8 @@ def resume_bimanual_training_run(
         "global_random_burst_steps",
         "actuator_dwell_probability",
         "actuator_dwell_steps",
+        "actuator_initial_dwell_probability",
+        "actuator_dwell_closed_probability",
         "policy_gripper_hold_steps",
         "frontier_reset_probability",
         "frontier_capacity_per_task",

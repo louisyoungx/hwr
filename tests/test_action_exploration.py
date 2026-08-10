@@ -137,9 +137,35 @@ def test_actuator_dwell_holds_random_grippers_without_motion_or_task_inputs() ->
     assert actions[0][14] in (0.0, 1.0)
     assert explorer.audit()["actuator_dwell"] == {
         "probability": 1.0,
+        "initial_probability": 0.0,
         "hold_steps": 3,
+        "closed_probability": 0.5,
         "motion": "zero",
-        "grippers": "paired-or-independent-uniform-binary",
+        "grippers": "paired-or-independent-bernoulli-binary",
     }
     assert explorer.audit()["observation_fields"] == []
     assert explorer.audit()["task_conditioned"] is False
+
+
+def test_initial_dwell_can_close_both_grippers_before_policy_motion() -> None:
+    explorer = TemporalActionExplorer(
+        TemporalExplorationConfig(
+            noise_standard_deviation=0.0,
+            action_smoothing=0.0,
+            gripper_epsilon=0.0,
+            paired_gripper_probability=1.0,
+            actuator_dwell_probability=0.0,
+            actuator_initial_dwell_probability=1.0,
+            actuator_dwell_closed_probability=1.0,
+            actuator_dwell_steps=3,
+        ),
+        np.random.default_rng(31),
+    )
+
+    first, second, third, fourth = (
+        explorer.perturb(np.ones(16)) for _ in range(4)
+    )
+
+    assert all(np.array_equal(action[:14], np.zeros(14)) for action in (first, second, third))
+    assert all(np.array_equal(action[14:], np.ones(2)) for action in (first, second, third))
+    assert not np.array_equal(fourth[:14], np.zeros(14))

@@ -26,6 +26,8 @@ class TemporalExplorationConfig:
     global_random_burst_steps: int = 8
     actuator_dwell_probability: float = 0.0
     actuator_dwell_steps: int = 240
+    actuator_initial_dwell_probability: float = 0.0
+    actuator_dwell_closed_probability: float = 0.50
     base_linear_scale: float = 0.18
     base_angular_scale: float = 0.50
     arm_twist_scale: float = 0.35
@@ -40,6 +42,8 @@ class TemporalExplorationConfig:
             self.paired_gripper_probability,
             self.global_random_burst_probability,
             self.actuator_dwell_probability,
+            self.actuator_initial_dwell_probability,
+            self.actuator_dwell_closed_probability,
         )
         if not all(0.0 <= value <= 1.0 for value in fractions):
             raise ValueError("temporal exploration fractions must be in [0, 1]")
@@ -86,6 +90,7 @@ class TemporalActionExplorer:
         self._burst_remaining = 0
         self._dwell_action: np.ndarray | None = None
         self._dwell_remaining = 0
+        self._first_perturb = True
         self._reflection_signs = np.asarray(
             DUAL_ARM_TOOL_TWIST_REFLECTION_SIGNS, dtype=np.float64
         )
@@ -102,16 +107,19 @@ class TemporalActionExplorer:
         self._burst_remaining = 0
         self._dwell_action = None
         self._dwell_remaining = 0
+        self._first_perturb = True
 
     def perturb(self, policy_action: np.ndarray) -> np.ndarray:
         value = np.asarray(policy_action, dtype=np.float64).copy()
         if value.shape != (DUAL_ARM_ACTION_DIM,):
             raise ValueError("temporal explorer requires one 16D action")
+        initial = self._first_perturb
+        self._first_perturb = False
         burst = self._global_random_burst()
         if burst is not None:
             self._previous = burst.copy()
             return burst
-        dwell = self._actuator_dwell()
+        dwell = self._actuator_dwell(initial=initial)
         if dwell is not None:
             self._previous = dwell.copy()
             return dwell
@@ -205,16 +213,27 @@ class TemporalActionExplorer:
         self._burst_remaining -= 1
         return self._burst_action.copy()
 
-    def _actuator_dwell(self) -> np.ndarray | None:
-        probability = self.config.actuator_dwell_probability
+    def _actuator_dwell(self, *, initial: bool) -> np.ndarray | None:
+        initial_probability = self.config.actuator_initial_dwell_probability
+        probability = (
+            initial_probability
+            if initial and initial_probability > 0.0
+            else self.config.actuator_dwell_probability
+        )
         if self._dwell_remaining <= 0:
             if probability <= 0.0 or self.rng.random() >= probability:
                 return None
             self._dwell_action = np.zeros(DUAL_ARM_ACTION_DIM, dtype=np.float64)
             if self.rng.random() < self.config.paired_gripper_probability:
-                self._dwell_action[14:] = self.rng.integers(0, 2)
+                self._dwell_action[14:] = float(
+                    self.rng.random()
+                    < self.config.actuator_dwell_closed_probability
+                )
             else:
-                self._dwell_action[14:] = self.rng.integers(0, 2, size=2)
+                self._dwell_action[14:] = (
+                    self.rng.random(2)
+                    < self.config.actuator_dwell_closed_probability
+                )
             self._dwell_remaining = self.config.actuator_dwell_steps
         if self._dwell_action is None:
             raise RuntimeError("actuator dwell has no sampled action")
@@ -237,9 +256,15 @@ class TemporalActionExplorer:
             },
             "actuator_dwell": {
                 "probability": self.config.actuator_dwell_probability,
+                "initial_probability": (
+                    self.config.actuator_initial_dwell_probability
+                ),
                 "hold_steps": self.config.actuator_dwell_steps,
+                "closed_probability": (
+                    self.config.actuator_dwell_closed_probability
+                ),
                 "motion": "zero",
-                "grippers": "paired-or-independent-uniform-binary",
+                "grippers": "paired-or-independent-bernoulli-binary",
             },
             "task_conditioned": False,
         }
