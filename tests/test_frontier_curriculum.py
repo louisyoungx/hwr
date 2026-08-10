@@ -108,6 +108,30 @@ def test_frontier_prioritizes_worst_side_progress_over_far_single_contact() -> N
         for seed in range(20)
     }
 
-    assert ranked[0].source_episode == 2
+    assert ranked[0].source_episode == 1
     assert ranked[-1].source_episode == 0
     assert selected_sources <= {1, 2}
+
+
+def test_frontier_contact_cannot_outrank_better_bilateral_reach() -> None:
+    config = FrontierCurriculumConfig(
+        capacity_per_task=8, reset_probability=1.0
+    )
+    frontier = OutcomeFrontierCurriculum(("tray",), config)
+    candidates = (
+        FrontierOutcome(0.083, 0.123, True, False),
+        FrontierOutcome(0.052, 0.109, False, False),
+    )
+    for index, outcome in enumerate(candidates):
+        assert frontier.consider(
+            "tray",
+            _snapshot("tray", float(index)),
+            outcome,
+            source_episode=index,
+            source_step=index,
+        )
+
+    audit = frontier.audit()
+
+    assert frontier.entries["tray"][0].source_episode == 1
+    assert audit["contact_affects_score"] is False

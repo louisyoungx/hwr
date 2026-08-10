@@ -158,7 +158,8 @@ class OutcomeFrontierCurriculum:
             "task_stages": False,
             "source": "autonomous_physical_state_discovery",
             "selection": "uniform_among_top_score_half",
-            "score": "exp(-worst_reach/scale)*(1+0.5*physical_contact_count)",
+            "score": "exp(-max(left_reach,right_reach)/scale)",
+            "contact_affects_score": False,
         }
 
     def state_dict(self) -> dict[str, object]:
@@ -210,11 +211,7 @@ class OutcomeFrontierCurriculum:
 
     def _score(self, outcome: FrontierOutcome) -> float:
         worst = max(outcome.left_reach_distance, outcome.right_reach_distance)
-        reach = math.exp(-worst / self.config.score_distance_scale_meters)
-        contact_multiplier = 1.0 + 0.5 * (
-            outcome.left_contact + outcome.right_contact
-        )
-        return float(reach * contact_multiplier)
+        return float(math.exp(-worst / self.config.score_distance_scale_meters))
 
     def _signature(self, outcome: FrontierOutcome) -> int:
         contact = int(outcome.left_contact) | (int(outcome.right_contact) << 1)
