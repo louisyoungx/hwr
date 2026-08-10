@@ -51,3 +51,21 @@ def test_phase_forces_progress_at_learned_maximum() -> None:
 
     assert 0 in selected
     assert selected[-1] == 1
+
+
+def test_learned_route_blocks_phase_jump_and_drives_to_endpoint() -> None:
+    policy = _policy()
+    policy.navigation_routes = {"approach": ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0))}
+    prefer_next = torch.tensor((0.0, 10.0))
+
+    selected = [
+        policy._select_phase(prefer_next, (0.2, 0.0, 0.0)) for _ in range(20)
+    ]
+    linear, angular = policy._navigation_action((0.2, 0.0, 0.0))
+
+    assert selected[-1] == 0
+    assert linear > 0.0
+    assert abs(angular) < 1e-6
+    for _ in range(10):
+        selected_phase = policy._select_phase(prefer_next, (1.0, 0.0, 0.0))
+    assert selected_phase == 1

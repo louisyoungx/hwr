@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from typing import Mapping, Sequence
 
@@ -79,6 +80,9 @@ class LearnedVisualPolicy:
         phase_names: Sequence[str],
         phase_action_mask: Sequence[Sequence[bool]],
         phase_step_limits: Sequence[Sequence[int]] | None = None,
+        navigation_routes: Mapping[
+            str, Sequence[Sequence[float]]
+        ] | None = None,
         device: str = "cpu",
     ) -> None:
         self.model = model.to(device).eval()
@@ -101,12 +105,22 @@ class LearnedVisualPolicy:
             for minimum, maximum in self.phase_step_limits
         ):
             raise ValueError("phase step limits do not match the visual model")
+        self.navigation_routes = {
+            name: tuple(tuple(float(item) for item in pose) for pose in route)
+            for name, route in (navigation_routes or {}).items()
+        }
+        if not set(self.navigation_routes).issubset(self.phase_names) or any(
+            not route or any(len(pose) != 3 for pose in route)
+            for route in self.navigation_routes.values()
+        ):
+            raise ValueError("navigation routes do not match the visual model")
         self.device = torch.device(device)
         self._history = [np.zeros(9, dtype=np.float32) for _ in range(model.config.action_history)]
         self._task_id: str | None = None
         self._phase_index = 0
         self._phase_candidate_steps = 0
         self._phase_steps = 0
+        self._route_index = 0
 
     def spec(self) -> PolicySpec:
         return PolicySpec(self.policy_version, 1, 1, self.control_hz, 6)
@@ -122,6 +136,7 @@ class LearnedVisualPolicy:
         self._phase_index = 0
         self._phase_candidate_steps = 0
         self._phase_steps = 0
+        self._route_index = 0
 
     def infer(self, observations: Sequence[ObservationFrame]) -> tuple[ActionFrame, ...]:
         if not observations or self._task_id is None:
@@ -143,7 +158,9 @@ class LearnedVisualPolicy:
         )
         with torch.inference_mode():
             output = self.model(*tensors)
-        phase_index = self._select_phase(output.phase_logits.squeeze(0))
+        phase_index = self._select_phase(
+            output.phase_logits.squeeze(0), observation.base_pose
+        )
         prediction = output.actions[0, phase_index].cpu().numpy()
         action = self._action(prediction, observation)
         vector = np.asarray(
@@ -153,24 +170,36 @@ class LearnedVisualPolicy:
         self._history = [*self._history[1:], vector]
         return (action,)
 
-    def _select_phase(self, logits: torch.Tensor) -> int:
+    def _select_phase(
+        self,
+        logits: torch.Tensor,
+        base_pose: Sequence[float] | None = None,
+    ) -> int:
         next_index = self._phase_index + 1
         if next_index >= len(self.phase_names):
             self._phase_steps += 1
             return self._phase_index
         minimum, maximum = self.phase_step_limits[self._phase_index]
-        candidate = (
-            self._phase_steps >= minimum
-            and float(logits[next_index].cpu()) > float(logits[self._phase_index].cpu())
-        )
+        phase_name = self.phase_names[self._phase_index]
+        if phase_name in self.navigation_routes and base_pose is not None:
+            candidate = self._phase_steps >= minimum and self._route_complete(base_pose)
+            force = False
+        else:
+            candidate = (
+                self._phase_steps >= minimum
+                and float(logits[next_index].cpu())
+                > float(logits[self._phase_index].cpu())
+            )
+            force = self._phase_steps >= maximum
         if candidate:
             self._phase_candidate_steps += 1
         else:
             self._phase_candidate_steps = 0
-        if self._phase_candidate_steps >= 10 or self._phase_steps >= maximum:
+        if self._phase_candidate_steps >= 10 or force:
             self._phase_index = next_index
             self._phase_candidate_steps = 0
             self._phase_steps = 0
+            self._route_index = 0
         else:
             self._phase_steps += 1
         return self._phase_index
@@ -182,6 +211,10 @@ class LearnedVisualPolicy:
         continuous = np.where(
             self.phase_action_mask[self._phase_index], continuous, 0.0
         )
+        phase_name = self.phase_names[self._phase_index]
+        if phase_name in self.navigation_routes:
+            continuous[:2] = self._navigation_action(observation.base_pose)
+            continuous[2:] = 0.0
         continuous[:2] = np.clip(continuous[:2], (-0.5, -1.0), (0.5, 1.0))
         continuous[2:] = np.clip(continuous[2:], -1.0, 1.0)
         gripper = float(prediction[8] >= 0.0)
@@ -198,5 +231,40 @@ class LearnedVisualPolicy:
             policy_version=self.policy_version,
         )
 
+    def _route_complete(self, base_pose: Sequence[float]) -> bool:
+        target = self.navigation_routes[self.phase_names[self._phase_index]][-1]
+        distance = math.hypot(target[0] - base_pose[0], target[1] - base_pose[1])
+        return distance <= 0.12 and abs(_wrap(target[2] - base_pose[2])) <= 0.10
+
+    def _navigation_action(self, base_pose: Sequence[float]) -> tuple[float, float]:
+        route = self.navigation_routes[self.phase_names[self._phase_index]]
+        while self._route_index < len(route) - 1:
+            target = route[self._route_index]
+            if math.hypot(target[0] - base_pose[0], target[1] - base_pose[1]) > 0.24:
+                break
+            self._route_index += 1
+        target = route[self._route_index]
+        distance = math.hypot(target[0] - base_pose[0], target[1] - base_pose[1])
+        final = self._route_index == len(route) - 1
+        if final and distance <= 0.12:
+            yaw_error = _wrap(target[2] - base_pose[2])
+            if abs(yaw_error) <= 0.10:
+                return (0.0, 0.0)
+            return (0.0, float(np.clip(1.8 * yaw_error, -0.75, 0.75)))
+        heading = math.atan2(target[1] - base_pose[1], target[0] - base_pose[0])
+        heading_error = _wrap(heading - base_pose[2])
+        direction = 1.0
+        if abs(heading_error) > math.pi / 2:
+            direction = -1.0
+            heading_error = _wrap(heading + math.pi - base_pose[2])
+        alignment = max(0.0, 1.0 - abs(heading_error) / 0.75)
+        linear = direction * min(0.42, 1.1 * distance) * alignment
+        angular = float(np.clip(1.8 * heading_error, -0.85, 0.85))
+        return (linear, angular)
+
     def close(self) -> None:
         pass
+
+
+def _wrap(angle: float) -> float:
+    return (angle + math.pi) % (2 * math.pi) - math.pi

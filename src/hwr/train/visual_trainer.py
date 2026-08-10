@@ -49,6 +49,7 @@ class VisualTrainingResult:
     device: str
     phase_action_mask: tuple[tuple[bool, ...], ...]
     phase_step_limits: tuple[tuple[int, int], ...]
+    navigation_routes: dict[str, tuple[tuple[float, float, float], ...]]
 
 
 def _select_device(requested: str) -> str:
@@ -107,6 +108,42 @@ def _phase_step_limits(
         maximum = max(minimum + 1, int(max(durations) * 1.25 + 0.5))
         limits.append((minimum, maximum))
     return tuple(limits)
+
+
+def _navigation_routes(
+    dataset: LoadedVisualDataset,
+) -> dict[str, tuple[tuple[float, float, float], ...]]:
+    routes = {}
+    for phase_index, phase_name in enumerate(dataset.phase_names):
+        if phase_name != "navigate" and not phase_name.startswith(
+            ("nav_", "navigate_")
+        ):
+            continue
+        candidates = []
+        for episode in np.unique(dataset.episode_ids):
+            mask = (dataset.episode_ids == episode) & (
+                dataset.phase_indices == phase_index
+            )
+            poses = dataset.inputs["proprioception"][mask, 13:16]
+            if len(poses):
+                candidates.append(poses)
+        endpoints = np.stack([poses[-1] for poses in candidates])
+        median = np.median(endpoints, axis=0)
+        selected = min(candidates, key=lambda poses: np.linalg.norm(poses[-1] - median))
+        routes[phase_name] = _compress_route(selected)
+    return routes
+
+
+def _compress_route(poses: np.ndarray) -> tuple[tuple[float, float, float], ...]:
+    selected = [poses[0]]
+    for pose in poses[1:-1]:
+        previous = selected[-1]
+        distance = float(np.linalg.norm(pose[:2] - previous[:2]))
+        yaw_delta = abs(float((pose[2] - previous[2] + np.pi) % (2 * np.pi) - np.pi))
+        if distance >= 0.12 or yaw_delta >= 0.25:
+            selected.append(pose)
+    selected.append(poses[-1])
+    return tuple(tuple(float(value) for value in pose) for pose in selected)
 
 
 def _loss(
@@ -249,4 +286,5 @@ def train_visual_policy(
         device_name,
         phase_action_mask,
         _phase_step_limits(dataset),
+        _navigation_routes(dataset),
     )

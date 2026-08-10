@@ -63,6 +63,10 @@ def save_visual_training_result(
         "phase_names": list(dataset_manifest["phase_names"]),
         "phase_action_mask": [list(row) for row in result.phase_action_mask],
         "phase_step_limits": [list(row) for row in result.phase_step_limits],
+        "navigation_routes": {
+            name: [list(pose) for pose in route]
+            for name, route in result.navigation_routes.items()
+        },
         "task_instructions": {
             task_id: {"instruction_id": value[0], "text": value[1]}
             for task_id, value in task_instructions.items()
@@ -119,5 +123,9 @@ def load_visual_policy(path: Path, *, device: str = "cpu") -> LearnedVisualPolic
                 [[0, 2**31 - 1] for _ in manifest["phase_names"]],
             )
         ),
+        navigation_routes={
+            name: tuple(tuple(float(value) for value in pose) for pose in route)
+            for name, route in manifest.get("navigation_routes", {}).items()
+        },
         device=device,
     )
