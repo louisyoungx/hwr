@@ -25,6 +25,10 @@ from hwr.train.asymmetric_rl import (
     AsymmetricRLConfig,
 )
 from hwr.train.asymmetric_replay import AsymmetricReplayBuffer
+from hwr.train.action_exploration import (
+    TemporalActionExplorer,
+    TemporalExplorationConfig,
+)
 from hwr.train.asymmetric_registry import (
     load_asymmetric_training_checkpoint,
     save_asymmetric_training_checkpoint,
@@ -73,6 +77,8 @@ __all__ = [
     "AsymmetricRLBatch",
     "AsymmetricRLConfig",
     "AsymmetricReplayBuffer",
+    "TemporalActionExplorer",
+    "TemporalExplorationConfig",
     "load_asymmetric_training_checkpoint",
     "save_asymmetric_training_checkpoint",
     "save_vla_actor_checkpoint",

@@ -229,12 +229,18 @@ class BimanualTaskTracker:
         self.stable_steps = 0
         self.concurrent_steps = 0
         self.maximum_concurrent_steps = 0
+        self.left_contact_steps = 0
+        self.right_contact_steps = 0
+        self.simultaneous_contact_steps = 0
 
     def reset(self, initial: BimanualTaskSample) -> None:
         self._previous_potential = self._potential(initial)
         self.stable_steps = 0
         self.concurrent_steps = 0
         self.maximum_concurrent_steps = 0
+        self.left_contact_steps = 0
+        self.right_contact_steps = 0
+        self.simultaneous_contact_steps = 0
 
     def desired_goal(self) -> tuple[float, ...]:
         return self._desired_goal()
@@ -243,6 +249,9 @@ class BimanualTaskTracker:
         if self._previous_potential is None:
             raise RuntimeError("task tracker must be reset before update")
         concurrent = sample.left_contact and sample.right_contact
+        self.left_contact_steps += int(sample.left_contact)
+        self.right_contact_steps += int(sample.right_contact)
+        self.simultaneous_contact_steps += int(concurrent)
         self.concurrent_steps = self.concurrent_steps + 1 if concurrent else 0
         self.maximum_concurrent_steps = max(
             self.maximum_concurrent_steps, self.concurrent_steps

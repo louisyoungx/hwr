@@ -33,6 +33,10 @@ from hwr.train.asymmetric_rl import (
     AsymmetricRLBatch,
     AsymmetricRLConfig,
 )
+from hwr.train.action_exploration import (
+    TemporalActionExplorer,
+    TemporalExplorationConfig,
+)
 from hwr.train.curriculum import AutomaticCurriculum, CurriculumConfig
 from hwr.train.goal_replay import GoalConditionedReplayBuffer, GoalEpisode
 
@@ -46,8 +50,12 @@ class BimanualRLTrainingConfig:
     learning_starts: int = 512
     updates_per_environment_step: float = 0.25
     initial_random_episodes: int = 9
-    random_action_hold_steps: int = 4
+    random_action_hold_steps: int = 8
     exploration_noise: float = 0.18
+    exploration_correlation: float = 0.85
+    action_smoothing: float = 0.65
+    gripper_exploration_probability: float = 0.35
+    gripper_exploration_hold_steps: int = 16
     failure_replay_fraction: float = 0.5
     seed: int = 20260810
     device: str = "cpu"
@@ -69,6 +77,7 @@ class BimanualRLTrainingConfig:
             self.batch_size,
             self.learning_starts,
             self.random_action_hold_steps,
+            self.gripper_exploration_hold_steps,
             self.raw_image_width,
             self.raw_image_height,
             self.image_width,
@@ -84,9 +93,12 @@ class BimanualRLTrainingConfig:
         fractions = (
             self.updates_per_environment_step,
             self.exploration_noise,
+            self.exploration_correlation,
+            self.action_smoothing,
+            self.gripper_exploration_probability,
             self.failure_replay_fraction,
         )
-        if min(fractions) < 0 or self.failure_replay_fraction > 1:
+        if min(fractions) < 0 or any(value > 1 for value in fractions[1:]):
             raise ValueError("bimanual training fractions are invalid")
 
     def to_dict(self) -> dict[str, object]:
@@ -103,6 +115,9 @@ class TrainingEpisodeRecord:
     success: bool
     severe_collisions: int
     maximum_concurrent_steps: int
+    left_contact_steps: int
+    right_contact_steps: int
+    simultaneous_contact_steps: int
     stable_steps: int
     minimum_left_reach_distance: float
     minimum_right_reach_distance: float
@@ -164,6 +179,16 @@ class BimanualTrainingRunner:
         np.random.seed(config.seed)
         torch.manual_seed(config.seed)
         self.rng = np.random.default_rng(config.seed)
+        self.explorer = TemporalActionExplorer(
+            TemporalExplorationConfig(
+                noise_standard_deviation=config.exploration_noise,
+                noise_correlation=config.exploration_correlation,
+                action_smoothing=config.action_smoothing,
+                gripper_epsilon=config.gripper_exploration_probability,
+                gripper_hold_steps=config.gripper_exploration_hold_steps,
+            ),
+            self.rng,
+        )
         self.language = FrozenNgramLanguageEncoder(
             FrozenNgramLanguageConfig(dimension=config.language_dim)
         )
@@ -270,6 +295,7 @@ class BimanualTrainingRunner:
         level = self.curriculum.level(task_id)
         environment.set_curriculum_level(level)
         observation = environment.reset(seed=seed, task_id=task_id)
+        self.explorer.reset()
         self.pipeline.reset()
         actor_input = self.pipeline.build(observation)
         state = environment.privileged_training_state()
@@ -335,6 +361,9 @@ class BimanualTrainingRunner:
             success=success,
             severe_collisions=int(audit["severe_collision_count"]),
             maximum_concurrent_steps=int(audit["maximum_concurrent_steps"]),
+            left_contact_steps=int(audit["left_contact_steps"]),
+            right_contact_steps=int(audit["right_contact_steps"]),
+            simultaneous_contact_steps=int(audit["simultaneous_contact_steps"]),
             stable_steps=int(audit["stable_steps"]),
             minimum_left_reach_distance=min(state[24] for state in buffers.states),
             minimum_right_reach_distance=min(state[25] for state in buffers.states),
@@ -358,7 +387,7 @@ class BimanualTrainingRunner:
                 (
                     self.rng.uniform((-0.20, -0.6), (0.20, 0.6)),
                     self.rng.uniform(-0.8, 0.8, 12),
-                    self.rng.uniform(0.0, 1.0, 2),
+                    self.rng.integers(0, 2, size=2),
                 )
             )
         else:
@@ -370,12 +399,7 @@ class BimanualTrainingRunner:
                 vector = bounded_vla_actions(
                     output, self.rl_config.action_scaling()
                 )[0, 0].cpu().numpy()
-            noise = self.rng.normal(0.0, self.config.exploration_noise, 14)
-            scales = np.asarray((0.45, 1.0, *(1.2,) * 12))
-            vector[:14] = np.clip(vector[:14] + noise * scales, -scales, scales)
-            vector[14:] = np.clip(
-                vector[14:] + self.rng.normal(0.0, 0.08, 2), 0.0, 1.0
-            )
+            vector = self.explorer.perturb(vector)
         return DualArmAction.from_vector(vector)
 
     def _action_frame(

@@ -74,6 +74,9 @@ def test_carry_success_requires_prior_bimanual_window_and_two_second_stability(
             _sample(task_id, left_contact=True, right_contact=True)
         )
     assert update.maximum_concurrent_steps == spec.concurrent_steps
+    assert tracker.left_contact_steps == spec.concurrent_steps
+    assert tracker.right_contact_steps == spec.concurrent_steps
+    assert tracker.simultaneous_contact_steps == spec.concurrent_steps
 
     for _ in range(spec.hold_steps - 1):
         update = tracker.update(_at_target(task_id))

@@ -30,6 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--episode-steps", type=int, default=240)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--learning-starts", type=int, default=512)
+    parser.add_argument("--initial-random-episodes", type=int, default=9)
+    parser.add_argument("--random-action-hold-steps", type=int, default=8)
     parser.add_argument("--seed", type=int, default=20260810)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--raw-width", type=int, default=64)
@@ -39,6 +41,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--point-count", type=int, default=32)
     parser.add_argument("--hidden-dim", type=int, default=64)
     parser.add_argument("--exploration-noise", type=float, default=0.18)
+    parser.add_argument("--exploration-correlation", type=float, default=0.85)
+    parser.add_argument("--action-smoothing", type=float, default=0.65)
+    parser.add_argument("--gripper-exploration", type=float, default=0.35)
+    parser.add_argument("--gripper-hold-steps", type=int, default=16)
     return parser
 
 
@@ -61,6 +67,8 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         episode_step_limit=arguments.episode_steps,
         batch_size=arguments.batch_size,
         learning_starts=arguments.learning_starts,
+        initial_random_episodes=arguments.initial_random_episodes,
+        random_action_hold_steps=arguments.random_action_hold_steps,
         seed=arguments.seed,
         device=arguments.device,
         raw_image_width=arguments.raw_width,
@@ -70,6 +78,10 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         point_count=arguments.point_count,
         hidden_dim=arguments.hidden_dim,
         exploration_noise=arguments.exploration_noise,
+        exploration_correlation=arguments.exploration_correlation,
+        action_smoothing=arguments.action_smoothing,
+        gripper_exploration_probability=arguments.gripper_exploration,
+        gripper_exploration_hold_steps=arguments.gripper_hold_steps,
     )
     output_root = (
         arguments.output_root
