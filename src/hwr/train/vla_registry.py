@@ -48,22 +48,47 @@ def save_vla_behavior_result(
     *,
     dataset_manifest: Mapping[str, Any],
 ) -> Path:
+    return save_vla_actor_checkpoint(
+        root,
+        model_id,
+        version,
+        result.model,
+        result.normalization,
+        dataset_manifest=dataset_manifest,
+        training_metadata={
+            "training_kind": "behavior_cloning",
+            "training_config": result.training_config.to_dict(),
+            "best_validation_loss": result.best_validation_loss,
+            "history": result.history,
+            "training_device": result.device,
+        },
+    )
+
+
+def save_vla_actor_checkpoint(
+    root: Path,
+    model_id: str,
+    version: str,
+    model: VLAActorModel,
+    normalization: VLANormalization,
+    *,
+    dataset_manifest: Mapping[str, Any],
+    training_metadata: Mapping[str, Any],
+) -> Path:
     if not model_id or not version:
         raise ValueError("VLA model id and version are required")
+    if any("critic" in str(key).lower() for key in training_metadata):
+        raise ValueError("deployable Actor metadata cannot contain critic state")
     path = root / model_id / version
     path.mkdir(parents=True, exist_ok=False)
     checkpoint_path = path / "actor.pt"
-    torch.save(result.model.state_dict(), checkpoint_path)
+    torch.save(model.state_dict(), checkpoint_path)
     manifest = {
         "schema_version": VLA_ACTOR_MODEL_SCHEMA,
         "model_id": model_id,
         "version": version,
-        "model_config": result.model_config.to_dict(),
-        "training_config": result.training_config.to_dict(),
-        "normalization": result.normalization.to_dict(),
-        "best_validation_loss": result.best_validation_loss,
-        "history": result.history,
-        "training_device": result.device,
+        "model_config": model.config.to_dict(),
+        "normalization": normalization.to_dict(),
         "dataset_id": dataset_manifest["dataset_id"],
         "dataset_schema": dataset_manifest["schema_version"],
         "dataset_manifest_sha256": _mapping_sha256(dataset_manifest),
@@ -71,6 +96,7 @@ def save_vla_behavior_result(
         "language_encoder_id": dataset_manifest["language_encoder_id"],
         "language_weights_sha256": dataset_manifest["language_weights_sha256"],
         "actor_sha256": _sha256(checkpoint_path),
+        **dict(training_metadata),
     }
     _write_json_atomic(path / "manifest.json", manifest)
     return path

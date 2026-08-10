@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+import copy
+
+import numpy as np
+import pytest
+import torch
+
+from hwr.data import load_vla_dataset
+from hwr.policy import PrivilegedCriticConfig, VLAActorConfig, VLAActorModel
+from hwr.policy.vla_input import VLA_POLICY_INPUT_FIELDS
+from hwr.policy.vla_runtime import VLANormalization
+from hwr.train import (
+    AsymmetricActorCriticTrainer,
+    AsymmetricRLBatch,
+    AsymmetricRLConfig,
+    AsymmetricReplayBuffer,
+    load_asymmetric_training_checkpoint,
+    load_deployable_vla_actor,
+    save_asymmetric_training_checkpoint,
+    save_vla_actor_checkpoint,
+)
+from tests.vla_fixtures import actor_input, build_dataset
+
+
+def _actor_inputs(batch: int = 4) -> dict[str, torch.Tensor]:
+    values = {
+        "head_rgb": torch.randn(batch, 2, 8, 8, 3),
+        "head_depth": torch.rand(batch, 2, 8, 8),
+        "head_depth_valid": torch.ones(batch, 2, 8, 8, dtype=torch.bool),
+        "head_points": torch.randn(batch, 2, 8, 6),
+        "head_point_valid": torch.ones(batch, 2, 8, dtype=torch.bool),
+        "wrist_rgb": torch.randn(batch, 2, 8, 8, 3),
+        "camera_validity": torch.ones(batch, 2, 3, dtype=torch.bool),
+        "proprioception": torch.randn(batch, 37),
+        "instruction_embedding": torch.randn(batch, 12),
+        "action_history": torch.randn(batch, 2, 16),
+    }
+    assert frozenset(values) == VLA_POLICY_INPUT_FIELDS
+    return values
+
+
+def _batch() -> AsymmetricRLBatch:
+    stop = torch.zeros(4, 3)
+    stop[:, -1] = 1.0
+    return AsymmetricRLBatch(
+        actor_inputs=_actor_inputs(),
+        next_actor_inputs=_actor_inputs(),
+        privileged_state=torch.randn(4, 10),
+        next_privileged_state=torch.randn(4, 10),
+        action_chunks=torch.randn(4, 3, 16),
+        stop_decisions=stop,
+        rewards=torch.tensor((1.0, 0.2, -0.1, 0.5)),
+        done=torch.tensor((1.0, 0.0, 0.0, 1.0)),
+    )
+
+
+def _trainer() -> AsymmetricActorCriticTrainer:
+    actor = VLAActorModel(
+        VLAActorConfig(
+            visual_history=2,
+            action_history=2,
+            proprioception_dim=37,
+            language_dim=12,
+            point_count=8,
+            action_chunk_size=3,
+            hidden_dim=32,
+            attention_heads=4,
+            transformer_layers=1,
+        )
+    )
+    return AsymmetricActorCriticTrainer(
+        actor,
+        PrivilegedCriticConfig(10, 3, hidden_dim=32),
+        AsymmetricRLConfig(policy_delay=1, behavior_regularization=0.01),
+    )
+
+
+def test_asymmetric_update_changes_actor_using_separate_privileged_critic() -> None:
+    trainer = _trainer()
+    before = [parameter.detach().clone() for parameter in trainer.actor.parameters()]
+
+    metrics = trainer.update(_batch())
+
+    assert metrics["actor_updated"] == 1.0
+    assert np.isfinite(metrics["critic_loss"])
+    assert np.isfinite(metrics["actor_loss"])
+    assert any(
+        not torch.equal(previous, current)
+        for previous, current in zip(before, trainer.actor.parameters(), strict=True)
+    )
+    assert not any("critic" in name for name, _ in trainer.actor.named_parameters())
+
+
+def test_asymmetric_actor_rejects_privileged_field_even_during_rl() -> None:
+    trainer = _trainer()
+    batch = _batch()
+    actor_inputs = dict(batch.actor_inputs)
+    actor_inputs["object_truth"] = batch.privileged_state
+    leaky = AsymmetricRLBatch(
+        actor_inputs=actor_inputs,
+        next_actor_inputs=batch.next_actor_inputs,
+        privileged_state=batch.privileged_state,
+        next_privileged_state=batch.next_privileged_state,
+        action_chunks=batch.action_chunks,
+        stop_decisions=batch.stop_decisions,
+        rewards=batch.rewards,
+        done=batch.done,
+    )
+
+    with pytest.raises(ValueError, match="non-deployment"):
+        trainer.update(leaky)
+
+
+def test_asymmetric_training_state_restores_for_continuation() -> None:
+    trainer = _trainer()
+    trainer.update(_batch())
+    state = copy.deepcopy(trainer.state_dict())
+    restored = _trainer()
+
+    restored.load_state_dict(state)
+
+    assert restored.update_count == 1
+    assert all(
+        torch.equal(left, right)
+        for left, right in zip(
+            trainer.actor.parameters(), restored.actor.parameters(), strict=True
+        )
+    )
+
+
+def test_asymmetric_replay_and_training_checkpoint_resume(tmp_path) -> None:
+    trainer = _trainer()
+    replay = AsymmetricReplayBuffer(8, seed=7)
+    replay.add(_batch())
+    trainer.update(replay.sample(3))
+    path = save_asymmetric_training_checkpoint(
+        tmp_path / "resume", trainer, replay, run_metadata={"scene": "kitchen"}
+    )
+    restored_trainer = _trainer()
+    restored_replay = AsymmetricReplayBuffer(8, seed=99)
+
+    manifest = load_asymmetric_training_checkpoint(
+        path, restored_trainer, restored_replay
+    )
+
+    assert restored_trainer.update_count == trainer.update_count
+    assert restored_replay.size == replay.size == 4
+    assert manifest["replay_size"] == 4
+    assert restored_replay.sample(2).action_chunks.shape == (2, 3, 16)
+
+
+def test_rl_export_contains_actor_only_and_reloads(tmp_path) -> None:
+    trainer = _trainer()
+    trainer.update(_batch())
+    dataset = load_vla_dataset(build_dataset(tmp_path / "datasets"))
+    normalization = VLANormalization(
+        proprioception_mean=(0.0,) * 37,
+        proprioception_std=(1.0,) * 37,
+        action_mean=(0.0,) * 16,
+        action_std=(1.0,) * 16,
+    )
+    path = save_vla_actor_checkpoint(
+        tmp_path / "models",
+        "rl-actor",
+        "v1",
+        trainer.actor,
+        normalization,
+        dataset_manifest=dataset.manifest,
+        training_metadata={
+            "training_kind": "asymmetric_rl",
+            "rl_updates": trainer.update_count,
+        },
+    )
+
+    actor = load_deployable_vla_actor(path)
+    chunk = actor.predict(actor_input(4))
+
+    assert len(chunk.actions) == 3
+    assert set(path.iterdir()) == {path / "actor.pt", path / "manifest.json"}

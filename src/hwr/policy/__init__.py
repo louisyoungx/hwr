@@ -12,6 +12,7 @@ from hwr.policy.vla_input import (
 )
 from hwr.policy.vla_model import VLAActorConfig, VLAActorModel, VLAActorOutput
 from hwr.policy.vla_runtime import DeployableVLAActor, VLANormalization
+from hwr.policy.privileged_critic import PrivilegedCriticConfig, TwinPrivilegedCritic
 
 __all__ = [
     "BehaviorMLP",
@@ -32,4 +33,6 @@ __all__ = [
     "VLAActorModel",
     "VLAActorOutput",
     "VLANormalization",
+    "PrivilegedCriticConfig",
+    "TwinPrivilegedCritic",
 ]

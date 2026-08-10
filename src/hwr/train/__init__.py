@@ -9,11 +9,25 @@ from hwr.train.visual_trainer import (
     VisualTrainingResult,
     train_visual_policy,
 )
-from hwr.train.vla_registry import load_deployable_vla_actor, save_vla_behavior_result
+from hwr.train.vla_registry import (
+    load_deployable_vla_actor,
+    save_vla_actor_checkpoint,
+    save_vla_behavior_result,
+)
 from hwr.train.vla_trainer import (
     VLABehaviorTrainingConfig,
     VLABehaviorTrainingResult,
     train_vla_behavior_cloning,
+)
+from hwr.train.asymmetric_rl import (
+    AsymmetricActorCriticTrainer,
+    AsymmetricRLBatch,
+    AsymmetricRLConfig,
+)
+from hwr.train.asymmetric_replay import AsymmetricReplayBuffer
+from hwr.train.asymmetric_registry import (
+    load_asymmetric_training_checkpoint,
+    save_asymmetric_training_checkpoint,
 )
 
 __all__ = [
@@ -34,4 +48,11 @@ __all__ = [
     "load_deployable_vla_actor",
     "save_vla_behavior_result",
     "train_vla_behavior_cloning",
+    "AsymmetricActorCriticTrainer",
+    "AsymmetricRLBatch",
+    "AsymmetricRLConfig",
+    "AsymmetricReplayBuffer",
+    "load_asymmetric_training_checkpoint",
+    "save_asymmetric_training_checkpoint",
+    "save_vla_actor_checkpoint",
 ]
