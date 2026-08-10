@@ -11,6 +11,7 @@ from typing import Any, Literal, Mapping, Sequence
 
 Objective = Literal["carry_payload", "hold_drawer_place"]
 BIMANUAL_GOAL_DIM = 12
+BIMANUAL_REACH_SCALE_METERS = 0.08
 
 
 def _finite(values: Sequence[float], name: str) -> tuple[float, ...]:
@@ -75,6 +76,7 @@ class RewardWeights:
     near_handle_closure: float = 1.5
     joint_grasp_readiness: float = 3.0
     bilateral_contact: float = 4.0
+    bilateral_reach_occupancy: float = 0.02
     support: float = 0.5
     progress_scale: float = 8.0
     step_cost: float = 0.002
@@ -264,6 +266,7 @@ class BimanualTaskTracker:
         potential = self._potential(sample)
         reward = (
             (potential - self._previous_potential) * self.spec.reward.progress_scale
+            + self._bilateral_reach_occupancy(sample)
             - self.spec.reward.step_cost
         )
         self._previous_potential = potential
@@ -318,10 +321,14 @@ class BimanualTaskTracker:
         )
         value -= weights.tilt * sample.payload_tilt_radians
         value += weights.contact * (sample.left_contact + sample.right_contact)
-        left_ready = math.exp(-sample.left_reach_distance / 0.08) * (
+        left_ready = math.exp(
+            -sample.left_reach_distance / BIMANUAL_REACH_SCALE_METERS
+        ) * (
             sample.left_gripper_position
         )
-        right_ready = math.exp(-sample.right_reach_distance / 0.08) * (
+        right_ready = math.exp(
+            -sample.right_reach_distance / BIMANUAL_REACH_SCALE_METERS
+        ) * (
             sample.right_gripper_position
         )
         value += weights.near_handle_closure * (left_ready + right_ready)
@@ -335,6 +342,12 @@ class BimanualTaskTracker:
             value += weights.articulation * min(sample.articulation_position, required)
             value += weights.support * sample.inside_target
         return float(value)
+
+    def _bilateral_reach_occupancy(self, sample: BimanualTaskSample) -> float:
+        worst = max(sample.left_reach_distance, sample.right_reach_distance)
+        return self.spec.reward.bilateral_reach_occupancy * math.exp(
+            -worst / BIMANUAL_REACH_SCALE_METERS
+        )
 
     def _desired_goal(self) -> tuple[float, ...]:
         criteria = self.spec.criteria
@@ -366,6 +379,7 @@ class BimanualTaskTracker:
             "right_reach_distance": sample.right_reach_distance,
             "left_gripper_position": sample.left_gripper_position,
             "right_gripper_position": sample.right_gripper_position,
+            "bilateral_reach_occupancy": self._bilateral_reach_occupancy(sample),
             "support_contact": float(sample.support_contact),
             "inside_target": float(sample.inside_target),
             "severe_collisions": float(sample.severe_collision_count),

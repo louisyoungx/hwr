@@ -215,6 +215,32 @@ def test_reward_prefers_balanced_bimanual_progress_over_one_sided_progress() -> 
     assert balanced.reward > one_sided.reward
 
 
+def test_reward_pays_for_staying_jointly_near_but_not_staying_far() -> None:
+    task_id = "carry_dining_tray/v1"
+    spec = SPECS[task_id]
+    near = _sample(
+        task_id,
+        left_reach_distance=0.08,
+        right_reach_distance=0.08,
+    )
+    far = replace(
+        near,
+        left_reach_distance=0.20,
+        right_reach_distance=0.20,
+    )
+    near_tracker = BimanualTaskTracker(spec)
+    near_tracker.reset(near)
+    far_tracker = BimanualTaskTracker(spec)
+    far_tracker.reset(far)
+
+    near_update = near_tracker.update(near)
+    far_update = far_tracker.update(far)
+
+    assert near_update.reward > 0.0
+    assert far_update.reward < 0.0
+    assert near_update.metrics["bilateral_reach_occupancy"] > 0.0
+
+
 def test_reward_contains_bilateral_contact_synergy() -> None:
     task_id = "carry_living_room_basket/v1"
     spec = SPECS[task_id]
