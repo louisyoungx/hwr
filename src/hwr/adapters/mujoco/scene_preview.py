@@ -8,7 +8,14 @@ from pathlib import Path
 import mujoco
 import numpy as np
 
-from hwr.adapters.mujoco.names import ARM_ACTUATORS, ARM_HOME, ARM_JOINTS
+from hwr.adapters.mujoco.names import (
+    ARM_ACTUATORS,
+    ARM_HOME,
+    ARM_JOINTS,
+    SECONDARY_ARM_ACTUATORS,
+    SECONDARY_ARM_HOME,
+    SECONDARY_ARM_JOINTS,
+)
 
 
 @dataclass(frozen=True)
@@ -33,6 +40,12 @@ def _reset_preview_robot(model: mujoco.MjModel, data: mujoco.MjData) -> None:
         joint_id = _id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
         data.qpos[model.jnt_qposadr[joint_id]] = home
     for name, home in zip(ARM_ACTUATORS, ARM_HOME, strict=True):
+        actuator_id = _id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
+        data.ctrl[actuator_id] = home
+    for name, home in zip(SECONDARY_ARM_JOINTS, SECONDARY_ARM_HOME, strict=True):
+        joint_id = _id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+        data.qpos[model.jnt_qposadr[joint_id]] = home
+    for name, home in zip(SECONDARY_ARM_ACTUATORS, SECONDARY_ARM_HOME, strict=True):
         actuator_id = _id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name)
         data.ctrl[actuator_id] = home
 

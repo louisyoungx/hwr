@@ -1,75 +1,191 @@
 <mujocoinclude>
   <body name="robot_base" pos="0 0 0.22">
     <freejoint name="base_free"/>
-    <geom name="chassis_collision" type="box" size="0.30 0.22 0.08" density="650"
+    <geom name="chassis_collision" type="box" size="0.34 0.26 0.08" density="400"
           material="chassis_material"/>
-    <geom name="bumper_front" type="capsule" fromto="0.30 -0.18 0 0.30 0.18 0" size="0.035"
-          density="350" material="joint_material"/>
-    <site name="base_imu" pos="0 0 0.09" size="0.012" rgba="0 1 0 0"/>
-    <body name="head_mast" pos="-0.11 0 0.18">
-      <geom type="box" size="0.035 0.035 0.28" pos="0 0 0.28" density="300"
-            material="joint_material"/>
-      <geom type="box" size="0.075 0.10 0.045" pos="0 0 0.59" density="300"
-            material="chassis_material"/>
-      <camera name="head_rgb" pos="0.077 0 0.60" xyaxes="0 -1 0 0.18 0 0.984" fovy="62"/>
-      <camera name="head_depth" pos="0.077 0 0.60" xyaxes="0 -1 0 0.18 0 0.984" fovy="62"/>
+    <geom name="body_box_collision" type="box" pos="-0.01 0 0.35" size="0.30 0.23 0.29"
+          density="120" material="body_material"/>
+    <geom name="body_front_panel" type="box" pos="0.295 0 0.35" size="0.012 0.20 0.25"
+          mass="0.05" contype="0" conaffinity="0" material="panel_material"/>
+    <geom name="bumper_front" type="capsule" fromto="0.34 -0.21 0 0.34 0.21 0" size="0.035"
+          density="300" material="joint_material"/>
+    <site name="base_imu" pos="0 0 0.12" size="0.012" rgba="0 1 0 0"/>
+
+    <body name="top_camera_head" pos="-0.12 0 0.70">
+      <geom name="camera_head_housing" type="box" size="0.11 0.14 0.07" density="180"
+            material="camera_material"/>
+      <geom name="camera_rgb_lens" type="cylinder" pos="0.118 -0.045 0.01" size="0.026 0.012"
+            quat="0.707107 0 0.707107 0" mass="0.02" contype="0" conaffinity="0"
+            material="camera_lens_material"/>
+      <geom name="camera_depth_lens" type="cylinder" pos="0.118 0.045 0.01" size="0.026 0.012"
+            quat="0.707107 0 0.707107 0" mass="0.02" contype="0" conaffinity="0"
+            material="camera_lens_material"/>
+      <camera name="head_rgb" pos="0.13 -0.045 0.01" xyaxes="0 -1 0 0.16 0 0.987" fovy="66"/>
+      <camera name="head_depth" pos="0.13 0.045 0.01" xyaxes="0 -1 0 0.16 0 0.987" fovy="66"/>
     </body>
-    <body name="wheel_front_left" pos="0.22 0.255 -0.13">
+
+    <body name="wheel_front_left" pos="0.24 0.27 -0.13">
       <joint name="wheel_front_left_joint" type="hinge" axis="0 1 0" limited="false" damping="0.15"/>
       <geom name="wheel_front_left_geom" type="cylinder" size="0.09 0.035"
-            quat="0.707107 0.707107 0 0" density="450" material="joint_material"
+            quat="0.707107 0.707107 0 0" density="450" material="wheel_material"
             friction="1.3 0.003 0.0002"/>
     </body>
-    <body name="wheel_rear_left" pos="-0.22 0.255 -0.13">
+    <body name="wheel_rear_left" pos="-0.24 0.27 -0.13">
       <joint name="wheel_rear_left_joint" type="hinge" axis="0 1 0" limited="false" damping="0.15"/>
       <geom name="wheel_rear_left_geom" type="cylinder" size="0.09 0.035"
-            quat="0.707107 0.707107 0 0" density="450" material="joint_material"
+            quat="0.707107 0.707107 0 0" density="450" material="wheel_material"
             friction="1.3 0.003 0.0002"/>
     </body>
-    <body name="wheel_front_right" pos="0.22 -0.255 -0.13">
+    <body name="wheel_front_right" pos="0.24 -0.27 -0.13">
       <joint name="wheel_front_right_joint" type="hinge" axis="0 1 0" limited="false" damping="0.15"/>
       <geom name="wheel_front_right_geom" type="cylinder" size="0.09 0.035"
-            quat="0.707107 0.707107 0 0" density="450" material="joint_material"
+            quat="0.707107 0.707107 0 0" density="450" material="wheel_material"
             friction="1.3 0.003 0.0002"/>
     </body>
-    <body name="wheel_rear_right" pos="-0.22 -0.255 -0.13">
+    <body name="wheel_rear_right" pos="-0.24 -0.27 -0.13">
       <joint name="wheel_rear_right_joint" type="hinge" axis="0 1 0" limited="false" damping="0.15"/>
       <geom name="wheel_rear_right_geom" type="cylinder" size="0.09 0.035"
-            quat="0.707107 0.707107 0 0" density="450" material="joint_material"
+            quat="0.707107 0.707107 0 0" density="450" material="wheel_material"
             friction="1.3 0.003 0.0002"/>
     </body>
-    <body name="shoulder_pan_link" pos="0.02 0 0.12" gravcomp="1">
-      <joint name="arm_joint_1" class="arm_joint" type="hinge" axis="0 0 1" range="-3.05 3.05"/>
-      <geom type="cylinder" size="0.10 0.07" pos="0 0 0.07" density="700" material="joint_material"/>
-      <body name="upper_arm_link" pos="0 0 0.14" gravcomp="1">
-        <joint name="arm_joint_2" class="arm_joint" type="hinge" axis="0 1 0" range="-1.75 1.45"/>
-        <geom type="capsule" fromto="0 0 0 0.34 0 0" size="0.055" density="620" material="arm_material"/>
-        <body name="forearm_link" pos="0.34 0 0" gravcomp="1">
-          <joint name="arm_joint_3" class="arm_joint" type="hinge" axis="0 1 0" range="-2.55 2.55"/>
-          <geom type="capsule" fromto="0 0 0 0.30 0 0" size="0.048" density="580" material="arm_material"/>
-          <body name="wrist_roll_link" pos="0.30 0 0" gravcomp="1">
-            <joint name="arm_joint_4" class="arm_joint" type="hinge" axis="1 0 0" range="-3.05 3.05"/>
-            <geom type="capsule" fromto="0 0 0 0.10 0 0" size="0.044" density="550" material="joint_material"/>
-            <body name="wrist_pitch_link" pos="0.10 0 0" gravcomp="1">
-              <joint name="arm_joint_5" class="arm_joint" type="hinge" axis="0 1 0" range="-2.10 2.10"/>
-              <geom type="capsule" fromto="0 0 0 0.09 0 0" size="0.040" density="520" material="arm_material"/>
-              <body name="wrist_yaw_link" pos="0.09 0 0" gravcomp="1">
-                <joint name="arm_joint_6" class="arm_joint" type="hinge" axis="1 0 0" range="-3.05 3.05"/>
-                <geom type="cylinder" size="0.045 0.04" quat="0.707107 0 0.707107 0"
-                      density="500" material="joint_material"/>
-                <body name="gripper_palm" pos="0.07 0 0" gravcomp="1">
-                  <geom type="box" size="0.055 0.115 0.035" density="500" material="gripper_material"/>
-                  <camera name="wrist_rgb" pos="0.015 0 0.065" xyaxes="0 -1 0 0 0 1" fovy="72"/>
-                  <site name="grasp_center" pos="0.14 0 -0.01" size="0.012" rgba="0 1 0 0"/>
-                  <body name="left_finger" pos="0.075 0.110 -0.005" gravcomp="1">
-                    <joint name="left_finger_joint" class="finger_joint" type="slide" axis="0 -1 0" range="0 0.075"/>
-                    <geom name="left_finger_pad" class="finger_pad" type="box" size="0.075 0.012 0.040"
-                          pos="0.065 0 -0.035" density="420" material="gripper_material"/>
+
+    <body name="right_shoulder_pan_link" pos="0.02 -0.31 0.48" gravcomp="1">
+      <joint name="right_arm_joint_1" class="arm_joint" type="hinge" axis="0 0 1" range="-3.05 3.05"/>
+      <geom type="cylinder" size="0.085 0.065" pos="0 0 0.065" density="620" material="joint_material"/>
+      <body name="right_upper_arm_link" pos="0 0 0.13" gravcomp="1">
+        <joint name="right_arm_joint_2" class="arm_joint" type="hinge" axis="0 1 0" range="-1.75 1.45"/>
+        <geom type="capsule" fromto="0 0 0 0.31 0 0" size="0.050" density="560" material="arm_material"/>
+        <body name="right_forearm_link" pos="0.31 0 0" gravcomp="1">
+          <joint name="right_arm_joint_3" class="arm_joint" type="hinge" axis="0 1 0" range="-2.55 2.55"/>
+          <geom type="capsule" fromto="0 0 0 0.27 0 0" size="0.044" density="520" material="arm_material"/>
+          <body name="right_wrist_roll_link" pos="0.27 0 0" gravcomp="1">
+            <joint name="right_arm_joint_4" class="arm_joint" type="hinge" axis="1 0 0" range="-3.05 3.05"/>
+            <geom type="capsule" fromto="0 0 0 0.09 0 0" size="0.040" density="500" material="joint_material"/>
+            <body name="right_wrist_pitch_link" pos="0.09 0 0" gravcomp="1">
+              <joint name="right_arm_joint_5" class="arm_joint" type="hinge" axis="0 1 0" range="-2.10 2.10"/>
+              <geom type="capsule" fromto="0 0 0 0.08 0 0" size="0.037" density="480" material="arm_material"/>
+              <body name="right_wrist_yaw_link" pos="0.08 0 0" gravcomp="1">
+                <joint name="right_arm_joint_6" class="arm_joint" type="hinge" axis="1 0 0" range="-3.05 3.05"/>
+                <geom type="cylinder" size="0.041 0.035" quat="0.707107 0 0.707107 0"
+                      density="470" material="joint_material"/>
+                <body name="right_gripper_palm" pos="0.065 0 0" gravcomp="1">
+                  <geom name="right_gripper_palm_shell" type="box" size="0.050 0.090 0.026"
+                        density="470" material="gripper_material"/>
+                  <geom name="right_gripper_wrist_adapter" type="cylinder" pos="-0.035 0 0"
+                        size="0.038 0.025" quat="0.707107 0 0.707107 0"
+                        density="420" material="joint_material"/>
+                  <camera name="wrist_rgb" pos="0.012 0 0.060" xyaxes="0 -1 0 0 0 1" fovy="72"/>
+                  <site name="right_grasp_center" pos="0.190 0 -0.045" size="0.012" rgba="0 1 0 0"/>
+                  <body name="right_gripper_left_finger" pos="0.070 0.122 -0.005" gravcomp="1">
+                    <joint name="right_gripper_left_finger_joint" class="finger_joint" type="slide"
+                           axis="0 -1 0" range="0 0.085"/>
+                    <geom name="right_gripper_left_knuckle" type="cylinder" size="0.026 0.018"
+                          quat="0.707107 0.707107 0 0" density="390"
+                          material="joint_material"/>
+                    <geom name="right_gripper_left_proximal" type="capsule"
+                          fromto="0 0 0 0.100 0 -0.012" size="0.018" density="360"
+                          material="gripper_material"/>
+                    <geom name="right_gripper_left_distal" type="capsule"
+                          fromto="0.100 0 -0.012 0.145 0 -0.047" size="0.016" density="340"
+                          material="gripper_material"/>
+                    <geom name="right_gripper_left_tip" type="capsule"
+                          fromto="0.145 0 -0.047 0.145 0 -0.075" size="0.014" density="330"
+                          material="gripper_material"/>
+                    <geom name="right_gripper_left_pad" class="finger_pad" type="box"
+                          size="0.045 0.012 0.030" pos="0.133 0 -0.045" euler="0 -0.30 0"
+                          density="400" material="gripper_pad_material"/>
                   </body>
-                  <body name="right_finger" pos="0.075 -0.110 -0.005" gravcomp="1">
-                    <joint name="right_finger_joint" class="finger_joint" type="slide" axis="0 1 0" range="0 0.075"/>
-                    <geom name="right_finger_pad" class="finger_pad" type="box" size="0.075 0.012 0.040"
-                          pos="0.065 0 -0.035" density="420" material="gripper_material"/>
+                  <body name="right_gripper_right_finger" pos="0.070 -0.122 -0.005" gravcomp="1">
+                    <joint name="right_gripper_right_finger_joint" class="finger_joint" type="slide"
+                           axis="0 1 0" range="0 0.085"/>
+                    <geom name="right_gripper_right_knuckle" type="cylinder" size="0.026 0.018"
+                          quat="0.707107 0.707107 0 0" density="390"
+                          material="joint_material"/>
+                    <geom name="right_gripper_right_proximal" type="capsule"
+                          fromto="0 0 0 0.100 0 -0.012" size="0.018" density="360"
+                          material="gripper_material"/>
+                    <geom name="right_gripper_right_distal" type="capsule"
+                          fromto="0.100 0 -0.012 0.145 0 -0.047" size="0.016" density="340"
+                          material="gripper_material"/>
+                    <geom name="right_gripper_right_tip" type="capsule"
+                          fromto="0.145 0 -0.047 0.145 0 -0.075" size="0.014" density="330"
+                          material="gripper_material"/>
+                    <geom name="right_gripper_right_pad" class="finger_pad" type="box"
+                          size="0.045 0.012 0.030" pos="0.133 0 -0.045" euler="0 -0.30 0"
+                          density="400" material="gripper_pad_material"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <body name="left_shoulder_pan_link" pos="0.02 0.31 0.48" gravcomp="1">
+      <joint name="left_arm_joint_1" class="arm_joint" type="hinge" axis="0 0 1" range="-3.05 3.05"/>
+      <geom type="cylinder" size="0.085 0.065" pos="0 0 0.065" density="620" material="joint_material"/>
+      <body name="left_upper_arm_link" pos="0 0 0.13" gravcomp="1">
+        <joint name="left_arm_joint_2" class="arm_joint" type="hinge" axis="0 1 0" range="-1.75 1.45"/>
+        <geom type="capsule" fromto="0 0 0 0.31 0 0" size="0.050" density="560" material="arm_secondary_material"/>
+        <body name="left_forearm_link" pos="0.31 0 0" gravcomp="1">
+          <joint name="left_arm_joint_3" class="arm_joint" type="hinge" axis="0 1 0" range="-2.55 2.55"/>
+          <geom type="capsule" fromto="0 0 0 0.27 0 0" size="0.044" density="520" material="arm_secondary_material"/>
+          <body name="left_wrist_roll_link" pos="0.27 0 0" gravcomp="1">
+            <joint name="left_arm_joint_4" class="arm_joint" type="hinge" axis="1 0 0" range="-3.05 3.05"/>
+            <geom type="capsule" fromto="0 0 0 0.09 0 0" size="0.040" density="500" material="joint_material"/>
+            <body name="left_wrist_pitch_link" pos="0.09 0 0" gravcomp="1">
+              <joint name="left_arm_joint_5" class="arm_joint" type="hinge" axis="0 1 0" range="-2.10 2.10"/>
+              <geom type="capsule" fromto="0 0 0 0.08 0 0" size="0.037" density="480" material="arm_secondary_material"/>
+              <body name="left_wrist_yaw_link" pos="0.08 0 0" gravcomp="1">
+                <joint name="left_arm_joint_6" class="arm_joint" type="hinge" axis="1 0 0" range="-3.05 3.05"/>
+                <geom type="cylinder" size="0.041 0.035" quat="0.707107 0 0.707107 0"
+                      density="470" material="joint_material"/>
+                <body name="left_gripper_palm" pos="0.065 0 0" gravcomp="1">
+                  <geom name="left_gripper_palm_shell" type="box" size="0.050 0.090 0.026"
+                        density="470" material="gripper_material"/>
+                  <geom name="left_gripper_wrist_adapter" type="cylinder" pos="-0.035 0 0"
+                        size="0.038 0.025" quat="0.707107 0 0.707107 0"
+                        density="420" material="joint_material"/>
+                  <camera name="left_wrist_rgb" pos="0.012 0 0.060" xyaxes="0 -1 0 0 0 1" fovy="72"/>
+                  <site name="left_grasp_center" pos="0.190 0 -0.045" size="0.012" rgba="0 1 0 0"/>
+                  <body name="left_gripper_left_finger" pos="0.070 0.122 -0.005" gravcomp="1">
+                    <joint name="left_gripper_left_finger_joint" class="finger_joint" type="slide"
+                           axis="0 -1 0" range="0 0.085"/>
+                    <geom name="left_gripper_left_knuckle" type="cylinder" size="0.026 0.018"
+                          quat="0.707107 0.707107 0 0" density="390"
+                          material="joint_material"/>
+                    <geom name="left_gripper_left_proximal" type="capsule"
+                          fromto="0 0 0 0.100 0 -0.012" size="0.018" density="360"
+                          material="gripper_material"/>
+                    <geom name="left_gripper_left_distal" type="capsule"
+                          fromto="0.100 0 -0.012 0.145 0 -0.047" size="0.016" density="340"
+                          material="gripper_material"/>
+                    <geom name="left_gripper_left_tip" type="capsule"
+                          fromto="0.145 0 -0.047 0.145 0 -0.075" size="0.014" density="330"
+                          material="gripper_material"/>
+                    <geom name="left_gripper_left_pad" class="finger_pad" type="box"
+                          size="0.045 0.012 0.030" pos="0.133 0 -0.045" euler="0 -0.30 0"
+                          density="400" material="gripper_pad_material"/>
+                  </body>
+                  <body name="left_gripper_right_finger" pos="0.070 -0.122 -0.005" gravcomp="1">
+                    <joint name="left_gripper_right_finger_joint" class="finger_joint" type="slide"
+                           axis="0 1 0" range="0 0.085"/>
+                    <geom name="left_gripper_right_knuckle" type="cylinder" size="0.026 0.018"
+                          quat="0.707107 0.707107 0 0" density="390"
+                          material="joint_material"/>
+                    <geom name="left_gripper_right_proximal" type="capsule"
+                          fromto="0 0 0 0.100 0 -0.012" size="0.018" density="360"
+                          material="gripper_material"/>
+                    <geom name="left_gripper_right_distal" type="capsule"
+                          fromto="0.100 0 -0.012 0.145 0 -0.047" size="0.016" density="340"
+                          material="gripper_material"/>
+                    <geom name="left_gripper_right_tip" type="capsule"
+                          fromto="0.145 0 -0.047 0.145 0 -0.075" size="0.014" density="330"
+                          material="gripper_material"/>
+                    <geom name="left_gripper_right_pad" class="finger_pad" type="box"
+                          size="0.045 0.012 0.030" pos="0.133 0 -0.045" euler="0 -0.30 0"
+                          density="400" material="gripper_pad_material"/>
                   </body>
                 </body>
               </body>

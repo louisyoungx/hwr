@@ -1,4 +1,4 @@
-<mujoco model="hwr_mobile_manipulator_smoke_v1">
+<mujoco model="hwr_dual_arm_household_robot_smoke_v2">
   <compiler angle="radian" autolimits="true" inertiafromgeom="true"/>
   <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast">
     <flag multiccd="enable"/>
@@ -12,28 +12,15 @@
   </visual>
 
   <asset>
+    <include file="common/robot_assets.xml"/>
     <texture name="floor_checker" type="2d" builtin="checker" width="512" height="512"
              rgb1="0.20 0.23 0.27" rgb2="0.34 0.38 0.43"/>
     <material name="floor_material" texture="floor_checker" texrepeat="8 8" reflectance="0.08"/>
-    <material name="chassis_material" rgba="0.08 0.22 0.38 1" metallic="0.2" roughness="0.35"/>
-    <material name="arm_material" rgba="0.83 0.40 0.10 1" metallic="0.15" roughness="0.3"/>
-    <material name="joint_material" rgba="0.13 0.15 0.18 1" metallic="0.6" roughness="0.25"/>
-    <material name="gripper_material" rgba="0.18 0.20 0.23 1" metallic="0.25" roughness="0.5"/>
     <material name="object_material" rgba="0.72 0.08 0.06 1" metallic="0.05" roughness="0.6"/>
   </asset>
 
   <default>
-    <joint damping="1.0" armature="0.02" frictionloss="0.05"/>
-    <geom condim="4" friction="0.9 0.01 0.001" solref="0.006 1" solimp="0.9 0.95 0.001"/>
-    <default class="arm_joint">
-      <joint damping="2.0" armature="0.05"/>
-    </default>
-    <default class="finger_joint">
-      <joint damping="3.0" armature="0.01"/>
-    </default>
-    <default class="finger_pad">
-      <geom condim="4" friction="3.0 0.04 0.004" solref="0.004 1"/>
-    </default>
+    <include file="common/robot_defaults.xml"/>
   </default>
 
   <worldbody>
@@ -41,91 +28,13 @@
     <light name="key_light" pos="1.5 -2.0 3.5" dir="-0.2 0.3 -1" directional="true" castshadow="true"/>
     <light name="fill_light" pos="-2.0 1.5 2.4" diffuse="0.45 0.50 0.58" castshadow="true"/>
     <camera name="third_person" pos="3.1 -3.1 2.5" xyaxes="0.707 0.707 0 -0.350 0.350 0.869" fovy="48"/>
-
-    <body name="robot_base" pos="0 0 0.22">
-      <freejoint name="base_free"/>
-      <geom name="chassis_collision" type="box" size="0.30 0.22 0.08" density="650"
-            material="chassis_material"/>
-      <geom name="bumper_front" type="capsule" fromto="0.30 -0.18 0 0.30 0.18 0" size="0.035"
-            density="350" material="joint_material"/>
-      <site name="base_imu" pos="0 0 0.09" size="0.012" rgba="0 1 0 0"/>
-      <body name="head_mast" pos="-0.11 0 0.18">
-        <geom type="box" size="0.035 0.035 0.28" pos="0 0 0.28" density="300"
-              material="joint_material"/>
-        <geom type="box" size="0.075 0.10 0.045" pos="0 0 0.59" density="300"
-              material="chassis_material"/>
-        <camera name="head_rgb" pos="0.077 0 0.60" xyaxes="0 -1 0 0.18 0 0.984" fovy="62"/>
-        <camera name="head_depth" pos="0.077 0 0.60" xyaxes="0 -1 0 0.18 0 0.984" fovy="62"/>
-      </body>
-
-      <body name="wheel_front_left" pos="0.22 0.255 -0.13">
-        <joint name="wheel_front_left_joint" type="hinge" axis="0 1 0" limited="false" damping="0.15"/>
-        <geom name="wheel_front_left_geom" type="cylinder" size="0.09 0.035"
-              quat="0.707107 0.707107 0 0" density="450" material="joint_material"
-              friction="1.3 0.003 0.0002"/>
-      </body>
-      <body name="wheel_rear_left" pos="-0.22 0.255 -0.13">
-        <joint name="wheel_rear_left_joint" type="hinge" axis="0 1 0" limited="false" damping="0.15"/>
-        <geom name="wheel_rear_left_geom" type="cylinder" size="0.09 0.035"
-              quat="0.707107 0.707107 0 0" density="450" material="joint_material"
-              friction="1.3 0.003 0.0002"/>
-      </body>
-      <body name="wheel_front_right" pos="0.22 -0.255 -0.13">
-        <joint name="wheel_front_right_joint" type="hinge" axis="0 1 0" limited="false" damping="0.15"/>
-        <geom name="wheel_front_right_geom" type="cylinder" size="0.09 0.035"
-              quat="0.707107 0.707107 0 0" density="450" material="joint_material"
-              friction="1.3 0.003 0.0002"/>
-      </body>
-      <body name="wheel_rear_right" pos="-0.22 -0.255 -0.13">
-        <joint name="wheel_rear_right_joint" type="hinge" axis="0 1 0" limited="false" damping="0.15"/>
-        <geom name="wheel_rear_right_geom" type="cylinder" size="0.09 0.035"
-              quat="0.707107 0.707107 0 0" density="450" material="joint_material"
-              friction="1.3 0.003 0.0002"/>
-      </body>
-
-      <body name="shoulder_pan_link" pos="0.02 0 0.12" gravcomp="1">
-        <joint name="arm_joint_1" class="arm_joint" type="hinge" axis="0 0 1" range="-3.05 3.05"/>
-        <geom type="cylinder" size="0.10 0.07" pos="0 0 0.07" density="700" material="joint_material"/>
-        <body name="upper_arm_link" pos="0 0 0.14" gravcomp="1">
-          <joint name="arm_joint_2" class="arm_joint" type="hinge" axis="0 1 0" range="-1.75 1.45"/>
-          <geom type="capsule" fromto="0 0 0 0.34 0 0" size="0.055" density="620" material="arm_material"/>
-          <body name="forearm_link" pos="0.34 0 0" gravcomp="1">
-            <joint name="arm_joint_3" class="arm_joint" type="hinge" axis="0 1 0" range="-2.55 2.55"/>
-            <geom type="capsule" fromto="0 0 0 0.30 0 0" size="0.048" density="580" material="arm_material"/>
-            <body name="wrist_roll_link" pos="0.30 0 0" gravcomp="1">
-              <joint name="arm_joint_4" class="arm_joint" type="hinge" axis="1 0 0" range="-3.05 3.05"/>
-              <geom type="capsule" fromto="0 0 0 0.10 0 0" size="0.044" density="550" material="joint_material"/>
-              <body name="wrist_pitch_link" pos="0.10 0 0" gravcomp="1">
-                <joint name="arm_joint_5" class="arm_joint" type="hinge" axis="0 1 0" range="-2.10 2.10"/>
-                <geom type="capsule" fromto="0 0 0 0.09 0 0" size="0.040" density="520" material="arm_material"/>
-                <body name="wrist_yaw_link" pos="0.09 0 0" gravcomp="1">
-                  <joint name="arm_joint_6" class="arm_joint" type="hinge" axis="1 0 0" range="-3.05 3.05"/>
-                  <geom type="cylinder" size="0.045 0.04" quat="0.707107 0 0.707107 0"
-                        density="500" material="joint_material"/>
-                  <body name="gripper_palm" pos="0.07 0 0" gravcomp="1">
-                    <geom type="box" size="0.055 0.115 0.035" density="500" material="gripper_material"/>
-                    <camera name="wrist_rgb" pos="0.015 0 0.065" xyaxes="0 -1 0 0 0 1" fovy="72"/>
-                  <site name="grasp_center" pos="0.14 0 -0.01" size="0.012" rgba="0 1 0 0"/>
-                    <body name="left_finger" pos="0.075 0.110 -0.005" gravcomp="1">
-                      <joint name="left_finger_joint" class="finger_joint" type="slide" axis="0 -1 0" range="0 0.075"/>
-                    <geom name="left_finger_pad" class="finger_pad" type="box" size="0.075 0.012 0.040"
-                          pos="0.065 0 -0.035" density="420" material="gripper_material"/>
-                    </body>
-                    <body name="right_finger" pos="0.075 -0.110 -0.005" gravcomp="1">
-                      <joint name="right_finger_joint" class="finger_joint" type="slide" axis="0 1 0" range="0 0.075"/>
-                    <geom name="right_finger_pad" class="finger_pad" type="box" size="0.075 0.012 0.040"
-                          pos="0.065 0 -0.035" density="420" material="gripper_material"/>
-                    </body>
-                  </body>
-                </body>
-              </body>
-            </body>
-          </body>
-        </body>
-      </body>
+    <include file="common/robot_body.xml"/>
+    <body name="smoke_table" pos="0.90 0 0.35">
+      <geom name="smoke_table_top" type="box" pos="0 0 0.33" size="0.45 0.45 0.035"
+            material="body_material"/>
+      <geom type="box" pos="0 0 0.15" size="0.08 0.08 0.15" material="body_material"/>
     </body>
-
-    <body name="smoke_object" pos="1.1 0 0.09">
+    <body name="smoke_object" pos="1.1 0 0.79">
       <freejoint name="smoke_object_free"/>
       <geom name="smoke_object_geom" type="box" size="0.055 0.04 0.09" mass="0.12"
             material="object_material" friction="1.5 0.03 0.003"/>
@@ -133,34 +42,12 @@
   </worldbody>
 
   <contact>
-    <exclude body1="robot_base" body2="shoulder_pan_link"/>
-    <exclude body1="shoulder_pan_link" body2="upper_arm_link"/>
-    <exclude body1="upper_arm_link" body2="forearm_link"/>
-    <exclude body1="forearm_link" body2="wrist_roll_link"/>
-    <exclude body1="wrist_roll_link" body2="wrist_pitch_link"/>
-    <exclude body1="wrist_pitch_link" body2="wrist_yaw_link"/>
-    <exclude body1="wrist_yaw_link" body2="gripper_palm"/>
-    <exclude body1="gripper_palm" body2="left_finger"/>
-    <exclude body1="gripper_palm" body2="right_finger"/>
+    <include file="common/robot_contacts.xml"/>
   </contact>
-
   <actuator>
-    <velocity name="wheel_front_left_velocity" joint="wheel_front_left_joint" kv="18" forcerange="-30 30"/>
-    <velocity name="wheel_rear_left_velocity" joint="wheel_rear_left_joint" kv="18" forcerange="-30 30"/>
-    <velocity name="wheel_front_right_velocity" joint="wheel_front_right_joint" kv="18" forcerange="-30 30"/>
-    <velocity name="wheel_rear_right_velocity" joint="wheel_rear_right_joint" kv="18" forcerange="-30 30"/>
-    <position name="arm_joint_1_position" joint="arm_joint_1" kp="180" kv="24" forcerange="-75 75"/>
-    <position name="arm_joint_2_position" joint="arm_joint_2" kp="180" kv="24" forcerange="-75 75"/>
-    <position name="arm_joint_3_position" joint="arm_joint_3" kp="160" kv="20" forcerange="-60 60"/>
-    <position name="arm_joint_4_position" joint="arm_joint_4" kp="100" kv="14" forcerange="-35 35"/>
-    <position name="arm_joint_5_position" joint="arm_joint_5" kp="90" kv="12" forcerange="-30 30"/>
-    <position name="arm_joint_6_position" joint="arm_joint_6" kp="70" kv="10" forcerange="-22 22"/>
-    <position name="left_finger_position" joint="left_finger_joint" kp="260" kv="14" forcerange="-35 35"/>
-    <position name="right_finger_position" joint="right_finger_joint" kp="260" kv="14" forcerange="-35 35"/>
+    <include file="common/robot_actuators.xml"/>
   </actuator>
-
   <sensor>
-    <gyro name="base_gyro" site="base_imu"/>
-    <accelerometer name="base_accelerometer" site="base_imu"/>
+    <include file="common/robot_sensors.xml"/>
   </sensor>
 </mujoco>

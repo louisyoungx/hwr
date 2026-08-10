@@ -11,7 +11,13 @@ import mujoco
 import numpy as np
 
 from hwr.adapters.mujoco.model import MujocoModelBundle
-from hwr.adapters.mujoco.names import ARM_HOME, FINGER_TRAVEL, TRACK_WIDTH, WHEEL_RADIUS
+from hwr.adapters.mujoco.names import (
+    ARM_HOME,
+    FINGER_TRAVEL,
+    SECONDARY_ARM_HOME,
+    TRACK_WIDTH,
+    WHEEL_RADIUS,
+)
 from hwr.adapters.mujoco.rendering import MujocoCameraRenderer
 from hwr.core.runtime import StepOutcome
 from hwr.core.types import ActionFrame, EpisodeResult, ObservationFrame, SafetyState
@@ -31,6 +37,7 @@ class Mujoco3DConfig:
     max_arm_velocity: float = 1.2
     max_arm_servo_error: float = 0.30
     primary_object_joint_name: str | None = "smoke_object_free"
+    primary_object_reset_z: float = 0.805
 
     def __post_init__(self) -> None:
         numeric = (
@@ -42,6 +49,7 @@ class Mujoco3DConfig:
             self.max_base_angular,
             self.max_arm_velocity,
             self.max_arm_servo_error,
+            self.primary_object_reset_z,
         )
         if not self.task_id or min(numeric) <= 0:
             raise ValueError("MuJoCo backend configuration values must be positive")
@@ -86,6 +94,7 @@ class Mujoco3DBackend:
         self._task_id: str | None = None
         self._result: EpisodeResult | None = None
         self._arm_targets = np.asarray(ARM_HOME, dtype=np.float64)
+        self._secondary_arm_targets = np.asarray(SECONDARY_ARM_HOME, dtype=np.float64)
 
     def reset(self, *, seed: int, task_id: str) -> ObservationFrame:
         if task_id != self.config.task_id:
@@ -159,22 +168,33 @@ class Mujoco3DBackend:
 
     def _reset_arm(self) -> None:
         self._arm_targets = np.asarray(ARM_HOME, dtype=np.float64)
+        self._secondary_arm_targets = np.asarray(SECONDARY_ARM_HOME, dtype=np.float64)
         for target, joint_id in zip(self._arm_targets, self.bundle.ids.arm_joints, strict=True):
             self.data.qpos[self.model.jnt_qposadr[joint_id]] = target
-        for joint_id in (*self.bundle.ids.wheel_joints, *self.bundle.ids.finger_joints):
+        for target, joint_id in zip(
+            self._secondary_arm_targets,
+            self.bundle.ids.secondary_arm_joints,
+            strict=True,
+        ):
+            self.data.qpos[self.model.jnt_qposadr[joint_id]] = target
+        for joint_id in (
+            *self.bundle.ids.wheel_joints,
+            *self.bundle.ids.finger_joints,
+            *self.bundle.ids.secondary_finger_joints,
+        ):
             self.data.qpos[self.model.jnt_qposadr[joint_id]] = 0.0
 
     def _reset_object(self) -> None:
         if self.bundle.ids.object_joint is None:
             return
         address = self.model.jnt_qposadr[self.bundle.ids.object_joint]
-        object_x = 0.88 + self._rng.uniform(-0.04, 0.04)
-        object_y = self._rng.uniform(-0.12, 0.12)
+        object_x = 0.72 + self._rng.uniform(-0.04, 0.04)
+        object_y = self._rng.uniform(-0.18, -0.02)
         yaw = self._rng.uniform(-math.pi, math.pi)
         self.data.qpos[address : address + 7] = (
             object_x,
             object_y,
-            0.09,
+            self.config.primary_object_reset_z,
             math.cos(yaw / 2),
             0.0,
             0.0,
@@ -217,8 +237,12 @@ class Mujoco3DBackend:
                 self._arm_targets[index], servo_low, servo_high
             )
         self.data.ctrl[list(self.bundle.ids.arm_actuators)] = self._arm_targets
+        self.data.ctrl[
+            list(self.bundle.ids.secondary_arm_actuators)
+        ] = self._secondary_arm_targets
         finger_target = action.gripper_target * FINGER_TRAVEL
         self.data.ctrl[list(self.bundle.ids.finger_actuators)] = finger_target
+        self.data.ctrl[list(self.bundle.ids.secondary_finger_actuators)] = 0.0
 
     def _observation(self) -> ObservationFrame:
         timestamp_ns = self._timestamp_ns()

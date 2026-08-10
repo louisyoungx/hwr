@@ -14,16 +14,37 @@ WHEEL_ACTUATORS = (
     "wheel_rear_right_velocity",
 )
 
-ARM_JOINTS = tuple(f"arm_joint_{index}" for index in range(1, 7))
-ARM_ACTUATORS = tuple(f"arm_joint_{index}_position" for index in range(1, 7))
+ARM_JOINTS = tuple(f"right_arm_joint_{index}" for index in range(1, 7))
+ARM_ACTUATORS = tuple(f"right_arm_joint_{index}_position" for index in range(1, 7))
+SECONDARY_ARM_JOINTS = tuple(f"left_arm_joint_{index}" for index in range(1, 7))
+SECONDARY_ARM_ACTUATORS = tuple(
+    f"left_arm_joint_{index}_position" for index in range(1, 7)
+)
+ALL_ARM_JOINTS = ARM_JOINTS + SECONDARY_ARM_JOINTS
 
-FINGER_JOINTS = ("left_finger_joint", "right_finger_joint")
-FINGER_ACTUATORS = ("left_finger_position", "right_finger_position")
+FINGER_JOINTS = (
+    "right_gripper_left_finger_joint",
+    "right_gripper_right_finger_joint",
+)
+FINGER_ACTUATORS = (
+    "right_gripper_left_finger_position",
+    "right_gripper_right_finger_position",
+)
+SECONDARY_FINGER_JOINTS = (
+    "left_gripper_left_finger_joint",
+    "left_gripper_right_finger_joint",
+)
+SECONDARY_FINGER_ACTUATORS = (
+    "left_gripper_left_finger_position",
+    "left_gripper_right_finger_position",
+)
+ALL_FINGER_JOINTS = FINGER_JOINTS + SECONDARY_FINGER_JOINTS
 
 POLICY_CAMERAS = ("head_rgb", "head_depth", "wrist_rgb")
 EVIDENCE_CAMERAS = ("third_person", *POLICY_CAMERAS)
 
-ARM_HOME = (0.0, -0.65, 1.20, 0.0, -0.55, 0.0)
+ARM_HOME = (0.0, 1.30, -2.50, 0.0, -1.50, 0.0)
+SECONDARY_ARM_HOME = (0.0, 1.30, -2.50, 0.0, -1.50, 0.0)
 WHEEL_RADIUS = 0.09
-TRACK_WIDTH = 0.51
-FINGER_TRAVEL = 0.075
+TRACK_WIDTH = 0.54
+FINGER_TRAVEL = 0.085

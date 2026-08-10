@@ -7,7 +7,14 @@ from dataclasses import asdict, dataclass
 import mujoco
 import numpy as np
 
-from hwr.adapters.mujoco.names import ARM_JOINTS, FINGER_JOINTS, POLICY_CAMERAS, WHEEL_JOINTS
+from hwr.adapters.mujoco.names import (
+    ALL_ARM_JOINTS,
+    ALL_FINGER_JOINTS,
+    FINGER_JOINTS,
+    POLICY_CAMERAS,
+    SECONDARY_FINGER_JOINTS,
+    WHEEL_JOINTS,
+)
 
 
 def _names(model: mujoco.MjModel, object_type: mujoco.mjtObj, count: int) -> set[str]:
@@ -21,11 +28,17 @@ def _names(model: mujoco.MjModel, object_type: mujoco.mjtObj, count: int) -> set
 @dataclass(frozen=True)
 class RobotModelReport:
     wheel_joint_count: int
+    manipulator_count: int
     arm_joint_count: int
     finger_joint_count: int
+    central_body_present: bool
+    top_camera_present: bool
+    arm_mount_y_m: tuple[float, float]
     finger_joint_travel_m: tuple[float, ...]
     gripper_open_gap_m: float
     gripper_closed_gap_m: float
+    gripper_open_gaps_m: tuple[float, ...]
+    gripper_closed_gaps_m: tuple[float, ...]
     policy_cameras: tuple[str, ...]
     dynamic_body_count: int
     invalid_dynamic_bodies: tuple[str, ...]
@@ -46,25 +59,43 @@ def inspect_robot_model(model: mujoco.MjModel) -> RobotModelReport:
     joint_names = _names(model, mujoco.mjtObj.mjOBJ_JOINT, model.njnt)
     camera_names = _names(model, mujoco.mjtObj.mjOBJ_CAMERA, model.ncam)
     wheel_count = sum(name in joint_names for name in WHEEL_JOINTS)
-    arm_count = sum(name in joint_names for name in ARM_JOINTS)
-    finger_count = sum(name in joint_names for name in FINGER_JOINTS)
+    arm_count = sum(name in joint_names for name in ALL_ARM_JOINTS)
+    finger_count = sum(name in joint_names for name in ALL_FINGER_JOINTS)
     finger_ids = [
         mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
-        for name in FINGER_JOINTS
+        for name in ALL_FINGER_JOINTS
     ]
     finger_travel = tuple(
         float(np.ptp(model.jnt_range[joint_id])) for joint_id in finger_ids if joint_id >= 0
     )
-    left_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "left_finger")
-    right_body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "right_finger")
-    left_pad = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "left_finger_pad")
-    right_pad = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "right_finger_pad")
-    if min(left_body, right_body, left_pad, right_pad) >= 0:
-        center_distance = abs(float(model.body_pos[left_body, 1] - model.body_pos[right_body, 1]))
-        open_gap = center_distance - float(model.geom_size[left_pad, 1] + model.geom_size[right_pad, 1])
-    else:
-        open_gap = 0.0
-    closed_gap = open_gap - sum(finger_travel)
+    gripper_gaps = tuple(
+        _gripper_gaps(model, prefix, joints)
+        for prefix, joints in (
+            ("right_gripper", FINGER_JOINTS),
+            ("left_gripper", SECONDARY_FINGER_JOINTS),
+        )
+    )
+    open_gaps = tuple(value[0] for value in gripper_gaps)
+    closed_gaps = tuple(value[1] for value in gripper_gaps)
+    open_gap = open_gaps[0]
+    closed_gap = closed_gaps[0]
+    right_shoulder = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_BODY, "right_shoulder_pan_link"
+    )
+    left_shoulder = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_BODY, "left_shoulder_pan_link"
+    )
+    arm_mount_y = tuple(
+        float(model.body_pos[body_id, 1])
+        for body_id in (right_shoulder, left_shoulder)
+        if body_id >= 0
+    )
+    central_body_present = (
+        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "body_box_collision") >= 0
+    )
+    top_camera_present = (
+        mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "top_camera_head") >= 0
+    )
     invalid_bodies: list[str] = []
     dynamic_count = 0
     for body_id in range(1, model.nbody):
@@ -80,13 +111,21 @@ def inspect_robot_model(model: mujoco.MjModel) -> RobotModelReport:
     errors: list[str] = []
     if wheel_count != 4:
         errors.append(f"expected 4 wheel joints, found {wheel_count}")
-    if arm_count != 6:
-        errors.append(f"expected 6 arm joints, found {arm_count}")
-    if finger_count != 2:
-        errors.append(f"expected 2 finger joints, found {finger_count}")
-    if open_gap < 0.18 or not 0.02 <= closed_gap <= 0.07:
+    if arm_count != 12:
+        errors.append(f"expected 12 arm joints across two manipulators, found {arm_count}")
+    if finger_count != 4:
+        errors.append(f"expected 4 finger joints across two grippers, found {finger_count}")
+    if len(arm_mount_y) != 2 or not arm_mount_y[0] < 0 < arm_mount_y[1]:
+        errors.append("mechanical arms must be mounted on opposite box sides")
+    if not central_body_present:
+        errors.append("central body box is missing")
+    if not top_camera_present:
+        errors.append("top camera head is missing")
+    if any(value < 0.18 for value in open_gaps) or any(
+        not 0.02 <= value <= 0.07 for value in closed_gaps
+    ):
         errors.append(
-            f"gripper gap is not household-object capable: open={open_gap}, closed={closed_gap}"
+            f"gripper gaps are not household-object capable: open={open_gaps}, closed={closed_gaps}"
         )
     missing_cameras = tuple(name for name in POLICY_CAMERAS if name not in camera_names)
     if missing_cameras:
@@ -99,11 +138,17 @@ def inspect_robot_model(model: mujoco.MjModel) -> RobotModelReport:
         errors.append("gravity must point downward")
     return RobotModelReport(
         wheel_joint_count=wheel_count,
+        manipulator_count=arm_count // 6,
         arm_joint_count=arm_count,
         finger_joint_count=finger_count,
+        central_body_present=central_body_present,
+        top_camera_present=top_camera_present,
+        arm_mount_y_m=arm_mount_y,
         finger_joint_travel_m=finger_travel,
         gripper_open_gap_m=open_gap,
         gripper_closed_gap_m=closed_gap,
+        gripper_open_gaps_m=open_gaps,
+        gripper_closed_gaps_m=closed_gaps,
         policy_cameras=tuple(name for name in POLICY_CAMERAS if name in camera_names),
         dynamic_body_count=dynamic_count,
         invalid_dynamic_bodies=tuple(invalid_bodies),
@@ -112,3 +157,37 @@ def inspect_robot_model(model: mujoco.MjModel) -> RobotModelReport:
         gravity=tuple(float(value) for value in model.opt.gravity),
         errors=tuple(errors),
     )
+
+
+def _gripper_gaps(
+    model: mujoco.MjModel,
+    prefix: str,
+    finger_joints: tuple[str, ...],
+) -> tuple[float, float]:
+    left_body = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_BODY, f"{prefix}_left_finger"
+    )
+    right_body = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_BODY, f"{prefix}_right_finger"
+    )
+    left_pad = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_GEOM, f"{prefix}_left_pad"
+    )
+    right_pad = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_GEOM, f"{prefix}_right_pad"
+    )
+    ids = (left_body, right_body, left_pad, right_pad)
+    if min(ids) < 0:
+        return (0.0, 0.0)
+    center_distance = abs(
+        float(model.body_pos[left_body, 1] - model.body_pos[right_body, 1])
+    )
+    open_gap = center_distance - float(
+        model.geom_size[left_pad, 1] + model.geom_size[right_pad, 1]
+    )
+    travel = sum(
+        float(np.ptp(model.jnt_range[joint_id]))
+        for name in finger_joints
+        if (joint_id := mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)) >= 0
+    )
+    return (open_gap, open_gap - travel)

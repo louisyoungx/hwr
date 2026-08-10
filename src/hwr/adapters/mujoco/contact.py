@@ -29,13 +29,13 @@ class GraspContactMonitor:
         model: mujoco.MjModel,
         *,
         object_geom: str,
-        left_pad: str = "left_finger_pad",
-        right_pad: str = "right_finger_pad",
+        left_pad: str | tuple[str, ...] = "right_gripper_left_pad",
+        right_pad: str | tuple[str, ...] = "right_gripper_right_pad",
     ) -> None:
         self.model = model
         self.object_geom_id = _geom_id(model, object_geom)
-        self.left_pad_id = _geom_id(model, left_pad)
-        self.right_pad_id = _geom_id(model, right_pad)
+        self.left_pad_ids = _geom_ids(model, left_pad)
+        self.right_pad_ids = _geom_ids(model, right_pad)
 
     def sample(self, data: mujoco.MjData) -> GraspContactSample:
         left_force = 0.0
@@ -48,9 +48,9 @@ class GraspContactMonitor:
                 continue
             mujoco.mj_contactForce(self.model, data, contact_index, force)
             normal_force = abs(float(force[0]))
-            if self.left_pad_id in pair:
+            if pair.intersection(self.left_pad_ids):
                 left_force += normal_force
-            if self.right_pad_id in pair:
+            if pair.intersection(self.right_pad_ids):
                 right_force += normal_force
         return GraspContactSample(
             left_contact=left_force > 0,
@@ -65,3 +65,10 @@ def _geom_id(model: mujoco.MjModel, name: str) -> int:
     if geom_id < 0:
         raise ValueError(f"model is missing geom: {name}")
     return geom_id
+
+
+def _geom_ids(
+    model: mujoco.MjModel, names: str | tuple[str, ...]
+) -> frozenset[int]:
+    values = (names,) if isinstance(names, str) else names
+    return frozenset(_geom_id(model, name) for name in values)

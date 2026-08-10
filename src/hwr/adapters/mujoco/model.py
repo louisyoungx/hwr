@@ -12,6 +12,10 @@ from hwr.adapters.mujoco.names import (
     ARM_JOINTS,
     FINGER_ACTUATORS,
     FINGER_JOINTS,
+    SECONDARY_ARM_ACTUATORS,
+    SECONDARY_ARM_JOINTS,
+    SECONDARY_FINGER_ACTUATORS,
+    SECONDARY_FINGER_JOINTS,
     WHEEL_ACTUATORS,
     WHEEL_JOINTS,
 )
@@ -34,8 +38,12 @@ class MujocoEntityIds:
     wheel_actuators: tuple[int, ...]
     arm_joints: tuple[int, ...]
     arm_actuators: tuple[int, ...]
+    secondary_arm_joints: tuple[int, ...]
+    secondary_arm_actuators: tuple[int, ...]
     finger_joints: tuple[int, ...]
     finger_actuators: tuple[int, ...]
+    secondary_finger_joints: tuple[int, ...]
+    secondary_finger_actuators: tuple[int, ...]
 
     @classmethod
     def resolve(
@@ -53,8 +61,20 @@ class MujocoEntityIds:
             wheel_actuators=_ids(model, mujoco.mjtObj.mjOBJ_ACTUATOR, WHEEL_ACTUATORS),
             arm_joints=_ids(model, mujoco.mjtObj.mjOBJ_JOINT, ARM_JOINTS),
             arm_actuators=_ids(model, mujoco.mjtObj.mjOBJ_ACTUATOR, ARM_ACTUATORS),
+            secondary_arm_joints=_ids(
+                model, mujoco.mjtObj.mjOBJ_JOINT, SECONDARY_ARM_JOINTS
+            ),
+            secondary_arm_actuators=_ids(
+                model, mujoco.mjtObj.mjOBJ_ACTUATOR, SECONDARY_ARM_ACTUATORS
+            ),
             finger_joints=_ids(model, mujoco.mjtObj.mjOBJ_JOINT, FINGER_JOINTS),
             finger_actuators=_ids(model, mujoco.mjtObj.mjOBJ_ACTUATOR, FINGER_ACTUATORS),
+            secondary_finger_joints=_ids(
+                model, mujoco.mjtObj.mjOBJ_JOINT, SECONDARY_FINGER_JOINTS
+            ),
+            secondary_finger_actuators=_ids(
+                model, mujoco.mjtObj.mjOBJ_ACTUATOR, SECONDARY_FINGER_ACTUATORS
+            ),
         )
 
 
