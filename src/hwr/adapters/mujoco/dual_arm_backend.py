@@ -155,8 +155,9 @@ class MujocoDualArmBackend:
         )
         events = (*events, *predictive_events)
         self._write_controls(applied.action)
-        for _ in range(self._substeps):
-            mujoco.mj_step(self.model, self.data)
+        if not predictive_events:
+            for _ in range(self._substeps):
+                mujoco.mj_step(self.model, self.data)
         self._steps += 1
         self._sequence += 1
         truncated = self._steps >= self.config.max_steps
@@ -176,6 +177,7 @@ class MujocoDualArmBackend:
             info={
                 "applied_action": applied,
                 "physics_contacts": int(self.data.ncon),
+                "physics_advanced": not predictive_events,
                 "safety_intervened": bool(predictive_events),
             },
         )
@@ -197,9 +199,10 @@ class MujocoDualArmBackend:
             self.data = trial_data
             self._write_controls(frame.action)
             horizon = self._predictive_horizon_control_steps() * self._substeps
-            for _ in range(horizon):
+            for substep in range(horizon):
                 mujoco.mj_step(self.model, self.data)
-                if self._predictive_safety_violation():
+                control_boundary = (substep + 1) % self._substeps == 0
+                if control_boundary and self._predictive_safety_violation():
                     unsafe = True
                     break
         finally:
@@ -240,6 +243,7 @@ class MujocoDualArmBackend:
         ):
             for index, joint_id in enumerate(joint_ids):
                 targets[index] = self.data.qpos[self.model.jnt_qposadr[joint_id]]
+
 
     def result(self) -> EpisodeResult | None:
         return self._result

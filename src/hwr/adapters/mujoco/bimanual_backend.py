@@ -122,7 +122,8 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
 
     def apply(self, frame: DualArmActionFrame) -> RuntimeStepOutcome:
         outcome = super().apply(frame)
-        self._scan_forbidden_contacts()
+        if outcome.info["physics_advanced"]:
+            self._scan_forbidden_contacts()
         sample = self._task_sample()
         update = self.tracker.update(sample)
         self._last_sample = sample

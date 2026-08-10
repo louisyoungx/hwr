@@ -73,7 +73,11 @@ def _trainer() -> AsymmetricActorCriticTrainer:
     return AsymmetricActorCriticTrainer(
         actor,
         PrivilegedCriticConfig(10, 3, hidden_dim=32),
-        AsymmetricRLConfig(policy_delay=1, behavior_regularization=0.01),
+        AsymmetricRLConfig(
+            policy_delay=1,
+            actor_warmup_updates=0,
+            behavior_regularization=0.01,
+        ),
     )
 
 
@@ -106,6 +110,7 @@ def test_unsupervised_actor_does_not_optimize_unused_stop_head() -> None:
     trainer = _trainer()
     trainer.config = AsymmetricRLConfig(
         policy_delay=1,
+        actor_warmup_updates=0,
         behavior_regularization=0.0,
     )
     before = [value.detach().clone() for value in trainer.actor.stop_head.parameters()]
@@ -118,6 +123,28 @@ def test_unsupervised_actor_does_not_optimize_unused_stop_head() -> None:
             before, trainer.actor.stop_head.parameters(), strict=True
         )
     )
+
+
+def test_actor_waits_for_critic_only_warmup() -> None:
+    trainer = _trainer()
+    trainer.config = AsymmetricRLConfig(
+        policy_delay=1,
+        actor_warmup_updates=2,
+        behavior_regularization=0.0,
+    )
+    before = [parameter.detach().clone() for parameter in trainer.actor.parameters()]
+
+    first = trainer.update(_batch())
+    second = trainer.update(_batch())
+
+    assert first["actor_updated"] == second["actor_updated"] == 0.0
+    assert all(
+        torch.equal(previous, current)
+        for previous, current in zip(
+            before, trainer.actor.parameters(), strict=True
+        )
+    )
+    assert trainer.update(_batch())["actor_updated"] == 1.0
 
 
 def test_asymmetric_actor_rejects_privileged_field_even_during_rl() -> None:

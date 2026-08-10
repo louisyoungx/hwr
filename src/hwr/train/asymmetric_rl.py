@@ -26,6 +26,7 @@ class AsymmetricRLConfig:
     target_update_rate: float = 0.005
     behavior_regularization: float = 0.02
     policy_delay: int = 2
+    actor_warmup_updates: int = 2000
     target_action_noise: float = 0.15
     target_noise_clip: float = 0.30
     action_magnitude_penalty: float = 0.08
@@ -47,7 +48,11 @@ class AsymmetricRLConfig:
             raise ValueError("asymmetric RL discount must be in [0, 1]")
         if not 0.0 < self.target_update_rate <= 1.0:
             raise ValueError("target update rate must be in (0, 1]")
-        if self.behavior_regularization < 0.0 or self.policy_delay <= 0:
+        if (
+            self.behavior_regularization < 0.0
+            or self.policy_delay <= 0
+            or self.actor_warmup_updates < 0
+        ):
             raise ValueError("asymmetric RL regularization or delay is invalid")
         regularizers = (
             self.target_action_noise,
@@ -166,7 +171,10 @@ class AsymmetricActorCriticTrainer:
         self._validate_batch(batch)
         critic_loss = self._update_critic(batch)
         actor_loss = torch.zeros((), device=self.device)
-        actor_updated = (self.update_count + 1) % self.config.policy_delay == 0
+        actor_updated = (
+            self.update_count >= self.config.actor_warmup_updates
+            and (self.update_count + 1) % self.config.policy_delay == 0
+        )
         if actor_updated:
             actor_loss = self._update_actor(batch)
             _soft_update(self.target_actor, self.actor, self.config.target_update_rate)

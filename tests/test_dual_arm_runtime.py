@@ -190,6 +190,7 @@ def test_predictive_safety_rejects_motion_before_physics_commit() -> None:
     assert applied.action.left_arm == (0.0,) * 6
     assert applied.action.right_arm == (0.0,) * 6
     assert outcome.info["safety_intervened"] is True
+    assert outcome.info["physics_advanced"] is False
     assert outcome.events[-1].details["reason"] == "predicted_severe_collision"
 
 
