@@ -66,3 +66,34 @@ def test_frontier_preserves_side_diversity_and_round_trips_checkpoint() -> None:
     assert selected is not None
     assert selected.snapshot.task_id == "tray"
     assert restored.reset_count == 1
+
+
+def test_frontier_prioritizes_worst_side_progress_over_far_single_contact() -> None:
+    config = FrontierCurriculumConfig(
+        capacity_per_task=8, reset_probability=1.0
+    )
+    frontier = OutcomeFrontierCurriculum(("tray",), config)
+    candidates = (
+        FrontierOutcome(0.03, 0.40, True, False),
+        FrontierOutcome(0.05, 0.09, False, False),
+        FrontierOutcome(0.07, 0.10, True, False),
+        FrontierOutcome(0.06, 0.11, False, False),
+    )
+    for index, outcome in enumerate(candidates):
+        assert frontier.consider(
+            "tray",
+            _snapshot("tray", float(index)),
+            outcome,
+            source_episode=index,
+            source_step=index,
+        )
+
+    ranked = frontier.entries["tray"]
+    selected_sources = {
+        frontier.select("tray", np.random.default_rng(seed)).source_episode
+        for seed in range(20)
+    }
+
+    assert ranked[0].source_episode == 2
+    assert ranked[-1].source_episode == 0
+    assert selected_sources <= {1, 2}

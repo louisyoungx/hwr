@@ -134,7 +134,8 @@ class OutcomeFrontierCurriculum:
         if not values or rng.random() >= self.config.reset_probability:
             return None
         self.reset_count += 1
-        return values[int(rng.integers(0, len(values)))]
+        candidate_count = max(1, (len(values) + 1) // 2)
+        return values[int(rng.integers(0, candidate_count))]
 
     def audit(self) -> dict[str, object]:
         return {
@@ -148,6 +149,8 @@ class OutcomeFrontierCurriculum:
             "actor_input_fields": [],
             "task_stages": False,
             "source": "autonomous_physical_state_discovery",
+            "selection": "uniform_among_top_score_half",
+            "score": "exp(-worst_reach/scale)*(1+0.5*physical_contact_count)",
         }
 
     def state_dict(self) -> dict[str, object]:
@@ -179,23 +182,31 @@ class OutcomeFrontierCurriculum:
         self.reset_count = int(value["reset_count"])
         states = value["entries"]
         for task_id in self.task_ids:
-            self.entries[task_id] = [
+            entries = [
                 FrontierEntry(
                     snapshot=PhysicalStateSnapshot(**item["snapshot"]),
                     outcome=FrontierOutcome(**item["outcome"]),
-                    score=float(item["score"]),
-                    signature=int(item["signature"]),
+                    score=self._score(FrontierOutcome(**item["outcome"])),
+                    signature=self._signature(FrontierOutcome(**item["outcome"])),
                     source_episode=int(item["source_episode"]),
                     source_step=int(item["source_step"]),
                 )
                 for item in states[task_id]
             ]
+            entries.sort(
+                key=lambda item: (
+                    -item.score, item.source_episode, item.source_step
+                )
+            )
+            self.entries[task_id] = entries
 
     def _score(self, outcome: FrontierOutcome) -> float:
         worst = max(outcome.left_reach_distance, outcome.right_reach_distance)
         reach = math.exp(-worst / self.config.score_distance_scale_meters)
-        contacts = 0.5 * (outcome.left_contact + outcome.right_contact)
-        return float(reach + contacts)
+        contact_multiplier = 1.0 + 0.5 * (
+            outcome.left_contact + outcome.right_contact
+        )
+        return float(reach * contact_multiplier)
 
     def _signature(self, outcome: FrontierOutcome) -> int:
         contact = int(outcome.left_contact) | (int(outcome.right_contact) << 1)
