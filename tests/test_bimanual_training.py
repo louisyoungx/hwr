@@ -75,4 +75,7 @@ def test_local_training_executes_actor_critic_update_from_random_experience() ->
 
     assert result.trainer.update_count == 2
     assert result.records[0].updates == 2
+    assert result.records[0].actor_updates == 0
+    assert result.records[0].mean_critic_loss > 0.0
+    assert result.records[0].mean_safety_loss > 0.0
     assert result.replay.size == 16

@@ -143,6 +143,16 @@ class TrainingEpisodeRecord:
     updates: int
     safety_interventions: int = 0
     sampling_probability: float = 1.0 / 3.0
+    actor_updates: int = 0
+    mean_critic_loss: float = 0.0
+    mean_safety_loss: float = 0.0
+    mean_actor_loss: float = 0.0
+    mean_actor_reward_value: float = 0.0
+    mean_actor_safety_risk: float = 0.0
+    mean_reward_critic_disagreement: float = 0.0
+    mean_safety_critic_disagreement: float = 0.0
+    mean_actor_motion_ratio: float = 0.0
+    maximum_actor_motion_ratio: float = 0.0
 
 
 @dataclass
@@ -398,7 +408,7 @@ class BimanualTrainingRunner:
                 self.tasks[task_id].objective == "carry_payload",
             ),
         )
-        updates = self._update_after_episode(len(buffers.rewards))
+        update_summary = self._update_after_episode(len(buffers.rewards))
         self.curriculum.record(
             task_id,
             success=success,
@@ -434,6 +444,22 @@ class BimanualTrainingRunner:
             updates=self.trainer.update_count,
             safety_interventions=safety_interventions,
             sampling_probability=sampling_probability,
+            actor_updates=int(update_summary["actor_updates"]),
+            mean_critic_loss=update_summary["mean_critic_loss"],
+            mean_safety_loss=update_summary["mean_safety_loss"],
+            mean_actor_loss=update_summary["mean_actor_loss"],
+            mean_actor_reward_value=update_summary["mean_actor_reward_value"],
+            mean_actor_safety_risk=update_summary["mean_actor_safety_risk"],
+            mean_reward_critic_disagreement=update_summary[
+                "mean_reward_critic_disagreement"
+            ],
+            mean_safety_critic_disagreement=update_summary[
+                "mean_safety_critic_disagreement"
+            ],
+            mean_actor_motion_ratio=update_summary["mean_actor_motion_ratio"],
+            maximum_actor_motion_ratio=update_summary[
+                "maximum_actor_motion_ratio"
+            ],
         )
 
     def _select_action(
@@ -526,10 +552,11 @@ class BimanualTrainingRunner:
             mirrorable,
         )
 
-    def _update_after_episode(self, episode_steps: int) -> int:
+    def _update_after_episode(self, episode_steps: int) -> dict[str, float]:
         if self.replay.size < max(self.config.learning_starts, self.config.batch_size):
-            return 0
+            return _summarize_updates([])
         count = max(1, round(episode_steps * self.config.updates_per_environment_step))
+        metrics = []
         for _ in range(count):
             batch = self.replay.sample(
                 self.config.batch_size,
@@ -537,8 +564,34 @@ class BimanualTrainingRunner:
                 discovery_fraction=self.config.discovery_replay_fraction,
                 safety_fraction=self.config.safety_replay_fraction,
             )
-            self.trainer.update(batch)
-        return count
+            metrics.append(self.trainer.update(batch))
+        return _summarize_updates(metrics)
+
+
+def _summarize_updates(metrics: list[Mapping[str, float]]) -> dict[str, float]:
+    actor = [item for item in metrics if item["actor_updated"] > 0.5]
+
+    def mean(items: list[Mapping[str, float]], name: str) -> float:
+        return sum(item[name] for item in items) / len(items) if items else 0.0
+
+    return {
+        "actor_updates": float(len(actor)),
+        "mean_critic_loss": mean(metrics, "critic_loss"),
+        "mean_safety_loss": mean(metrics, "safety_loss"),
+        "mean_actor_loss": mean(actor, "actor_loss"),
+        "mean_actor_reward_value": mean(actor, "actor_reward_value"),
+        "mean_actor_safety_risk": mean(actor, "actor_safety_risk"),
+        "mean_reward_critic_disagreement": mean(
+            actor, "reward_critic_disagreement"
+        ),
+        "mean_safety_critic_disagreement": mean(
+            actor, "safety_critic_disagreement"
+        ),
+        "mean_actor_motion_ratio": mean(actor, "actor_motion_mean_ratio"),
+        "maximum_actor_motion_ratio": max(
+            (item["actor_motion_max_ratio"] for item in actor), default=0.0
+        ),
+    }
 
 
 def load_default_bimanual_training_catalogs(

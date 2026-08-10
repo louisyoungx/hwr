@@ -198,12 +198,20 @@ class AsymmetricActorCriticTrainer:
         critic_loss, conservative_loss = self._update_critic(batch)
         safety_loss = self._update_safety_critic(batch)
         actor_loss = torch.zeros((), device=self.device)
+        actor_metrics = {
+            "actor_reward_value": 0.0,
+            "actor_safety_risk": 0.0,
+            "reward_critic_disagreement": 0.0,
+            "safety_critic_disagreement": 0.0,
+            "actor_motion_mean_ratio": 0.0,
+            "actor_motion_max_ratio": 0.0,
+        }
         actor_updated = (
             self.update_count >= self.config.actor_warmup_updates
             and (self.update_count + 1) % self.config.policy_delay == 0
         )
         if actor_updated:
-            actor_loss = self._update_actor(batch)
+            actor_loss, actor_metrics = self._update_actor(batch)
             _soft_update(self.target_actor, self.actor, self.config.target_update_rate)
             _soft_update(self.target_critic, self.critic, self.config.target_update_rate)
         self.update_count += 1
@@ -214,6 +222,7 @@ class AsymmetricActorCriticTrainer:
             "actor_loss": float(actor_loss.detach().cpu()),
             "actor_updated": float(actor_updated),
             "update": float(self.update_count),
+            **actor_metrics,
         }
 
     def _update_critic(
@@ -321,7 +330,9 @@ class AsymmetricActorCriticTrainer:
         self.safety_optimizer.step()
         return loss
 
-    def _update_actor(self, batch: AsymmetricRLBatch) -> torch.Tensor:
+    def _update_actor(
+        self, batch: AsymmetricRLBatch
+    ) -> tuple[torch.Tensor, dict[str, float]]:
         _set_requires_grad(self.critic, False)
         _set_requires_grad(self.safety_critic, False)
         output = self.actor(batch.actor_inputs)
@@ -331,13 +342,15 @@ class AsymmetricActorCriticTrainer:
         q1, q2 = self.critic(batch.privileged_state, action)
         reward_value = torch.minimum(q1, q2)
         safety_risk = torch.zeros_like(q1)
+        safety_disagreement = torch.zeros_like(q1)
         if batch.safety_costs is not None:
             safety_first, safety_second = self.safety_critic(
                 batch.privileged_state, action
             )
-            safety_risk = torch.sigmoid(
-                torch.maximum(safety_first, safety_second)
-            )
+            first_risk = torch.sigmoid(safety_first)
+            second_risk = torch.sigmoid(safety_second)
+            safety_risk = torch.maximum(first_risk, second_risk)
+            safety_disagreement = (first_risk - second_risk).abs()
         behavior = torch.zeros_like(q1)
         if self.config.behavior_regularization > 0.0:
             behavior = nn.functional.smooth_l1_loss(
@@ -349,7 +362,8 @@ class AsymmetricActorCriticTrainer:
                 reduction="none",
             ).mean(dim=1)
         scales = _action_scales(self.config, bounded)
-        magnitude = (bounded[..., :14] / scales[:14]).square().mean(dim=(1, 2))
+        normalized_motion = bounded[..., :14] / scales[:14]
+        magnitude = normalized_motion.square().mean(dim=(1, 2))
         previous = batch.actor_inputs["action_history"][:, -1:, :]
         trajectory = torch.cat((previous, bounded), dim=1)
         slew = (
@@ -377,7 +391,23 @@ class AsymmetricActorCriticTrainer:
         self.actor_optimizer.step()
         _set_requires_grad(self.critic, True)
         _set_requires_grad(self.safety_critic, True)
-        return loss
+        metrics = {
+            "actor_reward_value": float(reward_value.mean().detach().cpu()),
+            "actor_safety_risk": float(safety_risk.mean().detach().cpu()),
+            "reward_critic_disagreement": float(
+                (q1 - q2).abs().mean().detach().cpu()
+            ),
+            "safety_critic_disagreement": float(
+                safety_disagreement.mean().detach().cpu()
+            ),
+            "actor_motion_mean_ratio": float(
+                normalized_motion.abs().mean().detach().cpu()
+            ),
+            "actor_motion_max_ratio": float(
+                normalized_motion.abs().max().detach().cpu()
+            ),
+        }
+        return loss, metrics
 
     def _validate_batch(self, batch: AsymmetricRLBatch) -> None:
         if frozenset(batch.actor_inputs) != VLA_POLICY_INPUT_FIELDS or frozenset(

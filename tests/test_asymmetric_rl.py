@@ -93,6 +93,12 @@ def test_asymmetric_update_changes_actor_using_separate_privileged_critic() -> N
     assert np.isfinite(metrics["critic_loss"])
     assert np.isfinite(metrics["conservative_loss"])
     assert np.isfinite(metrics["actor_loss"])
+    assert np.isfinite(metrics["actor_reward_value"])
+    assert np.isfinite(metrics["actor_safety_risk"])
+    assert np.isfinite(metrics["reward_critic_disagreement"])
+    assert np.isfinite(metrics["safety_critic_disagreement"])
+    assert 0.0 <= metrics["actor_motion_mean_ratio"] <= 1.0
+    assert 0.0 <= metrics["actor_motion_max_ratio"] <= 1.0
     assert any(
         not torch.equal(previous, current)
         for previous, current in zip(before, trainer.actor.parameters(), strict=True)
@@ -123,9 +129,10 @@ def test_actor_optimizes_the_pessimistic_twin_critic_value() -> None:
             output, trainer.config.action_scaling()
         )[:, 0, 0].mean()
 
-    loss = trainer._update_actor(batch)
+    loss, metrics = trainer._update_actor(batch)
 
     assert float(loss.detach()) == pytest.approx(float(expected), abs=1e-6)
+    assert metrics["actor_reward_value"] == pytest.approx(float(-expected))
 
 
 def test_td3_target_smoothing_and_action_regularization_are_enabled() -> None:
