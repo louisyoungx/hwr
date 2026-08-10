@@ -20,6 +20,7 @@ class VisualModelConfig:
     action_dim: int = 9
     visual_channels: tuple[int, ...] = (16, 32, 48)
     hidden_dim: int = 192
+    phase_embedding_dim: int = 16
 
     def __post_init__(self) -> None:
         values = (
@@ -31,6 +32,7 @@ class VisualModelConfig:
             self.proprioception_dim,
             self.action_dim,
             self.hidden_dim,
+            self.phase_embedding_dim,
             *self.visual_channels,
         )
         if min(values) <= 0 or self.action_dim != 9:
@@ -76,8 +78,13 @@ class HouseholdVisualPolicyModel(nn.Module):
             nn.SiLU(),
         )
         self.phase_head = nn.Linear(config.hidden_dim, config.phase_count)
-        self.action_head = nn.Linear(
-            config.hidden_dim, config.phase_count * config.action_dim
+        self.phase_embedding = nn.Embedding(
+            config.phase_count, config.phase_embedding_dim
+        )
+        self.action_decoder = nn.Sequential(
+            nn.Linear(config.hidden_dim + config.phase_embedding_dim, config.hidden_dim),
+            nn.SiLU(),
+            nn.Linear(config.hidden_dim, config.action_dim),
         )
 
     def forward(
@@ -95,8 +102,12 @@ class HouseholdVisualPolicyModel(nn.Module):
         state = torch.cat((proprioception, action_history.flatten(1), instruction), dim=1)
         state_features = self.state_encoder(state)
         fused = self.fusion(torch.cat((visual_features, state_features), dim=1))
-        actions = self.action_head(fused).reshape(
-            -1, self.config.phase_count, self.config.action_dim
+        phase_embeddings = self.phase_embedding.weight.unsqueeze(0).expand(
+            fused.shape[0], -1, -1
+        )
+        phase_features = fused.unsqueeze(1).expand(-1, self.config.phase_count, -1)
+        actions = self.action_decoder(
+            torch.cat((phase_features, phase_embeddings), dim=2)
         )
         return VisualModelOutput(actions=actions, phase_logits=self.phase_head(fused))
 

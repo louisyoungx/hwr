@@ -109,6 +109,7 @@ def aggregate_visual_policy_dataset(
             image_size,
             action_history,
             sample_stride,
+            base.phase_names,
         )
     return builder.seal()
 
@@ -125,6 +126,7 @@ def _collect_visited_episode(
     image_size: tuple[int, int],
     action_history: int,
     sample_stride: int,
+    phase_names: Sequence[str],
 ) -> None:
     environment = environment_factory()
     samples: list[VisualBehaviorSample] = []
@@ -153,7 +155,7 @@ def _collect_visited_episode(
                             image_height=image_size[1],
                         ),
                         formal_action_vector(label.action),
-                        phase=compact_household_phase(label.stage),
+                        phase=_matching_phase(label.stage, phase_names),
                     )
                 )
             outcome = environment.apply(behavior)
@@ -169,3 +171,12 @@ def _collect_visited_episode(
         builder.write_episode(episode_id, seed, samples)
     finally:
         environment.close()
+
+
+def _matching_phase(stage: str, phase_names: Sequence[str]) -> str:
+    if stage in phase_names:
+        return stage
+    macro_phase = compact_household_phase(stage)
+    if macro_phase in phase_names:
+        return macro_phase
+    raise ValueError(f"expert label phase is absent from the base dataset: {stage}")

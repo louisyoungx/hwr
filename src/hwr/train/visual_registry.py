@@ -15,7 +15,7 @@ from hwr.policy.visual_policy import LearnedVisualPolicy, VisualNormalization
 from hwr.train.visual_trainer import VisualTrainingResult
 
 
-VISUAL_MODEL_SCHEMA = "hwr.visual-policy-model/v2"
+VISUAL_MODEL_SCHEMA = "hwr.visual-policy-model/v3"
 
 
 def _sha256(path: Path) -> str:
@@ -91,6 +91,7 @@ def load_visual_policy(path: Path, *, device: str = "cpu") -> LearnedVisualPolic
         action_dim=int(values["action_dim"]),
         visual_channels=tuple(values["visual_channels"]),
         hidden_dim=int(values["hidden_dim"]),
+        phase_embedding_dim=int(values["phase_embedding_dim"]),
     )
     model = HouseholdVisualPolicyModel(config)
     state = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
