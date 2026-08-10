@@ -3,11 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from hwr.adapters.mujoco import (
+    MujocoBimanualBackendFactory,
+    load_default_bimanual_training_catalogs,
+)
 from hwr.train import (
     BimanualRLTrainingConfig,
     BimanualTrainingRunner,
     load_bimanual_actor,
-    load_default_bimanual_training_catalogs,
     resume_bimanual_training_run,
     save_bimanual_live_progress,
     save_bimanual_training_run,
@@ -35,7 +38,9 @@ def _small_result():
         language_dim=16,
         hidden_dim=32,
     )
-    return BimanualTrainingRunner(tasks, bindings, config).train()
+    return BimanualTrainingRunner(
+        tasks, MujocoBimanualBackendFactory(bindings), config
+    ).train()
 
 
 def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
@@ -66,6 +71,8 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
         "hold_drawer_place_item/v1",
     }
     assert replay["task_sampling"]["task_stages"] is False
+    assert replay["frontier_curriculum"]["task_stages"] is False
+    assert replay["frontier_curriculum"]["action_outputs"] is False
     assert replay["action_exploration"]["task_conditioned"] is False
     assert replay["action_exploration"]["global_random_bursts"] == {
         "probability": 0.01,
@@ -95,7 +102,9 @@ def test_training_run_resumes_at_next_episode_with_replay_and_rng(tmp_path) -> N
     config_values = result.config.to_dict()
     config_values["episodes"] = 2
     runner = BimanualTrainingRunner(
-        tasks, bindings, BimanualRLTrainingConfig(**config_values)
+        tasks,
+        MujocoBimanualBackendFactory(bindings),
+        BimanualRLTrainingConfig(**config_values),
     )
 
     resume_bimanual_training_run(path, runner)

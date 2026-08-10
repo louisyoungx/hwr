@@ -11,6 +11,7 @@ from hwr.core.embodied import (
     FrozenLanguageEmbedding,
     NaturalLanguageInstruction,
 )
+from hwr.core.state_snapshot import PhysicalStateSnapshot
 
 __all__ = [
     "DUAL_ARM_ACTION_DIM",
@@ -22,4 +23,5 @@ __all__ = [
     "DualArmProprioception",
     "FrozenLanguageEmbedding",
     "NaturalLanguageInstruction",
+    "PhysicalStateSnapshot",
 ]

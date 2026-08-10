@@ -16,6 +16,7 @@ from hwr.adapters.mujoco.dual_arm_backend import (
 )
 from hwr.core.embodied import DualArmActionFrame, DualArmObservation
 from hwr.core.runtime import RuntimeStepOutcome
+from hwr.core.state_snapshot import PhysicalStateSnapshot
 from hwr.core.types import EpisodeEvent, EpisodeResult
 from hwr.tasks import (
     BimanualTaskSample,
@@ -105,12 +106,20 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
         self._maximum_forbidden_force = 0.0
         self._episode_randomization: dict[str, float] = {}
 
-    def reset(self, *, seed: int, task_id: str) -> DualArmObservation:
+    def reset(
+        self,
+        *,
+        seed: int,
+        task_id: str,
+        initial_state: PhysicalStateSnapshot | None = None,
+    ) -> DualArmObservation:
         self._severe_collision_count = 0
         self._maximum_forbidden_force = 0.0
         self._last_update = None
         self._randomize_model(seed)
-        observation = super().reset(seed=seed, task_id=task_id)
+        observation = super().reset(
+            seed=seed, task_id=task_id, initial_state=initial_state
+        )
         self._last_sample = self._task_sample()
         self.tracker.reset(self._last_sample)
         return observation

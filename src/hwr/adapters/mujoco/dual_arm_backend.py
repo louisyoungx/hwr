@@ -27,6 +27,7 @@ from hwr.core.embodied import (
     NaturalLanguageInstruction,
 )
 from hwr.core.runtime import RuntimeStepOutcome
+from hwr.core.state_snapshot import PhysicalStateSnapshot
 from hwr.core.types import EpisodeEvent, EpisodeResult, SafetyState
 from hwr.safety import DualArmSafetySupervisor, SafetyLimits
 
@@ -117,7 +118,13 @@ class MujocoDualArmBackend:
         self._left_tool_site = self._site_id("left_grasp_center")
         self._right_tool_site = self._site_id("right_grasp_center")
 
-    def reset(self, *, seed: int, task_id: str) -> DualArmObservation:
+    def reset(
+        self,
+        *,
+        seed: int,
+        task_id: str,
+        initial_state: PhysicalStateSnapshot | None = None,
+    ) -> DualArmObservation:
         if task_id != self.config.task_id:
             raise ValueError(f"backend provides {self.config.task_id}, not {task_id}")
         self._rng.seed(seed)
@@ -131,11 +138,43 @@ class MujocoDualArmBackend:
         self._reset_object()
         self._write_controls(_zero_action())
         mujoco.mj_forward(self.model, self.data)
+        if initial_state is not None:
+            self._reset_state_snapshot(initial_state)
         return self._observation()
 
     def observe(self) -> DualArmObservation:
         self._require_active()
         return self._observation()
+
+    def capture_state_snapshot(self) -> PhysicalStateSnapshot:
+        """Capture positions only; no action, reward, or task stage is encoded."""
+        self._require_active()
+        return PhysicalStateSnapshot(
+            task_id=self._task_id or self.config.task_id,
+            backend_fingerprint=self._state_snapshot_fingerprint(),
+            generalized_positions=tuple(float(value) for value in self.data.qpos),
+        )
+
+    def _reset_state_snapshot(self, snapshot: PhysicalStateSnapshot) -> None:
+        """Apply a visited configuration only inside the Episode reset boundary."""
+        if snapshot.task_id != self._task_id:
+            raise ValueError("snapshot task identity differs from active backend")
+        if snapshot.backend_fingerprint != self._state_snapshot_fingerprint():
+            raise ValueError("snapshot backend fingerprint differs")
+        if len(snapshot.generalized_positions) != self.model.nq:
+            raise ValueError("snapshot generalized-position dimension differs")
+        self.data.qpos[:] = snapshot.generalized_positions
+        self.data.qvel[:] = 0.0
+        self.data.qacc[:] = 0.0
+        self.data.qacc_warmstart[:] = 0.0
+        if self.model.na:
+            self.data.act[:] = 0.0
+        self.data.ctrl[:] = 0.0
+        self.data.time = 0.0
+        mujoco.mj_forward(self.model, self.data)
+        self._synchronize_arm_targets_to_measured()
+        self._write_controls(_hold_action(self._gripper_positions()))
+        mujoco.mj_forward(self.model, self.data)
 
     def apply(self, frame: DualArmActionFrame) -> RuntimeStepOutcome:
         self._require_active()
@@ -244,6 +283,11 @@ class MujocoDualArmBackend:
             for index, joint_id in enumerate(joint_ids):
                 targets[index] = self.data.qpos[self.model.jnt_qposadr[joint_id]]
 
+    def _state_snapshot_fingerprint(self) -> str:
+        return (
+            f"mujoco-qpos/v1:nq={self.model.nq}:nv={self.model.nv}:"
+            f"nu={self.model.nu}"
+        )
 
     def result(self) -> EpisodeResult | None:
         return self._result

@@ -34,6 +34,12 @@ from hwr.train.asymmetric_registry import (
     save_asymmetric_training_checkpoint,
 )
 from hwr.train.curriculum import AutomaticCurriculum, CurriculumConfig, CurriculumUpdate
+from hwr.train.frontier_curriculum import (
+    FrontierCurriculumConfig,
+    FrontierEntry,
+    FrontierOutcome,
+    OutcomeFrontierCurriculum,
+)
 from hwr.train.goal_replay import (
     GoalConditionedReplayBuffer,
     GoalEpisode,
@@ -53,7 +59,6 @@ from hwr.train.bimanual_training import (
     BimanualTrainingResult,
     BimanualTrainingRunner,
     TrainingEpisodeRecord,
-    load_default_bimanual_training_catalogs,
 )
 from hwr.train.bimanual_registry import (
     load_bimanual_actor,
@@ -93,6 +98,10 @@ __all__ = [
     "AutomaticCurriculum",
     "CurriculumConfig",
     "CurriculumUpdate",
+    "FrontierCurriculumConfig",
+    "FrontierEntry",
+    "FrontierOutcome",
+    "OutcomeFrontierCurriculum",
     "GoalConditionedReplayBuffer",
     "GoalEpisode",
     "GoalReplayAddResult",
@@ -108,7 +117,6 @@ __all__ = [
     "TaskOutcome",
     "NStepTargets",
     "build_n_step_targets",
-    "load_default_bimanual_training_catalogs",
     "load_bimanual_actor",
     "resume_bimanual_training_run",
     "save_bimanual_live_progress",

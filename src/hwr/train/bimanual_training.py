@@ -4,18 +4,13 @@ from __future__ import annotations
 
 import random
 from dataclasses import asdict, dataclass
-from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Protocol
 
 import numpy as np
 import torch
 
-from hwr.adapters.mujoco import (
-    BimanualMujocoBinding,
-    MujocoBimanualTaskBackend,
-    load_bimanual_mujoco_bindings,
-)
 from hwr.core.embodied import DualArmAction, DualArmActionFrame
+from hwr.core.runtime import SnapshotRuntimeBackend
 from hwr.policy.bimanual_input import (
     BimanualActorInputPipeline,
     BimanualInputConfig,
@@ -26,7 +21,7 @@ from hwr.policy.privileged_critic import PrivilegedCriticConfig
 from hwr.policy.vla_input import VLAActorInput
 from hwr.policy.vla_model import VLAActorConfig, VLAActorModel
 from hwr.perception import FrozenNgramLanguageConfig, FrozenNgramLanguageEncoder
-from hwr.tasks import BimanualTaskSpec, load_bimanual_task_specs
+from hwr.tasks import BimanualTaskSpec, PrivilegedTaskState
 from hwr.train.asymmetric_rl import (
     AsymmetricActorCriticTrainer,
     AsymmetricRLBatch,
@@ -37,6 +32,10 @@ from hwr.train.action_exploration import (
     TemporalExplorationConfig,
 )
 from hwr.train.curriculum import AutomaticCurriculum, CurriculumConfig
+from hwr.train.frontier_curriculum import (
+    FrontierCurriculumConfig,
+    OutcomeFrontierCurriculum,
+)
 from hwr.train.goal_replay import GoalEpisode
 from hwr.train.n_step import build_n_step_targets
 from hwr.train.task_replay import TaskPartitionedGoalReplayBuffer
@@ -63,6 +62,8 @@ class BimanualRLTrainingConfig:
     paired_gripper_exploration_probability: float = 0.60
     global_random_burst_probability: float = 0.01
     global_random_burst_steps: int = 8
+    frontier_reset_probability: float = 0.50
+    frontier_capacity_per_task: int = 16
     failure_replay_fraction: float = 0.5
     discovery_replay_fraction: float = 0.35
     safety_replay_fraction: float = 0.15
@@ -89,6 +90,7 @@ class BimanualRLTrainingConfig:
             self.gripper_exploration_hold_steps,
             self.policy_gripper_hold_steps,
             self.global_random_burst_steps,
+            self.frontier_capacity_per_task,
             self.raw_image_width,
             self.raw_image_height,
             self.image_width,
@@ -113,6 +115,7 @@ class BimanualRLTrainingConfig:
             self.reflection_coupled_exploration_probability,
             self.paired_gripper_exploration_probability,
             self.global_random_burst_probability,
+            self.frontier_reset_probability,
             self.failure_replay_fraction,
             self.discovery_replay_fraction,
             self.safety_replay_fraction,
@@ -165,6 +168,9 @@ class TrainingEpisodeRecord:
     mean_actor_entropy: float = 0.0
     mean_actor_motion_log_standard_deviation: float = 0.0
     mean_actor_gripper_log_standard_deviation: float = 0.0
+    frontier_reset: bool = False
+    frontier_source_episode: int = -1
+    frontier_source_step: int = -1
 
 
 @dataclass
@@ -175,6 +181,7 @@ class BimanualTrainingResult:
     trainer: AsymmetricActorCriticTrainer
     replay: TaskPartitionedGoalReplayBuffer
     curriculum: AutomaticCurriculum
+    frontier: OutcomeFrontierCurriculum
     task_sampler: OutcomeAdaptiveTaskSampler
     records: list[TrainingEpisodeRecord]
     language_encoder: FrozenNgramLanguageEncoder
@@ -205,19 +212,32 @@ class _EpisodeBuffers:
         return cls([], [], [], [], [], [], [], [], [], [], [], [])
 
 
+class BimanualTrainingBackend(SnapshotRuntimeBackend, Protocol):
+    def set_curriculum_level(self, level: float) -> None: ...
+
+    def privileged_training_state(self) -> PrivilegedTaskState: ...
+
+    def task_audit(self) -> dict[str, object]: ...
+
+
+BimanualEnvironmentFactory = Callable[
+    [BimanualTaskSpec, int, int], BimanualTrainingBackend
+]
+
+
 class BimanualTrainingRunner:
     """Collect random/Actor experience and update without an action-label source."""
 
     def __init__(
         self,
         tasks: Mapping[str, BimanualTaskSpec],
-        bindings: Mapping[str, BimanualMujocoBinding],
+        environment_factory: BimanualEnvironmentFactory,
         config: BimanualRLTrainingConfig,
     ) -> None:
-        if set(tasks) != set(bindings) or len(tasks) != 3:
-            raise ValueError("training requires exactly three matching bimanual tasks")
+        if len(tasks) != 3:
+            raise ValueError("training requires exactly three bimanual tasks")
         self.tasks = dict(tasks)
-        self.bindings = dict(bindings)
+        self.environment_factory = environment_factory
         self.config = config
         self.task_ids = tuple(sorted(tasks))
         random.seed(config.seed)
@@ -284,6 +304,13 @@ class BimanualTrainingRunner:
         self.curriculum = AutomaticCurriculum(
             self.task_ids, CurriculumConfig(initial_level=0.1)
         )
+        self.frontier = OutcomeFrontierCurriculum(
+            self.task_ids,
+            FrontierCurriculumConfig(
+                capacity_per_task=config.frontier_capacity_per_task,
+                reset_probability=config.frontier_reset_probability,
+            ),
+        )
         self.task_sampler = OutcomeAdaptiveTaskSampler(self.task_ids)
         self.records: list[TrainingEpisodeRecord] = []
         self._environment_steps = 0
@@ -293,11 +320,10 @@ class BimanualTrainingRunner:
         on_episode: Callable[[BimanualTrainingResult], None] | None = None,
     ) -> BimanualTrainingResult:
         environments = {
-            task_id: MujocoBimanualTaskBackend(
+            task_id: self.environment_factory(
                 self.tasks[task_id],
-                self.bindings[task_id],
-                camera_width=self.config.raw_image_width,
-                camera_height=self.config.raw_image_height,
+                self.config.raw_image_width,
+                self.config.raw_image_height,
             )
             for task_id in self.task_ids
         }
@@ -326,6 +352,7 @@ class BimanualTrainingRunner:
             self.trainer,
             self.replay,
             self.curriculum,
+            self.frontier,
             self.task_sampler,
             self.records,
             self.language,
@@ -341,6 +368,8 @@ class BimanualTrainingRunner:
         self.trainer.load_state_dict(value["trainer"])
         self.replay.load_state_dict(value["replay"])
         self.curriculum.load_state_dict(value["curriculum"])
+        if "frontier" in value:
+            self.frontier.load_state_dict(value["frontier"])
         self.task_sampler.load_state_dict(value["task_sampler"])
         self.records = [
             TrainingEpisodeRecord(**record) for record in value["records"]
@@ -355,14 +384,21 @@ class BimanualTrainingRunner:
         self,
         episode_index: int,
         task_id: str,
-        environment: MujocoBimanualTaskBackend,
+        environment: BimanualTrainingBackend,
         *,
         sampling_probability: float,
     ) -> TrainingEpisodeRecord:
         seed = self.config.seed + episode_index * 104729
         level = self.curriculum.level(task_id)
         environment.set_curriculum_level(level)
-        observation = environment.reset(seed=seed, task_id=task_id)
+        frontier_entry = None
+        if episode_index >= self.config.initial_random_episodes:
+            frontier_entry = self.frontier.select(task_id, self.rng)
+        observation = environment.reset(
+            seed=seed,
+            task_id=task_id,
+            initial_state=(frontier_entry.snapshot if frontier_entry else None),
+        )
         self.explorer.reset()
         self.pipeline.reset()
         actor_input = self.pipeline.build(observation)
@@ -397,6 +433,18 @@ class BimanualTrainingRunner:
             self.pipeline.record_action(applied_action)
             next_input = self.pipeline.build(outcome.observation)
             next_state = environment.privileged_training_state()
+            if not bool(outcome.info["safety_intervened"]):
+                frontier_outcome = self.frontier.outcome_from_metrics(
+                    next_state.metrics
+                )
+                if self.frontier.qualifies(frontier_outcome):
+                    self.frontier.consider(
+                        task_id,
+                        environment.capture_state_snapshot(),
+                        frontier_outcome,
+                        source_episode=episode_index,
+                        source_step=step,
+                    )
             terminal = outcome.terminated or outcome.truncated
             limit = step + 1 >= step_limit
             self._append_transition(
@@ -487,6 +535,13 @@ class BimanualTrainingRunner:
             mean_actor_gripper_log_standard_deviation=update_summary[
                 "mean_actor_gripper_log_standard_deviation"
             ],
+            frontier_reset=frontier_entry is not None,
+            frontier_source_episode=(
+                frontier_entry.source_episode if frontier_entry else -1
+            ),
+            frontier_source_step=(
+                frontier_entry.source_step if frontier_entry else -1
+            ),
         )
 
     def _select_action(
@@ -639,16 +694,3 @@ def _summarize_updates(metrics: list[Mapping[str, float]]) -> dict[str, float]:
             actor, "actor_gripper_log_standard_deviation"
         ),
     }
-
-
-def load_default_bimanual_training_catalogs(
-    root: Path,
-) -> tuple[dict[str, BimanualTaskSpec], dict[str, BimanualMujocoBinding]]:
-    tasks = load_bimanual_task_specs(
-        root / "configs/tasks/bimanual_household_v1.json"
-    )
-    bindings = load_bimanual_mujoco_bindings(
-        root / "configs/adapters/mujoco/bimanual_household_v1.json",
-        root=root,
-    )
-    return tasks, bindings

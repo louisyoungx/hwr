@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, Sequence
 
 from hwr.core.embodied import ActionChunk, DualArmActionFrame, DualArmObservation
+from hwr.core.state_snapshot import PhysicalStateSnapshot
 from hwr.core.types import ActionFrame, EpisodeEvent, EpisodeResult, ObservationFrame
 
 
@@ -31,6 +32,20 @@ class RuntimeBackend(Protocol):
     def result(self) -> EpisodeResult | None: ...
 
     def close(self) -> None: ...
+
+
+class SnapshotRuntimeBackend(RuntimeBackend, Protocol):
+    """Optional simulation extension used only to vary training resets."""
+
+    def reset(
+        self,
+        *,
+        seed: int,
+        task_id: str,
+        initial_state: PhysicalStateSnapshot | None = None,
+    ) -> DualArmObservation: ...
+
+    def capture_state_snapshot(self) -> PhysicalStateSnapshot: ...
 
 
 @dataclass(frozen=True)

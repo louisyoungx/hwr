@@ -8,9 +8,9 @@ from hwr.adapters.mujoco import (
     BIMANUAL_EVIDENCE_VIEWS,
     MujocoBimanualEvidenceSource,
     MujocoBimanualTaskBackend,
+    load_default_bimanual_training_catalogs,
 )
 from hwr.render import BimanualVideoRecorder
-from hwr.train import load_default_bimanual_training_catalogs
 
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -8,10 +8,13 @@ import subprocess
 from pathlib import Path
 from typing import Sequence
 
+from hwr.adapters.mujoco import (
+    MujocoBimanualBackendFactory,
+    load_default_bimanual_training_catalogs,
+)
 from hwr.train import (
     BimanualRLTrainingConfig,
     BimanualTrainingRunner,
-    load_default_bimanual_training_catalogs,
     resume_bimanual_training_run,
     save_bimanual_live_progress,
 )
@@ -56,6 +59,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--paired-gripper-exploration", type=float, default=0.60)
     parser.add_argument("--global-random-burst", type=float, default=0.01)
     parser.add_argument("--global-random-burst-steps", type=int, default=8)
+    parser.add_argument("--frontier-reset", type=float, default=0.50)
+    parser.add_argument("--frontier-capacity", type=int, default=16)
     parser.add_argument("--checkpoint-interval", type=int, default=10)
     return parser
 
@@ -104,6 +109,8 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         ),
         global_random_burst_probability=arguments.global_random_burst,
         global_random_burst_steps=arguments.global_random_burst_steps,
+        frontier_reset_probability=arguments.frontier_reset,
+        frontier_capacity_per_task=arguments.frontier_capacity,
     )
     output_root = (
         arguments.output_root
@@ -112,7 +119,9 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     )
     path = output_root / arguments.run_id
     source_commit = _source_commit(root)
-    runner = BimanualTrainingRunner(tasks, bindings, config)
+    runner = BimanualTrainingRunner(
+        tasks, MujocoBimanualBackendFactory(bindings), config
+    )
     if arguments.resume:
         resume_bimanual_training_run(path, runner)
     elif path.exists():

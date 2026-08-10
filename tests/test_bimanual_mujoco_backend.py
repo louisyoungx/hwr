@@ -156,6 +156,45 @@ def test_procedural_reset_is_seeded_and_changes_continuous_physics() -> None:
     assert changed_randomization != first_randomization
 
 
+def test_adapter_restores_self_discovered_position_as_a_fresh_episode() -> None:
+    task_id = "carry_dining_tray/v1"
+    backend = _backend(task_id)
+    try:
+        observation = backend.reset(seed=303, task_id=task_id)
+        snapshot = backend.capture_state_snapshot()
+        expected = np.asarray(snapshot.generalized_positions)
+        moving = DualArmActionFrame(
+            observation.timestamp_ns,
+            observation.timestamp_ns,
+            observation.timestamp_ns + 100_000_000,
+            "random_actor",
+            DualArmAction(0.12, 0.0, (0.1,) * 6, (-0.1,) * 6, 0.7, 0.3),
+        )
+        for _ in range(3):
+            outcome = backend.apply(moving)
+            moving = DualArmActionFrame(
+                outcome.observation.timestamp_ns,
+                outcome.observation.timestamp_ns,
+                outcome.observation.timestamp_ns + 100_000_000,
+                "random_actor",
+                moving.action,
+            )
+        restored = backend.reset(
+            seed=304, task_id=task_id, initial_state=snapshot
+        )
+        audit = backend.task_audit()
+    finally:
+        backend.close()
+
+    assert np.asarray(backend.data.qpos) == pytest.approx(expected)
+    assert np.asarray(backend.data.qvel) == pytest.approx(0.0)
+    assert restored.sequence_id == 0
+    assert restored.timestamp_ns == 0
+    assert audit["left_contact_steps"] == 0
+    assert audit["right_contact_steps"] == 0
+    assert not hasattr(backend, "restore_state_snapshot")
+
+
 @pytest.mark.parametrize("task_id", sorted(TASKS))
 def test_idle_actor_runs_physics_without_false_success_or_truth_leak(task_id: str) -> None:
     backend = _backend(task_id)

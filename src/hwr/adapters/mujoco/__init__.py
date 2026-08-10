@@ -19,11 +19,16 @@ from hwr.adapters.mujoco.household_backend import MujocoHouseholdBackend
 from hwr.adapters.mujoco.inspection import RobotModelReport, inspect_robot_model
 from hwr.adapters.mujoco.scene_preview import ScenePreview, render_scene_preview
 from hwr.adapters.mujoco.smoke_trial import ContactGraspReport, run_contact_grasp_trial
+from hwr.adapters.mujoco.training_catalog import (
+    MujocoBimanualBackendFactory,
+    load_default_bimanual_training_catalogs,
+)
 
 __all__ = [
     "Mujoco3DBackend",
     "Mujoco3DConfig",
     "MujocoBimanualTaskBackend",
+    "MujocoBimanualBackendFactory",
     "MujocoDualArmBackend",
     "MujocoDualArmConfig",
     "MujocoBimanualEvidenceSource",
@@ -42,6 +47,7 @@ __all__ = [
     "inspect_robot_model",
     "load_mujoco_task_bindings",
     "load_bimanual_mujoco_bindings",
+    "load_default_bimanual_training_catalogs",
     "render_scene_preview",
     "run_contact_grasp_trial",
 ]

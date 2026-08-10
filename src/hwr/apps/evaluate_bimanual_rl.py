@@ -12,6 +12,7 @@ from typing import Any, Mapping, Sequence
 from hwr.adapters.mujoco import (
     MujocoBimanualEvidenceSource,
     MujocoBimanualTaskBackend,
+    load_default_bimanual_training_catalogs,
 )
 from hwr.eval import (
     BimanualEpisodeEvaluation,
@@ -26,7 +27,6 @@ from hwr.policy.vla_actions import VLAActionScaling
 from hwr.render import BimanualVideoRecorder, BimanualVideoResult
 from hwr.train import (
     load_bimanual_actor,
-    load_default_bimanual_training_catalogs,
     verify_bimanual_training_run,
 )
 

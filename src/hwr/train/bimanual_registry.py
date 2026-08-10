@@ -86,6 +86,7 @@ def save_bimanual_training_run(
             "trainer": result.trainer.state_dict(),
             "replay": result.replay.state_dict(),
             "curriculum": result.curriculum.state_dict(),
+            "frontier": result.frontier.state_dict(),
             "task_sampler": result.task_sampler.state_dict(),
             "records": [asdict(record) for record in result.records],
             "environment_steps": result.environment_steps,
@@ -109,6 +110,9 @@ def save_bimanual_training_run(
         "updates": "goal-conditioned maximum-entropy asymmetric off-policy actor-critic",
         "actor_distribution": "reparameterized-squashed-gaussian",
         "safety_constraint": "privileged intervention cost critic",
+        "initial_state_curriculum": (
+            "autonomous-physical-frontier-resets-without-action-labels"
+        ),
         "hindsight_actor_weight": 0.0,
     }
     _write_json(path / "lineage.json", lineage)
@@ -161,6 +165,7 @@ def save_bimanual_training_run(
         "safety_cost_labels": "deterministic_runtime_intervention",
         "task_partition_sizes": result.replay.task_sizes(),
         "task_sampling": result.task_sampler.audit(),
+        "frontier_curriculum": result.frontier.audit(),
         "action_exploration": dict(result.exploration_audit),
     }
     _write_json(path / "replay-manifest.json", replay_manifest)
@@ -247,6 +252,8 @@ def resume_bimanual_training_run(
         "global_random_burst_probability",
         "global_random_burst_steps",
         "policy_gripper_hold_steps",
+        "frontier_reset_probability",
+        "frontier_capacity_per_task",
     ):
         saved.setdefault(name, requested[name])
     saved.pop("episodes")
