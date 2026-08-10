@@ -28,6 +28,7 @@ class VLAActorConfig:
     action_dim: int = DUAL_ARM_ACTION_DIM
     action_head_init_scale: float = 1.0e-3
     isolated_gripper_head: bool = False
+    separate_gripper_head: bool = False
 
     def __post_init__(self) -> None:
         dimensions = (
@@ -51,6 +52,8 @@ class VLAActorConfig:
             0.0 < self.action_head_init_scale <= 1.0e-2
         ):
             raise ValueError("VLA action head initialization scale must be in (0, 0.01]")
+        if self.isolated_gripper_head and self.separate_gripper_head:
+            raise ValueError("VLA gripper head modes are mutually exclusive")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -121,7 +124,7 @@ class VLAActorModel(nn.Module):
             layer, num_layers=config.transformer_layers, enable_nested_tensor=False
         )
         self.output_norm = nn.LayerNorm(hidden)
-        if config.isolated_gripper_head:
+        if config.isolated_gripper_head or config.separate_gripper_head:
             self.motion_head = nn.Linear(hidden, config.action_chunk_size * 14)
             self.gripper_head = nn.Linear(hidden, config.action_chunk_size * 2)
             self._initialize_action_head(self.motion_head)
@@ -158,12 +161,18 @@ class VLAActorModel(nn.Module):
     def _action_chunks(self, summary: torch.Tensor) -> torch.Tensor:
         batch = summary.shape[0]
         chunks = self.config.action_chunk_size
-        if not self.config.isolated_gripper_head:
+        if not (
+            self.config.isolated_gripper_head
+            or self.config.separate_gripper_head
+        ):
             return self.action_head(summary).reshape(
                 batch, chunks, self.config.action_dim
             )
         motion = self.motion_head(summary).reshape(batch, chunks, 14)
-        grippers = self.gripper_head(summary.detach()).reshape(batch, chunks, 2)
+        gripper_summary = (
+            summary.detach() if self.config.isolated_gripper_head else summary
+        )
+        grippers = self.gripper_head(gripper_summary).reshape(batch, chunks, 2)
         return torch.cat((motion, grippers), dim=-1)
 
     def _head_tokens(self, inputs: Mapping[str, torch.Tensor]) -> torch.Tensor:

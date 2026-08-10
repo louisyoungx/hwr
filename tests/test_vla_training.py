@@ -69,6 +69,31 @@ def test_isolated_gripper_head_does_not_backpropagate_into_shared_motion() -> No
     assert torch.count_nonzero(actor.head_encoder.network[0].weight.grad) == 0
 
 
+def test_separate_gripper_head_keeps_normal_shared_gradient() -> None:
+    actor = VLAActorModel(
+        VLAActorConfig(
+            visual_history=2,
+            action_history=2,
+            proprioception_dim=37,
+            language_dim=12,
+            point_count=8,
+            action_chunk_size=3,
+            hidden_dim=32,
+            attention_heads=4,
+            transformer_layers=1,
+            separate_gripper_head=True,
+        )
+    )
+
+    output = actor(actor_input_tensors(actor_input(3)))
+    output.action_chunks[..., 14:].sum().backward()
+
+    assert torch.count_nonzero(actor.gripper_head.weight.grad) > 0
+    assert torch.count_nonzero(actor.motion_head.weight.grad) == 0
+    assert torch.count_nonzero(actor.output_norm.weight.grad) > 0
+    assert torch.count_nonzero(actor.head_encoder.network[0].weight.grad) > 0
+
+
 @pytest.mark.parametrize("scale", [0.0, float("inf"), 0.02])
 def test_vla_actor_rejects_invalid_action_head_initialization(scale: float) -> None:
     with pytest.raises(ValueError, match="initialization scale"):

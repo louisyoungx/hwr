@@ -22,7 +22,6 @@ from hwr.train import (
     save_asymmetric_training_checkpoint,
     save_vla_actor_checkpoint,
 )
-from hwr.train.asymmetric_rl import _scale_gripper_actor_gradient
 from tests.vla_fixtures import actor_input, build_dataset
 
 
@@ -160,7 +159,7 @@ def test_maximum_entropy_actor_and_action_regularization_are_enabled() -> None:
     )
     assert config.action_magnitude_penalty > 0
     assert config.action_slew_penalty > 0
-    assert config.gripper_actor_gradient_scale > 1.0
+    assert config.gripper_head_learning_rate_scale > 1.0
     assert config.reward_scale == 0.25
     assert config.conservative_critic_weight == 0.05
     assert config.conservative_action_samples > 1
@@ -169,15 +168,37 @@ def test_maximum_entropy_actor_and_action_regularization_are_enabled() -> None:
     assert defaults.policy_delay >= 5
 
 
-def test_gripper_actor_gradient_scaling_preserves_forward_action() -> None:
-    actions = torch.linspace(-0.5, 1.0, 16, requires_grad=True)
+def test_gripper_head_uses_faster_optimizer_group_only() -> None:
+    actor = VLAActorModel(
+        VLAActorConfig(
+            visual_history=2,
+            action_history=2,
+            proprioception_dim=37,
+            language_dim=12,
+            point_count=8,
+            action_chunk_size=3,
+            hidden_dim=32,
+            attention_heads=4,
+            transformer_layers=1,
+            separate_gripper_head=True,
+        )
+    )
+    config = AsymmetricRLConfig()
+    trainer = AsymmetricActorCriticTrainer(
+        actor, PrivilegedCriticConfig(10, 3, hidden_dim=32), config
+    )
+    slow, fast = trainer.actor_optimizer.param_groups
+    fast_ids = {id(parameter) for parameter in fast["params"]}
+    slow_ids = {id(parameter) for parameter in slow["params"]}
 
-    scaled = _scale_gripper_actor_gradient(actions, 4.0)
-    scaled.sum().backward()
-
-    assert torch.equal(scaled, actions.detach())
-    assert torch.equal(actions.grad[:14], torch.ones(14))
-    assert torch.equal(actions.grad[14:], torch.full((2,), 4.0))
+    assert fast["lr"] == pytest.approx(
+        config.actor_learning_rate * config.gripper_head_learning_rate_scale
+    )
+    assert slow["lr"] == pytest.approx(config.actor_learning_rate)
+    assert {id(parameter) for parameter in actor.gripper_head.parameters()} == fast_ids
+    assert id(actor.motion_head.weight) in slow_ids
+    assert id(actor.output_norm.weight) in slow_ids
+    assert id(trainer.actor_log_standard_deviation) in slow_ids
 
 
 def test_stochastic_actor_samples_bounded_actions_and_finite_density() -> None:

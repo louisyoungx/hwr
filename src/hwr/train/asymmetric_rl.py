@@ -43,7 +43,7 @@ class AsymmetricRLConfig:
     maximum_gripper_log_standard_deviation: float = 0.2
     action_magnitude_penalty: float = 0.08
     action_slew_penalty: float = 0.04
-    gripper_actor_gradient_scale: float = 4.0
+    gripper_head_learning_rate_scale: float = 4.0
     safety_learning_rate: float = 3e-4
     safety_actor_penalty: float = 3.0
     conservative_critic_weight: float = 0.05
@@ -61,7 +61,7 @@ class AsymmetricRLConfig:
             self.arm_velocity_scale,
             self.safety_learning_rate,
             self.reward_scale,
-            self.gripper_actor_gradient_scale,
+            self.gripper_head_learning_rate_scale,
         ) <= 0:
             raise ValueError("asymmetric RL learning rates must be positive")
         if not 0.0 <= self.discount <= 1.0:
@@ -152,16 +152,6 @@ def _action_scales(config: AsymmetricRLConfig, reference: torch.Tensor) -> torch
     )
 
 
-def _scale_gripper_actor_gradient(
-    actions: torch.Tensor, scale: float
-) -> torch.Tensor:
-    if actions.shape[-1] != 16 or scale <= 0.0:
-        raise ValueError("gripper gradient scaling requires 16D actions and positive scale")
-    grippers = actions[..., 14:]
-    scaled = grippers.detach() + scale * (grippers - grippers.detach())
-    return torch.cat((actions[..., :14], scaled), dim=-1)
-
-
 def _executed_action_representation(batch: AsymmetricRLBatch) -> torch.Tensor:
     stop = batch.stop_decisions.unsqueeze(-1).to(batch.action_chunks.dtype)
     return torch.cat((batch.action_chunks, stop), dim=2).flatten(1)
@@ -222,10 +212,7 @@ class AsymmetricActorCriticTrainer:
                 1, actor.config.action_chunk_size, actor.config.action_dim
             ).clone()
         )
-        self.actor_optimizer = torch.optim.AdamW(
-            (*self.actor.parameters(), self.actor_log_standard_deviation),
-            lr=config.actor_learning_rate,
-        )
+        self.actor_optimizer = self._actor_optimizer()
         self.critic_optimizer = torch.optim.AdamW(
             self.critic.parameters(), lr=config.critic_learning_rate
         )
@@ -269,6 +256,24 @@ class AsymmetricActorCriticTrainer:
             "update": float(self.update_count),
             **actor_metrics,
         }
+
+    def _actor_optimizer(self) -> torch.optim.AdamW:
+        base = [*self.actor.parameters(), self.actor_log_standard_deviation]
+        if not self.actor.config.separate_gripper_head:
+            return torch.optim.AdamW(base, lr=self.config.actor_learning_rate)
+        gripper = list(self.actor.gripper_head.parameters())
+        gripper_ids = {id(parameter) for parameter in gripper}
+        shared = [parameter for parameter in base if id(parameter) not in gripper_ids]
+        return torch.optim.AdamW(
+            (
+                {"params": shared, "lr": self.config.actor_learning_rate},
+                {
+                    "params": gripper,
+                    "lr": self.config.actor_learning_rate
+                    * self.config.gripper_head_learning_rate_scale,
+                },
+            )
+        )
 
     def _update_critic(
         self, batch: AsymmetricRLBatch
@@ -394,10 +399,7 @@ class AsymmetricActorCriticTrainer:
         output = self.actor(batch.actor_inputs)
         sample = self._sample_action(output)
         bounded = sample.values
-        critic_bounded = _scale_gripper_actor_gradient(
-            bounded, self.config.gripper_actor_gradient_scale
-        )
-        action = self._critic_action(output, critic_bounded)
+        action = self._critic_action(output, bounded)
         q1, q2 = self.critic(batch.privileged_state, action)
         reward_value = torch.minimum(q1, q2)
         safety_risk = torch.zeros_like(q1)
