@@ -5,6 +5,7 @@ import pytest
 from hwr.core.embodied import (
     DUAL_ARM_ACTION_DIM,
     DUAL_ARM_TOOL_TWIST_FIELDS,
+    DUAL_ARM_TOOL_TWIST_REFLECTION_SIGNS,
     ActionChunk,
     DualArmAction,
     DualArmActionFrame,
@@ -44,6 +45,7 @@ def test_dual_arm_action_chunk_round_trips_vectors() -> None:
     assert DualArmAction.from_vector(action.vector()) == action
     assert chunk.vectors()[0] == action.vector()
     assert DUAL_ARM_TOOL_TWIST_FIELDS == ("vx", "vy", "vz", "wx", "wy", "wz")
+    assert DUAL_ARM_TOOL_TWIST_REFLECTION_SIGNS == (1, -1, 1, -1, 1, -1)
 
 
 def test_dual_arm_action_rejects_incomplete_arm() -> None:

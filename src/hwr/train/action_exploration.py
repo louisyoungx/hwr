@@ -6,7 +6,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from hwr.core.embodied import DUAL_ARM_ACTION_DIM
+from hwr.core.embodied import (
+    DUAL_ARM_ACTION_DIM,
+    DUAL_ARM_TOOL_TWIST_REFLECTION_SIGNS,
+)
 
 
 @dataclass(frozen=True)
@@ -16,6 +19,8 @@ class TemporalExplorationConfig:
     action_smoothing: float = 0.65
     gripper_epsilon: float = 0.35
     gripper_hold_steps: int = 16
+    reflection_coupled_probability: float = 0.60
+    paired_gripper_probability: float = 0.60
     base_linear_scale: float = 0.18
     base_angular_scale: float = 0.50
     arm_twist_scale: float = 0.35
@@ -26,6 +31,8 @@ class TemporalExplorationConfig:
             self.noise_correlation,
             self.action_smoothing,
             self.gripper_epsilon,
+            self.reflection_coupled_probability,
+            self.paired_gripper_probability,
         )
         if not all(0.0 <= value <= 1.0 for value in fractions):
             raise ValueError("temporal exploration fractions must be in [0, 1]")
@@ -61,6 +68,9 @@ class TemporalActionExplorer:
         self._gripper_mask = np.zeros(2, dtype=bool)
         self._gripper_values = np.zeros(2, dtype=np.float64)
         self._gripper_remaining = 0
+        self._reflection_signs = np.asarray(
+            DUAL_ARM_TOOL_TWIST_REFLECTION_SIGNS, dtype=np.float64
+        )
 
     def reset(self) -> None:
         self._noise.fill(0.0)
@@ -75,9 +85,8 @@ class TemporalActionExplorer:
             raise ValueError("temporal explorer requires one 16D action")
         correlation = self.config.noise_correlation
         innovation = np.sqrt(max(0.0, 1.0 - correlation**2))
-        self._noise = correlation * self._noise + innovation * self.rng.normal(
-            0.0, self.config.noise_standard_deviation, 14
-        )
+        sampled = self._sample_motion_noise()
+        self._noise = correlation * self._noise + innovation * sampled
         value[:14] = np.clip(
             value[:14] + self._noise * self.motion_scales,
             -self.motion_scales,
@@ -95,11 +104,56 @@ class TemporalActionExplorer:
         self._previous = value.copy()
         return value
 
+    def sample_random(self) -> np.ndarray:
+        """Sample without observations, goals, stages, or labeled actions."""
+        value = np.empty(DUAL_ARM_ACTION_DIM, dtype=np.float64)
+        value[:2] = self.rng.uniform(-self.motion_scales[:2], self.motion_scales[:2])
+        right = self.rng.uniform(
+            -self.config.arm_twist_scale,
+            self.config.arm_twist_scale,
+            6,
+        )
+        if self.rng.random() < self.config.reflection_coupled_probability:
+            left = right * self._reflection_signs
+        else:
+            left = self.rng.uniform(
+                -self.config.arm_twist_scale,
+                self.config.arm_twist_scale,
+                6,
+            )
+        value[2:8] = left
+        value[8:14] = right
+        if self.rng.random() < self.config.paired_gripper_probability:
+            value[14:] = self.rng.integers(0, 2)
+        else:
+            value[14:] = self.rng.integers(0, 2, size=2)
+        return value
+
+    def _sample_motion_noise(self) -> np.ndarray:
+        sampled = self.rng.normal(
+            0.0, self.config.noise_standard_deviation, 14
+        )
+        if self.rng.random() < self.config.reflection_coupled_probability:
+            right = self.rng.normal(
+                0.0, self.config.noise_standard_deviation, 6
+            )
+            sampled[2:8] = right * self._reflection_signs
+            sampled[8:14] = right
+        return sampled
+
     def _refresh_grippers(self) -> None:
         if self._gripper_remaining > 0:
             return
-        self._gripper_mask = self.rng.random(2) < self.config.gripper_epsilon
-        self._gripper_values = self.rng.integers(0, 2, size=2).astype(np.float64)
+        if self.rng.random() < self.config.paired_gripper_probability:
+            self._gripper_mask.fill(
+                self.rng.random() < self.config.gripper_epsilon
+            )
+            self._gripper_values.fill(self.rng.integers(0, 2))
+        else:
+            self._gripper_mask = self.rng.random(2) < self.config.gripper_epsilon
+            self._gripper_values = self.rng.integers(0, 2, size=2).astype(
+                np.float64
+            )
         self._gripper_remaining = self.config.gripper_hold_steps
 
     def audit(self) -> dict[str, object]:
@@ -109,5 +163,7 @@ class TemporalActionExplorer:
             "privileged_fields": [],
             "action_labels": False,
             "noise_process": "first-order-correlated-gaussian",
-            "gripper_process": "persistent-independent-epsilon",
+            "gripper_process": "persistent-mixed-paired-independent-epsilon",
+            "embodiment_prior": "stochastic-left-right-reflection-coupling",
+            "task_conditioned": False,
         }

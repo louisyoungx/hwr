@@ -56,6 +56,8 @@ class BimanualRLTrainingConfig:
     action_smoothing: float = 0.65
     gripper_exploration_probability: float = 0.35
     gripper_exploration_hold_steps: int = 16
+    reflection_coupled_exploration_probability: float = 0.60
+    paired_gripper_exploration_probability: float = 0.60
     failure_replay_fraction: float = 0.5
     discovery_replay_fraction: float = 0.35
     seed: int = 20260810
@@ -97,6 +99,8 @@ class BimanualRLTrainingConfig:
             self.exploration_correlation,
             self.action_smoothing,
             self.gripper_exploration_probability,
+            self.reflection_coupled_exploration_probability,
+            self.paired_gripper_exploration_probability,
             self.failure_replay_fraction,
             self.discovery_replay_fraction,
         )
@@ -192,6 +196,12 @@ class BimanualTrainingRunner:
                 action_smoothing=config.action_smoothing,
                 gripper_epsilon=config.gripper_exploration_probability,
                 gripper_hold_steps=config.gripper_exploration_hold_steps,
+                reflection_coupled_probability=(
+                    config.reflection_coupled_exploration_probability
+                ),
+                paired_gripper_probability=(
+                    config.paired_gripper_exploration_probability
+                ),
                 base_linear_scale=self.rl_config.base_linear_scale,
                 base_angular_scale=self.rl_config.base_angular_scale,
                 arm_twist_scale=self.rl_config.arm_velocity_scale,
@@ -400,13 +410,7 @@ class BimanualTrainingRunner:
         if random_phase and previous is not None and not refresh_random:
             return previous
         if random_phase:
-            vector = np.concatenate(
-                (
-                    self.rng.uniform((-0.20, -0.6), (0.20, 0.6)),
-                    self.rng.uniform(-0.8, 0.8, 12),
-                    self.rng.integers(0, 2, size=2),
-                )
-            )
+            vector = self.explorer.sample_random()
         else:
             tensors = actor_input_tensors(
                 actor_input, device=self.trainer.device

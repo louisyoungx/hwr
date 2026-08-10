@@ -8,6 +8,7 @@ from typing import Mapping
 import torch
 
 from hwr.policy.vla_input import VLA_POLICY_INPUT_FIELDS
+from hwr.core.embodied import DUAL_ARM_TOOL_TWIST_REFLECTION_SIGNS
 from hwr.tasks import BIMANUAL_GOAL_DIM
 from hwr.train.asymmetric_replay import AsymmetricReplayBuffer
 from hwr.train.asymmetric_rl import AsymmetricRLBatch
@@ -155,7 +156,9 @@ def _mirror_action(value: torch.Tensor) -> torch.Tensor:
     # Reflection across the robot's x-z plane. Linear velocity is a polar
     # vector (vx, -vy, vz), while angular velocity is an axial vector and
     # therefore gains the extra determinant sign (-wx, wy, -wz).
-    signs = torch.tensor((1, -1, 1, -1, 1, -1), dtype=value.dtype)
+    signs = torch.tensor(
+        DUAL_ARM_TOOL_TWIST_REFLECTION_SIGNS, dtype=value.dtype
+    )
     mirrored[..., 1] *= -1
     mirrored[..., 2:8] = value[..., 8:14] * signs.to(value.device)
     mirrored[..., 8:14] = value[..., 2:8] * signs.to(value.device)

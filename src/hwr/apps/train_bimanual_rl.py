@@ -46,6 +46,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--action-smoothing", type=float, default=0.65)
     parser.add_argument("--gripper-exploration", type=float, default=0.35)
     parser.add_argument("--gripper-hold-steps", type=int, default=16)
+    parser.add_argument("--reflection-coupling", type=float, default=0.60)
+    parser.add_argument("--paired-gripper-exploration", type=float, default=0.60)
     parser.add_argument("--checkpoint-interval", type=int, default=10)
     return parser
 
@@ -86,6 +88,10 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         action_smoothing=arguments.action_smoothing,
         gripper_exploration_probability=arguments.gripper_exploration,
         gripper_exploration_hold_steps=arguments.gripper_hold_steps,
+        reflection_coupled_exploration_probability=arguments.reflection_coupling,
+        paired_gripper_exploration_probability=(
+            arguments.paired_gripper_exploration
+        ),
     )
     output_root = (
         arguments.output_root

@@ -43,3 +43,30 @@ def test_continuous_noise_is_correlated_bounded_and_resettable() -> None:
     assert np.all(np.abs(second[2:14]) <= 0.35)
     assert not np.array_equal(first[:14], second[:14])
     assert explorer.audit()["privileged_fields"] == []
+
+
+def test_reflection_coupling_is_embodiment_only_and_preserves_independent_mode() -> None:
+    coupled = TemporalActionExplorer(
+        TemporalExplorationConfig(
+            reflection_coupled_probability=1.0,
+            paired_gripper_probability=1.0,
+        ),
+        np.random.default_rng(10),
+    )
+    random_action = coupled.sample_random()
+    perturbed = coupled.perturb(np.zeros(16))
+    signs = np.asarray((1, -1, 1, -1, 1, -1))
+
+    assert np.allclose(random_action[2:8], random_action[8:14] * signs)
+    assert random_action[14] == random_action[15]
+    assert np.allclose(perturbed[2:8], perturbed[8:14] * signs)
+    assert coupled.audit()["task_conditioned"] is False
+
+    independent = TemporalActionExplorer(
+        TemporalExplorationConfig(
+            reflection_coupled_probability=0.0,
+            paired_gripper_probability=0.0,
+        ),
+        np.random.default_rng(10),
+    ).sample_random()
+    assert not np.allclose(independent[2:8], independent[8:14] * signs)

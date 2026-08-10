@@ -227,6 +227,11 @@ def resume_bimanual_training_run(
     saved.setdefault(
         "discovery_replay_fraction", requested["discovery_replay_fraction"]
     )
+    for name in (
+        "reflection_coupled_exploration_probability",
+        "paired_gripper_exploration_probability",
+    ):
+        saved.setdefault(name, requested[name])
     saved.pop("episodes")
     requested.pop("episodes")
     if saved != requested:
