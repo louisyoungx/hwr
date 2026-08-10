@@ -160,14 +160,16 @@ def test_frontier_prioritizes_worst_side_progress_over_far_single_contact() -> N
         )
 
     ranked = frontier.entries["tray"]
-    selected_sources = {
+    selected_sources = [
         frontier.select("tray", np.random.default_rng(seed)).source_episode
-        for seed in range(20)
-    }
+        for seed in range(512)
+    ]
 
     assert ranked[0].source_episode == 1
     assert ranked[-1].source_episode == 0
-    assert selected_sources <= {1, 2}
+    assert set(selected_sources) == {0, 1, 2, 3}
+    assert selected_sources.count(1) > selected_sources.count(3)
+    assert selected_sources.count(2) > selected_sources.count(0)
 
 
 def test_frontier_contact_cannot_outrank_better_bilateral_reach() -> None:
@@ -225,7 +227,7 @@ def test_frontier_selection_replays_each_discovered_contact_signature() -> None:
     assert selected_signatures == {1, 2}
     assert selected.count(1) > selected.count(2)
     assert frontier.audit()["selection"] == (
-        "quality_weighted_signature_with_uniform_diversity_floor"
+        "quality_weighted_signature_and_source_with_diversity_floor"
     )
     assert frontier.audit()["signature_uniform_fraction"] == 0.2
 
@@ -258,6 +260,27 @@ def test_frontier_limits_duplicate_frames_from_one_episode_and_prunes_legacy() -
 
     assert len(restored.entries["tray"]) == 2
     assert restored.audit()["maximum_entries_per_source_signature"] == 2
+
+    selection = OutcomeFrontierCurriculum(
+        ("tray",),
+        FrontierCurriculumConfig(capacity_per_task=16, reset_probability=1.0),
+    )
+    for source_episode, distance in ((7, 0.07), (8, 0.14)):
+        for index in range(2):
+            assert selection.consider(
+                "tray",
+                _snapshot("tray", float(source_episode * 10 + index)),
+                FrontierOutcome(0.04, distance + index * 0.005, True, False),
+                source_episode=source_episode,
+                source_step=index,
+                contact_stability_steps=40,
+            )
+    selected_sources = [
+        selection.select("tray", np.random.default_rng(seed)).source_episode
+        for seed in range(256)
+    ]
+    assert set(selected_sources) == {7, 8}
+    assert selected_sources.count(7) > selected_sources.count(8)
 
 
 def test_frontier_requires_two_seconds_of_contact_before_snapshotting() -> None:

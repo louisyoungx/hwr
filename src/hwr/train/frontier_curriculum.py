@@ -227,6 +227,19 @@ class OutcomeFrontierCurriculum:
         probabilities = mix * uniform + (1.0 - mix) * quality
         signature = signatures[int(rng.choice(len(signatures), p=probabilities))]
         matching = [item for item in values if item.signature == signature]
+        sources = sorted({item.source_episode for item in matching})
+        source_scores = np.asarray(
+            [
+                max(item.score for item in matching if item.source_episode == source)
+                for source in sources
+            ],
+            dtype=np.float64,
+        )
+        source_quality = source_scores / source_scores.sum()
+        source_uniform = np.full(len(sources), 1.0 / len(sources))
+        source_probabilities = mix * source_uniform + (1.0 - mix) * source_quality
+        source = sources[int(rng.choice(len(sources), p=source_probabilities))]
+        matching = [item for item in matching if item.source_episode == source]
         candidate_count = max(1, (len(matching) + 1) // 2)
         return matching[int(rng.integers(0, candidate_count))]
 
@@ -242,7 +255,9 @@ class OutcomeFrontierCurriculum:
             "actor_input_fields": [],
             "task_stages": False,
             "source": "autonomous_physical_state_discovery",
-            "selection": "quality_weighted_signature_with_uniform_diversity_floor",
+            "selection": (
+                "quality_weighted_signature_and_source_with_diversity_floor"
+            ),
             "signature_uniform_fraction": self.config.signature_uniform_fraction,
             "maximum_entries_per_source_signature": (
                 self.config.maximum_entries_per_source_signature
