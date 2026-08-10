@@ -1,19 +1,19 @@
 # 正式三维视觉训练运行说明
 
-> 状态：历史 V1/V2 基线；不再代表当前训练架构
+> 状态：已废弃的 V1/V2 行为克隆基线；不得用于当前正式训练
 >
-> 当前方案：[端到端视觉—语言—动作训练范式](./end-to-end-training-paradigm.md)
+> 当前方案：[无专家的端到端视觉—语言—双臂训练范式](./end-to-end-training-paradigm.md)
 >
 > 配置：[formal_visual_v1.json](../configs/training/formal_visual_v1.json)
 > 训练结果：[formal_visual_v1_results.json](../configs/training/formal_visual_v1_results.json)
 
-首轮普通行为克隆在餐厅未见种子 30000 上能导航到餐桌附近，但混淆机械臂操作与后续导航阶段，6000 步超时且没有夹持接触。该结果保留为 V1 基线。V2 曾通过训练标签 `phase` 增加阶段分类和分阶段动作头；这一做法只保留作历史对照，后续端到端 Actor 不读取、预测或监督人工任务阶段。
+本页只保留失败实验的可追溯记录，所列数据、checkpoint 和命令不得进入当前训练谱系。首轮普通行为克隆在餐厅未见种子 30000 上能导航到餐桌附近，但混淆机械臂操作与后续导航阶段，6000 步超时且没有夹持接触。V2 又通过训练标签 `phase` 增加阶段分类和分阶段动作头；这进一步依赖人工结构，没有解决闭环泛化问题。
 
 V2 数据与训练配置见 [formal_visual_v2.json](../configs/training/formal_visual_v2.json)。三个 V2 数据集仍使用相同的 9 个成功专家 Episode，但按 `hwr.visual-behavior-dataset/v2` 重采并锁定新的 shard 哈希。
 
 ## 数据边界
 
-三个任务分别使用 3 条接触有效的专家 Episode。正式策略输入固定为头部 RGB、头部深度、腕部 RGB、24 维本体状态、任务指令 ID 和 8 步动作历史；引擎真值位姿、目标位置、专家阶段和成功状态只作为标签或审计信息，不进入训练张量。
+当时三个任务分别使用 3 条专家 Episode，动作空间也只覆盖单臂。这些数据只能复现历史结论，训练加载器必须将其来源标记为 `legacy` 并拒绝用于当前双臂 Actor-Critic 训练。
 
 | 任务 | 训练种子 | 样本数 | 数据目录 |
 |---|---:|---:|---|
@@ -23,9 +23,9 @@ V2 数据与训练配置见 [formal_visual_v2.json](../configs/training/formal_v
 
 数据目录由 Git 忽略；受版本管理的训练配置保存每个 shard 的 SHA-256。训练前加载器会再次检查 manifest、字段白名单和 shard 哈希。
 
-## 本机训练命令
+## 历史复现命令
 
-每个任务独立训练、登记和重载，避免不同任务的动作分布互相掩盖：
+以下命令只用于审计旧失败基线，不是当前训练入口：
 
 ```bash
 .venv/bin/python -m hwr.apps.train_formal_visual \

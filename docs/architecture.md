@@ -5,6 +5,7 @@
 
 三维拟真实施的冻结决策与验收门槛见：
 
+- [无专家的端到端视觉—语言—双臂训练范式](end-to-end-training-paradigm.md)
 - [ADR-0001：三维物理后端采用 MuJoCo 适配器](adr/0001-mujoco-3d-backend.md)
 - [三维拟真训练平台 V1 实施与验收合同](three-dimensional-v1-acceptance.md)
 
@@ -34,6 +35,7 @@ flowchart TB
     B --> G[data]
     C --> E
     C --> G
+    C --> H
     D --> F
     F --> H[runtime contracts]
     F --> I[safety]
@@ -53,9 +55,9 @@ flowchart TB
 2. `runtime`、`data`、`safety` 只依赖 `core`；
 3. `sim` 实现 `runtime`，并使用 `safety`，但不依赖训练代码；
 4. `policy` 只依赖核心 schema 和张量计算接口；
-5. `train` 依赖 `data` 与 `policy`，不直接访问仿真后端；
+5. `train` 依赖 `data`、`policy` 和运行时协议，通过注入的环境工厂闭环采样，不导入具体仿真后端；
 6. `eval` 负责组合 `sim`、`policy` 和 `data`；
-7. `scenarios` 只包含场景/任务声明和专家策略，不包含训练循环；
+7. `scenarios` 只包含场景/任务分布、成功判据和奖励声明，不包含策略、专家或训练循环；
 8. `apps` 和 CLI 是最上层装配入口。
 
 禁止跨层捷径，例如训练器直接读取某个机械臂 SDK，或仿真场景直接调用某个策略类。
@@ -84,7 +86,7 @@ flowchart TB
 │   ├── train/                  # 训练循环和实验产物
 │   ├── eval/                   # 离线与闭环评测
 │   ├── render/                 # 回放采集、二维渲染和视频编码
-│   ├── scenarios/              # 家务场景、任务和专家
+│   ├── scenarios/              # 家务场景、任务分布、目标与奖励
 │   ├── adapters/               # 物理引擎、硬件、数据格式适配器
 │   └── apps/                   # CLI 和端到端装配
 ├── configs/
@@ -151,7 +153,7 @@ flowchart TB
 - `configs/tasks/formal_3d_v1.json`：项目自有的 task/scene/object/target ID、指令、重置范围、随机化和成功门槛；
 - `configs/adapters/mujoco/formal_3d_v1.json`：只在适配器侧把这些 ID 绑定到 MJCF body/joint/geom/site。
 
-`MujocoHouseholdBackend` 对上仍只实现 `RuntimeBackend`。真值实体位姿、目标 site、接触力和抽屉关节只用于 reset、示范标签与只读审计，不进入 `ObservationFrame.features`；在线观察固定为三路相机 payload 与本体状态。
+`MujocoHouseholdBackend` 对上仍只实现 `RuntimeBackend`。真值实体位姿、目标 site、接触力和抽屉关节只用于 reset、自动成功判定、训练期 Critic 与只读审计，不产生动作标签，也不进入 `ObservationFrame.features`；在线观察固定为头部和左右腕部相机 payload 与双臂本体状态。
 
 ### `hwr.policy`
 
@@ -161,9 +163,11 @@ flowchart TB
 
 ### `hwr.train`
 
-- 数据加载、优化循环、检查点和实验 manifest；
+- 无专家的在线环境采样、经验回放、Actor-Critic 优化、自动课程、检查点和实验 manifest；
+- 只通过核心运行时协议接收环境实例，禁止导入 MuJoCo 或硬件适配器；
+- Critic 可以接收训练期特权观察，但不得输出动作、示范或 Actor 可见特征；
 - 计算设备选择封装在训练后端；
-- 不直接调用硬件或仿真引擎。
+- 不读取专家数据、遥操作动作或教师 checkpoint。
 
 ### `hwr.eval`
 
@@ -195,9 +199,10 @@ flowchart LR
 
 ### `hwr.scenarios`
 
-- SceneSpec、TaskSpec、随机化范围和规则专家；
+- SceneSpec、TaskSpec、初始状态分布、自然语言表达、环境目标和随机化范围；
+- 只读状态的成功/失败判据、奖励项和 achieved goal 提取；
 - 每个场景独立声明，不复制运行时和训练代码；
-- 场景间共享技能时抽取为公共组件。
+- 不包含航点、抓取姿态、左右臂分工、动作脚本或任何可被模仿的专家策略。
 
 ## 5. 稳定接口
 
@@ -233,8 +238,9 @@ flowchart LR
 2. Episode 录制、校验和回放；
 3. 安全动作过滤；
 4. 确定性二维拟真后端；
-5. 场景和规则专家；
-6. Dataset 和策略训练；
-7. 闭环评测；
-8. 三个家务场景训练；
-9. 真实硬件适配器。
+5. 三维四轮双臂运行时和 16 维联合动作；
+6. 场景分布、自动成功判据、奖励和 achieved goal；
+7. 无专家的非对称 Actor-Critic、经验回放与自动课程；
+8. 双臂必需任务、单臂消融和闭环评测；
+9. 三个家务场景训练；
+10. 真实硬件适配器。

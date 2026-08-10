@@ -10,12 +10,14 @@
 - 差速底盘、二维机械臂、夹爪、物体和障碍拟真；
 - 固定种子确定性重放；
 - Parquet 行为数据集和按 Episode 切分；
-- 本机 MPS/CPU 行为克隆训练；
-- 策略访问状态的数据聚合和专家纠正；
+- 16 维底盘—双臂—双夹爪动作契约；
+- 可部署 VLA Actor、训练期特权双 Critic 和经验回放基础组件；
 - 带校验和的本地模型注册表；
-- 三个独立家务场景的闭环训练基准。
+- 三个独立家务场景的历史二维闭环基准；
 - 三个正式三维家庭场景的 12 个 CC0 纹理网格、许可/哈希锁和可重复转换工具；
 - 客厅、餐厅、厨房 MJCF 装配，含独立视觉/碰撞几何与无执行器物理抽屉。
+
+历史行为克隆、数据聚合和规则专家实现不再属于正式训练路线。当前主线是无专家、无示范的双臂非对称强化学习；MuJoCo 双臂运行时与在线训练闭环尚未打通。
 
 ## 快速开始
 
@@ -48,18 +50,7 @@ python3 -m venv .venv
   --output artifacts/formal-scenes.png
 ```
 
-训练一个场景：
-
-```bash
-hwr-train-scenario tidy_table/v1 \
-  --run-id local-tidy-table \
-  --episodes 60 \
-  --epochs 40 \
-  --aggregation-rounds 2 \
-  --aggregation-episodes 20
-```
-
-复现三个已训练基准的闭环动作，并输出并排视频（需要系统安装 `ffmpeg`）：
+复现三个历史二维基准的闭环动作，并输出并排视频（只用于软件链路回归，需要系统安装 `ffmpeg`）：
 
 ```bash
 hwr-render-benchmarks --output-path artifacts/benchmark-rollouts.mp4
@@ -68,7 +59,7 @@ hwr-render-benchmarks --output-path artifacts/benchmark-rollouts.mp4
 ## 文档
 
 - [平台架构与模块边界](docs/architecture.md)
-- [端到端视觉—语言—动作训练范式](docs/end-to-end-training-paradigm.md)
+- [无专家的端到端视觉—语言—双臂训练范式](docs/end-to-end-training-paradigm.md)
 - [训练与拟真环境方案](docs/training-and-simulation-plan.md)
 - [万元内平台方案](docs/low-cost-platform-proposal.md)
 - [训练基准与复现命令](benchmarks/README.md)
@@ -78,4 +69,4 @@ hwr-render-benchmarks --output-path artifacts/benchmark-rollouts.mp4
 
 ## 当前边界
 
-二维后端不代表家务仿真能力。三维 V1 尚在实施中；在三个带纹理家庭场景、六轴移动机械臂、非特权视觉策略、真实接触操作和隔离种子评测全部通过前，项目不会宣称完成拟真家务训练平台。
+二维后端不代表家务仿真能力。三维 V1 尚在实施中；在三个带纹理家庭场景、四轮双六轴机器人、无专家的非特权视觉策略、真实双臂接触操作和隔离种子评测全部通过前，项目不会宣称完成拟真家务训练平台。
