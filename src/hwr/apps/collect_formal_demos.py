@@ -25,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--task-id", action="append")
     parser.add_argument("--episodes", type=int, default=4)
     parser.add_argument("--seed", type=int, default=1000)
+    parser.add_argument("--seed-list", type=int, nargs="+")
     parser.add_argument("--image-width", type=int, default=48)
     parser.add_argument("--image-height", type=int, default=36)
     parser.add_argument("--action-history", type=int, default=8)
@@ -41,14 +42,21 @@ def collect(arguments: argparse.Namespace) -> dict[str, object]:
     unknown = sorted(set(task_ids) - set(tasks))
     if unknown:
         raise ValueError(f"unknown formal tasks: {unknown}")
+    if arguments.seed_list and len(task_ids) != 1:
+        raise ValueError("an explicit seed list can collect only one formal task")
     arguments.output_root.mkdir(parents=True, exist_ok=True)
     manifests: dict[str, object] = {}
     for task_index, task_id in enumerate(task_ids):
         task = tasks[task_id]
         binding = bindings[task_id]
-        dataset_id = f"{task_id.replace('/', '_')}-expert-s{arguments.seed}"
+        first_seed = arguments.seed_list[0] if arguments.seed_list else arguments.seed
+        dataset_id = f"{task_id.replace('/', '_')}-expert-s{first_seed}"
         start = arguments.seed + task_index * 10_000
-        seeds = range(start, start + arguments.episodes)
+        seeds = (
+            arguments.seed_list
+            if arguments.seed_list is not None
+            else range(start, start + arguments.episodes)
+        )
         path = generate_visual_expert_dataset(
             arguments.output_root,
             dataset_id,
