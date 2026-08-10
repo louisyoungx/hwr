@@ -117,30 +117,35 @@ def test_actor_optimizes_the_pessimistic_twin_critic_value() -> None:
         policy_delay=1,
         actor_warmup_updates=0,
         behavior_regularization=0.0,
+        entropy_temperature=0.0,
         action_magnitude_penalty=0.0,
         action_slew_penalty=0.0,
         safety_actor_penalty=0.0,
     )
     trainer.critic = ConflictingCritic()
     batch = trainer._to_device(_batch())
+    torch.manual_seed(17)
     with torch.no_grad():
         output = trainer.actor(batch.actor_inputs)
-        expected = -bounded_vla_actions(
-            output, trainer.config.action_scaling()
-        )[:, 0, 0].mean()
+        expected = -trainer._sample_action(output).values[:, 0, 0].mean()
 
+    torch.manual_seed(17)
     loss, metrics = trainer._update_actor(batch)
 
     assert float(loss.detach()) == pytest.approx(float(expected), abs=1e-6)
     assert metrics["actor_reward_value"] == pytest.approx(float(-expected))
 
 
-def test_td3_target_smoothing_and_action_regularization_are_enabled() -> None:
+def test_maximum_entropy_actor_and_action_regularization_are_enabled() -> None:
     config = _trainer().config
     defaults = AsymmetricRLConfig()
 
-    assert config.target_action_noise > 0
-    assert config.target_noise_clip > config.target_action_noise
+    assert config.entropy_temperature > 0
+    assert (
+        config.minimum_log_standard_deviation
+        < config.initial_log_standard_deviation
+        < config.maximum_log_standard_deviation
+    )
     assert config.action_magnitude_penalty > 0
     assert config.action_slew_penalty > 0
     assert config.reward_scale == 0.25
@@ -149,6 +154,36 @@ def test_td3_target_smoothing_and_action_regularization_are_enabled() -> None:
     assert defaults.actor_learning_rate < defaults.critic_learning_rate
     assert defaults.actor_learning_rate < defaults.safety_learning_rate
     assert defaults.policy_delay >= 5
+
+
+def test_stochastic_actor_samples_bounded_actions_and_finite_density() -> None:
+    trainer = _trainer()
+    inputs = _actor_inputs(batch=2)
+    output = trainer.actor(inputs)
+
+    first = trainer._sample_action(output)
+    second = trainer._sample_action(output)
+    deterministic = trainer._sample_action(output, deterministic=True)
+    repeated = trainer._sample_action(output, deterministic=True)
+
+    assert not torch.equal(first.values, second.values)
+    assert torch.isfinite(first.log_probability).all()
+    assert torch.all(first.values[..., 0].abs() <= trainer.config.base_linear_scale)
+    assert torch.all(first.values[..., 1].abs() <= trainer.config.base_angular_scale)
+    assert torch.all(first.values[..., 2:14].abs() <= trainer.config.arm_velocity_scale)
+    assert torch.all((0.0 <= first.values[..., 14:]) & (first.values[..., 14:] <= 1.0))
+    assert torch.equal(deterministic.values, repeated.values)
+
+
+def test_entropy_update_learns_action_distribution_scale() -> None:
+    trainer = _trainer()
+    before = trainer.actor_log_standard_deviation.detach().clone()
+
+    metrics = trainer.update(_batch())
+
+    assert metrics["actor_entropy"] != 0.0
+    assert np.isfinite(metrics["actor_log_standard_deviation"])
+    assert not torch.equal(before, trainer.actor_log_standard_deviation)
 
 
 def test_unsupervised_actor_does_not_optimize_unused_stop_head() -> None:
@@ -168,8 +203,6 @@ def test_unsupervised_actor_does_not_optimize_unused_stop_head() -> None:
             before, trainer.actor.stop_head.parameters(), strict=True
         )
     )
-
-
 def test_actor_waits_for_critic_only_warmup() -> None:
     trainer = _trainer()
     trainer.config = AsymmetricRLConfig(
@@ -251,6 +284,10 @@ def test_asymmetric_training_state_restores_for_continuation() -> None:
         for left, right in zip(
             trainer.actor.parameters(), restored.actor.parameters(), strict=True
         )
+    )
+    assert torch.equal(
+        trainer.actor_log_standard_deviation,
+        restored.actor_log_standard_deviation,
     )
 
 

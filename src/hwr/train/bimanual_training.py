@@ -23,7 +23,6 @@ from hwr.policy.bimanual_input import (
     stack_actor_inputs,
 )
 from hwr.policy.privileged_critic import PrivilegedCriticConfig
-from hwr.policy.vla_actions import bounded_vla_actions
 from hwr.policy.vla_input import VLAActorInput
 from hwr.policy.vla_model import VLAActorConfig, VLAActorModel
 from hwr.perception import FrozenNgramLanguageConfig, FrozenNgramLanguageEncoder
@@ -160,6 +159,8 @@ class TrainingEpisodeRecord:
     mean_safety_critic_disagreement: float = 0.0
     mean_actor_motion_ratio: float = 0.0
     maximum_actor_motion_ratio: float = 0.0
+    mean_actor_entropy: float = 0.0
+    mean_actor_log_standard_deviation: float = 0.0
 
 
 @dataclass
@@ -473,6 +474,10 @@ class BimanualTrainingRunner:
             maximum_actor_motion_ratio=update_summary[
                 "maximum_actor_motion_ratio"
             ],
+            mean_actor_entropy=update_summary["mean_actor_entropy"],
+            mean_actor_log_standard_deviation=update_summary[
+                "mean_actor_log_standard_deviation"
+            ],
         )
 
     def _select_action(
@@ -492,10 +497,9 @@ class BimanualTrainingRunner:
                 actor_input, device=self.trainer.device
             )
             with torch.inference_mode():
-                output = self.trainer.actor(tensors)
-                vector = bounded_vla_actions(
-                    output, self.rl_config.action_scaling()
-                )[0, 0].cpu().numpy()
+                vector = self.trainer.sample_actor_action(tensors)[
+                    0, 0
+                ].cpu().numpy()
             vector = self.explorer.perturb(vector)
         return DualArmAction.from_vector(vector)
 
@@ -617,6 +621,10 @@ def _summarize_updates(metrics: list[Mapping[str, float]]) -> dict[str, float]:
         "mean_actor_motion_ratio": mean(actor, "actor_motion_mean_ratio"),
         "maximum_actor_motion_ratio": max(
             (item["actor_motion_max_ratio"] for item in actor), default=0.0
+        ),
+        "mean_actor_entropy": mean(actor, "actor_entropy"),
+        "mean_actor_log_standard_deviation": mean(
+            actor, "actor_log_standard_deviation"
         ),
     }
 

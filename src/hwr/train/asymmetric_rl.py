@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import asdict, dataclass
+import math
 from typing import Mapping
 
 import torch
@@ -16,6 +17,10 @@ from hwr.policy.privileged_critic import (
 from hwr.policy.vla_input import VLA_POLICY_INPUT_FIELDS
 from hwr.policy.vla_actions import VLAActionScaling, bounded_vla_actions
 from hwr.policy.vla_model import VLAActorModel, VLAActorOutput
+from hwr.train.stochastic_action import (
+    SquashedGaussianAction,
+    sample_squashed_gaussian_action,
+)
 
 
 @dataclass(frozen=True)
@@ -28,8 +33,10 @@ class AsymmetricRLConfig:
     policy_delay: int = 10
     actor_warmup_updates: int = 2000
     reward_scale: float = 0.25
-    target_action_noise: float = 0.15
-    target_noise_clip: float = 0.30
+    entropy_temperature: float = 0.02
+    initial_log_standard_deviation: float = -1.5
+    minimum_log_standard_deviation: float = -4.0
+    maximum_log_standard_deviation: float = -0.3
     action_magnitude_penalty: float = 0.08
     action_slew_penalty: float = 0.04
     safety_learning_rate: float = 3e-4
@@ -63,15 +70,24 @@ class AsymmetricRLConfig:
         ):
             raise ValueError("asymmetric RL regularization or delay is invalid")
         regularizers = (
-            self.target_action_noise,
-            self.target_noise_clip,
+            self.entropy_temperature,
             self.action_magnitude_penalty,
             self.action_slew_penalty,
             self.safety_actor_penalty,
             self.conservative_critic_weight,
         )
         if min(regularizers) < 0.0:
-            raise ValueError("TD3 smoothing and action penalties cannot be negative")
+            raise ValueError("entropy and action penalties cannot be negative")
+        log_std = (
+            self.minimum_log_standard_deviation,
+            self.initial_log_standard_deviation,
+            self.maximum_log_standard_deviation,
+        )
+        if not all(math.isfinite(value) for value in log_std) or not (
+            log_std[0] < log_std[2]
+            and log_std[0] <= log_std[1] <= log_std[2]
+        ):
+            raise ValueError("stochastic Actor log standard deviations are invalid")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -112,25 +128,6 @@ def _action_scales(config: AsymmetricRLConfig, reference: torch.Tensor) -> torch
         dtype=reference.dtype,
         device=reference.device,
     )
-
-
-def _smoothed_target_action(
-    output: VLAActorOutput,
-    config: AsymmetricRLConfig,
-) -> torch.Tensor:
-    bounded = bounded_vla_actions(output, config.action_scaling())
-    scales = _action_scales(config, bounded)
-    noise = torch.randn_like(bounded) * config.target_action_noise * scales
-    noise = torch.clamp(
-        noise,
-        min=-config.target_noise_clip * scales,
-        max=config.target_noise_clip * scales,
-    )
-    value = bounded + noise
-    value[..., :14] = torch.clamp(value[..., :14], min=-scales[:14], max=scales[:14])
-    value[..., 14:] = value[..., 14:].clamp(0.0, 1.0)
-    stop = torch.zeros_like(output.stop_logits).unsqueeze(-1)
-    return torch.cat((value, stop), dim=2).flatten(1)
 
 
 def _executed_action_representation(batch: AsymmetricRLBatch) -> torch.Tensor:
@@ -182,8 +179,16 @@ class AsymmetricActorCriticTrainer:
         self.safety_critic = TwinPrivilegedCritic(critic_config).to(self.device)
         self.critic_config = critic_config
         self.config = config
+        self.actor_log_standard_deviation = nn.Parameter(
+            torch.full(
+                (1, actor.config.action_chunk_size, actor.config.action_dim),
+                config.initial_log_standard_deviation,
+                device=self.device,
+            )
+        )
         self.actor_optimizer = torch.optim.AdamW(
-            self.actor.parameters(), lr=config.actor_learning_rate
+            (*self.actor.parameters(), self.actor_log_standard_deviation),
+            lr=config.actor_learning_rate,
         )
         self.critic_optimizer = torch.optim.AdamW(
             self.critic.parameters(), lr=config.critic_learning_rate
@@ -206,6 +211,8 @@ class AsymmetricActorCriticTrainer:
             "safety_critic_disagreement": 0.0,
             "actor_motion_mean_ratio": 0.0,
             "actor_motion_max_ratio": 0.0,
+            "actor_entropy": 0.0,
+            "actor_log_standard_deviation": 0.0,
         }
         actor_updated = (
             self.update_count >= self.config.actor_warmup_updates
@@ -231,7 +238,8 @@ class AsymmetricActorCriticTrainer:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         with torch.no_grad():
             next_output = self.target_actor(batch.next_actor_inputs)
-            next_action = _smoothed_target_action(next_output, self.config)
+            next_sample = self._sample_action(next_output)
+            next_action = self._critic_action(next_output, next_sample.values)
             target_q1, target_q2 = self.target_critic(
                 batch.next_privileged_state, next_action
             )
@@ -242,7 +250,12 @@ class AsymmetricActorCriticTrainer:
             )
             target_q = (
                 batch.rewards * self.config.reward_scale
-                + bootstrap * torch.minimum(target_q1, target_q2)
+                + bootstrap
+                * (
+                    torch.minimum(target_q1, target_q2)
+                    - self.config.entropy_temperature
+                    * next_sample.log_probability
+                )
             )
         executed = _executed_action_representation(batch)
         q1, q2 = self.critic(batch.privileged_state, executed)
@@ -343,9 +356,9 @@ class AsymmetricActorCriticTrainer:
         _set_requires_grad(self.critic, False)
         _set_requires_grad(self.safety_critic, False)
         output = self.actor(batch.actor_inputs)
-        bounded = bounded_vla_actions(output, self.config.action_scaling())
-        stop = torch.zeros_like(output.stop_logits).unsqueeze(-1)
-        action = torch.cat((bounded, stop), dim=2).flatten(1)
+        sample = self._sample_action(output)
+        bounded = sample.values
+        action = self._critic_action(output, bounded)
         q1, q2 = self.critic(batch.privileged_state, action)
         reward_value = torch.minimum(q1, q2)
         safety_risk = torch.zeros_like(q1)
@@ -386,6 +399,7 @@ class AsymmetricActorCriticTrainer:
             weights
             * (
                 -reward_value
+                + self.config.entropy_temperature * sample.log_probability
                 + self.config.behavior_regularization * behavior
                 + self.config.action_magnitude_penalty * magnitude
                 + self.config.action_slew_penalty * slew
@@ -413,8 +427,51 @@ class AsymmetricActorCriticTrainer:
             "actor_motion_max_ratio": float(
                 normalized_motion.abs().max().detach().cpu()
             ),
+            "actor_entropy": float(
+                -sample.log_probability.mean().detach().cpu()
+            ),
+            "actor_log_standard_deviation": float(
+                self.actor_log_standard_deviation.mean().detach().cpu()
+            ),
         }
         return loss, metrics
+
+    def sample_actor_action(
+        self,
+        inputs: Mapping[str, torch.Tensor],
+        *,
+        deterministic: bool = False,
+    ) -> torch.Tensor:
+        """Return a bounded deployable action sample without privileged inputs."""
+
+        output = self.actor(inputs)
+        return self._sample_action(output, deterministic=deterministic).values
+
+    def _sample_action(
+        self,
+        output: VLAActorOutput,
+        *,
+        deterministic: bool = False,
+    ) -> SquashedGaussianAction:
+        return sample_squashed_gaussian_action(
+            output,
+            self.actor_log_standard_deviation,
+            self.config.action_scaling(),
+            minimum_log_standard_deviation=(
+                self.config.minimum_log_standard_deviation
+            ),
+            maximum_log_standard_deviation=(
+                self.config.maximum_log_standard_deviation
+            ),
+            deterministic=deterministic,
+        )
+
+    @staticmethod
+    def _critic_action(
+        output: VLAActorOutput, bounded: torch.Tensor
+    ) -> torch.Tensor:
+        stop = torch.zeros_like(output.stop_logits).unsqueeze(-1)
+        return torch.cat((bounded, stop), dim=2).flatten(1)
 
     def _validate_batch(self, batch: AsymmetricRLBatch) -> None:
         if frozenset(batch.actor_inputs) != VLA_POLICY_INPUT_FIELDS or frozenset(
@@ -501,6 +558,9 @@ class AsymmetricActorCriticTrainer:
             "critic_optimizer": self.critic_optimizer.state_dict(),
             "safety_critic": self.safety_critic.state_dict(),
             "safety_optimizer": self.safety_optimizer.state_dict(),
+            "actor_log_standard_deviation": (
+                self.actor_log_standard_deviation.detach().cpu()
+            ),
             "update_count": self.update_count,
         }
 
@@ -509,7 +569,12 @@ class AsymmetricActorCriticTrainer:
         self.target_actor.load_state_dict(value["target_actor"])
         self.critic.load_state_dict(value["critic"])
         self.target_critic.load_state_dict(value["target_critic"])
-        self.actor_optimizer.load_state_dict(value["actor_optimizer"])
+        has_stochastic_state = "actor_log_standard_deviation" in value
+        if has_stochastic_state:
+            self.actor_log_standard_deviation.data.copy_(
+                value["actor_log_standard_deviation"].to(self.device)
+            )
+            self.actor_optimizer.load_state_dict(value["actor_optimizer"])
         self.critic_optimizer.load_state_dict(value["critic_optimizer"])
         if "safety_critic" in value:
             self.safety_critic.load_state_dict(value["safety_critic"])
