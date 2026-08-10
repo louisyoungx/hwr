@@ -81,6 +81,7 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
         self.task = task
         self.binding = binding
         self.severe_force_threshold = float(severe_force_threshold)
+        self._curriculum_level = 1.0
         super().__init__(
             MujocoDualArmConfig(
                 model_path=binding.model_path,
@@ -113,6 +114,11 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
         self._last_sample = self._task_sample()
         self.tracker.reset(self._last_sample)
         return observation
+
+    def set_curriculum_level(self, level: float) -> None:
+        if not 0.0 <= level <= 1.0:
+            raise ValueError("curriculum level must be in [0, 1]")
+        self._curriculum_level = float(level)
 
     def apply(self, frame: DualArmActionFrame) -> RuntimeStepOutcome:
         outcome = super().apply(frame)
@@ -189,6 +195,7 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
         return {
             "task_id": self.task.task_id,
             "objective": self.task.objective,
+            "curriculum_level": self._curriculum_level,
             "randomization": self._episode_randomization,
             "stable_steps": self.tracker.stable_steps,
             "concurrent_steps": self.tracker.concurrent_steps,
@@ -201,7 +208,7 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
     def _reset_base(self) -> None:
         pose = self.task.initial_base
         x, y, z, yaw = (
-            self._rng.uniform(value.low, value.high)
+            self._sample_range(value)
             for value in (pose.x, pose.y, pose.z, pose.yaw)
         )
         joint_id = self.bundle.ids.base_joint
@@ -221,7 +228,7 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
     def _reset_object(self) -> None:
         pose = self.task.payload_reset
         x, y, z, yaw = (
-            self._rng.uniform(value.low, value.high)
+            self._sample_range(value)
             for value in (pose.x, pose.y, pose.z, pose.yaw)
         )
         joint_id = self.task_ids.payload_joint
@@ -303,14 +310,10 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
     def _randomize_model(self, seed: int) -> None:
         rng = random.Random(seed ^ 0xB14A2A1)
         randomization = self.task.randomization
-        mass = rng.uniform(randomization.mass_scale.low, randomization.mass_scale.high)
-        friction = rng.uniform(
-            randomization.friction_scale.low, randomization.friction_scale.high
-        )
-        light = rng.uniform(randomization.light_scale.low, randomization.light_scale.high)
-        material = rng.uniform(
-            randomization.material_scale.low, randomization.material_scale.high
-        )
+        mass = self._scaled_random(rng, randomization.mass_scale)
+        friction = self._scaled_random(rng, randomization.friction_scale)
+        light = self._scaled_random(rng, randomization.light_scale)
+        material = self._scaled_random(rng, randomization.material_scale)
         body = self.task_ids.payload_body
         self.model.body_mass[body] = self._defaults.payload_mass * mass
         self.model.body_inertia[body] = self._defaults.payload_inertia * mass
@@ -328,6 +331,15 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
             "material_scale": material,
         }
         mujoco.mj_setConst(self.model, self.data)
+
+    def _sample_range(self, value) -> float:
+        midpoint = (value.low + value.high) / 2
+        sampled = self._rng.uniform(value.low, value.high)
+        return midpoint + (sampled - midpoint) * self._curriculum_level
+
+    def _scaled_random(self, rng: random.Random, value) -> float:
+        sampled = rng.uniform(value.low, value.high)
+        return 1.0 + (sampled - 1.0) * self._curriculum_level
 
     def _task_sample(self) -> BimanualTaskSample:
         ids = self.task_ids

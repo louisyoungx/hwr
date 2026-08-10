@@ -29,6 +29,14 @@ from hwr.train.asymmetric_registry import (
     load_asymmetric_training_checkpoint,
     save_asymmetric_training_checkpoint,
 )
+from hwr.train.curriculum import AutomaticCurriculum, CurriculumConfig, CurriculumUpdate
+from hwr.train.goal_replay import (
+    GoalConditionedReplayBuffer,
+    GoalEpisode,
+    GoalReplayAddResult,
+    hindsight_relabel,
+    mirror_batch,
+)
 
 __all__ = [
     "TrainingConfig",
@@ -55,4 +63,12 @@ __all__ = [
     "load_asymmetric_training_checkpoint",
     "save_asymmetric_training_checkpoint",
     "save_vla_actor_checkpoint",
+    "AutomaticCurriculum",
+    "CurriculumConfig",
+    "CurriculumUpdate",
+    "GoalConditionedReplayBuffer",
+    "GoalEpisode",
+    "GoalReplayAddResult",
+    "hindsight_relabel",
+    "mirror_batch",
 ]

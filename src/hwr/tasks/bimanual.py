@@ -10,6 +10,7 @@ from typing import Any, Literal, Mapping, Sequence
 
 
 Objective = Literal["carry_payload", "hold_drawer_place"]
+BIMANUAL_GOAL_DIM = 12
 
 
 def _finite(values: Sequence[float], name: str) -> tuple[float, ...]:

@@ -50,6 +50,7 @@ class AsymmetricRLBatch:
     stop_decisions: torch.Tensor
     rewards: torch.Tensor
     done: torch.Tensor
+    actor_weights: torch.Tensor | None = None
 
 
 def _action_representation(output: VLAActorOutput) -> torch.Tensor:
@@ -146,11 +147,22 @@ class AsymmetricActorCriticTrainer:
         action = _action_representation(output)
         q1, _ = self.critic(batch.privileged_state, action)
         behavior = nn.functional.smooth_l1_loss(
-            output.action_chunks, batch.action_chunks
-        ) + nn.functional.binary_cross_entropy_with_logits(
-            output.stop_logits, batch.stop_decisions.to(output.stop_logits.dtype)
-        )
-        loss = -q1.mean() + self.config.behavior_regularization * behavior
+            output.action_chunks, batch.action_chunks, reduction="none"
+        ).mean(dim=(1, 2))
+        behavior += nn.functional.binary_cross_entropy_with_logits(
+            output.stop_logits,
+            batch.stop_decisions.to(output.stop_logits.dtype),
+            reduction="none",
+        ).mean(dim=1)
+        weights = (
+            batch.actor_weights
+            if batch.actor_weights is not None
+            else torch.ones_like(q1)
+        ).to(q1.dtype)
+        denominator = weights.sum().clamp_min(1.0)
+        loss = (
+            weights * (-q1 + self.config.behavior_regularization * behavior)
+        ).sum() / denominator
         self.actor_optimizer.zero_grad(set_to_none=True)
         loss.backward()
         nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
@@ -183,6 +195,10 @@ class AsymmetricActorCriticTrainer:
             batch_size,
         ):
             raise ValueError("asymmetric RL reward or done shape is invalid")
+        if batch.actor_weights is not None and tuple(batch.actor_weights.shape) != (
+            batch_size,
+        ):
+            raise ValueError("asymmetric RL Actor weights shape is invalid")
 
     def _to_device(self, batch: AsymmetricRLBatch) -> AsymmetricRLBatch:
         move = lambda values: {name: value.to(self.device) for name, value in values.items()}
@@ -195,6 +211,11 @@ class AsymmetricActorCriticTrainer:
             stop_decisions=batch.stop_decisions.to(self.device),
             rewards=batch.rewards.to(self.device),
             done=batch.done.to(self.device),
+            actor_weights=(
+                batch.actor_weights.to(self.device)
+                if batch.actor_weights is not None
+                else None
+            ),
         )
 
     def state_dict(self) -> dict[str, object]:

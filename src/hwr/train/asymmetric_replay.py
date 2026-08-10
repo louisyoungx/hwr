@@ -91,6 +91,11 @@ class AsymmetricReplayBuffer:
                 "stop_decisions": batch.stop_decisions,
                 "rewards": batch.rewards,
                 "done": batch.done,
+                "actor_weights": (
+                    batch.actor_weights
+                    if batch.actor_weights is not None
+                    else torch.ones_like(batch.rewards)
+                ),
             }
         )
         batch_sizes = {value.shape[0] for value in values.values()}
@@ -116,4 +121,5 @@ class AsymmetricReplayBuffer:
             stop_decisions=values["stop_decisions"],
             rewards=values["rewards"],
             done=values["done"],
+            actor_weights=values["actor_weights"],
         )

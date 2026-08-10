@@ -1,6 +1,7 @@
 """Engine-independent programmatic household task contracts."""
 
 from hwr.tasks.bimanual import (
+    BIMANUAL_GOAL_DIM,
     BimanualTaskSample,
     BimanualTaskSpec,
     BimanualTaskTracker,
@@ -10,6 +11,7 @@ from hwr.tasks.bimanual import (
 )
 
 __all__ = [
+    "BIMANUAL_GOAL_DIM",
     "BimanualTaskSample",
     "BimanualTaskSpec",
     "BimanualTaskTracker",
