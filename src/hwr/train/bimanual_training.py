@@ -189,7 +189,9 @@ class BimanualTrainingResult:
     preprocess_fingerprint: str
     exploration_audit: Mapping[str, object]
     environment_steps: int
-    numpy_rng_state: Mapping[str, object]
+    task_rng_state: Mapping[str, object]
+    frontier_rng_state: Mapping[str, object]
+    exploration_rng_state: Mapping[str, object]
     torch_rng_state: torch.Tensor
 
 
@@ -244,7 +246,12 @@ class BimanualTrainingRunner:
         random.seed(config.seed)
         np.random.seed(config.seed)
         torch.manual_seed(config.seed)
-        self.rng = np.random.default_rng(config.seed)
+        task_seed, frontier_seed, exploration_seed = np.random.SeedSequence(
+            config.seed
+        ).spawn(3)
+        self.task_rng = np.random.default_rng(task_seed)
+        self.frontier_rng = np.random.default_rng(frontier_seed)
+        self.exploration_rng = np.random.default_rng(exploration_seed)
         self.rl_config = AsymmetricRLConfig(behavior_regularization=0.0)
         self.explorer = TemporalActionExplorer(
             TemporalExplorationConfig(
@@ -268,7 +275,7 @@ class BimanualTrainingRunner:
                 base_angular_scale=self.rl_config.base_angular_scale,
                 arm_twist_scale=self.rl_config.arm_velocity_scale,
             ),
-            self.rng,
+            self.exploration_rng,
         )
         self.language = FrozenNgramLanguageEncoder(
             FrozenNgramLanguageConfig(dimension=config.language_dim)
@@ -330,7 +337,9 @@ class BimanualTrainingRunner:
         }
         try:
             for episode_index in range(len(self.records), self.config.episodes):
-                task_id, sampling_probability = self.task_sampler.sample(self.rng)
+                task_id, sampling_probability = self.task_sampler.sample(
+                    self.task_rng
+                )
                 record = self._run_episode(
                     episode_index,
                     task_id,
@@ -360,7 +369,9 @@ class BimanualTrainingRunner:
             self.pipeline.preprocessor.fingerprint,
             self.explorer.audit(),
             self._environment_steps,
-            self.rng.bit_generator.state,
+            self.task_rng.bit_generator.state,
+            self.frontier_rng.bit_generator.state,
+            self.exploration_rng.bit_generator.state,
             torch.get_rng_state(),
         )
 
@@ -385,7 +396,11 @@ class BimanualTrainingRunner:
             records.append(TrainingEpisodeRecord(**fields))
         self.records = records
         self._environment_steps = int(value["environment_steps"])
-        self.rng.bit_generator.state = value["numpy_rng_state"]
+        self.task_rng.bit_generator.state = value["task_rng_state"]
+        self.frontier_rng.bit_generator.state = value["frontier_rng_state"]
+        self.exploration_rng.bit_generator.state = value[
+            "exploration_rng_state"
+        ]
         torch.set_rng_state(value["torch_rng_state"])
         if len(self.records) > self.config.episodes:
             raise ValueError("resume checkpoint exceeds configured total episodes")
@@ -403,7 +418,7 @@ class BimanualTrainingRunner:
         environment.set_curriculum_level(level)
         frontier_entry = None
         if episode_index >= self.config.initial_random_episodes:
-            frontier_entry = self.frontier.select(task_id, self.rng)
+            frontier_entry = self.frontier.select(task_id, self.frontier_rng)
         observation = environment.reset(
             seed=seed,
             task_id=task_id,

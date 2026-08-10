@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import torch
+
 from hwr.adapters.mujoco import (
     MujocoBimanualBackendFactory,
     load_default_bimanual_training_catalogs,
@@ -58,6 +60,9 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
         (path / "model-manifest.json").read_text(encoding="utf-8")
     )
     actor = load_bimanual_actor(path)
+    checkpoint = torch.load(
+        path / "training-checkpoint.pt", map_location="cpu", weights_only=False
+    )
 
     assert manifest["record_count"] == 1
     assert lineage["action_label_sources"] == []
@@ -81,6 +86,11 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
         "probability": 0.01,
         "hold_steps": 8,
     }
+    assert replay["random_streams"]["shared"] is False
+    assert "task_rng_state" in checkpoint
+    assert "frontier_rng_state" in checkpoint
+    assert "exploration_rng_state" in checkpoint
+    assert "numpy_rng_state" not in checkpoint
     assert replay["hindsight_transition_count"] == 2
     assert model["contains_critic"] is False
     assert actor.config.action_dim == 16

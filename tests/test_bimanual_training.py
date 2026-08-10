@@ -56,6 +56,32 @@ def test_formal_training_defaults_to_each_tasks_full_physical_horizon() -> None:
     assert {task.max_steps for task in tasks.values()} == {1200, 1600}
 
 
+def test_task_schedule_rng_is_independent_from_action_exploration() -> None:
+    tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
+    config = BimanualRLTrainingConfig(episodes=1, seed=731)
+    first = BimanualTrainingRunner(
+        tasks, MujocoBimanualBackendFactory(bindings), config
+    )
+    second = BimanualTrainingRunner(
+        tasks, MujocoBimanualBackendFactory(bindings), config
+    )
+
+    for _ in range(100):
+        first.explorer.sample_random()
+    first.frontier_rng.random(100)
+    first_schedule = [
+        first.task_sampler.sample(first.task_rng)[0] for _ in range(20)
+    ]
+    second_schedule = [
+        second.task_sampler.sample(second.task_rng)[0] for _ in range(20)
+    ]
+
+    assert first_schedule == second_schedule
+    assert first.task_rng is not first.frontier_rng
+    assert first.task_rng is not first.exploration_rng
+    assert first.frontier_rng is not first.exploration_rng
+
+
 def test_local_training_collects_all_three_tasks_without_action_labels() -> None:
     tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
     config = BimanualRLTrainingConfig(

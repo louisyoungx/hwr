@@ -90,7 +90,9 @@ def save_bimanual_training_run(
             "task_sampler": result.task_sampler.state_dict(),
             "records": [asdict(record) for record in result.records],
             "environment_steps": result.environment_steps,
-            "numpy_rng_state": result.numpy_rng_state,
+            "task_rng_state": result.task_rng_state,
+            "frontier_rng_state": result.frontier_rng_state,
+            "exploration_rng_state": result.exploration_rng_state,
             "torch_rng_state": result.torch_rng_state,
         },
     )
@@ -167,6 +169,13 @@ def save_bimanual_training_run(
         "task_sampling": result.task_sampler.audit(),
         "frontier_curriculum": result.frontier.audit(),
         "action_exploration": dict(result.exploration_audit),
+        "random_streams": {
+            "schema_version": "hwr.independent-rng-streams/v1",
+            "shared": False,
+            "task_sampling": "independent",
+            "frontier_selection": "independent",
+            "exploration": ["random_actor", "temporal_action_exploration"],
+        },
     }
     _write_json(path / "replay-manifest.json", replay_manifest)
     files = (
