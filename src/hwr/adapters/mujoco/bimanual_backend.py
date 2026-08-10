@@ -350,6 +350,7 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
         rotation = self.data.xmat[ids.payload_body].reshape(3, 3)
         tilt = math.acos(float(np.clip(rotation[2, 2], -1.0, 1.0)))
         articulation_position, articulation_speed = self._articulation_state()
+        left_gripper, right_gripper = self._gripper_positions()
         return BimanualTaskSample(
             payload_position=position,
             target_position=target,
@@ -369,6 +370,8 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
             articulation_position=articulation_position,
             articulation_speed=articulation_speed,
             severe_collision_count=self._severe_collision_count,
+            left_gripper_position=left_gripper,
+            right_gripper_position=right_gripper,
         )
 
     def _contact_pairs(self) -> set[frozenset[int]]:

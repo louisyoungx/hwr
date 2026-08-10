@@ -70,7 +70,8 @@ class RewardWeights:
     right_reach: float = 1.5
     tilt: float = 1.0
     articulation: float = 2.0
-    contact: float = 0.25
+    contact: float = 1.0
+    near_handle_closure: float = 1.5
     support: float = 0.5
     progress_scale: float = 8.0
     step_cost: float = 0.002
@@ -144,6 +145,8 @@ class BimanualTaskSample:
     articulation_position: float = 0.0
     articulation_speed: float = 0.0
     severe_collision_count: int = 0
+    left_gripper_position: float = 1.0
+    right_gripper_position: float = 1.0
 
     def __post_init__(self) -> None:
         for name in ("payload_position", "target_position"):
@@ -159,11 +162,15 @@ class BimanualTaskSample:
             self.right_reach_distance,
             self.articulation_position,
             self.articulation_speed,
+            self.left_gripper_position,
+            self.right_gripper_position,
         )
         if not all(math.isfinite(value) for value in scalars):
             raise ValueError("task sample scalars must be finite")
         if min(scalars[:5]) < 0.0 or self.severe_collision_count < 0:
             raise ValueError("task distances, speeds, and collisions cannot be negative")
+        if not all(0.0 <= value <= 1.0 for value in scalars[-2:]):
+            raise ValueError("task gripper positions must be normalized")
 
     @property
     def target_distance(self) -> float:
@@ -252,7 +259,10 @@ class BimanualTaskTracker:
         bimanual = self.maximum_concurrent_steps >= self.spec.concurrent_steps
         success = self.stable_steps >= self.spec.hold_steps and bimanual and not severe
         if severe:
-            reward -= self.spec.reward.severe_collision
+            reward = min(
+                reward - self.spec.reward.severe_collision,
+                -self.spec.reward.severe_collision,
+            )
         if success:
             reward += self.spec.reward.success
         return TaskUpdate(
@@ -293,6 +303,13 @@ class BimanualTaskTracker:
         value -= weights.right_reach * sample.right_reach_distance
         value -= weights.tilt * sample.payload_tilt_radians
         value += weights.contact * (sample.left_contact + sample.right_contact)
+        left_ready = math.exp(-sample.left_reach_distance / 0.08) * (
+            1.0 - sample.left_gripper_position
+        )
+        right_ready = math.exp(-sample.right_reach_distance / 0.08) * (
+            1.0 - sample.right_gripper_position
+        )
+        value += weights.near_handle_closure * (left_ready + right_ready)
         value += weights.support * sample.support_contact
         if self.spec.objective == "hold_drawer_place":
             required = self.spec.criteria.minimum_articulation_position
@@ -326,6 +343,10 @@ class BimanualTaskTracker:
             "maximum_concurrent_steps": float(self.maximum_concurrent_steps),
             "left_contact": float(sample.left_contact),
             "right_contact": float(sample.right_contact),
+            "left_reach_distance": sample.left_reach_distance,
+            "right_reach_distance": sample.right_reach_distance,
+            "left_gripper_position": sample.left_gripper_position,
+            "right_gripper_position": sample.right_gripper_position,
             "support_contact": float(sample.support_contact),
             "inside_target": float(sample.inside_target),
             "severe_collisions": float(sample.severe_collision_count),

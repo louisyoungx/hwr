@@ -32,6 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--image-height", type=int, default=24)
     parser.add_argument("--point-count", type=int, default=32)
     parser.add_argument("--hidden-dim", type=int, default=64)
+    parser.add_argument("--exploration-noise", type=float, default=0.18)
     return parser
 
 
@@ -62,6 +63,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         image_height=arguments.image_height,
         point_count=arguments.point_count,
         hidden_dim=arguments.hidden_dim,
+        exploration_noise=arguments.exploration_noise,
     )
     result = BimanualTrainingRunner(tasks, bindings, config).train()
     output_root = (

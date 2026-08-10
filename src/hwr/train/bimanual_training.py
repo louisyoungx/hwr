@@ -104,6 +104,8 @@ class TrainingEpisodeRecord:
     severe_collisions: int
     maximum_concurrent_steps: int
     stable_steps: int
+    minimum_left_reach_distance: float
+    minimum_right_reach_distance: float
     curriculum_level: float
     replay_size: int
     updates: int
@@ -306,6 +308,8 @@ class BimanualTrainingRunner:
             severe_collisions=int(audit["severe_collision_count"]),
             maximum_concurrent_steps=int(audit["maximum_concurrent_steps"]),
             stable_steps=int(audit["stable_steps"]),
+            minimum_left_reach_distance=min(state[24] for state in buffers.states),
+            minimum_right_reach_distance=min(state[25] for state in buffers.states),
             curriculum_level=level,
             replay_size=self.replay.size,
             updates=self.trainer.update_count,

@@ -161,3 +161,26 @@ def test_severe_collision_terminates_without_false_success() -> None:
 
     assert update.terminated and not update.success
     assert update.reward < 0.0
+
+
+def test_reward_encourages_closing_both_grippers_only_near_handles() -> None:
+    task_id = "carry_living_room_basket/v1"
+    spec = SPECS[task_id]
+    near = _sample(
+        task_id,
+        left_reach_distance=0.05,
+        right_reach_distance=0.05,
+        left_gripper_position=1.0,
+        right_gripper_position=1.0,
+    )
+    tracker = BimanualTaskTracker(spec)
+    tracker.reset(near)
+
+    closed = replace(
+        near,
+        left_gripper_position=0.0,
+        right_gripper_position=0.0,
+    )
+    update = tracker.update(closed)
+
+    assert update.reward > 1.0
