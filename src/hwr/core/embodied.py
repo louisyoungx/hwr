@@ -57,7 +57,7 @@ class FrozenLanguageEmbedding:
 
 @dataclass(frozen=True)
 class DualArmAction:
-    """One simultaneous mobile-base and dual-arm command."""
+    """One simultaneous command; gripper zero is open and one is closed."""
 
     base_linear: float
     base_angular: float
@@ -127,7 +127,7 @@ class ActionChunk:
 
 @dataclass(frozen=True)
 class DualArmProprioception:
-    """Deployable robot state with explicit left/right ownership."""
+    """Deployable state; normalized gripper travel is open=0 and closed=1."""
 
     left_joint_position: tuple[float, ...]
     left_joint_velocity: tuple[float, ...]

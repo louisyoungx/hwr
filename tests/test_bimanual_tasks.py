@@ -170,16 +170,16 @@ def test_reward_encourages_closing_both_grippers_only_near_handles() -> None:
         task_id,
         left_reach_distance=0.05,
         right_reach_distance=0.05,
-        left_gripper_position=1.0,
-        right_gripper_position=1.0,
+        left_gripper_position=0.0,
+        right_gripper_position=0.0,
     )
     tracker = BimanualTaskTracker(spec)
     tracker.reset(near)
 
     closed = replace(
         near,
-        left_gripper_position=0.0,
-        right_gripper_position=0.0,
+        left_gripper_position=1.0,
+        right_gripper_position=1.0,
     )
     update = tracker.update(closed)
 

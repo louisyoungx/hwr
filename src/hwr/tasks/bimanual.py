@@ -304,10 +304,10 @@ class BimanualTaskTracker:
         value -= weights.tilt * sample.payload_tilt_radians
         value += weights.contact * (sample.left_contact + sample.right_contact)
         left_ready = math.exp(-sample.left_reach_distance / 0.08) * (
-            1.0 - sample.left_gripper_position
+            sample.left_gripper_position
         )
         right_ready = math.exp(-sample.right_reach_distance / 0.08) * (
-            1.0 - sample.right_gripper_position
+            sample.right_gripper_position
         )
         value += weights.near_handle_closure * (left_ready + right_ready)
         value += weights.support * sample.support_contact

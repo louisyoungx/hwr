@@ -152,3 +152,36 @@ def test_runtime_rejects_legacy_single_arm_action_frame() -> None:
             backend.apply(ActionFrame(0, 0, 1, "legacy", arm_command=(0.0,) * 6))
     finally:
         backend.close()
+
+
+def test_normalized_gripper_one_physically_closes_both_pincers() -> None:
+    backend = _backend()
+    try:
+        observation = backend.reset(seed=10, task_id=backend.config.task_id)
+        left_geoms = tuple(
+            mujoco.mj_name2id(backend.model, mujoco.mjtObj.mjOBJ_GEOM, name)
+            for name in ("left_gripper_left_pad", "left_gripper_right_pad")
+        )
+        right_geoms = tuple(
+            mujoco.mj_name2id(backend.model, mujoco.mjtObj.mjOBJ_GEOM, name)
+            for name in ("right_gripper_left_pad", "right_gripper_right_pad")
+        )
+        separation = lambda geoms: np.linalg.norm(
+            backend.data.geom_xpos[geoms[0]] - backend.data.geom_xpos[geoms[1]]
+        )
+        open_separation = (separation(left_geoms), separation(right_geoms))
+        for _ in range(12):
+            outcome = backend.apply(
+                _frame(
+                    observation.timestamp_ns,
+                    left_gripper=1.0,
+                    right_gripper=1.0,
+                )
+            )
+            observation = outcome.observation
+        closed_separation = (separation(left_geoms), separation(right_geoms))
+    finally:
+        backend.close()
+
+    assert closed_separation[0] < open_separation[0] - 0.05
+    assert closed_separation[1] < open_separation[1] - 0.05
