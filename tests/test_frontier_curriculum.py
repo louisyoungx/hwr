@@ -189,3 +189,34 @@ def test_frontier_contact_cannot_outrank_better_bilateral_reach() -> None:
 
     assert frontier.entries["tray"][0].source_episode == 1
     assert audit["contact_affects_score"] is False
+
+
+def test_frontier_selection_replays_each_discovered_contact_signature() -> None:
+    frontier = OutcomeFrontierCurriculum(
+        ("tray",),
+        FrontierCurriculumConfig(capacity_per_task=8, reset_probability=1.0),
+    )
+    candidates = (
+        FrontierOutcome(0.03, 0.14, True, False),
+        FrontierOutcome(0.04, 0.15, True, False),
+        FrontierOutcome(0.28, 0.04, False, True),
+        FrontierOutcome(0.30, 0.03, False, True),
+    )
+    for index, outcome in enumerate(candidates):
+        assert frontier.consider(
+            "tray",
+            _snapshot("tray", float(index)),
+            outcome,
+            source_episode=index,
+            source_step=index,
+        )
+
+    selected_signatures = {
+        frontier.select("tray", np.random.default_rng(seed)).signature
+        for seed in range(32)
+    }
+
+    assert selected_signatures == {1, 2}
+    assert frontier.audit()["selection"] == (
+        "uniform_signature_then_uniform_top_score_half"
+    )

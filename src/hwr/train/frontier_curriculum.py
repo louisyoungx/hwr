@@ -168,8 +168,11 @@ class OutcomeFrontierCurriculum:
         if not values or rng.random() >= self.config.reset_probability:
             return None
         self.reset_count += 1
-        candidate_count = max(1, (len(values) + 1) // 2)
-        return values[int(rng.integers(0, candidate_count))]
+        signatures = sorted({item.signature for item in values})
+        signature = signatures[int(rng.integers(0, len(signatures)))]
+        matching = [item for item in values if item.signature == signature]
+        candidate_count = max(1, (len(matching) + 1) // 2)
+        return matching[int(rng.integers(0, candidate_count))]
 
     def audit(self) -> dict[str, object]:
         return {
@@ -183,7 +186,7 @@ class OutcomeFrontierCurriculum:
             "actor_input_fields": [],
             "task_stages": False,
             "source": "autonomous_physical_state_discovery",
-            "selection": "uniform_among_top_score_half",
+            "selection": "uniform_signature_then_uniform_top_score_half",
             "score": "exp(-max(left_reach,right_reach)/scale)",
             "contact_affects_score": False,
             "physical_stability_filter": {
