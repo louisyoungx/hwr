@@ -185,22 +185,22 @@ class OutcomeFrontierCurriculum:
         ]
         signature_capacity = max(1, self.config.capacity_per_task // 4)
         if len(same_source) >= self.config.maximum_entries_per_source_signature:
-            worst = min(same_source, key=lambda item: item.score)
-            if score <= worst.score + 1.0e-6:
+            worst = min(same_source, key=self._retention_rank)
+            if not self._outperforms(candidate, worst):
                 return False
             values.remove(worst)
         elif len(same) >= signature_capacity:
-            worst = min(same, key=lambda item: item.score)
-            if score <= worst.score + 1.0e-6:
+            worst = min(same, key=self._retention_rank)
+            if not self._outperforms(candidate, worst):
                 return False
             values.remove(worst)
         elif len(values) >= self.config.capacity_per_task:
-            worst = min(values, key=lambda item: item.score)
-            if score <= worst.score + 1.0e-6:
+            worst = min(values, key=self._retention_rank)
+            if not self._outperforms(candidate, worst):
                 return False
             values.remove(worst)
         values.append(candidate)
-        values.sort(key=lambda item: (-item.score, item.source_episode, item.source_step))
+        values.sort(key=self._display_rank)
         return True
 
     def select(
@@ -213,10 +213,11 @@ class OutcomeFrontierCurriculum:
         if not values or rng.random() >= self.config.reset_probability:
             return None
         self.reset_count += 1
-        signatures = sorted({item.signature for item in values})
+        eligible = self._eligible_entries(values)
+        signatures = sorted({item.signature for item in eligible})
         best_scores = np.asarray(
             [
-                max(item.score for item in values if item.signature == signature)
+                max(item.score for item in eligible if item.signature == signature)
                 for signature in signatures
             ],
             dtype=np.float64,
@@ -226,7 +227,7 @@ class OutcomeFrontierCurriculum:
         mix = self.config.signature_uniform_fraction
         probabilities = mix * uniform + (1.0 - mix) * quality
         signature = signatures[int(rng.choice(len(signatures), p=probabilities))]
-        matching = [item for item in values if item.signature == signature]
+        matching = [item for item in eligible if item.signature == signature]
         sources = sorted({item.source_episode for item in matching})
         source_scores = np.asarray(
             [
@@ -257,6 +258,9 @@ class OutcomeFrontierCurriculum:
             "source": "autonomous_physical_state_discovery",
             "snapshot_state": (
                 "positions_velocities_and_controller_loads_never_actor_inputs"
+            ),
+            "snapshot_migration": (
+                "complete_state_replaces_and_suppresses_legacy_within_signature"
             ),
             "selection": (
                 "quality_weighted_signature_and_source_with_diversity_floor"
@@ -345,11 +349,7 @@ class OutcomeFrontierCurriculum:
                 )
             ]
             entries = self._prune_source_duplicates(entries)
-            entries.sort(
-                key=lambda item: (
-                    -item.score, item.source_episode, item.source_step
-                )
-            )
+            entries.sort(key=self._display_rank)
             self.entries[task_id] = entries
 
     def _prune_source_duplicates(
@@ -365,9 +365,39 @@ class OutcomeFrontierCurriculum:
                 if item.signature == signature
                 and item.source_episode == source_episode
             ]
-            matching.sort(key=lambda item: -item.score)
+            matching.sort(key=self._display_rank)
             retained.extend(matching[:limit])
         return retained
+
+    def _eligible_entries(
+        self, entries: Sequence[FrontierEntry]
+    ) -> list[FrontierEntry]:
+        eligible: list[FrontierEntry] = []
+        for signature in sorted({item.signature for item in entries}):
+            matching = [item for item in entries if item.signature == signature]
+            complete = [item for item in matching if item.snapshot.runtime_state]
+            eligible.extend(complete or matching)
+        return eligible
+
+    def _retention_rank(self, item: FrontierEntry) -> tuple[bool, float]:
+        return bool(item.snapshot.runtime_state), item.score
+
+    def _outperforms(
+        self, candidate: FrontierEntry, incumbent: FrontierEntry
+    ) -> bool:
+        candidate_complete = bool(candidate.snapshot.runtime_state)
+        incumbent_complete = bool(incumbent.snapshot.runtime_state)
+        if candidate_complete != incumbent_complete:
+            return candidate_complete
+        return candidate.score > incumbent.score + 1.0e-6
+
+    def _display_rank(self, item: FrontierEntry) -> tuple[int, float, int, int]:
+        return (
+            -int(bool(item.snapshot.runtime_state)),
+            -item.score,
+            item.source_episode,
+            item.source_step,
+        )
 
     def _score(self, outcome: FrontierOutcome) -> float:
         worst = max(outcome.left_reach_distance, outcome.right_reach_distance)

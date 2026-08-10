@@ -14,6 +14,15 @@ def _snapshot(task_id: str, value: float) -> PhysicalStateSnapshot:
     return PhysicalStateSnapshot(task_id, "test-backend/v1", (value, value + 1.0))
 
 
+def _complete_snapshot(task_id: str, value: float) -> PhysicalStateSnapshot:
+    return PhysicalStateSnapshot(
+        task_id,
+        "test-backend/v1",
+        (value, value + 1.0),
+        runtime_state=(value + 2.0,),
+    )
+
+
 def test_frontier_rejects_ordinary_and_unsafe_states_without_action_outputs() -> None:
     frontier = OutcomeFrontierCurriculum(("tray",))
 
@@ -315,3 +324,36 @@ def test_frontier_requires_two_seconds_of_contact_before_snapshotting() -> None:
     restored = OutcomeFrontierCurriculum(("tray",), frontier.config)
     restored.load_state_dict(legacy)
     assert restored.entries["tray"] == []
+
+
+def test_complete_snapshot_replaces_and_suppresses_stronger_legacy_state() -> None:
+    frontier = OutcomeFrontierCurriculum(
+        ("tray",),
+        FrontierCurriculumConfig(capacity_per_task=4, reset_probability=1.0),
+    )
+    assert frontier.consider(
+        "tray",
+        _snapshot("tray", 1.0),
+        FrontierOutcome(0.02, 0.03, True, False),
+        source_episode=1,
+        source_step=10,
+        contact_stability_steps=40,
+    )
+    assert frontier.consider(
+        "tray",
+        _complete_snapshot("tray", 2.0),
+        FrontierOutcome(0.04, 0.05, True, False),
+        source_episode=2,
+        source_step=20,
+        contact_stability_steps=40,
+    )
+
+    selected = frontier.select("tray", np.random.default_rng(7))
+
+    assert selected is not None
+    assert selected.source_episode == 2
+    assert selected.snapshot.runtime_state
+    assert all(item.snapshot.runtime_state for item in frontier.entries["tray"])
+    assert frontier.audit()["snapshot_migration"] == (
+        "complete_state_replaces_and_suppresses_legacy_within_signature"
+    )
