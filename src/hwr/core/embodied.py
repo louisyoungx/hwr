@@ -10,8 +10,9 @@ from hwr.core.types import CameraFrame, SafetyState
 
 
 DUAL_ARM_ACTION_DIM = 16
+DUAL_ARM_TOOL_TWIST_FIELDS = ("vx", "vy", "vz", "wx", "wy", "wz")
 DUAL_ARM_OBSERVATION_SCHEMA = "hwr.dual-arm-observation/v1"
-DUAL_ARM_RUNTIME_ACTION_SCHEMA = "hwr.dual-arm-runtime-action/v1"
+DUAL_ARM_RUNTIME_ACTION_SCHEMA = "hwr.dual-arm-runtime-action/v2"
 
 
 def _finite(values: Sequence[float], name: str) -> tuple[float, ...]:
@@ -57,7 +58,7 @@ class FrozenLanguageEmbedding:
 
 @dataclass(frozen=True)
 class DualArmAction:
-    """One simultaneous command; gripper zero is open and one is closed."""
+    """Base twist, two normalized base-frame tool twists, and pincer targets."""
 
     base_linear: float
     base_angular: float

@@ -33,7 +33,7 @@ class TemporalExplorationConfig:
 class TemporalActionExplorer:
     """Perturb actions without observations, task truth, goals, or action labels."""
 
-    _CONTINUOUS_SCALES = np.asarray((0.45, 1.0, *(1.2,) * 12))
+    _CONTINUOUS_SCALES = np.asarray((0.45, 1.0, *(1.0,) * 12))
 
     def __init__(
         self,

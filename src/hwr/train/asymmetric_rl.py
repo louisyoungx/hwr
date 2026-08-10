@@ -32,7 +32,7 @@ class AsymmetricRLConfig:
     action_slew_penalty: float = 0.04
     base_linear_scale: float = 0.45
     base_angular_scale: float = 1.0
-    arm_velocity_scale: float = 1.2
+    arm_velocity_scale: float = 1.0
 
     def __post_init__(self) -> None:
         if min(

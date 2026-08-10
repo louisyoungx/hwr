@@ -44,6 +44,9 @@ class MujocoDualArmConfig:
     max_base_linear: float = 0.45
     max_base_angular: float = 1.0
     max_arm_velocity: float = 1.2
+    max_tool_linear_velocity: float = 0.30
+    max_tool_angular_velocity: float = 1.0
+    ik_damping: float = 0.08
     max_arm_servo_error: float = 0.30
     left_arm_home: tuple[float, ...] = SECONDARY_ARM_HOME
     right_arm_home: tuple[float, ...] = ARM_HOME
@@ -59,6 +62,9 @@ class MujocoDualArmConfig:
             self.max_base_linear,
             self.max_base_angular,
             self.max_arm_velocity,
+            self.max_tool_linear_velocity,
+            self.max_tool_angular_velocity,
+            self.ik_damping,
             self.max_arm_servo_error,
             self.primary_object_reset_z,
         )
@@ -93,7 +99,7 @@ class MujocoDualArmBackend:
             SafetyLimits(
                 max_base_linear=config.max_base_linear,
                 max_base_angular=config.max_base_angular,
-                max_arm_command=config.max_arm_velocity,
+                max_arm_command=1.0,
             )
         )
         self._substeps = _control_substeps(config.control_hz, self.model.opt.timestep)
@@ -108,6 +114,8 @@ class MujocoDualArmBackend:
         self._result: EpisodeResult | None = None
         self._left_targets = np.asarray(config.left_arm_home, dtype=np.float64)
         self._right_targets = np.asarray(config.right_arm_home, dtype=np.float64)
+        self._left_tool_site = self._site_id("left_grasp_center")
+        self._right_tool_site = self._site_id("right_grasp_center")
 
     def reset(self, *, seed: int, task_id: str) -> DualArmObservation:
         if task_id != self.config.task_id:
@@ -237,16 +245,18 @@ class MujocoDualArmBackend:
             right_wheel,
         )
         control_dt = 1.0 / self.config.control_hz
-        self._advance_targets(
+        self._advance_tool_targets(
             self._left_targets,
             action.left_arm,
             self.bundle.ids.secondary_arm_joints,
+            self._left_tool_site,
             control_dt,
         )
-        self._advance_targets(
+        self._advance_tool_targets(
             self._right_targets,
             action.right_arm,
             self.bundle.ids.arm_joints,
+            self._right_tool_site,
             control_dt,
         )
         self.data.ctrl[list(self.bundle.ids.secondary_arm_actuators)] = self._left_targets
@@ -258,20 +268,65 @@ class MujocoDualArmBackend:
             action.right_gripper * FINGER_TRAVEL
         )
 
-    def _advance_targets(
+    def _advance_tool_targets(
         self,
         targets: np.ndarray,
         command: tuple[float, ...],
         joint_ids: tuple[int, ...],
+        tool_site: int,
         control_dt: float,
     ) -> None:
-        targets += np.asarray(command, dtype=np.float64) * control_dt
+        targets += self._resolved_joint_velocity(
+            command, joint_ids, tool_site
+        ) * control_dt
         for index, joint_id in enumerate(joint_ids):
             low, high = self.model.jnt_range[joint_id]
             actual = float(self.data.qpos[self.model.jnt_qposadr[joint_id]])
             servo_low = max(float(low), actual - self.config.max_arm_servo_error)
             servo_high = min(float(high), actual + self.config.max_arm_servo_error)
             targets[index] = np.clip(targets[index], servo_low, servo_high)
+
+    def _resolved_joint_velocity(
+        self,
+        command: tuple[float, ...],
+        joint_ids: tuple[int, ...],
+        tool_site: int,
+    ) -> np.ndarray:
+        jacobian_position = np.zeros((3, self.model.nv), dtype=np.float64)
+        jacobian_rotation = np.zeros((3, self.model.nv), dtype=np.float64)
+        mujoco.mj_jacSite(
+            self.model,
+            self.data,
+            jacobian_position,
+            jacobian_rotation,
+            tool_site,
+        )
+        dofs = [int(self.model.jnt_dofadr[joint_id]) for joint_id in joint_ids]
+        jacobian = np.vstack(
+            (jacobian_position[:, dofs], jacobian_rotation[:, dofs])
+        )
+        base_rotation = self.data.xmat[self.bundle.ids.base_body].reshape(3, 3)
+        value = np.asarray(command, dtype=np.float64)
+        twist = np.concatenate(
+            (
+                base_rotation @ value[:3] * self.config.max_tool_linear_velocity,
+                base_rotation @ value[3:] * self.config.max_tool_angular_velocity,
+            )
+        )
+        regularized = jacobian @ jacobian.T
+        regularized += np.eye(6) * self.config.ik_damping**2
+        joint_velocity = jacobian.T @ np.linalg.solve(regularized, twist)
+        return np.clip(
+            joint_velocity,
+            -self.config.max_arm_velocity,
+            self.config.max_arm_velocity,
+        )
+
+    def _site_id(self, name: str) -> int:
+        site = int(mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_SITE, name))
+        if site < 0:
+            raise ValueError(f"dual-arm model is missing tool site {name}")
+        return site
 
     def _observation(self) -> DualArmObservation:
         timestamp_ns = self._timestamp_ns()

@@ -2,6 +2,7 @@
 
 from hwr.core.embodied import (
     DUAL_ARM_ACTION_DIM,
+    DUAL_ARM_TOOL_TWIST_FIELDS,
     ActionChunk,
     DualArmAction,
     DualArmActionFrame,
@@ -13,6 +14,7 @@ from hwr.core.embodied import (
 
 __all__ = [
     "DUAL_ARM_ACTION_DIM",
+    "DUAL_ARM_TOOL_TWIST_FIELDS",
     "ActionChunk",
     "DualArmAction",
     "DualArmActionFrame",
