@@ -4,6 +4,10 @@
 > 配置：[formal_visual_v1.json](../configs/training/formal_visual_v1.json)
 > 训练结果：[formal_visual_v1_results.json](../configs/training/formal_visual_v1_results.json)
 
+首轮普通行为克隆在餐厅未见种子 30000 上能导航到餐桌附近，但混淆机械臂操作与后续导航阶段，6000 步超时且没有夹持接触。该结果保留为 V1 基线。V2 在不改变策略输入白名单的前提下增加训练标签 `phase`，模型同时学习阶段分类和分阶段动作头；推理阶段由模型从允许观测预测阶段，运行时不读取专家阶段。
+
+V2 数据与训练配置见 [formal_visual_v2.json](../configs/training/formal_visual_v2.json)。三个 V2 数据集仍使用相同的 9 个成功专家 Episode，但按 `hwr.visual-behavior-dataset/v2` 重采并锁定新的 shard 哈希。
+
 ## 数据边界
 
 三个任务分别使用 3 条接触有效的专家 Episode。正式策略输入固定为头部 RGB、头部深度、腕部 RGB、24 维本体状态、任务指令 ID 和 8 步动作历史；引擎真值位姿、目标位置、专家阶段和成功状态只作为标签或审计信息，不进入训练张量。

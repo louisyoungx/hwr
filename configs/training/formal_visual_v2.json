@@ -1,0 +1,65 @@
+{
+  "schema_version": "hwr.formal-visual-training-plan/v2",
+  "dataset_schema": "hwr.visual-behavior-dataset/v2",
+  "model_schema": "hwr.visual-policy-model/v2",
+  "policy_input_schema": "hwr.formal-policy-input/v1",
+  "policy_input_fields": [
+    "head_rgb",
+    "head_depth",
+    "wrist_rgb",
+    "proprioception",
+    "instruction_id",
+    "action_history"
+  ],
+  "label_fields": ["action", "phase"],
+  "image_size": [48, 36],
+  "action_history": 8,
+  "training": {
+    "epochs": 40,
+    "batch_size": 128,
+    "learning_rate": 0.0005,
+    "device": "auto",
+    "seed": 0
+  },
+  "datasets": [
+    {
+      "task_id": "clear_dining_table_3d/v1",
+      "path": "datasets/formal-v2-r2/clear_dining_table_3d_v1-expert-s1000",
+      "episode_count": 3,
+      "sample_count": 2482,
+      "phase_count": 23,
+      "seeds": [1000, 1001, 1002],
+      "shards": [
+        {"path": "clear_dining_table_3d_v1-expert-s1000-00000.npz", "sha256": "dda74efc0fa3c7e471e06967d8e82d2fd6d5ed86007248ef233a9f1e741ec0d4"},
+        {"path": "clear_dining_table_3d_v1-expert-s1000-00001.npz", "sha256": "c30989fd51cb939091104961c0b26c6de54cbb5897f5afb01d308c861690b7b4"},
+        {"path": "clear_dining_table_3d_v1-expert-s1000-00002.npz", "sha256": "71abf9fa03edd6a4bf3663d87dc9b9be54f336288db76aedd6cdc4509a3b5c02"}
+      ]
+    },
+    {
+      "task_id": "tidy_living_room_3d/v1",
+      "path": "datasets/formal-v2-r2/tidy_living_room_3d_v1-expert-s2000",
+      "episode_count": 3,
+      "sample_count": 2199,
+      "phase_count": 23,
+      "seeds": [2000, 2001, 2002],
+      "shards": [
+        {"path": "tidy_living_room_3d_v1-expert-s2000-00000.npz", "sha256": "91a4f1f936017b3157d4307d2c768935c8462c0ec5470aabf318a7e12c555015"},
+        {"path": "tidy_living_room_3d_v1-expert-s2000-00001.npz", "sha256": "864c306a78b09397cf2faadb381abab6239ff080647de5f5315943cc9f999a81"},
+        {"path": "tidy_living_room_3d_v1-expert-s2000-00002.npz", "sha256": "da654b3c9ce54d06f168730f7180b3cd92581d27e22771a9105fa8e22c34a7b8"}
+      ]
+    },
+    {
+      "task_id": "store_kitchen_items_3d/v1",
+      "path": "datasets/formal-v2-r2/store_kitchen_items_3d_v1-expert-s3000",
+      "episode_count": 3,
+      "sample_count": 4059,
+      "phase_count": 34,
+      "seeds": [3000, 3001, 3002],
+      "shards": [
+        {"path": "store_kitchen_items_3d_v1-expert-s3000-00000.npz", "sha256": "80c6e77544785530663dac59048d327e9a54c7352c22ddac93c85b99313345f6"},
+        {"path": "store_kitchen_items_3d_v1-expert-s3000-00001.npz", "sha256": "e1abdbe98451673f35f50c9c48c3da5e85fd2af12f57f698e6d8b4b273ebf2aa"},
+        {"path": "store_kitchen_items_3d_v1-expert-s3000-00002.npz", "sha256": "1e9708023057a8b8a3801d1782b83c6b70344ef158cf3ab5b45ec7ea80762e22"}
+      ]
+    }
+  ]
+}
