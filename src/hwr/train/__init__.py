@@ -37,6 +37,18 @@ from hwr.train.goal_replay import (
     hindsight_relabel,
     mirror_batch,
 )
+from hwr.train.bimanual_training import (
+    BimanualRLTrainingConfig,
+    BimanualTrainingResult,
+    BimanualTrainingRunner,
+    TrainingEpisodeRecord,
+    load_default_bimanual_training_catalogs,
+)
+from hwr.train.bimanual_registry import (
+    load_bimanual_actor,
+    save_bimanual_training_run,
+    verify_bimanual_training_run,
+)
 
 __all__ = [
     "TrainingConfig",
@@ -71,4 +83,12 @@ __all__ = [
     "GoalReplayAddResult",
     "hindsight_relabel",
     "mirror_batch",
+    "BimanualRLTrainingConfig",
+    "BimanualTrainingResult",
+    "BimanualTrainingRunner",
+    "TrainingEpisodeRecord",
+    "load_default_bimanual_training_catalogs",
+    "load_bimanual_actor",
+    "save_bimanual_training_run",
+    "verify_bimanual_training_run",
 ]

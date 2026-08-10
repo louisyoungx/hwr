@@ -14,6 +14,7 @@ from hwr.policy.privileged_critic import (
     TwinPrivilegedCritic,
 )
 from hwr.policy.vla_input import VLA_POLICY_INPUT_FIELDS
+from hwr.policy.vla_actions import VLAActionScaling, bounded_vla_actions
 from hwr.policy.vla_model import VLAActorModel, VLAActorOutput
 
 
@@ -25,9 +26,18 @@ class AsymmetricRLConfig:
     target_update_rate: float = 0.005
     behavior_regularization: float = 0.02
     policy_delay: int = 2
+    base_linear_scale: float = 0.45
+    base_angular_scale: float = 1.0
+    arm_velocity_scale: float = 1.2
 
     def __post_init__(self) -> None:
-        if min(self.actor_learning_rate, self.critic_learning_rate) <= 0:
+        if min(
+            self.actor_learning_rate,
+            self.critic_learning_rate,
+            self.base_linear_scale,
+            self.base_angular_scale,
+            self.arm_velocity_scale,
+        ) <= 0:
             raise ValueError("asymmetric RL learning rates must be positive")
         if not 0.0 <= self.discount <= 1.0:
             raise ValueError("asymmetric RL discount must be in [0, 1]")
@@ -38,6 +48,13 @@ class AsymmetricRLConfig:
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
+
+    def action_scaling(self) -> VLAActionScaling:
+        return VLAActionScaling(
+            self.base_linear_scale,
+            self.base_angular_scale,
+            self.arm_velocity_scale,
+        )
 
 
 @dataclass(frozen=True)
@@ -53,9 +70,13 @@ class AsymmetricRLBatch:
     actor_weights: torch.Tensor | None = None
 
 
-def _action_representation(output: VLAActorOutput) -> torch.Tensor:
+def _action_representation(
+    output: VLAActorOutput, config: AsymmetricRLConfig
+) -> torch.Tensor:
     stop = torch.sigmoid(output.stop_logits).unsqueeze(-1)
-    return torch.cat((output.action_chunks, stop), dim=2).flatten(1)
+    return torch.cat(
+        (bounded_vla_actions(output, config.action_scaling()), stop), dim=2
+    ).flatten(1)
 
 
 def _executed_action_representation(batch: AsymmetricRLBatch) -> torch.Tensor:
@@ -125,7 +146,7 @@ class AsymmetricActorCriticTrainer:
     def _update_critic(self, batch: AsymmetricRLBatch) -> torch.Tensor:
         with torch.no_grad():
             next_output = self.target_actor(batch.next_actor_inputs)
-            next_action = _action_representation(next_output)
+            next_action = _action_representation(next_output, self.config)
             target_q1, target_q2 = self.target_critic(
                 batch.next_privileged_state, next_action
             )
@@ -144,10 +165,12 @@ class AsymmetricActorCriticTrainer:
     def _update_actor(self, batch: AsymmetricRLBatch) -> torch.Tensor:
         _set_requires_grad(self.critic, False)
         output = self.actor(batch.actor_inputs)
-        action = _action_representation(output)
+        bounded = bounded_vla_actions(output, self.config.action_scaling())
+        stop = torch.sigmoid(output.stop_logits).unsqueeze(-1)
+        action = torch.cat((bounded, stop), dim=2).flatten(1)
         q1, _ = self.critic(batch.privileged_state, action)
         behavior = nn.functional.smooth_l1_loss(
-            output.action_chunks, batch.action_chunks, reduction="none"
+            bounded, batch.action_chunks, reduction="none"
         ).mean(dim=(1, 2))
         behavior += nn.functional.binary_cross_entropy_with_logits(
             output.stop_logits,

@@ -11,6 +11,10 @@ from hwr.perception.preprocessing import (
     DeterministicVisionPreprocessor,
     DualArmVisionPreprocessor,
 )
+from hwr.perception.language import (
+    FrozenNgramLanguageConfig,
+    FrozenNgramLanguageEncoder,
+)
 
 __all__ = [
     "CameraCalibration",
@@ -20,4 +24,6 @@ __all__ = [
     "PinholeIntrinsics",
     "ProcessedVision",
     "VisionPreprocessConfig",
+    "FrozenNgramLanguageConfig",
+    "FrozenNgramLanguageEncoder",
 ]
