@@ -8,7 +8,7 @@ from typing import Sequence
 import numpy as np
 
 from hwr.core.embodied import DUAL_ARM_ACTION_DIM, FrozenLanguageEmbedding
-from hwr.perception.contracts import ProcessedVision
+from hwr.perception.contracts import DualArmProcessedVision
 
 
 VLA_POLICY_INPUT_SCHEMA = "hwr.vla-actor-input/v1"
@@ -19,7 +19,8 @@ VLA_POLICY_INPUT_FIELDS = frozenset(
         "head_depth_valid",
         "head_points",
         "head_point_valid",
-        "wrist_rgb",
+        "left_wrist_rgb",
+        "right_wrist_rgb",
         "camera_validity",
         "proprioception",
         "instruction_embedding",
@@ -35,7 +36,8 @@ class VLAActorInput:
     head_depth_valid: np.ndarray
     head_points: np.ndarray
     head_point_valid: np.ndarray
-    wrist_rgb: np.ndarray
+    left_wrist_rgb: np.ndarray
+    right_wrist_rgb: np.ndarray
     camera_validity: np.ndarray
     proprioception: np.ndarray
     instruction_embedding: np.ndarray
@@ -55,7 +57,7 @@ class VLAActorInput:
 
 
 def build_vla_actor_input(
-    visual_history: Sequence[ProcessedVision],
+    visual_history: Sequence[DualArmProcessedVision],
     language: FrozenLanguageEmbedding,
     *,
     proprioception: Sequence[float],
@@ -86,7 +88,8 @@ def build_vla_actor_input(
         head_depth_valid=np.stack([value.head_depth_valid for value in history]),
         head_points=np.stack([value.head_points for value in history]),
         head_point_valid=np.stack([value.head_point_valid for value in history]),
-        wrist_rgb=np.stack([value.wrist_rgb for value in history]),
+        left_wrist_rgb=np.stack([value.left_wrist_rgb for value in history]),
+        right_wrist_rgb=np.stack([value.right_wrist_rgb for value in history]),
         camera_validity=np.stack([value.camera_validity for value in history]),
         proprioception=proprio,
         instruction_embedding=np.asarray(language.values, dtype=np.float32),

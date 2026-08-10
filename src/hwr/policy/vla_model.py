@@ -97,7 +97,7 @@ class VLAActorModel(nn.Module):
             nn.Linear(hidden, hidden),
         )
         self.camera_quality_encoder = nn.Linear(3, hidden)
-        self.token_type = nn.Parameter(torch.zeros(6, hidden))
+        self.token_type = nn.Parameter(torch.zeros(7, hidden))
         self.temporal_position = nn.Parameter(
             torch.zeros(config.visual_history, hidden)
         )
@@ -146,11 +146,21 @@ class VLAActorModel(nn.Module):
         return self._temporal(tokens.reshape(batch, history, -1), quality, 3)
 
     def _wrist_tokens(self, inputs: Mapping[str, torch.Tensor]) -> torch.Tensor:
-        value = inputs["wrist_rgb"].permute(0, 1, 4, 2, 3)
-        batch, history = value.shape[:2]
-        tokens = self.wrist_encoder(value.reshape(batch * history, 3, *value.shape[-2:]))
-        quality = inputs["camera_validity"][..., 2:3]
-        return self._temporal(tokens.reshape(batch, history, -1), quality, 4)
+        streams = []
+        for name, validity_index, token_type in (
+            ("left_wrist_rgb", 2, 4),
+            ("right_wrist_rgb", 3, 5),
+        ):
+            value = inputs[name].permute(0, 1, 4, 2, 3)
+            batch, history = value.shape[:2]
+            tokens = self.wrist_encoder(
+                value.reshape(batch * history, 3, *value.shape[-2:])
+            )
+            quality = inputs["camera_validity"][..., validity_index : validity_index + 1]
+            streams.append(
+                self._temporal(tokens.reshape(batch, history, -1), quality, token_type)
+            )
+        return torch.cat(streams, dim=1)
 
     def _point_tokens(self, inputs: Mapping[str, torch.Tensor]) -> torch.Tensor:
         points = inputs["head_points"]
@@ -160,7 +170,7 @@ class VLAActorModel(nn.Module):
         pooled = features.masked_fill(~valid, minimum).amax(dim=2)
         any_valid = valid.any(dim=2)
         pooled = torch.where(any_valid, pooled, torch.zeros_like(pooled))
-        return self._temporal(pooled, any_valid, 5)
+        return self._temporal(pooled, any_valid, 6)
 
     def _global_tokens(self, inputs: Mapping[str, torch.Tensor]) -> torch.Tensor:
         language = self.language_encoder(inputs["instruction_embedding"]) + self.token_type[0]
@@ -188,8 +198,9 @@ class VLAActorModel(nn.Module):
             "head_depth_valid": (batch, config.visual_history, None, None),
             "head_points": (batch, config.visual_history, config.point_count, 6),
             "head_point_valid": (batch, config.visual_history, config.point_count),
-            "wrist_rgb": (batch, config.visual_history, None, None, 3),
-            "camera_validity": (batch, config.visual_history, 3),
+            "left_wrist_rgb": (batch, config.visual_history, None, None, 3),
+            "right_wrist_rgb": (batch, config.visual_history, None, None, 3),
+            "camera_validity": (batch, config.visual_history, 4),
             "proprioception": (batch, config.proprioception_dim),
             "instruction_embedding": (batch, config.language_dim),
             "action_history": (batch, config.action_history, config.action_dim),

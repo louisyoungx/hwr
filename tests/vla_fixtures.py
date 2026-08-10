@@ -22,8 +22,13 @@ def actor_input(step: int) -> VLAActorInput:
         head_depth_valid=np.ones((history, height, width), dtype=np.bool_),
         head_points=np.full((history, points, 6), step / 50.0, dtype=np.float32),
         head_point_valid=np.ones((history, points), dtype=np.bool_),
-        wrist_rgb=np.full((history, height, width, 3), step / 30.0, dtype=np.float32),
-        camera_validity=np.ones((history, 3), dtype=np.bool_),
+        left_wrist_rgb=np.full(
+            (history, height, width, 3), step / 30.0, dtype=np.float32
+        ),
+        right_wrist_rgb=np.full(
+            (history, height, width, 3), step / 40.0, dtype=np.float32
+        ),
+        camera_validity=np.ones((history, 4), dtype=np.bool_),
         proprioception=np.full(37, step / 100.0, dtype=np.float32),
         instruction_embedding=np.linspace(-1.0, 1.0, 12, dtype=np.float32),
         action_history=np.full((2, 16), step / 100.0, dtype=np.float32),

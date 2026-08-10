@@ -14,6 +14,12 @@ import numpy as np
 VISION_PREPROCESS_SCHEMA = "hwr.vision-preprocess/v1"
 PROCESSED_VISION_SCHEMA = "hwr.processed-vision/v1"
 CAMERA_IDS = ("head_rgb", "head_depth", "wrist_rgb")
+DUAL_ARM_CAMERA_IDS = (
+    "head_rgb",
+    "head_depth",
+    "left_wrist_rgb",
+    "right_wrist_rgb",
+)
 
 
 def _finite(values: Sequence[float], name: str) -> tuple[float, ...]:
@@ -48,7 +54,10 @@ class CameraCalibration:
     robot_from_camera: tuple[float, ...]
 
     def __post_init__(self) -> None:
-        if not self.calibration_id or self.camera_id not in CAMERA_IDS:
+        if not self.calibration_id or self.camera_id not in {
+            *CAMERA_IDS,
+            *DUAL_ARM_CAMERA_IDS,
+        }:
             raise ValueError("known camera and calibration identities are required")
         transform = _finite(self.robot_from_camera, "camera transform")
         if len(transform) != 16 or transform[12:] != (0.0, 0.0, 0.0, 1.0):
@@ -128,3 +137,50 @@ class ProcessedVision:
         floating = (self.head_rgb, self.head_depth, self.head_points, self.wrist_rgb)
         if not all(np.isfinite(value).all() for value in floating):
             raise ValueError("processed vision tensors must be finite")
+
+
+@dataclass(frozen=True)
+class DualArmProcessedVision:
+    """Four-camera deployable vision with explicit left/right wrist ownership."""
+
+    head_rgb: np.ndarray
+    head_depth: np.ndarray
+    head_depth_valid: np.ndarray
+    head_points: np.ndarray
+    head_point_valid: np.ndarray
+    left_wrist_rgb: np.ndarray
+    right_wrist_rgb: np.ndarray
+    camera_validity: np.ndarray
+    frame_timestamps_ns: np.ndarray
+    preprocess_fingerprint: str
+    schema_version: str = "hwr.dual-arm-processed-vision/v1"
+
+    def __post_init__(self) -> None:
+        height, width = self.head_depth.shape
+        expected = {
+            "head_rgb": (height, width, 3),
+            "head_depth_valid": (height, width),
+            "head_points": (self.head_point_valid.shape[0], 6),
+            "left_wrist_rgb": (height, width, 3),
+            "right_wrist_rgb": (height, width, 3),
+            "camera_validity": (len(DUAL_ARM_CAMERA_IDS),),
+            "frame_timestamps_ns": (len(DUAL_ARM_CAMERA_IDS),),
+        }
+        mismatches = {
+            name: (getattr(self, name).shape, shape)
+            for name, shape in expected.items()
+            if getattr(self, name).shape != shape
+        }
+        if mismatches:
+            raise ValueError(f"dual-arm vision tensor shapes are invalid: {mismatches}")
+        if len(self.preprocess_fingerprint) != 64:
+            raise ValueError("dual-arm vision requires a preprocess fingerprint")
+        floating = (
+            self.head_rgb,
+            self.head_depth,
+            self.head_points,
+            self.left_wrist_rgb,
+            self.right_wrist_rgb,
+        )
+        if not all(np.isfinite(value).all() for value in floating):
+            raise ValueError("dual-arm vision tensors must be finite")

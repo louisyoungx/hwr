@@ -7,9 +7,12 @@ from typing import Mapping
 import numpy as np
 
 from hwr.core.types import CameraFrame, ObservationFrame
+from hwr.core.embodied import DualArmObservation
 from hwr.perception.contracts import (
     CAMERA_IDS,
+    DUAL_ARM_CAMERA_IDS,
     CameraCalibration,
+    DualArmProcessedVision,
     ProcessedVision,
     VisionPreprocessConfig,
 )
@@ -19,6 +22,12 @@ CAMERA_ENCODINGS = {
     "head_rgb": "rgb8",
     "head_depth": "depth32f",
     "wrist_rgb": "rgb8",
+}
+DUAL_ARM_CAMERA_ENCODINGS = {
+    "head_rgb": "rgb8",
+    "head_depth": "depth32f",
+    "left_wrist_rgb": "rgb8",
+    "right_wrist_rgb": "rgb8",
 }
 
 
@@ -193,3 +202,79 @@ class DeterministicVisionPreprocessor:
         selected = combined[indices].astype(np.float32)
         selected[~valid] = 0.0
         return selected, valid
+
+
+class DualArmVisionPreprocessor(DeterministicVisionPreprocessor):
+    """Apply the same deterministic transform to all four deployable cameras."""
+
+    def __init__(
+        self,
+        config: VisionPreprocessConfig,
+        calibrations: Mapping[str, CameraCalibration],
+    ) -> None:
+        self.config = config
+        self.calibrations = dict(calibrations)
+        if set(self.calibrations) != set(DUAL_ARM_CAMERA_IDS):
+            raise ValueError("dual-arm preprocessor requires four camera calibrations")
+        if any(name != value.camera_id for name, value in self.calibrations.items()):
+            raise ValueError("camera calibration keys and identities differ")
+        self.fingerprint = config.fingerprint(self.calibrations)
+
+    def preprocess(self, observation: DualArmObservation) -> DualArmProcessedVision:
+        if not isinstance(observation, DualArmObservation):
+            raise TypeError("dual-arm preprocessing requires DualArmObservation")
+        frames = self._validated_dual_frames(observation)
+        timestamp_ns = observation.timestamp_ns
+        head_rgb, head_valid = self._rgb(frames.get("head_rgb"), timestamp_ns)
+        left_wrist, left_valid = self._rgb(
+            frames.get("left_wrist_rgb"), timestamp_ns
+        )
+        right_wrist, right_valid = self._rgb(
+            frames.get("right_wrist_rgb"), timestamp_ns
+        )
+        depth, depth_valid, depth_frame_valid = self._depth(
+            frames.get("head_depth"), timestamp_ns
+        )
+        points, point_valid = self._point_cloud(
+            depth, depth_valid, head_rgb, head_valid
+        )
+        validity = np.asarray(
+            (head_valid, depth_frame_valid, left_valid, right_valid),
+            dtype=np.bool_,
+        )
+        timestamps = np.asarray(
+            [
+                frames[name].timestamp_ns if name in frames else -1
+                for name in DUAL_ARM_CAMERA_IDS
+            ],
+            dtype=np.int64,
+        )
+        return DualArmProcessedVision(
+            head_rgb=_readonly(head_rgb),
+            head_depth=_readonly(depth),
+            head_depth_valid=_readonly(depth_valid),
+            head_points=_readonly(points),
+            head_point_valid=_readonly(point_valid),
+            left_wrist_rgb=_readonly(left_wrist),
+            right_wrist_rgb=_readonly(right_wrist),
+            camera_validity=_readonly(validity),
+            frame_timestamps_ns=_readonly(timestamps),
+            preprocess_fingerprint=self.fingerprint,
+        )
+
+    def _validated_dual_frames(
+        self, observation: DualArmObservation
+    ) -> dict[str, CameraFrame]:
+        frames = {frame.camera_id: frame for frame in observation.cameras}
+        extras = set(frames) - set(DUAL_ARM_CAMERA_IDS)
+        if extras:
+            raise ValueError(
+                f"camera set contains non-deployment fields: {sorted(extras)}"
+            )
+        for camera_id, frame in frames.items():
+            if frame.encoding != DUAL_ARM_CAMERA_ENCODINGS[camera_id]:
+                raise ValueError(f"camera {camera_id} encoding is invalid")
+            intrinsics = self.calibrations[camera_id].intrinsics
+            if (frame.width, frame.height) != (intrinsics.width, intrinsics.height):
+                raise ValueError(f"camera {camera_id} dimensions differ from calibration")
+        return frames
