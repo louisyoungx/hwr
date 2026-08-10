@@ -61,6 +61,8 @@ class BimanualRLTrainingConfig:
     gripper_exploration_hold_steps: int = 16
     reflection_coupled_exploration_probability: float = 0.60
     paired_gripper_exploration_probability: float = 0.60
+    global_random_burst_probability: float = 0.01
+    global_random_burst_steps: int = 8
     failure_replay_fraction: float = 0.5
     discovery_replay_fraction: float = 0.35
     safety_replay_fraction: float = 0.15
@@ -86,6 +88,7 @@ class BimanualRLTrainingConfig:
             self.learning_starts,
             self.random_action_hold_steps,
             self.gripper_exploration_hold_steps,
+            self.global_random_burst_steps,
             self.raw_image_width,
             self.raw_image_height,
             self.image_width,
@@ -107,6 +110,7 @@ class BimanualRLTrainingConfig:
             self.gripper_exploration_probability,
             self.reflection_coupled_exploration_probability,
             self.paired_gripper_exploration_probability,
+            self.global_random_burst_probability,
             self.failure_replay_fraction,
             self.discovery_replay_fraction,
             self.safety_replay_fraction,
@@ -170,6 +174,7 @@ class BimanualTrainingResult:
     records: list[TrainingEpisodeRecord]
     language_encoder: FrozenNgramLanguageEncoder
     preprocess_fingerprint: str
+    exploration_audit: Mapping[str, object]
     environment_steps: int
     numpy_rng_state: Mapping[str, object]
     torch_rng_state: torch.Tensor
@@ -228,6 +233,10 @@ class BimanualTrainingRunner:
                 paired_gripper_probability=(
                     config.paired_gripper_exploration_probability
                 ),
+                global_random_burst_probability=(
+                    config.global_random_burst_probability
+                ),
+                global_random_burst_steps=config.global_random_burst_steps,
                 base_linear_scale=self.rl_config.base_linear_scale,
                 base_angular_scale=self.rl_config.base_angular_scale,
                 arm_twist_scale=self.rl_config.arm_velocity_scale,
@@ -315,6 +324,7 @@ class BimanualTrainingRunner:
             self.records,
             self.language,
             self.pipeline.preprocessor.fingerprint,
+            self.explorer.audit(),
             self._environment_steps,
             self.rng.bit_generator.state,
             torch.get_rng_state(),

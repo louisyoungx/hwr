@@ -66,6 +66,11 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
         "hold_drawer_place_item/v1",
     }
     assert replay["task_sampling"]["task_stages"] is False
+    assert replay["action_exploration"]["task_conditioned"] is False
+    assert replay["action_exploration"]["global_random_bursts"] == {
+        "probability": 0.01,
+        "hold_steps": 8,
+    }
     assert replay["hindsight_transition_count"] == 2
     assert model["contains_critic"] is False
     assert actor.config.action_dim == 16

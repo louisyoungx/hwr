@@ -155,6 +155,7 @@ def save_bimanual_training_run(
         "safety_cost_labels": "deterministic_runtime_intervention",
         "task_partition_sizes": result.replay.task_sizes(),
         "task_sampling": result.task_sampler.audit(),
+        "action_exploration": dict(result.exploration_audit),
     }
     _write_json(path / "replay-manifest.json", replay_manifest)
     files = (
@@ -237,6 +238,8 @@ def resume_bimanual_training_run(
     for name in (
         "reflection_coupled_exploration_probability",
         "paired_gripper_exploration_probability",
+        "global_random_burst_probability",
+        "global_random_burst_steps",
     ):
         saved.setdefault(name, requested[name])
     saved.pop("episodes")

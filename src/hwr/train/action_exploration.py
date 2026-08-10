@@ -21,6 +21,8 @@ class TemporalExplorationConfig:
     gripper_hold_steps: int = 16
     reflection_coupled_probability: float = 0.60
     paired_gripper_probability: float = 0.60
+    global_random_burst_probability: float = 0.0
+    global_random_burst_steps: int = 8
     base_linear_scale: float = 0.18
     base_angular_scale: float = 0.50
     arm_twist_scale: float = 0.35
@@ -33,11 +35,12 @@ class TemporalExplorationConfig:
             self.gripper_epsilon,
             self.reflection_coupled_probability,
             self.paired_gripper_probability,
+            self.global_random_burst_probability,
         )
         if not all(0.0 <= value <= 1.0 for value in fractions):
             raise ValueError("temporal exploration fractions must be in [0, 1]")
-        if self.gripper_hold_steps <= 0:
-            raise ValueError("gripper exploration hold must be positive")
+        if min(self.gripper_hold_steps, self.global_random_burst_steps) <= 0:
+            raise ValueError("exploration hold durations must be positive")
         if min(
             self.base_linear_scale,
             self.base_angular_scale,
@@ -68,6 +71,8 @@ class TemporalActionExplorer:
         self._gripper_mask = np.zeros(2, dtype=bool)
         self._gripper_values = np.zeros(2, dtype=np.float64)
         self._gripper_remaining = 0
+        self._burst_action: np.ndarray | None = None
+        self._burst_remaining = 0
         self._reflection_signs = np.asarray(
             DUAL_ARM_TOOL_TWIST_REFLECTION_SIGNS, dtype=np.float64
         )
@@ -78,11 +83,17 @@ class TemporalActionExplorer:
         self._gripper_mask.fill(False)
         self._gripper_values.fill(0.0)
         self._gripper_remaining = 0
+        self._burst_action = None
+        self._burst_remaining = 0
 
     def perturb(self, policy_action: np.ndarray) -> np.ndarray:
         value = np.asarray(policy_action, dtype=np.float64).copy()
         if value.shape != (DUAL_ARM_ACTION_DIM,):
             raise ValueError("temporal explorer requires one 16D action")
+        burst = self._global_random_burst()
+        if burst is not None:
+            self._previous = burst.copy()
+            return burst
         correlation = self.config.noise_correlation
         innovation = np.sqrt(max(0.0, 1.0 - correlation**2))
         sampled = self._sample_motion_noise()
@@ -156,6 +167,18 @@ class TemporalActionExplorer:
             )
         self._gripper_remaining = self.config.gripper_hold_steps
 
+    def _global_random_burst(self) -> np.ndarray | None:
+        probability = self.config.global_random_burst_probability
+        if self._burst_remaining <= 0:
+            if probability <= 0.0 or self.rng.random() >= probability:
+                return None
+            self._burst_action = self.sample_random()
+            self._burst_remaining = self.config.global_random_burst_steps
+        if self._burst_action is None:
+            raise RuntimeError("global exploration burst has no sampled action")
+        self._burst_remaining -= 1
+        return self._burst_action.copy()
+
     def audit(self) -> dict[str, object]:
         return {
             "schema_version": "hwr.task-agnostic-action-exploration/v1",
@@ -165,5 +188,9 @@ class TemporalActionExplorer:
             "noise_process": "first-order-correlated-gaussian",
             "gripper_process": "persistent-mixed-paired-independent-epsilon",
             "embodiment_prior": "stochastic-left-right-reflection-coupling",
+            "global_random_bursts": {
+                "probability": self.config.global_random_burst_probability,
+                "hold_steps": self.config.global_random_burst_steps,
+            },
             "task_conditioned": False,
         }

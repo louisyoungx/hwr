@@ -15,10 +15,21 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
     arguments = build_parser().parse_args(
-        ["--run-id", "capacity-smoke", "--replay-capacity", "12000"]
+        [
+            "--run-id",
+            "capacity-smoke",
+            "--replay-capacity",
+            "12000",
+            "--global-random-burst",
+            "0.02",
+            "--global-random-burst-steps",
+            "6",
+        ]
     )
 
     assert arguments.replay_capacity == 12_000
+    assert arguments.global_random_burst == 0.02
+    assert arguments.global_random_burst_steps == 6
 
 
 def test_local_training_collects_all_three_tasks_without_action_labels() -> None:

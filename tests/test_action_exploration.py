@@ -70,3 +70,27 @@ def test_reflection_coupling_is_embodiment_only_and_preserves_independent_mode()
         np.random.default_rng(10),
     ).sample_random()
     assert not np.allclose(independent[2:8], independent[8:14] * signs)
+
+
+def test_global_random_bursts_escape_a_local_policy_without_task_inputs() -> None:
+    explorer = TemporalActionExplorer(
+        TemporalExplorationConfig(
+            noise_standard_deviation=0.0,
+            action_smoothing=0.0,
+            gripper_epsilon=0.0,
+            global_random_burst_probability=1.0,
+            global_random_burst_steps=3,
+        ),
+        np.random.default_rng(19),
+    )
+    policy = np.zeros(16)
+
+    first, second, third, fourth = (
+        explorer.perturb(policy) for _ in range(4)
+    )
+
+    assert np.array_equal(first, second)
+    assert np.array_equal(second, third)
+    assert not np.array_equal(third, fourth)
+    assert explorer.audit()["observation_fields"] == []
+    assert explorer.audit()["task_conditioned"] is False
