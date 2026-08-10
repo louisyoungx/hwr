@@ -68,7 +68,9 @@ class BimanualRLTrainingConfig:
     discovery_replay_fraction: float = 0.35
     safety_replay_fraction: float = 0.15
     n_step_horizon: int = 8
-    actor_learning_rate: float = 1.0e-5
+    actor_learning_rate: float = 3.0e-5
+    final_actor_learning_rate: float = 1.0e-5
+    actor_learning_rate_decay_updates: int = 6500
     seed: int = 20260810
     device: str = "cpu"
     raw_image_width: int = 64
@@ -103,6 +105,8 @@ class BimanualRLTrainingConfig:
             self.transformer_layers,
             self.n_step_horizon,
             self.actor_learning_rate,
+            self.final_actor_learning_rate,
+            self.actor_learning_rate_decay_updates,
         )
         if min(positive) <= 0 or self.initial_random_episodes < 0:
             raise ValueError("bimanual training dimensions must be positive")
@@ -173,6 +177,7 @@ class TrainingEpisodeRecord:
     mean_actor_entropy: float = 0.0
     mean_actor_motion_log_standard_deviation: float = 0.0
     mean_actor_gripper_log_standard_deviation: float = 0.0
+    actor_learning_rate: float = 0.0
     frontier_reset: bool = False
     frontier_source_episode: int = -1
     frontier_source_step: int = -1
@@ -258,6 +263,10 @@ class BimanualTrainingRunner:
         self.exploration_rng = np.random.default_rng(exploration_seed)
         self.rl_config = AsymmetricRLConfig(
             actor_learning_rate=config.actor_learning_rate,
+            final_actor_learning_rate=config.final_actor_learning_rate,
+            actor_learning_rate_decay_updates=(
+                config.actor_learning_rate_decay_updates
+            ),
             behavior_regularization=0.0,
         )
         self.explorer = TemporalActionExplorer(
@@ -576,6 +585,7 @@ class BimanualTrainingRunner:
             mean_actor_gripper_log_standard_deviation=update_summary[
                 "mean_actor_gripper_log_standard_deviation"
             ],
+            actor_learning_rate=update_summary["actor_learning_rate"],
             frontier_reset=frontier_entry is not None,
             frontier_source_episode=(
                 frontier_entry.source_episode if frontier_entry else -1
@@ -748,4 +758,5 @@ def _summarize_updates(metrics: list[Mapping[str, float]]) -> dict[str, float]:
         "mean_actor_gripper_log_standard_deviation": mean(
             actor, "actor_gripper_log_standard_deviation"
         ),
+        "actor_learning_rate": mean(actor, "actor_learning_rate"),
     }

@@ -26,6 +26,8 @@ from hwr.train.stochastic_action import (
 @dataclass(frozen=True)
 class AsymmetricRLConfig:
     actor_learning_rate: float = 3e-5
+    final_actor_learning_rate: float = 1e-5
+    actor_learning_rate_decay_updates: int = 6500
     critic_learning_rate: float = 3e-4
     discount: float = 0.99
     target_update_rate: float = 0.005
@@ -54,6 +56,7 @@ class AsymmetricRLConfig:
     def __post_init__(self) -> None:
         if min(
             self.actor_learning_rate,
+            self.final_actor_learning_rate,
             self.critic_learning_rate,
             self.base_linear_scale,
             self.base_angular_scale,
@@ -64,12 +67,15 @@ class AsymmetricRLConfig:
             raise ValueError("asymmetric RL learning rates must be positive")
         if not 0.0 <= self.discount <= 1.0:
             raise ValueError("asymmetric RL discount must be in [0, 1]")
+        if self.final_actor_learning_rate > self.actor_learning_rate:
+            raise ValueError("final Actor learning rate cannot exceed its initial rate")
         if not 0.0 < self.target_update_rate <= 1.0:
             raise ValueError("target update rate must be in (0, 1]")
         if (
             self.behavior_regularization < 0.0
             or self.policy_delay <= 0
             or self.actor_warmup_updates < 0
+            or self.actor_learning_rate_decay_updates < self.actor_warmup_updates
             or self.conservative_action_samples <= 0
         ):
             raise ValueError("asymmetric RL regularization or delay is invalid")
@@ -250,6 +256,7 @@ class AsymmetricActorCriticTrainer:
             "actor_entropy": 0.0,
             "actor_motion_log_standard_deviation": 0.0,
             "actor_gripper_log_standard_deviation": 0.0,
+            "actor_learning_rate": 0.0,
         }
         actor_updated = (
             self.update_count >= self.config.actor_warmup_updates
@@ -389,6 +396,7 @@ class AsymmetricActorCriticTrainer:
     def _update_actor(
         self, batch: AsymmetricRLBatch
     ) -> tuple[torch.Tensor, dict[str, float]]:
+        self._schedule_actor_learning_rate()
         _set_requires_grad(self.critic, False)
         _set_requires_grad(self.safety_critic, False)
         output = self.actor(batch.actor_inputs)
@@ -469,8 +477,20 @@ class AsymmetricActorCriticTrainer:
             "actor_gripper_log_standard_deviation": float(
                 self.actor_log_standard_deviation[..., 14:].mean().detach().cpu()
             ),
+            "actor_learning_rate": float(
+                self.actor_optimizer.param_groups[0]["lr"]
+            ),
         }
         return loss, metrics
+
+    def _schedule_actor_learning_rate(self) -> None:
+        learning_rate = (
+            self.config.final_actor_learning_rate
+            if self.update_count >= self.config.actor_learning_rate_decay_updates
+            else self.config.actor_learning_rate
+        )
+        for group in self.actor_optimizer.param_groups:
+            group["lr"] = learning_rate
 
     def _weighted_log_probability(
         self, sample: SquashedGaussianAction

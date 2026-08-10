@@ -164,6 +164,7 @@ def test_maximum_entropy_actor_and_action_regularization_are_enabled() -> None:
     assert config.conservative_critic_weight == 0.05
     assert config.conservative_action_samples > 1
     assert defaults.actor_learning_rate < defaults.critic_learning_rate
+    assert defaults.final_actor_learning_rate < defaults.actor_learning_rate
     assert defaults.actor_learning_rate < defaults.safety_learning_rate
     assert defaults.policy_delay >= 5
 
@@ -177,6 +178,23 @@ def test_actor_uses_one_learning_rate_for_all_action_dimensions() -> None:
     assert groups[0]["lr"] == pytest.approx(trainer.config.actor_learning_rate)
     assert id(trainer.actor.action_head.weight) in parameter_ids
     assert id(trainer.actor_log_standard_deviation) in parameter_ids
+
+
+def test_actor_learning_rate_decays_after_calibrated_critic_updates() -> None:
+    trainer = _trainer()
+    trainer.update_count = trainer.config.actor_learning_rate_decay_updates - 1
+    trainer._schedule_actor_learning_rate()
+
+    assert trainer.actor_optimizer.param_groups[0]["lr"] == pytest.approx(
+        trainer.config.actor_learning_rate
+    )
+
+    trainer.update_count += 1
+    trainer._schedule_actor_learning_rate()
+
+    assert trainer.actor_optimizer.param_groups[0]["lr"] == pytest.approx(
+        trainer.config.final_actor_learning_rate
+    )
 
 
 def test_motion_slew_penalty_does_not_hold_grippers_open() -> None:
