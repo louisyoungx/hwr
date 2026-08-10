@@ -68,6 +68,7 @@ class BimanualRLTrainingConfig:
     discovery_replay_fraction: float = 0.35
     safety_replay_fraction: float = 0.15
     n_step_horizon: int = 8
+    actor_learning_rate: float = 1.0e-5
     seed: int = 20260810
     device: str = "cpu"
     raw_image_width: int = 64
@@ -101,6 +102,7 @@ class BimanualRLTrainingConfig:
             self.attention_heads,
             self.transformer_layers,
             self.n_step_horizon,
+            self.actor_learning_rate,
         )
         if min(positive) <= 0 or self.initial_random_episodes < 0:
             raise ValueError("bimanual training dimensions must be positive")
@@ -254,7 +256,10 @@ class BimanualTrainingRunner:
         self.task_rng = np.random.default_rng(task_seed)
         self.frontier_rng = np.random.default_rng(frontier_seed)
         self.exploration_rng = np.random.default_rng(exploration_seed)
-        self.rl_config = AsymmetricRLConfig(behavior_regularization=0.0)
+        self.rl_config = AsymmetricRLConfig(
+            actor_learning_rate=config.actor_learning_rate,
+            behavior_regularization=0.0,
+        )
         self.explorer = TemporalActionExplorer(
             TemporalExplorationConfig(
                 noise_standard_deviation=config.exploration_noise,

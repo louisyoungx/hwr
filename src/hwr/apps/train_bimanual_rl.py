@@ -39,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--replay-capacity", type=int, default=80_000)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--learning-starts", type=int, default=512)
+    parser.add_argument("--actor-learning-rate", type=float, default=1.0e-5)
     parser.add_argument("--initial-random-episodes", type=int, default=9)
     parser.add_argument("--random-action-hold-steps", type=int, default=8)
     parser.add_argument("--seed", type=int, default=20260810)
@@ -87,6 +88,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         replay_capacity=arguments.replay_capacity,
         batch_size=arguments.batch_size,
         learning_starts=arguments.learning_starts,
+        actor_learning_rate=arguments.actor_learning_rate,
         initial_random_episodes=arguments.initial_random_episodes,
         random_action_hold_steps=arguments.random_action_hold_steps,
         seed=arguments.seed,

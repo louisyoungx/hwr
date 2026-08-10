@@ -94,6 +94,9 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert replay["hindsight_transition_count"] == 2
     assert model["contains_critic"] is False
     assert actor.config.action_dim == 16
+    assert manifest["rl_config"]["actor_learning_rate"] == (
+        result.config.actor_learning_rate
+    )
 
     result.records.append(result.records[0])
     progress = save_bimanual_live_progress(path, result)
