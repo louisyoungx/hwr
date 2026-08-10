@@ -196,7 +196,8 @@ class MujocoDualArmBackend:
         try:
             self.data = trial_data
             self._write_controls(frame.action)
-            for _ in range(self._substeps):
+            horizon = self._predictive_horizon_control_steps() * self._substeps
+            for _ in range(horizon):
                 mujoco.mj_step(self.model, self.data)
                 if self._predictive_safety_violation():
                     unsafe = True
@@ -207,6 +208,7 @@ class MujocoDualArmBackend:
             self._right_targets = right_targets
         if not unsafe:
             return frame, ()
+        self._synchronize_arm_targets_to_measured()
         stopped = replace(
             frame,
             action=_hold_action(hold_grippers),
@@ -227,6 +229,17 @@ class MujocoDualArmBackend:
 
     def _predictive_safety_violation(self) -> bool:
         return False
+
+    def _predictive_horizon_control_steps(self) -> int:
+        return 1
+
+    def _synchronize_arm_targets_to_measured(self) -> None:
+        for targets, joint_ids in (
+            (self._left_targets, self.bundle.ids.secondary_arm_joints),
+            (self._right_targets, self.bundle.ids.arm_joints),
+        ):
+            for index, joint_id in enumerate(joint_ids):
+                targets[index] = self.data.qpos[self.model.jnt_qposadr[joint_id]]
 
     def result(self) -> EpisodeResult | None:
         return self._result

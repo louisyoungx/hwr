@@ -426,6 +426,9 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
     def _predictive_safety_violation(self) -> bool:
         return self._current_maximum_forbidden_force() >= self.severe_force_threshold
 
+    def _predictive_horizon_control_steps(self) -> int:
+        return 2
+
     def _current_maximum_forbidden_force(self) -> float:
         ids = self.task_ids
         maximum = 0.0
