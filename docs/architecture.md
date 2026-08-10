@@ -155,7 +155,7 @@ flowchart TB
 
 `MujocoHouseholdBackend` 对上仍只实现 `RuntimeBackend`。真值实体位姿、目标 site、接触力和抽屉关节只用于 reset、自动成功判定、训练期 Critic 与只读审计，不产生动作标签，也不进入 `ObservationFrame.features`；在线观察固定为头部和左右腕部相机 payload 与双臂本体状态。
 
-无专家训练使用可选的 `SnapshotRuntimeBackend` 扩展改变初始状态分布。核心层的 `PhysicalStateSnapshot` 只保存任务 ID、适配器指纹和不透明的广义位置；MuJoCo 只能在 Episode `reset` 边界恢复位置，速度清零、控制器同步和接触重建全部留在适配器内部，运行中写入仍由反瞬移检查拒绝。`hwr.adapters.mujoco.training_catalog` 负责把任务、MuJoCo binding 和 backend factory 组合起来，`hwr.train` 只接收 factory 返回的项目自有协议实例，不导入 MuJoCo 或具体设备 SDK。
+无专家训练使用可选的 `SnapshotRuntimeBackend` 扩展改变初始状态分布。核心层的 `PhysicalStateSnapshot` 只定义任务 ID、适配器指纹和不透明的瞬时动力学向量，包括广义位置/速度/加速度、当前执行器载荷与求解器状态；它不解释引擎布局，也不携带奖励、阶段或未来动作序列。MuJoCo 只能在 Episode `reset` 边界恢复快照，维度校验、控制器同步、派生量重算和接触重建全部留在适配器内部，运行中写入仍由反瞬移检查拒绝。`hwr.adapters.mujoco.training_catalog` 负责把任务、MuJoCo binding 和 backend factory 组合起来，`hwr.train` 只接收 factory 返回的项目自有协议实例，不导入 MuJoCo 或具体设备 SDK。
 
 ### `hwr.policy`
 

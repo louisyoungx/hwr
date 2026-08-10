@@ -250,4 +250,7 @@ def test_training_episode_can_start_from_an_autonomous_frontier_snapshot() -> No
     assert result.records[0].frontier_reset is True
     assert result.records[0].frontier_source_episode == 17
     assert result.records[0].frontier_source_step == 23
+    assert result.records[0].environment_reset_seed == (
+        config.seed + 17 * 104729
+    )
     assert result.frontier.reset_count == 1

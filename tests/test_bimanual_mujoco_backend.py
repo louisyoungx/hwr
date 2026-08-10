@@ -163,6 +163,10 @@ def test_adapter_restores_self_discovered_position_as_a_fresh_episode() -> None:
         observation = backend.reset(seed=303, task_id=task_id)
         snapshot = backend.capture_state_snapshot()
         expected = np.asarray(snapshot.generalized_positions)
+        assert len(snapshot.generalized_velocities) == backend.model.nv
+        assert len(snapshot.generalized_accelerations) == backend.model.nv
+        assert len(snapshot.actuator_controls) == backend.model.nu
+        assert len(snapshot.solver_state) == backend.model.nv
         moving = DualArmActionFrame(
             observation.timestamp_ns,
             observation.timestamp_ns,
@@ -193,6 +197,61 @@ def test_adapter_restores_self_discovered_position_as_a_fresh_episode() -> None:
     assert audit["left_contact_steps"] == 0
     assert audit["right_contact_steps"] == 0
     assert not hasattr(backend, "restore_state_snapshot")
+
+
+def test_snapshot_restores_dynamical_continuation_and_controller_load() -> None:
+    task_id = "carry_dining_tray/v1"
+    backend = _backend(task_id)
+    action = DualArmAction(
+        0.04,
+        -0.02,
+        (0.02, -0.01, 0.01, 0.0, 0.0, 0.0),
+        (0.02, 0.01, 0.01, 0.0, 0.0, 0.0),
+        1.0,
+        1.0,
+    )
+
+    def advance(observation, steps: int) -> None:
+        for _ in range(steps):
+            outcome = backend.apply(
+                DualArmActionFrame(
+                    observation.timestamp_ns,
+                    observation.timestamp_ns,
+                    observation.timestamp_ns + 100_000_000,
+                    "random_actor",
+                    action,
+                )
+            )
+            observation = outcome.observation
+
+    try:
+        observation = backend.reset(seed=811, task_id=task_id)
+        advance(observation, 5)
+        snapshot = backend.capture_state_snapshot()
+        snapshot_left_targets = backend._left_targets.copy()
+        snapshot_right_targets = backend._right_targets.copy()
+        observation = backend.observe()
+        advance(observation, 8)
+        expected_positions = backend.data.qpos.copy()
+        expected_velocities = backend.data.qvel.copy()
+        expected_controls = backend.data.ctrl.copy()
+
+        restored = backend.reset(
+            seed=811, task_id=task_id, initial_state=snapshot
+        )
+        assert backend.data.qpos == pytest.approx(snapshot.generalized_positions)
+        assert backend.data.qvel == pytest.approx(snapshot.generalized_velocities)
+        assert backend.data.ctrl == pytest.approx(snapshot.actuator_controls)
+        assert backend.data.qacc_warmstart == pytest.approx(snapshot.solver_state)
+        assert backend._left_targets == pytest.approx(snapshot_left_targets)
+        assert backend._right_targets == pytest.approx(snapshot_right_targets)
+        advance(restored, 8)
+    finally:
+        backend.close()
+
+    assert backend.data.qpos == pytest.approx(expected_positions, abs=1.0e-10)
+    assert backend.data.qvel == pytest.approx(expected_velocities, abs=1.0e-10)
+    assert backend.data.ctrl == pytest.approx(expected_controls, abs=1.0e-10)
 
 
 @pytest.mark.parametrize("task_id", sorted(TASKS))

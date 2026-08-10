@@ -147,12 +147,22 @@ class MujocoDualArmBackend:
         return self._observation()
 
     def capture_state_snapshot(self) -> PhysicalStateSnapshot:
-        """Capture positions only; no action, reward, or task stage is encoded."""
+        """Capture physical continuation state without reward or task stage."""
         self._require_active()
+        specification = _snapshot_state_specification()
+        runtime_state = np.empty(
+            mujoco.mj_stateSize(self.model, specification), dtype=np.float64
+        )
+        mujoco.mj_getState(self.model, self.data, runtime_state, specification)
         return PhysicalStateSnapshot(
             task_id=self._task_id or self.config.task_id,
             backend_fingerprint=self._state_snapshot_fingerprint(),
             generalized_positions=tuple(float(value) for value in self.data.qpos),
+            generalized_velocities=tuple(float(value) for value in self.data.qvel),
+            generalized_accelerations=tuple(float(value) for value in self.data.qacc),
+            actuator_controls=tuple(float(value) for value in self.data.ctrl),
+            solver_state=tuple(float(value) for value in self.data.qacc_warmstart),
+            runtime_state=tuple(float(value) for value in runtime_state),
         )
 
     def _reset_state_snapshot(self, snapshot: PhysicalStateSnapshot) -> None:
@@ -163,18 +173,52 @@ class MujocoDualArmBackend:
             raise ValueError("snapshot backend fingerprint differs")
         if len(snapshot.generalized_positions) != self.model.nq:
             raise ValueError("snapshot generalized-position dimension differs")
-        self.data.qpos[:] = snapshot.generalized_positions
-        self.data.qvel[:] = 0.0
-        self.data.qacc[:] = 0.0
-        self.data.qacc_warmstart[:] = 0.0
-        if self.model.na:
-            self.data.act[:] = 0.0
-        self.data.ctrl[:] = 0.0
+        specification = _snapshot_state_specification()
+        if snapshot.runtime_state:
+            expected = mujoco.mj_stateSize(self.model, specification)
+            if len(snapshot.runtime_state) != expected:
+                raise ValueError("snapshot runtime-state dimension differs")
+            mujoco.mj_setState(
+                self.model,
+                self.data,
+                np.asarray(snapshot.runtime_state, dtype=np.float64),
+                specification,
+            )
+        else:
+            self.data.qpos[:] = snapshot.generalized_positions
+            if snapshot.generalized_velocities:
+                if len(snapshot.generalized_velocities) != self.model.nv:
+                    raise ValueError("snapshot generalized-velocity dimension differs")
+                self.data.qvel[:] = snapshot.generalized_velocities
+            else:
+                self.data.qvel[:] = 0.0
+            self.data.qacc[:] = 0.0
+            if snapshot.solver_state:
+                if len(snapshot.solver_state) != self.model.nv:
+                    raise ValueError("snapshot solver-state dimension differs")
+                self.data.qacc_warmstart[:] = snapshot.solver_state
+            else:
+                self.data.qacc_warmstart[:] = 0.0
+            if self.model.na:
+                self.data.act[:] = 0.0
+            if snapshot.actuator_controls:
+                if len(snapshot.actuator_controls) != self.model.nu:
+                    raise ValueError("snapshot actuator-control dimension differs")
+                self.data.ctrl[:] = snapshot.actuator_controls
+            else:
+                self.data.ctrl[:] = 0.0
         self.data.time = 0.0
         mujoco.mj_forward(self.model, self.data)
-        self._synchronize_arm_targets_to_measured()
-        self._write_controls(_hold_action(self._gripper_positions()))
+        if snapshot.actuator_controls:
+            self._synchronize_arm_targets_to_controls()
+        else:
+            self._synchronize_arm_targets_to_measured()
+            self._write_controls(_hold_action(self._gripper_positions()))
         mujoco.mj_forward(self.model, self.data)
+        if snapshot.generalized_accelerations:
+            if len(snapshot.generalized_accelerations) != self.model.nv:
+                raise ValueError("snapshot generalized-acceleration dimension differs")
+            self.data.qacc[:] = snapshot.generalized_accelerations
 
     def apply(self, frame: DualArmActionFrame) -> RuntimeStepOutcome:
         self._require_active()
@@ -197,6 +241,7 @@ class MujocoDualArmBackend:
         if not predictive_events:
             for _ in range(self._substeps):
                 mujoco.mj_step(self.model, self.data)
+            mujoco.mj_forward(self.model, self.data)
         self._steps += 1
         self._sequence += 1
         truncated = self._steps >= self.config.max_steps
@@ -282,6 +327,13 @@ class MujocoDualArmBackend:
         ):
             for index, joint_id in enumerate(joint_ids):
                 targets[index] = self.data.qpos[self.model.jnt_qposadr[joint_id]]
+
+    def _synchronize_arm_targets_to_controls(self) -> None:
+        for targets, actuator_ids in (
+            (self._left_targets, self.bundle.ids.secondary_arm_actuators),
+            (self._right_targets, self.bundle.ids.arm_actuators),
+        ):
+            targets[:] = self.data.ctrl[list(actuator_ids)]
 
     def _state_snapshot_fingerprint(self) -> str:
         return (
@@ -561,6 +613,13 @@ def _control_substeps(control_hz: float, timestep: float) -> int:
     ):
         raise ValueError("control period must be an integer number of physics steps")
     return substeps
+
+
+def _snapshot_state_specification() -> mujoco.mjtState:
+    return mujoco.mjtState(
+        int(mujoco.mjtState.mjSTATE_INTEGRATION)
+        | int(mujoco.mjtState.mjSTATE_CTRL)
+    )
 
 
 def _zero_action() -> DualArmAction:

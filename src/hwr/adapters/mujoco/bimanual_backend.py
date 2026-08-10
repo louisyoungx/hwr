@@ -116,6 +116,7 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
         self._severe_collision_count = 0
         self._maximum_forbidden_force = 0.0
         self._last_update = None
+        mujoco.mj_resetData(self.model, self.data)
         self._randomize_model(seed)
         observation = super().reset(
             seed=seed, task_id=task_id, initial_state=initial_state

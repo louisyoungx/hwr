@@ -196,6 +196,7 @@ class TrainingEpisodeRecord:
     frontier_reset: bool = False
     frontier_source_episode: int = -1
     frontier_source_step: int = -1
+    environment_reset_seed: int = -1
 
 
 @dataclass
@@ -441,6 +442,7 @@ class BimanualTrainingRunner:
                     fields["minimum_right_reach_distance"],
                 ),
             )
+            fields.setdefault("environment_reset_seed", fields["seed"])
             records.append(TrainingEpisodeRecord(**fields))
         self.records = records
         self._environment_steps = int(value["environment_steps"])
@@ -467,8 +469,13 @@ class BimanualTrainingRunner:
         frontier_entry = None
         if episode_index >= self.config.initial_random_episodes:
             frontier_entry = self.frontier.select(task_id, self.frontier_rng)
+        reset_seed = (
+            self.config.seed + frontier_entry.source_episode * 104729
+            if frontier_entry
+            else seed
+        )
         observation = environment.reset(
-            seed=seed,
+            seed=reset_seed,
             task_id=task_id,
             initial_state=(frontier_entry.snapshot if frontier_entry else None),
         )
@@ -635,6 +642,7 @@ class BimanualTrainingRunner:
             frontier_source_step=(
                 frontier_entry.source_step if frontier_entry else -1
             ),
+            environment_reset_seed=reset_seed,
         )
 
     def _select_action(

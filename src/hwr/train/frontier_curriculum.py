@@ -255,6 +255,9 @@ class OutcomeFrontierCurriculum:
             "actor_input_fields": [],
             "task_stages": False,
             "source": "autonomous_physical_state_discovery",
+            "snapshot_state": (
+                "positions_velocities_and_controller_loads_never_actor_inputs"
+            ),
             "selection": (
                 "quality_weighted_signature_and_source_with_diversity_floor"
             ),
