@@ -79,3 +79,7 @@ def test_local_training_executes_actor_critic_update_from_random_experience() ->
     assert result.records[0].mean_critic_loss > 0.0
     assert result.records[0].mean_safety_loss > 0.0
     assert result.replay.size == 16
+    partition = result.replay.partitions[result.records[0].task_id]
+    discounts = partition.regular.all().bootstrap_discounts
+    assert discounts is not None
+    assert float(discounts.max()) <= result.trainer.config.discount

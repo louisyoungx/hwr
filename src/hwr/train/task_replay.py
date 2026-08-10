@@ -42,6 +42,7 @@ def _concatenate(
         actor_weights=optional("actor_weights"),
         proposed_action_chunks=optional("proposed_action_chunks"),
         safety_costs=optional("safety_costs"),
+        bootstrap_discounts=optional("bootstrap_discounts"),
     )
 
 

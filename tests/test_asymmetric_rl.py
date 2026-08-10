@@ -257,7 +257,8 @@ def test_asymmetric_training_state_restores_for_continuation() -> None:
 def test_asymmetric_replay_and_training_checkpoint_resume(tmp_path) -> None:
     trainer = _trainer()
     replay = AsymmetricReplayBuffer(8, seed=7)
-    replay.add(_batch())
+    source = replace(_batch(), bootstrap_discounts=torch.full((4,), 0.75))
+    replay.add(source)
     replay_state = replay.state_dict()
     assert all(
         tensor.shape[0] == replay.size
@@ -276,6 +277,7 @@ def test_asymmetric_replay_and_training_checkpoint_resume(tmp_path) -> None:
 
     assert restored_trainer.update_count == trainer.update_count
     assert restored_replay.size == replay.size == 4
+    assert torch.all(restored_replay.all().bootstrap_discounts == 0.75)
     assert manifest["replay_size"] == 4
     assert restored_replay.sample(2).action_chunks.shape == (2, 3, 16)
 

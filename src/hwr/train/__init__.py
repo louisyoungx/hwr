@@ -47,6 +47,7 @@ from hwr.train.task_sampling import (
     OutcomeAdaptiveTaskSamplingConfig,
     TaskOutcome,
 )
+from hwr.train.n_step import NStepTargets, build_n_step_targets
 from hwr.train.bimanual_training import (
     BimanualRLTrainingConfig,
     BimanualTrainingResult,
@@ -105,6 +106,8 @@ __all__ = [
     "OutcomeAdaptiveTaskSampler",
     "OutcomeAdaptiveTaskSamplingConfig",
     "TaskOutcome",
+    "NStepTargets",
+    "build_n_step_targets",
     "load_default_bimanual_training_catalogs",
     "load_bimanual_actor",
     "resume_bimanual_training_run",

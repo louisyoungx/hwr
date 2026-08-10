@@ -97,6 +97,7 @@ class AsymmetricRLBatch:
     actor_weights: torch.Tensor | None = None
     proposed_action_chunks: torch.Tensor | None = None
     safety_costs: torch.Tensor | None = None
+    bootstrap_discounts: torch.Tensor | None = None
 
 
 def _action_scales(config: AsymmetricRLConfig, reference: torch.Tensor) -> torch.Tensor:
@@ -234,9 +235,15 @@ class AsymmetricActorCriticTrainer:
             target_q1, target_q2 = self.target_critic(
                 batch.next_privileged_state, next_action
             )
-            target_q = batch.rewards * self.config.reward_scale + (
-                1.0 - batch.done
-            ) * self.config.discount * torch.minimum(target_q1, target_q2)
+            bootstrap = (
+                batch.bootstrap_discounts
+                if batch.bootstrap_discounts is not None
+                else (1.0 - batch.done) * self.config.discount
+            )
+            target_q = (
+                batch.rewards * self.config.reward_scale
+                + bootstrap * torch.minimum(target_q1, target_q2)
+            )
         executed = _executed_action_representation(batch)
         q1, q2 = self.critic(batch.privileged_state, executed)
         temporal_difference = nn.functional.mse_loss(
@@ -438,6 +445,10 @@ class AsymmetricActorCriticTrainer:
             batch_size,
         ):
             raise ValueError("asymmetric RL Actor weights shape is invalid")
+        if batch.bootstrap_discounts is not None and tuple(
+            batch.bootstrap_discounts.shape
+        ) != (batch_size,):
+            raise ValueError("asymmetric RL bootstrap discounts shape is invalid")
         optional = (batch.proposed_action_chunks, batch.safety_costs)
         if (optional[0] is None) != (optional[1] is None):
             raise ValueError("safety proposal and cost must appear together")
@@ -471,6 +482,11 @@ class AsymmetricActorCriticTrainer:
             safety_costs=(
                 batch.safety_costs.to(self.device)
                 if batch.safety_costs is not None
+                else None
+            ),
+            bootstrap_discounts=(
+                batch.bootstrap_discounts.to(self.device)
+                if batch.bootstrap_discounts is not None
                 else None
             ),
         )

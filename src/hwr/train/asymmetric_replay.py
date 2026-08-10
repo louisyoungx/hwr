@@ -104,6 +104,8 @@ class AsymmetricReplayBuffer:
         if batch.proposed_action_chunks is not None and batch.safety_costs is not None:
             values["proposed_action_chunks"] = batch.proposed_action_chunks
             values["safety_costs"] = batch.safety_costs
+        if batch.bootstrap_discounts is not None:
+            values["bootstrap_discounts"] = batch.bootstrap_discounts
         values.update(
             {
                 "privileged_state": batch.privileged_state,
@@ -145,4 +147,5 @@ class AsymmetricReplayBuffer:
             actor_weights=values["actor_weights"],
             proposed_action_chunks=values.get("proposed_action_chunks"),
             safety_costs=values.get("safety_costs"),
+            bootstrap_discounts=values.get("bootstrap_discounts"),
         )

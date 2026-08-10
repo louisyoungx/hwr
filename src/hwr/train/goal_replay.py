@@ -74,6 +74,11 @@ def _slice_batch(batch: AsymmetricRLBatch, indices: torch.Tensor) -> AsymmetricR
         safety_costs=(
             batch.safety_costs[indices] if batch.safety_costs is not None else None
         ),
+        bootstrap_discounts=(
+            batch.bootstrap_discounts[indices]
+            if batch.bootstrap_discounts is not None
+            else None
+        ),
     )
 
 
@@ -90,6 +95,7 @@ def _with_actor_weights(batch: AsymmetricRLBatch, value: float) -> AsymmetricRLB
         actor_weights=torch.full_like(batch.rewards, value),
         proposed_action_chunks=batch.proposed_action_chunks,
         safety_costs=batch.safety_costs,
+        bootstrap_discounts=batch.bootstrap_discounts,
     )
 
 
@@ -129,6 +135,9 @@ def hindsight_relabel(
     state[:, goal_slice] = desired
     next_state[:, goal_slice] = desired
     success = _hindsight_success(episode.next_achieved_goals, desired)
+    bootstrap = episode.batch.bootstrap_discounts
+    if bootstrap is not None:
+        bootstrap = torch.where(success, torch.zeros_like(bootstrap), bootstrap)
     return AsymmetricRLBatch(
         actor_inputs=episode.batch.actor_inputs,
         next_actor_inputs=episode.batch.next_actor_inputs,
@@ -141,6 +150,7 @@ def hindsight_relabel(
         actor_weights=torch.zeros_like(episode.batch.rewards),
         proposed_action_chunks=episode.batch.proposed_action_chunks,
         safety_costs=episode.batch.safety_costs,
+        bootstrap_discounts=bootstrap,
     )
 
 
@@ -242,6 +252,11 @@ def mirror_batch(batch: AsymmetricRLBatch) -> AsymmetricRLBatch:
         safety_costs=(
             batch.safety_costs.clone() if batch.safety_costs is not None else None
         ),
+        bootstrap_discounts=(
+            batch.bootstrap_discounts.clone()
+            if batch.bootstrap_discounts is not None
+            else None
+        ),
     )
 
 
@@ -265,6 +280,12 @@ def _concat_batches(first: AsymmetricRLBatch, second: AsymmetricRLBatch) -> Asym
         if first.safety_costs is not None and second.safety_costs is not None
         else None
     )
+    bootstrap = (
+        torch.cat((first.bootstrap_discounts, second.bootstrap_discounts))
+        if first.bootstrap_discounts is not None
+        and second.bootstrap_discounts is not None
+        else None
+    )
     return AsymmetricRLBatch(
         actor_inputs=combine(first.actor_inputs, second.actor_inputs),
         next_actor_inputs=combine(first.next_actor_inputs, second.next_actor_inputs),
@@ -279,6 +300,7 @@ def _concat_batches(first: AsymmetricRLBatch, second: AsymmetricRLBatch) -> Asym
         actor_weights=weights,
         proposed_action_chunks=proposals,
         safety_costs=safety,
+        bootstrap_discounts=bootstrap,
     )
 
 

@@ -39,6 +39,7 @@ from hwr.train.action_exploration import (
 )
 from hwr.train.curriculum import AutomaticCurriculum, CurriculumConfig
 from hwr.train.goal_replay import GoalEpisode
+from hwr.train.n_step import build_n_step_targets
 from hwr.train.task_replay import TaskPartitionedGoalReplayBuffer
 from hwr.train.task_sampling import OutcomeAdaptiveTaskSampler, TaskOutcome
 
@@ -63,6 +64,7 @@ class BimanualRLTrainingConfig:
     failure_replay_fraction: float = 0.5
     discovery_replay_fraction: float = 0.35
     safety_replay_fraction: float = 0.15
+    n_step_horizon: int = 8
     seed: int = 20260810
     device: str = "cpu"
     raw_image_width: int = 64
@@ -93,6 +95,7 @@ class BimanualRLTrainingConfig:
             self.hidden_dim,
             self.attention_heads,
             self.transformer_layers,
+            self.n_step_horizon,
         )
         if min(positive) <= 0 or self.initial_random_episodes < 0:
             raise ValueError("bimanual training dimensions must be positive")
@@ -527,26 +530,40 @@ class BimanualTrainingRunner:
     def _goal_episode(
         self, buffers: _EpisodeBuffers, success: bool, mirrorable: bool
     ) -> GoalEpisode:
+        targets = build_n_step_targets(
+            buffers.rewards,
+            buffers.done,
+            horizon=self.config.n_step_horizon,
+            discount=self.rl_config.discount,
+        )
+        next_inputs = [
+            buffers.next_actor_inputs[index] for index in targets.next_indices
+        ]
+        next_states = [buffers.next_states[index] for index in targets.next_indices]
+        next_achieved = [
+            buffers.next_achieved[index] for index in targets.next_indices
+        ]
         batch = AsymmetricRLBatch(
             actor_inputs=stack_actor_inputs(buffers.actor_inputs),
-            next_actor_inputs=stack_actor_inputs(buffers.next_actor_inputs),
+            next_actor_inputs=stack_actor_inputs(next_inputs),
             privileged_state=torch.tensor(buffers.states, dtype=torch.float32),
-            next_privileged_state=torch.tensor(
-                buffers.next_states, dtype=torch.float32
-            ),
+            next_privileged_state=torch.tensor(next_states, dtype=torch.float32),
             action_chunks=torch.tensor(buffers.actions, dtype=torch.float32)[:, None],
             stop_decisions=torch.zeros(len(buffers.actions), 1),
-            rewards=torch.tensor(buffers.rewards, dtype=torch.float32),
-            done=torch.tensor(buffers.done, dtype=torch.float32),
+            rewards=torch.tensor(targets.rewards, dtype=torch.float32),
+            done=torch.tensor(targets.done, dtype=torch.float32),
             proposed_action_chunks=torch.tensor(
                 buffers.proposed_actions, dtype=torch.float32
             )[:, None],
             safety_costs=torch.tensor(buffers.safety_costs, dtype=torch.float32),
+            bootstrap_discounts=torch.tensor(
+                targets.bootstrap_discounts, dtype=torch.float32
+            ),
         )
         return GoalEpisode(
             batch,
             torch.tensor(buffers.achieved, dtype=torch.float32),
-            torch.tensor(buffers.next_achieved, dtype=torch.float32),
+            torch.tensor(next_achieved, dtype=torch.float32),
             torch.tensor(buffers.desired, dtype=torch.float32),
             success,
             mirrorable,
