@@ -191,14 +191,19 @@ def test_gripper_head_uses_faster_optimizer_group_only() -> None:
     fast_ids = {id(parameter) for parameter in fast["params"]}
     slow_ids = {id(parameter) for parameter in slow["params"]}
 
-    assert fast["lr"] == pytest.approx(
-        config.actor_learning_rate * config.gripper_head_learning_rate_scale
-    )
+    assert fast["lr"] == pytest.approx(config.actor_learning_rate)
     assert slow["lr"] == pytest.approx(config.actor_learning_rate)
     assert {id(parameter) for parameter in actor.gripper_head.parameters()} == fast_ids
     assert id(actor.motion_head.weight) in slow_ids
     assert id(actor.output_norm.weight) in slow_ids
     assert id(trainer.actor_log_standard_deviation) in slow_ids
+
+    trainer.update_count = config.gripper_head_acceleration_updates
+    trainer._schedule_actor_learning_rates()
+
+    assert fast["lr"] == pytest.approx(
+        config.actor_learning_rate * config.gripper_head_learning_rate_scale
+    )
 
 
 def test_stochastic_actor_samples_bounded_actions_and_finite_density() -> None:
