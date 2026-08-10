@@ -46,7 +46,7 @@ from hwr.train.task_sampling import OutcomeAdaptiveTaskSampler, TaskOutcome
 @dataclass(frozen=True)
 class BimanualRLTrainingConfig:
     episodes: int = 120
-    episode_step_limit: int = 240
+    episode_step_limit: int | None = None
     replay_capacity: int = 80_000
     batch_size: int = 64
     learning_starts: int = 512
@@ -82,7 +82,6 @@ class BimanualRLTrainingConfig:
     def __post_init__(self) -> None:
         positive = (
             self.episodes,
-            self.episode_step_limit,
             self.replay_capacity,
             self.batch_size,
             self.learning_starts,
@@ -103,6 +102,8 @@ class BimanualRLTrainingConfig:
         )
         if min(positive) <= 0 or self.initial_random_episodes < 0:
             raise ValueError("bimanual training dimensions must be positive")
+        if self.episode_step_limit is not None and self.episode_step_limit <= 0:
+            raise ValueError("bimanual episode step limit must be positive when set")
         fractions = (
             self.updates_per_environment_step,
             self.exploration_noise,
@@ -371,7 +372,8 @@ class BimanualTrainingRunner:
         total_reward = 0.0
         success = False
         safety_interventions = 0
-        for step in range(self.config.episode_step_limit):
+        step_limit = self.config.episode_step_limit or self.tasks[task_id].max_steps
+        for step in range(step_limit):
             random_phase = episode_index < self.config.initial_random_episodes
             action = self._select_action(
                 actor_input,
@@ -396,7 +398,7 @@ class BimanualTrainingRunner:
             next_input = self.pipeline.build(outcome.observation)
             next_state = environment.privileged_training_state()
             terminal = outcome.terminated or outcome.truncated
-            limit = step + 1 >= self.config.episode_step_limit
+            limit = step + 1 >= step_limit
             self._append_transition(
                 buffers,
                 actor_input,

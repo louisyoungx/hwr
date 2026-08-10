@@ -28,7 +28,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output-root", type=Path, default=Path("runs/bimanual-rl"))
     parser.add_argument("--episodes", type=int, default=120)
-    parser.add_argument("--episode-steps", type=int, default=240)
+    parser.add_argument(
+        "--episode-steps",
+        type=int,
+        help="optional diagnostic cap; defaults to each task's physical horizon",
+    )
     parser.add_argument("--replay-capacity", type=int, default=80_000)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--learning-starts", type=int, default=512)

@@ -30,6 +30,19 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
     assert arguments.replay_capacity == 12_000
     assert arguments.global_random_burst == 0.02
     assert arguments.global_random_burst_steps == 6
+    assert arguments.episode_steps is None
+
+
+def test_formal_training_defaults_to_each_tasks_full_physical_horizon() -> None:
+    tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
+    runner = BimanualTrainingRunner(
+        tasks,
+        bindings,
+        BimanualRLTrainingConfig(episodes=1),
+    )
+
+    assert runner.config.episode_step_limit is None
+    assert {task.max_steps for task in tasks.values()} == {1200, 1600}
 
 
 def test_local_training_collects_all_three_tasks_without_action_labels() -> None:
