@@ -68,10 +68,13 @@ class RewardWeights:
     target_distance: float = 4.0
     left_reach: float = 1.5
     right_reach: float = 1.5
+    worst_side_reach: float = 6.0
     tilt: float = 1.0
     articulation: float = 2.0
     contact: float = 1.0
     near_handle_closure: float = 1.5
+    joint_grasp_readiness: float = 3.0
+    bilateral_contact: float = 4.0
     support: float = 0.5
     progress_scale: float = 8.0
     step_cost: float = 0.002
@@ -310,6 +313,9 @@ class BimanualTaskTracker:
         value = -weights.target_distance * sample.target_distance
         value -= weights.left_reach * sample.left_reach_distance
         value -= weights.right_reach * sample.right_reach_distance
+        value -= weights.worst_side_reach * max(
+            sample.left_reach_distance, sample.right_reach_distance
+        )
         value -= weights.tilt * sample.payload_tilt_radians
         value += weights.contact * (sample.left_contact + sample.right_contact)
         left_ready = math.exp(-sample.left_reach_distance / 0.08) * (
@@ -319,6 +325,10 @@ class BimanualTaskTracker:
             sample.right_gripper_position
         )
         value += weights.near_handle_closure * (left_ready + right_ready)
+        value += weights.joint_grasp_readiness * left_ready * right_ready
+        value += weights.bilateral_contact * (
+            sample.left_contact and sample.right_contact
+        )
         value += weights.support * sample.support_contact
         if self.spec.objective == "hold_drawer_place":
             required = self.spec.criteria.minimum_articulation_position

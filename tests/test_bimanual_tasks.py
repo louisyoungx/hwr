@@ -187,3 +187,45 @@ def test_reward_encourages_closing_both_grippers_only_near_handles() -> None:
     update = tracker.update(closed)
 
     assert update.reward > 1.0
+
+
+def test_reward_prefers_balanced_bimanual_progress_over_one_sided_progress() -> None:
+    task_id = "carry_dining_tray/v1"
+    spec = SPECS[task_id]
+    initial = _sample(
+        task_id,
+        left_reach_distance=0.20,
+        right_reach_distance=0.20,
+    )
+    one_sided_tracker = BimanualTaskTracker(spec)
+    one_sided_tracker.reset(initial)
+    one_sided = one_sided_tracker.update(
+        replace(initial, left_reach_distance=0.05)
+    )
+    balanced_tracker = BimanualTaskTracker(spec)
+    balanced_tracker.reset(initial)
+    balanced = balanced_tracker.update(
+        replace(
+            initial,
+            left_reach_distance=0.125,
+            right_reach_distance=0.125,
+        )
+    )
+
+    assert balanced.reward > one_sided.reward
+
+
+def test_reward_contains_bilateral_contact_synergy() -> None:
+    task_id = "carry_living_room_basket/v1"
+    spec = SPECS[task_id]
+    initial = _sample(task_id)
+    single_tracker = BimanualTaskTracker(spec)
+    single_tracker.reset(initial)
+    single = single_tracker.update(replace(initial, left_contact=True))
+    both_tracker = BimanualTaskTracker(spec)
+    both_tracker.reset(initial)
+    both = both_tracker.update(
+        replace(initial, left_contact=True, right_contact=True)
+    )
+
+    assert both.reward - single.reward > spec.reward.contact
