@@ -33,6 +33,7 @@ class RobotModelReport:
     finger_joint_count: int
     central_body_present: bool
     top_camera_present: bool
+    overall_height_m: float
     arm_mount_y_m: tuple[float, float]
     finger_joint_travel_m: tuple[float, ...]
     gripper_open_gap_m: float
@@ -96,6 +97,7 @@ def inspect_robot_model(model: mujoco.MjModel) -> RobotModelReport:
     top_camera_present = (
         mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "top_camera_head") >= 0
     )
+    overall_height = _overall_height(model)
     invalid_bodies: list[str] = []
     dynamic_count = 0
     for body_id in range(1, model.nbody):
@@ -121,6 +123,8 @@ def inspect_robot_model(model: mujoco.MjModel) -> RobotModelReport:
         errors.append("central body box is missing")
     if not top_camera_present:
         errors.append("top camera head is missing")
+    if not np.isclose(overall_height, 1.60, atol=0.005):
+        errors.append(f"overall robot height must be 1.60 m, found {overall_height:.3f} m")
     if any(value < 0.18 for value in open_gaps) or any(
         not 0.02 <= value <= 0.07 for value in closed_gaps
     ):
@@ -143,6 +147,7 @@ def inspect_robot_model(model: mujoco.MjModel) -> RobotModelReport:
         finger_joint_count=finger_count,
         central_body_present=central_body_present,
         top_camera_present=top_camera_present,
+        overall_height_m=overall_height,
         arm_mount_y_m=arm_mount_y,
         finger_joint_travel_m=finger_travel,
         gripper_open_gap_m=open_gap,
@@ -156,6 +161,24 @@ def inspect_robot_model(model: mujoco.MjModel) -> RobotModelReport:
         timestep=float(model.opt.timestep),
         gravity=tuple(float(value) for value in model.opt.gravity),
         errors=tuple(errors),
+    )
+
+
+def _overall_height(model: mujoco.MjModel) -> float:
+    base_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "robot_base")
+    camera_body_id = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_BODY, "top_camera_head"
+    )
+    housing_id = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_GEOM, "camera_head_housing"
+    )
+    if min(base_id, camera_body_id, housing_id) < 0:
+        return 0.0
+    return float(
+        model.body_pos[base_id, 2]
+        + model.body_pos[camera_body_id, 2]
+        + model.geom_pos[housing_id, 2]
+        + model.geom_size[housing_id, 2]
     )
 
 

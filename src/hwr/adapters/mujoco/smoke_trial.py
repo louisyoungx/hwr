@@ -51,7 +51,20 @@ def run_contact_grasp_trial(
 ) -> ContactGraspReport:
     observation = backend.reset(seed=seed, task_id=backend.config.task_id)
     expert = PrivilegedCartesianExpert(backend)
-    monitor = GraspContactMonitor(backend.model, object_geom="smoke_object_geom")
+    monitor = GraspContactMonitor(
+        backend.model,
+        object_geom="smoke_object_geom",
+        left_pad=(
+            "right_gripper_left_pad",
+            "right_gripper_left_distal",
+            "right_gripper_left_tip",
+        ),
+        right_pad=(
+            "right_gripper_right_pad",
+            "right_gripper_right_distal",
+            "right_gripper_right_tip",
+        ),
+    )
     object_body_id = mujoco.mj_name2id(
         backend.model,
         mujoco.mjtObj.mjOBJ_BODY,
