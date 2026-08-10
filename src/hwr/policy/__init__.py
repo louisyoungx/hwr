@@ -3,6 +3,7 @@
 from hwr.policy.model import BehaviorMLP, ModelConfig
 from hwr.policy.neural import NeuralPolicy, Normalization
 from hwr.policy.visual_model import HouseholdVisualPolicyModel, VisualModelConfig
+from hwr.policy.visual_knn import VisualKnnConfig, VisualKnnPolicy
 from hwr.policy.visual_policy import LearnedVisualPolicy, VisualNormalization
 
 __all__ = [
@@ -14,4 +15,6 @@ __all__ = [
     "Normalization",
     "VisualModelConfig",
     "VisualNormalization",
+    "VisualKnnConfig",
+    "VisualKnnPolicy",
 ]

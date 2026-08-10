@@ -17,6 +17,8 @@ from hwr.train import (
     load_visual_policy,
     save_visual_training_result,
     train_visual_policy,
+    load_visual_knn_policy,
+    save_visual_knn_policy,
 )
 
 
@@ -135,3 +137,25 @@ def test_formal_visual_model_backpropagates_on_local_device() -> None:
     assert output.actions.shape == (batch, 1, 9)
     assert output.phase_logits.shape == (batch, 1)
     assert all(parameter.grad is not None for parameter in model.parameters())
+
+
+def test_visual_knn_policy_saves_reloads_and_infers(tmp_path) -> None:
+    dataset = _dataset(tmp_path)
+    model_path = save_visual_knn_policy(
+        tmp_path / "knn-models",
+        "visual-knn",
+        "v1",
+        dataset,
+        task_instructions={TASK_ID: (0, INSTRUCTION)},
+        control_hz=20.0,
+        neighbors=3,
+    )
+    policy = load_visual_knn_policy(model_path)
+    policy.reset(task_id=TASK_ID, seed=100)
+
+    action = policy.infer((_observation(1),))[0]
+
+    assert action.source == "learned:visual-knn:v1"
+    assert action.policy_version == "visual-knn:v1"
+    assert action.base_linear > 0.05
+    assert policy.config.neighbors == 3

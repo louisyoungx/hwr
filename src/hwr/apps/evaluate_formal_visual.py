@@ -11,7 +11,7 @@ from typing import Sequence
 from hwr.adapters.mujoco import MujocoHouseholdBackend, load_mujoco_task_bindings
 from hwr.eval import evaluate_formal_visual_policy
 from hwr.scenarios.formal3d import load_formal_3d_tasks
-from hwr.train import load_visual_policy
+from hwr.train import load_visual_knn_policy, load_visual_policy
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -45,12 +45,16 @@ def evaluate(arguments: argparse.Namespace) -> dict[str, object]:
     )
     task = tasks[arguments.task_id]
     binding = bindings[arguments.task_id]
-    policy = load_visual_policy(arguments.checkpoint, device=arguments.device)
-    config = policy.model.config
-    seeds = tuple(range(arguments.seed, arguments.seed + arguments.episodes))
     manifest = json.loads(
         (arguments.checkpoint / "manifest.json").read_text(encoding="utf-8")
     )
+    if manifest["schema_version"] == "hwr.visual-knn-policy/v1":
+        policy = load_visual_knn_policy(arguments.checkpoint)
+        config = policy.config
+    else:
+        policy = load_visual_policy(arguments.checkpoint, device=arguments.device)
+        config = policy.model.config
+    seeds = tuple(range(arguments.seed, arguments.seed + arguments.episodes))
     dataset_seeds = set(manifest["dataset"]["seeds"])
     overlap = sorted(dataset_seeds.intersection(seeds))
     if overlap:
