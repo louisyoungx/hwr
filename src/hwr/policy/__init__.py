@@ -1,5 +1,6 @@
 """Policy models and runtime wrappers."""
 
+from hwr.policy.bimanual_runtime import BimanualVLAActorPolicy
 from hwr.policy.model import BehaviorMLP, ModelConfig
 from hwr.policy.neural import NeuralPolicy, Normalization
 from hwr.policy.visual_model import HouseholdVisualPolicyModel, VisualModelConfig
@@ -16,6 +17,7 @@ from hwr.policy.privileged_critic import PrivilegedCriticConfig, TwinPrivilegedC
 
 __all__ = [
     "BehaviorMLP",
+    "BimanualVLAActorPolicy",
     "HouseholdVisualPolicyModel",
     "LearnedVisualPolicy",
     "ModelConfig",
