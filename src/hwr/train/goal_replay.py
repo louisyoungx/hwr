@@ -14,6 +14,9 @@ from hwr.train.asymmetric_replay import AsymmetricReplayBuffer
 from hwr.train.asymmetric_rl import AsymmetricRLBatch
 
 
+DISCOVERY_REACH_DISTANCE_METERS = 0.06
+
+
 @dataclass(frozen=True)
 class GoalEpisode:
     batch: AsymmetricRLBatch
@@ -408,7 +411,9 @@ class GoalConditionedReplayBuffer:
     def _add_discoveries(self, batch: AsymmetricRLBatch) -> None:
         state = batch.next_privileged_state
         any_contact = (state[:, 7] > 0.5) | (state[:, 8] > 0.5)
-        jointly_near = (state[:, 24] < 0.08) & (state[:, 25] < 0.08)
+        either_side_near = (
+            state[:, 24] < DISCOVERY_REACH_DISTANCE_METERS
+        ) | (state[:, 25] < DISCOVERY_REACH_DISTANCE_METERS)
         safe = state[:, 11] < 0.5
         actor_eligible = (
             batch.actor_weights > 0
@@ -416,7 +421,7 @@ class GoalConditionedReplayBuffer:
             else torch.ones_like(safe)
         )
         indices = torch.nonzero(
-            (any_contact | jointly_near) & safe & actor_eligible
+            (any_contact | either_side_near) & safe & actor_eligible
         ).flatten()
         if indices.numel():
             self.discoveries.add(_slice_batch(batch, indices))

@@ -152,6 +152,11 @@ def save_bimanual_training_run(
         "mirror_transition_count": result.replay.mirror_count,
         "action_labels": False,
         "failure_return": True,
+        "discovery_criteria": {
+            "physical_contact": "either_arm",
+            "reach_distance_meters": 0.06,
+            "reach_sides": "either_arm",
+        },
         "proposed_actions_for_safety_cost": True,
         "safety_cost_labels": "deterministic_runtime_intervention",
         "task_partition_sizes": result.replay.task_sizes(),

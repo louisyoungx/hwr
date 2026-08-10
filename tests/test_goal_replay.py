@@ -148,6 +148,38 @@ def test_runtime_interventions_receive_a_dedicated_safety_replay_quota() -> None
     assert torch.all(sampled.actor_weights[-4:] == 1.0)
 
 
+def test_rare_one_sided_near_grasp_states_enter_discovery_replay() -> None:
+    episode = _episode(success=False, mirrorable=False)
+    near_state = episode.batch.next_privileged_state.clone()
+    near_state[:, 24] = 0.04
+    near_state[:, 25] = 0.20
+    batch = replace(episode.batch, next_privileged_state=near_state)
+    replay = GoalConditionedReplayBuffer(64, seed=13)
+
+    replay.add_episode(replace(episode, batch=batch))
+    sampled = replay.sample(
+        4,
+        failure_fraction=0.0,
+        discovery_fraction=0.75,
+        safety_fraction=0.0,
+    )
+
+    assert replay.discovery_size == 4
+    assert int((sampled.next_privileged_state[:, 24] < 0.06).sum()) >= 3
+    assert torch.all(sampled.actor_weights[-3:] == 1.0)
+
+    outside_state = near_state.clone()
+    outside_state[:, 24] = 0.061
+    outside = GoalConditionedReplayBuffer(64, seed=14)
+    outside.add_episode(
+        replace(
+            episode,
+            batch=replace(episode.batch, next_privileged_state=outside_state),
+        )
+    )
+    assert outside.discovery_size == 0
+
+
 def test_automatic_curriculum_expands_only_after_safe_success_window() -> None:
     curriculum = AutomaticCurriculum(
         ("basket",),
