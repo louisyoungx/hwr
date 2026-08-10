@@ -106,6 +106,7 @@ def save_bimanual_training_run(
         "behavior_cloning": False,
         "teacher_policy": False,
         "updates": "goal-conditioned asymmetric off-policy actor-critic",
+        "safety_constraint": "privileged intervention cost critic",
         "hindsight_actor_weight": 0.0,
     }
     _write_json(path / "lineage.json", lineage)
@@ -119,6 +120,8 @@ def save_bimanual_training_run(
             "object_token",
             "privileged_state",
             "skill_plan",
+            "safety_cost",
+            "safety_intervention",
             "target_token",
             "task_stage",
         ],
@@ -146,6 +149,8 @@ def save_bimanual_training_run(
         "mirror_transition_count": result.replay.mirror_count,
         "action_labels": False,
         "failure_return": True,
+        "proposed_actions_for_safety_cost": True,
+        "safety_cost_labels": "deterministic_runtime_intervention",
     }
     _write_json(path / "replay-manifest.json", replay_manifest)
     files = (

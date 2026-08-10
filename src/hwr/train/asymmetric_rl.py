@@ -31,6 +31,8 @@ class AsymmetricRLConfig:
     target_noise_clip: float = 0.30
     action_magnitude_penalty: float = 0.08
     action_slew_penalty: float = 0.04
+    safety_learning_rate: float = 3e-4
+    safety_actor_penalty: float = 3.0
     base_linear_scale: float = 0.18
     base_angular_scale: float = 0.50
     arm_velocity_scale: float = 0.35
@@ -42,6 +44,7 @@ class AsymmetricRLConfig:
             self.base_linear_scale,
             self.base_angular_scale,
             self.arm_velocity_scale,
+            self.safety_learning_rate,
         ) <= 0:
             raise ValueError("asymmetric RL learning rates must be positive")
         if not 0.0 <= self.discount <= 1.0:
@@ -59,6 +62,7 @@ class AsymmetricRLConfig:
             self.target_noise_clip,
             self.action_magnitude_penalty,
             self.action_slew_penalty,
+            self.safety_actor_penalty,
         )
         if min(regularizers) < 0.0:
             raise ValueError("TD3 smoothing and action penalties cannot be negative")
@@ -85,6 +89,8 @@ class AsymmetricRLBatch:
     rewards: torch.Tensor
     done: torch.Tensor
     actor_weights: torch.Tensor | None = None
+    proposed_action_chunks: torch.Tensor | None = None
+    safety_costs: torch.Tensor | None = None
 
 
 def _action_scales(config: AsymmetricRLConfig, reference: torch.Tensor) -> torch.Tensor:
@@ -125,6 +131,16 @@ def _executed_action_representation(batch: AsymmetricRLBatch) -> torch.Tensor:
     return torch.cat((batch.action_chunks, stop), dim=2).flatten(1)
 
 
+def _proposed_action_representation(batch: AsymmetricRLBatch) -> torch.Tensor:
+    chunks = batch.proposed_action_chunks
+    if chunks is None:
+        raise ValueError("safety critic requires proposed actions")
+    stop = torch.zeros(
+        (*chunks.shape[:2], 1), dtype=chunks.dtype, device=chunks.device
+    )
+    return torch.cat((chunks, stop), dim=2).flatten(1)
+
+
 def _soft_update(target: nn.Module, source: nn.Module, rate: float) -> None:
     with torch.no_grad():
         for target_parameter, source_parameter in zip(
@@ -156,6 +172,7 @@ class AsymmetricActorCriticTrainer:
         self.target_actor = copy.deepcopy(actor).to(self.device).eval()
         self.critic = TwinPrivilegedCritic(critic_config).to(self.device)
         self.target_critic = copy.deepcopy(self.critic).to(self.device).eval()
+        self.safety_critic = TwinPrivilegedCritic(critic_config).to(self.device)
         self.critic_config = critic_config
         self.config = config
         self.actor_optimizer = torch.optim.AdamW(
@@ -164,12 +181,16 @@ class AsymmetricActorCriticTrainer:
         self.critic_optimizer = torch.optim.AdamW(
             self.critic.parameters(), lr=config.critic_learning_rate
         )
+        self.safety_optimizer = torch.optim.AdamW(
+            self.safety_critic.parameters(), lr=config.safety_learning_rate
+        )
         self.update_count = 0
 
     def update(self, batch: AsymmetricRLBatch) -> dict[str, float]:
         batch = self._to_device(batch)
         self._validate_batch(batch)
         critic_loss = self._update_critic(batch)
+        safety_loss = self._update_safety_critic(batch)
         actor_loss = torch.zeros((), device=self.device)
         actor_updated = (
             self.update_count >= self.config.actor_warmup_updates
@@ -182,6 +203,7 @@ class AsymmetricActorCriticTrainer:
         self.update_count += 1
         return {
             "critic_loss": float(critic_loss.detach().cpu()),
+            "safety_loss": float(safety_loss.detach().cpu()),
             "actor_loss": float(actor_loss.detach().cpu()),
             "actor_updated": float(actor_updated),
             "update": float(self.update_count),
@@ -206,13 +228,43 @@ class AsymmetricActorCriticTrainer:
         self.critic_optimizer.step()
         return loss
 
+    def _update_safety_critic(self, batch: AsymmetricRLBatch) -> torch.Tensor:
+        if batch.proposed_action_chunks is None or batch.safety_costs is None:
+            return torch.zeros((), device=self.device)
+        proposed = _proposed_action_representation(batch)
+        first, second = self.safety_critic(batch.privileged_state, proposed)
+        target = batch.safety_costs.to(first.dtype)
+        positives = target.sum()
+        negatives = target.numel() - positives
+        positive_weight = (negatives / positives.clamp_min(1.0)).clamp(1.0, 20.0)
+        loss = nn.functional.binary_cross_entropy_with_logits(
+            first, target, pos_weight=positive_weight
+        )
+        loss += nn.functional.binary_cross_entropy_with_logits(
+            second, target, pos_weight=positive_weight
+        )
+        self.safety_optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        nn.utils.clip_grad_norm_(self.safety_critic.parameters(), 1.0)
+        self.safety_optimizer.step()
+        return loss
+
     def _update_actor(self, batch: AsymmetricRLBatch) -> torch.Tensor:
         _set_requires_grad(self.critic, False)
+        _set_requires_grad(self.safety_critic, False)
         output = self.actor(batch.actor_inputs)
         bounded = bounded_vla_actions(output, self.config.action_scaling())
         stop = torch.zeros_like(output.stop_logits).unsqueeze(-1)
         action = torch.cat((bounded, stop), dim=2).flatten(1)
         q1, _ = self.critic(batch.privileged_state, action)
+        safety_risk = torch.zeros_like(q1)
+        if batch.safety_costs is not None:
+            safety_first, safety_second = self.safety_critic(
+                batch.privileged_state, action
+            )
+            safety_risk = torch.sigmoid(
+                torch.maximum(safety_first, safety_second)
+            )
         behavior = torch.zeros_like(q1)
         if self.config.behavior_regularization > 0.0:
             behavior = nn.functional.smooth_l1_loss(
@@ -243,6 +295,7 @@ class AsymmetricActorCriticTrainer:
                 + self.config.behavior_regularization * behavior
                 + self.config.action_magnitude_penalty * magnitude
                 + self.config.action_slew_penalty * slew
+                + self.config.safety_actor_penalty * safety_risk
             )
         ).sum() / denominator
         self.actor_optimizer.zero_grad(set_to_none=True)
@@ -250,6 +303,7 @@ class AsymmetricActorCriticTrainer:
         nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
         self.actor_optimizer.step()
         _set_requires_grad(self.critic, True)
+        _set_requires_grad(self.safety_critic, True)
         return loss
 
     def _validate_batch(self, batch: AsymmetricRLBatch) -> None:
@@ -281,6 +335,14 @@ class AsymmetricActorCriticTrainer:
             batch_size,
         ):
             raise ValueError("asymmetric RL Actor weights shape is invalid")
+        optional = (batch.proposed_action_chunks, batch.safety_costs)
+        if (optional[0] is None) != (optional[1] is None):
+            raise ValueError("safety proposal and cost must appear together")
+        if optional[0] is not None:
+            if tuple(optional[0].shape) != expected_chunk:
+                raise ValueError("safety proposal action shape is invalid")
+            if tuple(optional[1].shape) != (batch_size,):
+                raise ValueError("safety cost shape is invalid")
 
     def _to_device(self, batch: AsymmetricRLBatch) -> AsymmetricRLBatch:
         move = lambda values: {name: value.to(self.device) for name, value in values.items()}
@@ -298,6 +360,16 @@ class AsymmetricActorCriticTrainer:
                 if batch.actor_weights is not None
                 else None
             ),
+            proposed_action_chunks=(
+                batch.proposed_action_chunks.to(self.device)
+                if batch.proposed_action_chunks is not None
+                else None
+            ),
+            safety_costs=(
+                batch.safety_costs.to(self.device)
+                if batch.safety_costs is not None
+                else None
+            ),
         )
 
     def state_dict(self) -> dict[str, object]:
@@ -308,6 +380,8 @@ class AsymmetricActorCriticTrainer:
             "target_critic": self.target_critic.state_dict(),
             "actor_optimizer": self.actor_optimizer.state_dict(),
             "critic_optimizer": self.critic_optimizer.state_dict(),
+            "safety_critic": self.safety_critic.state_dict(),
+            "safety_optimizer": self.safety_optimizer.state_dict(),
             "update_count": self.update_count,
         }
 
@@ -318,4 +392,7 @@ class AsymmetricActorCriticTrainer:
         self.target_critic.load_state_dict(value["target_critic"])
         self.actor_optimizer.load_state_dict(value["actor_optimizer"])
         self.critic_optimizer.load_state_dict(value["critic_optimizer"])
+        if "safety_critic" in value:
+            self.safety_critic.load_state_dict(value["safety_critic"])
+            self.safety_optimizer.load_state_dict(value["safety_optimizer"])
         self.update_count = int(value["update_count"])

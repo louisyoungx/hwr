@@ -155,12 +155,14 @@ class _EpisodeBuffers:
     next_achieved: list[tuple[float, ...]]
     desired: list[tuple[float, ...]]
     actions: list[tuple[float, ...]]
+    proposed_actions: list[tuple[float, ...]]
+    safety_costs: list[float]
     rewards: list[float]
     done: list[float]
 
     @classmethod
     def empty(cls) -> "_EpisodeBuffers":
-        return cls([], [], [], [], [], [], [], [], [], [])
+        return cls([], [], [], [], [], [], [], [], [], [], [], [])
 
 
 class BimanualTrainingRunner:
@@ -342,7 +344,9 @@ class BimanualTrainingRunner:
                 next_input,
                 state,
                 next_state,
+                action,
                 applied_action,
+                bool(outcome.info["safety_intervened"]),
                 outcome.reward,
                 terminal or limit,
             )
@@ -434,7 +438,9 @@ class BimanualTrainingRunner:
         next_actor_input: VLAActorInput,
         state,
         next_state,
-        action: DualArmAction,
+        proposed_action: DualArmAction,
+        applied_action: DualArmAction,
+        safety_intervened: bool,
         reward: float,
         done: bool,
     ) -> None:
@@ -445,7 +451,9 @@ class BimanualTrainingRunner:
         buffers.achieved.append(state.achieved_goal)
         buffers.next_achieved.append(next_state.achieved_goal)
         buffers.desired.append(state.desired_goal)
-        buffers.actions.append(action.vector())
+        buffers.actions.append(applied_action.vector())
+        buffers.proposed_actions.append(proposed_action.vector())
+        buffers.safety_costs.append(float(safety_intervened))
         buffers.rewards.append(float(reward))
         buffers.done.append(float(done))
 
@@ -463,6 +471,10 @@ class BimanualTrainingRunner:
             stop_decisions=torch.zeros(len(buffers.actions), 1),
             rewards=torch.tensor(buffers.rewards, dtype=torch.float32),
             done=torch.tensor(buffers.done, dtype=torch.float32),
+            proposed_action_chunks=torch.tensor(
+                buffers.proposed_actions, dtype=torch.float32
+            )[:, None],
+            safety_costs=torch.tensor(buffers.safety_costs, dtype=torch.float32),
         )
         return GoalEpisode(
             batch,

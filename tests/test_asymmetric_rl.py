@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -145,6 +146,31 @@ def test_actor_waits_for_critic_only_warmup() -> None:
         )
     )
     assert trainer.update(_batch())["actor_updated"] == 1.0
+
+
+def test_privileged_safety_critic_learns_self_observed_interventions() -> None:
+    trainer = _trainer()
+    batch = _batch()
+    batch = replace(
+        batch,
+        proposed_action_chunks=batch.action_chunks.clone(),
+        safety_costs=torch.tensor((0.0, 1.0, 1.0, 0.0)),
+    )
+    before = [
+        parameter.detach().clone()
+        for parameter in trainer.safety_critic.parameters()
+    ]
+
+    metrics = trainer.update(batch)
+
+    assert metrics["safety_loss"] > 0.0
+    assert any(
+        not torch.equal(previous, current)
+        for previous, current in zip(
+            before, trainer.safety_critic.parameters(), strict=True
+        )
+    )
+    assert not any("safety" in name for name, _ in trainer.actor.named_parameters())
 
 
 def test_asymmetric_actor_rejects_privileged_field_even_during_rl() -> None:

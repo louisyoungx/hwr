@@ -65,6 +65,14 @@ def _slice_batch(batch: AsymmetricRLBatch, indices: torch.Tensor) -> AsymmetricR
         actor_weights=(
             batch.actor_weights[indices] if batch.actor_weights is not None else None
         ),
+        proposed_action_chunks=(
+            batch.proposed_action_chunks[indices]
+            if batch.proposed_action_chunks is not None
+            else None
+        ),
+        safety_costs=(
+            batch.safety_costs[indices] if batch.safety_costs is not None else None
+        ),
     )
 
 
@@ -79,6 +87,8 @@ def _with_actor_weights(batch: AsymmetricRLBatch, value: float) -> AsymmetricRLB
         rewards=batch.rewards,
         done=batch.done,
         actor_weights=torch.full_like(batch.rewards, value),
+        proposed_action_chunks=batch.proposed_action_chunks,
+        safety_costs=batch.safety_costs,
     )
 
 
@@ -128,6 +138,8 @@ def hindsight_relabel(
         rewards=_hindsight_reward(episode.next_achieved_goals, desired),
         done=success.to(episode.batch.done.dtype),
         actor_weights=torch.zeros_like(episode.batch.rewards),
+        proposed_action_chunks=episode.batch.proposed_action_chunks,
+        safety_costs=episode.batch.safety_costs,
     )
 
 
@@ -216,6 +228,14 @@ def mirror_batch(batch: AsymmetricRLBatch) -> AsymmetricRLBatch:
         actor_weights=(
             batch.actor_weights.clone() if batch.actor_weights is not None else None
         ),
+        proposed_action_chunks=(
+            _mirror_action(batch.proposed_action_chunks)
+            if batch.proposed_action_chunks is not None
+            else None
+        ),
+        safety_costs=(
+            batch.safety_costs.clone() if batch.safety_costs is not None else None
+        ),
     )
 
 
@@ -226,6 +246,17 @@ def _concat_batches(first: AsymmetricRLBatch, second: AsymmetricRLBatch) -> Asym
     weights = (
         torch.cat((first.actor_weights, second.actor_weights))
         if first.actor_weights is not None and second.actor_weights is not None
+        else None
+    )
+    proposals = (
+        torch.cat((first.proposed_action_chunks, second.proposed_action_chunks))
+        if first.proposed_action_chunks is not None
+        and second.proposed_action_chunks is not None
+        else None
+    )
+    safety = (
+        torch.cat((first.safety_costs, second.safety_costs))
+        if first.safety_costs is not None and second.safety_costs is not None
         else None
     )
     return AsymmetricRLBatch(
@@ -240,6 +271,8 @@ def _concat_batches(first: AsymmetricRLBatch, second: AsymmetricRLBatch) -> Asym
         rewards=torch.cat((first.rewards, second.rewards)),
         done=torch.cat((first.done, second.done)),
         actor_weights=weights,
+        proposed_action_chunks=proposals,
+        safety_costs=safety,
     )
 
 

@@ -101,6 +101,9 @@ class AsymmetricReplayBuffer:
                 for name, value in batch.next_actor_inputs.items()
             }
         )
+        if batch.proposed_action_chunks is not None and batch.safety_costs is not None:
+            values["proposed_action_chunks"] = batch.proposed_action_chunks
+            values["safety_costs"] = batch.safety_costs
         values.update(
             {
                 "privileged_state": batch.privileged_state,
@@ -140,4 +143,6 @@ class AsymmetricReplayBuffer:
             rewards=values["rewards"],
             done=values["done"],
             actor_weights=values["actor_weights"],
+            proposed_action_chunks=values.get("proposed_action_chunks"),
+            safety_costs=values.get("safety_costs"),
         )
