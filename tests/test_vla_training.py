@@ -7,6 +7,7 @@ import pytest
 import torch
 
 from hwr.data import load_vla_dataset
+from hwr.policy.bimanual_input import actor_input_tensors
 from hwr.policy.vla_model import VLAActorConfig, VLAActorModel
 from hwr.policy.vla_runtime import vla_input_tensors
 from hwr.train import (
@@ -41,6 +42,31 @@ def test_vla_actor_action_head_starts_randomized_around_zero() -> None:
     assert weights.abs().max() <= scale
     assert abs(float(weights.mean())) < scale / 4.0
     assert torch.count_nonzero(bias) == 0
+
+
+def test_isolated_gripper_head_does_not_backpropagate_into_shared_motion() -> None:
+    actor = VLAActorModel(
+        VLAActorConfig(
+            visual_history=2,
+            action_history=2,
+            proprioception_dim=37,
+            language_dim=12,
+            point_count=8,
+            action_chunk_size=3,
+            hidden_dim=32,
+            attention_heads=4,
+            transformer_layers=1,
+            isolated_gripper_head=True,
+        )
+    )
+
+    output = actor(actor_input_tensors(actor_input(2)))
+    output.action_chunks[..., 14:].sum().backward()
+
+    assert actor.gripper_head.weight.grad is not None
+    assert torch.count_nonzero(actor.motion_head.weight.grad) == 0
+    assert torch.count_nonzero(actor.output_norm.weight.grad) == 0
+    assert torch.count_nonzero(actor.head_encoder.network[0].weight.grad) == 0
 
 
 @pytest.mark.parametrize("scale", [0.0, float("inf"), 0.02])

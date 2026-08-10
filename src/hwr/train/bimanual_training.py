@@ -300,6 +300,7 @@ class BimanualTrainingRunner:
             hidden_dim=config.hidden_dim,
             attention_heads=config.attention_heads,
             transformer_layers=config.transformer_layers,
+            isolated_gripper_head=True,
         )
         actor = VLAActorModel(self.actor_config)
         self.trainer = AsymmetricActorCriticTrainer(

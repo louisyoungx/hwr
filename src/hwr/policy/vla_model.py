@@ -27,6 +27,7 @@ class VLAActorConfig:
     dropout: float = 0.0
     action_dim: int = DUAL_ARM_ACTION_DIM
     action_head_init_scale: float = 1.0e-3
+    isolated_gripper_head: bool = False
 
     def __post_init__(self) -> None:
         dimensions = (
@@ -120,15 +121,16 @@ class VLAActorModel(nn.Module):
             layer, num_layers=config.transformer_layers, enable_nested_tensor=False
         )
         self.output_norm = nn.LayerNorm(hidden)
-        self.action_head = nn.Linear(
-            hidden, config.action_chunk_size * config.action_dim
-        )
-        nn.init.uniform_(
-            self.action_head.weight,
-            -config.action_head_init_scale,
-            config.action_head_init_scale,
-        )
-        nn.init.zeros_(self.action_head.bias)
+        if config.isolated_gripper_head:
+            self.motion_head = nn.Linear(hidden, config.action_chunk_size * 14)
+            self.gripper_head = nn.Linear(hidden, config.action_chunk_size * 2)
+            self._initialize_action_head(self.motion_head)
+            self._initialize_action_head(self.gripper_head)
+        else:
+            self.action_head = nn.Linear(
+                hidden, config.action_chunk_size * config.action_dim
+            )
+            self._initialize_action_head(self.action_head)
         self.stop_head = nn.Linear(hidden, config.action_chunk_size)
 
     def forward(self, inputs: Mapping[str, torch.Tensor]) -> VLAActorOutput:
@@ -142,10 +144,27 @@ class VLAActorModel(nn.Module):
         tokens = torch.cat((global_tokens, head_tokens, wrist_tokens, point_tokens), dim=1)
         encoded = self.transformer(tokens)
         summary = self.output_norm(encoded[:, 0])
-        actions = self.action_head(summary).reshape(
-            summary.shape[0], self.config.action_chunk_size, self.config.action_dim
-        )
+        actions = self._action_chunks(summary)
         return VLAActorOutput(actions, self.stop_head(summary))
+
+    def _initialize_action_head(self, head: nn.Linear) -> None:
+        nn.init.uniform_(
+            head.weight,
+            -self.config.action_head_init_scale,
+            self.config.action_head_init_scale,
+        )
+        nn.init.zeros_(head.bias)
+
+    def _action_chunks(self, summary: torch.Tensor) -> torch.Tensor:
+        batch = summary.shape[0]
+        chunks = self.config.action_chunk_size
+        if not self.config.isolated_gripper_head:
+            return self.action_head(summary).reshape(
+                batch, chunks, self.config.action_dim
+            )
+        motion = self.motion_head(summary).reshape(batch, chunks, 14)
+        grippers = self.gripper_head(summary.detach()).reshape(batch, chunks, 2)
+        return torch.cat((motion, grippers), dim=-1)
 
     def _head_tokens(self, inputs: Mapping[str, torch.Tensor]) -> torch.Tensor:
         rgb = inputs["head_rgb"]
