@@ -115,11 +115,18 @@ def test_visual_policy_trains_saves_reloads_and_infers(tmp_path) -> None:
     assert result.phase_step_limits == ((3, 5), (3, 5))
     assert "navigate" in result.navigation_routes
     assert len(result.navigation_routes["navigate"]) >= 2
+    assert result.arm_control_mode == "phase_terminal_joint_position"
+    assert result.base_control_mode == "phase_terminal_base_position"
+    assert "navigate" in result.navigation_goal_bounds
+    assert result.phase_gripper_targets == (0.5, 0.5)
     assert len(result.history) == 2
     assert np.isfinite(result.best_validation_loss)
     assert len(action.arm_command) == 6
     assert action.source == "learned:visual-policy:v1"
     assert action.policy_version == "visual-policy:v1"
+    assert policy.arm_control_mode == "phase_terminal_joint_position"
+    assert policy.base_control_mode == "phase_terminal_base_position"
+    assert policy.phase_gripper_targets == (0.5, 0.5)
 
 
 def test_formal_visual_model_backpropagates_on_local_device() -> None:

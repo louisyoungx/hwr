@@ -50,6 +50,12 @@ class VisualTrainingResult:
     phase_action_mask: tuple[tuple[bool, ...], ...]
     phase_step_limits: tuple[tuple[int, int], ...]
     navigation_routes: dict[str, tuple[tuple[float, float, float], ...]]
+    arm_control_mode: str
+    base_control_mode: str
+    navigation_goal_bounds: dict[
+        str, tuple[tuple[float, float], tuple[float, float]]
+    ]
+    phase_gripper_targets: tuple[float, ...]
 
 
 def _select_device(requested: str) -> str:
@@ -62,9 +68,13 @@ def _select_device(requested: str) -> str:
     return "cpu"
 
 
-def _normalization(dataset: LoadedVisualDataset, indices: np.ndarray) -> VisualNormalization:
+def _normalization(
+    dataset: LoadedVisualDataset,
+    indices: np.ndarray,
+    targets: np.ndarray,
+) -> VisualNormalization:
     proprioception = dataset.inputs["proprioception"][indices]
-    actions = dataset.actions[indices, :8]
+    actions = targets[indices, :8]
     return VisualNormalization(
         proprioception_mean=tuple(float(value) for value in proprioception.mean(axis=0)),
         proprioception_std=tuple(
@@ -79,14 +89,40 @@ def _tensor_dataset(
     dataset: LoadedVisualDataset,
     indices: np.ndarray,
     normalization: VisualNormalization,
+    targets: np.ndarray,
 ) -> TensorDataset:
     inputs = visual_input_tensors(dataset.inputs, normalization, indices)
-    actions = dataset.actions[indices].astype(np.float32, copy=True)
+    actions = targets[indices].astype(np.float32, copy=True)
     mean = np.asarray(normalization.action_mean, dtype=np.float32)
     std = np.asarray(normalization.action_std, dtype=np.float32)
     actions[:, :8] = (actions[:, :8] - mean) / std
     phases = dataset.phase_indices[indices].astype(np.int64, copy=True)
     return TensorDataset(*inputs, torch.from_numpy(actions), torch.from_numpy(phases))
+
+
+def _control_targets(dataset: LoadedVisualDataset) -> np.ndarray:
+    targets = dataset.actions.astype(np.float32, copy=True)
+    for episode in np.unique(dataset.episode_ids):
+        for phase in range(len(dataset.phase_names)):
+            indices = np.flatnonzero(
+                (dataset.episode_ids == episode) & (dataset.phase_indices == phase)
+            )
+            if len(indices):
+                terminal = dataset.inputs["proprioception"][indices[-1]]
+                targets[indices, 2:8] = terminal[:6]
+                phase_name = dataset.phase_names[phase]
+                if phase_name == "navigate" or phase_name.startswith(
+                    ("nav_", "navigate_")
+                ):
+                    targets[indices, :2] = terminal[13:15]
+    return targets
+
+
+def _phase_gripper_targets(dataset: LoadedVisualDataset) -> tuple[float, ...]:
+    return tuple(
+        float(np.median(dataset.actions[dataset.phase_indices == phase, 8]))
+        for phase in range(len(dataset.phase_names))
+    )
 
 
 def _phase_step_limits(
@@ -132,6 +168,31 @@ def _navigation_routes(
         selected = min(candidates, key=lambda poses: np.linalg.norm(poses[-1] - median))
         routes[phase_name] = _compress_route(selected)
     return routes
+
+
+def _navigation_goal_bounds(
+    dataset: LoadedVisualDataset,
+) -> dict[str, tuple[tuple[float, float], tuple[float, float]]]:
+    bounds = {}
+    for phase_index, phase_name in enumerate(dataset.phase_names):
+        if phase_name != "navigate" and not phase_name.startswith(
+            ("nav_", "navigate_")
+        ):
+            continue
+        endpoints = []
+        for episode in np.unique(dataset.episode_ids):
+            mask = (dataset.episode_ids == episode) & (
+                dataset.phase_indices == phase_index
+            )
+            poses = dataset.inputs["proprioception"][mask, 13:15]
+            if len(poses):
+                endpoints.append(poses[-1])
+        values = np.stack(endpoints)
+        bounds[phase_name] = (
+            tuple(float(value) for value in values.min(axis=0)),
+            tuple(float(value) for value in values.max(axis=0)),
+        )
+    return bounds
 
 
 def _compress_route(poses: np.ndarray) -> tuple[tuple[float, float, float], ...]:
@@ -195,9 +256,12 @@ def train_visual_policy(
         validation_fraction=config.validation_fraction,
         seed=config.seed,
     )
-    normalization = _normalization(dataset, train_indices)
-    train_data = _tensor_dataset(dataset, train_indices, normalization)
-    validation_data = _tensor_dataset(dataset, validation_indices, normalization)
+    targets = _control_targets(dataset)
+    normalization = _normalization(dataset, train_indices, targets)
+    train_data = _tensor_dataset(dataset, train_indices, normalization, targets)
+    validation_data = _tensor_dataset(
+        dataset, validation_indices, normalization, targets
+    )
     generator = torch.Generator().manual_seed(config.seed)
     train_loader = DataLoader(
         train_data,
@@ -225,24 +289,7 @@ def train_visual_policy(
             phase_counts.sum() / np.maximum(phase_counts, 1) / len(phase_counts)
         ).astype(np.float32)
     ).to(device)
-    phase_action_mask = tuple(
-        tuple(
-            bool(value)
-            for value in np.max(
-                np.abs(
-                    dataset.actions[
-                        train_indices[
-                            dataset.phase_indices[train_indices] == phase_index
-                        ],
-                        :8,
-                    ]
-                ),
-                axis=0,
-            )
-            > 1e-4
-        )
-        for phase_index in range(len(dataset.phase_names))
-    )
+    phase_action_mask = _phase_action_mask(dataset, train_indices)
     history: list[dict[str, float]] = []
     best_loss = float("inf")
     best_state: dict[str, torch.Tensor] | None = None
@@ -287,4 +334,23 @@ def train_visual_policy(
         phase_action_mask,
         _phase_step_limits(dataset),
         _navigation_routes(dataset),
+        "phase_terminal_joint_position",
+        "phase_terminal_base_position",
+        _navigation_goal_bounds(dataset),
+        _phase_gripper_targets(dataset),
     )
+
+
+def _phase_action_mask(
+    dataset: LoadedVisualDataset, train_indices: np.ndarray
+) -> tuple[tuple[bool, ...], ...]:
+    rows = []
+    for phase_index, phase_name in enumerate(dataset.phase_names):
+        indices = train_indices[dataset.phase_indices[train_indices] == phase_index]
+        active = np.max(np.abs(dataset.actions[indices, :8]), axis=0) > 1e-4
+        if phase_name.startswith(("nav_", "navigate_")):
+            active[2:] = False
+        else:
+            active[2:] = True
+        rows.append(tuple(bool(value) for value in active))
+    return tuple(rows)

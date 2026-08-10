@@ -15,6 +15,11 @@ from hwr.data.visual import extract_formal_policy_input
 from hwr.policy.visual_model import HouseholdVisualPolicyModel
 
 
+ROUTE_POSITION_TOLERANCE = 0.035
+ROUTE_YAW_TOLERANCE = 0.01
+ROUTE_LOCAL_SERVO_RADIUS = 0.20
+
+
 @dataclass(frozen=True)
 class VisualNormalization:
     proprioception_mean: tuple[float, ...]
@@ -83,6 +88,12 @@ class LearnedVisualPolicy:
         navigation_routes: Mapping[
             str, Sequence[Sequence[float]]
         ] | None = None,
+        arm_control_mode: str = "joint_velocity",
+        base_control_mode: str = "base_velocity",
+        navigation_goal_bounds: Mapping[
+            str, Sequence[Sequence[float]]
+        ] | None = None,
+        phase_gripper_targets: Sequence[float] | None = None,
         device: str = "cpu",
     ) -> None:
         self.model = model.to(device).eval()
@@ -114,6 +125,41 @@ class LearnedVisualPolicy:
             for route in self.navigation_routes.values()
         ):
             raise ValueError("navigation routes do not match the visual model")
+        if arm_control_mode not in {
+            "joint_velocity",
+            "phase_terminal_joint_position",
+        }:
+            raise ValueError("unknown arm control mode")
+        self.arm_control_mode = arm_control_mode
+        if base_control_mode not in {
+            "base_velocity",
+            "phase_terminal_base_position",
+        }:
+            raise ValueError("unknown base control mode")
+        self.base_control_mode = base_control_mode
+        self.navigation_goal_bounds = {
+            name: (
+                tuple(float(value) for value in bounds[0]),
+                tuple(float(value) for value in bounds[1]),
+            )
+            for name, bounds in (navigation_goal_bounds or {}).items()
+        }
+        if not set(self.navigation_goal_bounds).issubset(self.navigation_routes) or any(
+            len(lower) != 2
+            or len(upper) != 2
+            or any(low > high for low, high in zip(lower, upper, strict=True))
+            for lower, upper in self.navigation_goal_bounds.values()
+        ):
+            raise ValueError("navigation goal bounds do not match learned routes")
+        self.phase_gripper_targets = (
+            tuple(float(value) for value in phase_gripper_targets)
+            if phase_gripper_targets is not None
+            else None
+        )
+        if self.phase_gripper_targets is not None and len(
+            self.phase_gripper_targets
+        ) != len(self.phase_names):
+            raise ValueError("phase gripper targets do not match the visual model")
         self.device = torch.device(device)
         self._history = [np.zeros(9, dtype=np.float32) for _ in range(model.config.action_history)]
         self._task_id: str | None = None
@@ -121,6 +167,7 @@ class LearnedVisualPolicy:
         self._phase_candidate_steps = 0
         self._phase_steps = 0
         self._route_index = 0
+        self._route_position_latched = False
 
     def spec(self) -> PolicySpec:
         return PolicySpec(self.policy_version, 1, 1, self.control_hz, 6)
@@ -137,6 +184,7 @@ class LearnedVisualPolicy:
         self._phase_candidate_steps = 0
         self._phase_steps = 0
         self._route_index = 0
+        self._route_position_latched = False
 
     def infer(self, observations: Sequence[ObservationFrame]) -> tuple[ActionFrame, ...]:
         if not observations or self._task_id is None:
@@ -158,8 +206,13 @@ class LearnedVisualPolicy:
         )
         with torch.inference_mode():
             output = self.model(*tensors)
+        current_prediction = output.actions[0, self._phase_index].cpu().numpy()
+        mean = np.asarray(self.normalization.action_mean, dtype=np.float32)
+        std = np.asarray(self.normalization.action_std, dtype=np.float32)
+        learned_base = current_prediction[:2] * std[:2] + mean[:2]
+        learned_base = self._bounded_navigation_goal(learned_base)
         phase_index = self._select_phase(
-            output.phase_logits.squeeze(0), observation.base_pose
+            output.phase_logits.squeeze(0), observation.base_pose, learned_base
         )
         prediction = output.actions[0, phase_index].cpu().numpy()
         action = self._action(prediction, observation)
@@ -174,6 +227,7 @@ class LearnedVisualPolicy:
         self,
         logits: torch.Tensor,
         base_pose: Sequence[float] | None = None,
+        learned_base: Sequence[float] | None = None,
     ) -> int:
         next_index = self._phase_index + 1
         if next_index >= len(self.phase_names):
@@ -182,7 +236,17 @@ class LearnedVisualPolicy:
         minimum, maximum = self.phase_step_limits[self._phase_index]
         phase_name = self.phase_names[self._phase_index]
         if phase_name in self.navigation_routes and base_pose is not None:
-            candidate = self._phase_steps >= minimum and self._route_complete(base_pose)
+            if (
+                learned_base is None
+                or self.base_control_mode != "phase_terminal_base_position"
+            ):
+                stopped = self._route_complete(base_pose)
+            else:
+                stopped = (
+                    self._route_near_endpoint(base_pose)
+                    and self._learned_route_complete(base_pose, learned_base)
+                )
+            candidate = self._phase_steps >= minimum and stopped
             force = False
         else:
             candidate = (
@@ -200,6 +264,7 @@ class LearnedVisualPolicy:
             self._phase_candidate_steps = 0
             self._phase_steps = 0
             self._route_index = 0
+            self._route_position_latched = False
         else:
             self._phase_steps += 1
         return self._phase_index
@@ -213,11 +278,26 @@ class LearnedVisualPolicy:
         )
         phase_name = self.phase_names[self._phase_index]
         if phase_name in self.navigation_routes:
-            continuous[:2] = self._navigation_action(observation.base_pose)
+            learned_goal = (
+                self._bounded_navigation_goal(continuous[:2])
+                if self.base_control_mode == "phase_terminal_base_position"
+                else None
+            )
+            continuous[:2] = self._navigation_action(
+                observation.base_pose, learned_goal
+            )
             continuous[2:] = 0.0
+        elif self.arm_control_mode == "phase_terminal_joint_position":
+            target = continuous[2:].copy()
+            current = np.asarray(observation.joint_position, dtype=np.float32)
+            continuous[2:] = np.clip(2.0 * (target - current), -1.0, 1.0)
         continuous[:2] = np.clip(continuous[:2], (-0.5, -1.0), (0.5, 1.0))
         continuous[2:] = np.clip(continuous[2:], -1.0, 1.0)
-        gripper = float(prediction[8] >= 0.0)
+        gripper = (
+            self.phase_gripper_targets[self._phase_index]
+            if self.phase_gripper_targets is not None
+            else float(prediction[8] >= 0.0)
+        )
         period = round(1_000_000_000 / self.control_hz)
         return ActionFrame(
             observation.timestamp_ns,
@@ -234,9 +314,47 @@ class LearnedVisualPolicy:
     def _route_complete(self, base_pose: Sequence[float]) -> bool:
         target = self.navigation_routes[self.phase_names[self._phase_index]][-1]
         distance = math.hypot(target[0] - base_pose[0], target[1] - base_pose[1])
-        return distance <= 0.12 and abs(_wrap(target[2] - base_pose[2])) <= 0.10
+        self._route_position_latched |= distance <= ROUTE_POSITION_TOLERANCE
+        return self._route_position_latched and abs(
+            _wrap(target[2] - base_pose[2])
+        ) <= ROUTE_YAW_TOLERANCE
 
-    def _navigation_action(self, base_pose: Sequence[float]) -> tuple[float, float]:
+    def _route_near_endpoint(self, base_pose: Sequence[float]) -> bool:
+        target = self.navigation_routes[self.phase_names[self._phase_index]][-1]
+        return math.hypot(
+            target[0] - base_pose[0], target[1] - base_pose[1]
+        ) <= ROUTE_LOCAL_SERVO_RADIUS
+
+    def _learned_route_complete(
+        self, base_pose: Sequence[float], learned_goal: Sequence[float]
+    ) -> bool:
+        route = self.navigation_routes[self.phase_names[self._phase_index]]
+        distance = math.hypot(
+            learned_goal[0] - base_pose[0], learned_goal[1] - base_pose[1]
+        )
+        self._route_position_latched |= distance <= ROUTE_POSITION_TOLERANCE
+        return self._route_position_latched and abs(
+            _wrap(route[-1][2] - base_pose[2])
+        ) <= ROUTE_YAW_TOLERANCE
+
+    def _bounded_navigation_goal(
+        self, learned_goal: Sequence[float]
+    ) -> np.ndarray:
+        phase_name = self.phase_names[self._phase_index]
+        bounds = self.navigation_goal_bounds.get(phase_name)
+        if bounds is None:
+            return np.asarray(learned_goal, dtype=np.float32)
+        return np.clip(
+            np.asarray(learned_goal, dtype=np.float32),
+            np.asarray(bounds[0], dtype=np.float32),
+            np.asarray(bounds[1], dtype=np.float32),
+        )
+
+    def _navigation_action(
+        self,
+        base_pose: Sequence[float],
+        learned_goal: Sequence[float] | None = None,
+    ) -> tuple[float, float]:
         route = self.navigation_routes[self.phase_names[self._phase_index]]
         while self._route_index < len(route) - 1:
             target = route[self._route_index]
@@ -246,9 +364,14 @@ class LearnedVisualPolicy:
         target = route[self._route_index]
         distance = math.hypot(target[0] - base_pose[0], target[1] - base_pose[1])
         final = self._route_index == len(route) - 1
-        if final and distance <= 0.12:
+        if final and distance <= ROUTE_LOCAL_SERVO_RADIUS and learned_goal is not None:
+            target = (float(learned_goal[0]), float(learned_goal[1]), route[-1][2])
+            distance = math.hypot(target[0] - base_pose[0], target[1] - base_pose[1])
+        if final and distance <= ROUTE_POSITION_TOLERANCE:
+            self._route_position_latched = True
+        if final and self._route_position_latched:
             yaw_error = _wrap(target[2] - base_pose[2])
-            if abs(yaw_error) <= 0.10:
+            if abs(yaw_error) <= ROUTE_YAW_TOLERANCE:
                 return (0.0, 0.0)
             return (0.0, float(np.clip(1.8 * yaw_error, -0.75, 0.75)))
         heading = math.atan2(target[1] - base_pose[1], target[0] - base_pose[0])

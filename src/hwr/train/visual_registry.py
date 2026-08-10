@@ -67,6 +67,13 @@ def save_visual_training_result(
             name: [list(pose) for pose in route]
             for name, route in result.navigation_routes.items()
         },
+        "arm_control_mode": result.arm_control_mode,
+        "base_control_mode": result.base_control_mode,
+        "navigation_goal_bounds": {
+            name: [list(bound) for bound in bounds]
+            for name, bounds in result.navigation_goal_bounds.items()
+        },
+        "phase_gripper_targets": list(result.phase_gripper_targets),
         "task_instructions": {
             task_id: {"instruction_id": value[0], "text": value[1]}
             for task_id, value in task_instructions.items()
@@ -127,5 +134,15 @@ def load_visual_policy(path: Path, *, device: str = "cpu") -> LearnedVisualPolic
             name: tuple(tuple(float(value) for value in pose) for pose in route)
             for name, route in manifest.get("navigation_routes", {}).items()
         },
+        arm_control_mode=str(manifest.get("arm_control_mode", "joint_velocity")),
+        base_control_mode=str(manifest.get("base_control_mode", "base_velocity")),
+        navigation_goal_bounds={
+            name: tuple(tuple(float(value) for value in bound) for bound in bounds)
+            for name, bounds in manifest.get("navigation_goal_bounds", {}).items()
+        },
+        phase_gripper_targets=tuple(
+            float(value) for value in manifest.get("phase_gripper_targets", ())
+        )
+        or None,
         device=device,
     )
