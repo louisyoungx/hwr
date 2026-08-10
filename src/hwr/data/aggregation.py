@@ -6,7 +6,7 @@ import random
 from pathlib import Path
 from typing import Callable, Protocol, Sequence
 
-from hwr.core.runtime import Policy, RuntimeBackend
+from hwr.core.runtime import LegacyPolicy, LegacyRuntimeBackend
 from hwr.data.dataset import BehaviorDataset, BehaviorSample, write_behavior_dataset
 from hwr.data.vectorization import action_to_vector, observation_to_vector
 from hwr.sim.specs import HouseholdTaskSpec
@@ -25,9 +25,9 @@ def aggregate_policy_dataset(
     dataset_id: str,
     base_dataset: BehaviorDataset,
     task_spec: HouseholdTaskSpec,
-    environment_factory: Callable[[], RuntimeBackend],
+    environment_factory: Callable[[], LegacyRuntimeBackend],
     expert: ObservationExpert,
-    policy: Policy,
+    policy: LegacyPolicy,
     seeds: Sequence[int],
     *,
     expert_action_probability: float = 0.2,
@@ -75,4 +75,3 @@ def aggregate_policy_dataset(
             "expert_action_probability": expert_action_probability,
         },
     )
-

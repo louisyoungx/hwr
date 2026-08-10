@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from hwr.core.runtime import Policy
+from hwr.core.runtime import LegacyPolicy
 from hwr.core.types import EpisodeEvent, EpisodeResult
 from hwr.sim import Household2DEnv, HouseholdTaskSpec, RobotSpec, SimulationSnapshot
 
@@ -32,7 +32,7 @@ class RolloutTrace:
 def capture_rollout(
     task_spec: HouseholdTaskSpec,
     robot_spec: RobotSpec,
-    policy: Policy,
+    policy: LegacyPolicy,
     *,
     seed: int,
 ) -> RolloutTrace:

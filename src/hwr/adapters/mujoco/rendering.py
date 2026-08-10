@@ -22,12 +22,13 @@ class MujocoCameraRenderer:
         *,
         timestamp_ns: int,
         frame_index: int,
+        camera_id: str | None = None,
     ) -> CameraFrame:
         self.renderer.disable_depth_rendering()
         self.renderer.update_scene(data, camera=camera_name)
         pixels = np.ascontiguousarray(self.renderer.render(), dtype=np.uint8)
         return CameraFrame(
-            camera_id=camera_name,
+            camera_id=camera_name if camera_id is None else camera_id,
             timestamp_ns=timestamp_ns,
             frame_index=frame_index,
             width=self.width,
@@ -43,12 +44,13 @@ class MujocoCameraRenderer:
         *,
         timestamp_ns: int,
         frame_index: int,
+        camera_id: str | None = None,
     ) -> CameraFrame:
         self.renderer.enable_depth_rendering()
         self.renderer.update_scene(data, camera=camera_name)
         pixels = np.ascontiguousarray(self.renderer.render(), dtype=np.float32)
         return CameraFrame(
-            camera_id=camera_name,
+            camera_id=camera_name if camera_id is None else camera_id,
             timestamp_ns=timestamp_ns,
             frame_index=frame_index,
             width=self.width,

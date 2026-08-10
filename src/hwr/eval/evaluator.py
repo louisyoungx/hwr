@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Callable, Sequence
 
-from hwr.core.runtime import Policy, RuntimeBackend
+from hwr.core.runtime import LegacyPolicy, LegacyRuntimeBackend
 from hwr.sim.specs import HouseholdTaskSpec
 
 
@@ -25,8 +25,8 @@ class EvaluationReport:
 
 def evaluate_policy(
     task_spec: HouseholdTaskSpec,
-    environment_factory: Callable[[], RuntimeBackend],
-    policy: Policy,
+    environment_factory: Callable[[], LegacyRuntimeBackend],
+    policy: LegacyPolicy,
     seeds: Sequence[int],
 ) -> EvaluationReport:
     if not seeds:
@@ -65,4 +65,3 @@ def evaluate_policy(
         average_collisions=total_collisions / episode_count,
         reasons=reasons,
     )
-

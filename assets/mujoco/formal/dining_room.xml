@@ -82,10 +82,10 @@
   </worldbody>
   <contact>
     <include file="../common/robot_contacts.xml"/>
-    <pair geom1="left_finger_pad" geom2="dining_cup_collision" condim="4" friction="3 3 0.04 0.004 0.004" solref="0.001 1" solimp="0.99 0.999 0.0001"/>
-    <pair geom1="right_finger_pad" geom2="dining_cup_collision" condim="4" friction="3 3 0.04 0.004 0.004" solref="0.001 1" solimp="0.99 0.999 0.0001"/>
-    <pair geom1="left_finger_pad" geom2="dining_plate_collision" condim="4" friction="3 3 0.04 0.004 0.004" solref="0.001 1" solimp="0.99 0.999 0.0001"/>
-    <pair geom1="right_finger_pad" geom2="dining_plate_collision" condim="4" friction="3 3 0.04 0.004 0.004" solref="0.001 1" solimp="0.99 0.999 0.0001"/>
+    <pair geom1="right_gripper_left_pad" geom2="dining_cup_collision" condim="4" friction="3 3 0.04 0.004 0.004" solref="0.001 1" solimp="0.99 0.999 0.0001"/>
+    <pair geom1="right_gripper_right_pad" geom2="dining_cup_collision" condim="4" friction="3 3 0.04 0.004 0.004" solref="0.001 1" solimp="0.99 0.999 0.0001"/>
+    <pair geom1="right_gripper_left_pad" geom2="dining_plate_collision" condim="4" friction="3 3 0.04 0.004 0.004" solref="0.001 1" solimp="0.99 0.999 0.0001"/>
+    <pair geom1="right_gripper_right_pad" geom2="dining_plate_collision" condim="4" friction="3 3 0.04 0.004 0.004" solref="0.001 1" solimp="0.99 0.999 0.0001"/>
   </contact>
   <actuator><include file="../common/robot_actuators.xml"/></actuator>
   <sensor><include file="../common/robot_sensors.xml"/></sensor>

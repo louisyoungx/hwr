@@ -7,7 +7,7 @@ from typing import Callable, Protocol, Sequence
 
 import numpy as np
 
-from hwr.core.runtime import Policy, RuntimeBackend
+from hwr.core.runtime import LegacyPolicy, LegacyRuntimeBackend
 from hwr.core.types import ActionFrame, ObservationFrame
 from hwr.data.visual import (
     FormalPolicyInput,
@@ -61,9 +61,9 @@ def aggregate_visual_policy_dataset(
     dataset_id: str,
     base_path: Path,
     task: AggregationTask,
-    environment_factory: Callable[[], RuntimeBackend],
-    expert_factory: Callable[[RuntimeBackend], AggregationExpert],
-    policy: Policy,
+    environment_factory: Callable[[], LegacyRuntimeBackend],
+    expert_factory: Callable[[LegacyRuntimeBackend], AggregationExpert],
+    policy: LegacyPolicy,
     seeds: Sequence[int],
     *,
     max_steps: int | None = None,
@@ -119,9 +119,9 @@ def _collect_visited_episode(
     episode_id: str,
     seed: int,
     task: AggregationTask,
-    environment_factory: Callable[[], RuntimeBackend],
-    expert_factory: Callable[[RuntimeBackend], AggregationExpert],
-    policy: Policy,
+    environment_factory: Callable[[], LegacyRuntimeBackend],
+    expert_factory: Callable[[LegacyRuntimeBackend], AggregationExpert],
+    policy: LegacyPolicy,
     max_steps: int,
     image_size: tuple[int, int],
     action_history: int,

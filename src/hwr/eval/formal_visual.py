@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from hwr.core.runtime import Policy, RuntimeBackend
+from hwr.core.runtime import LegacyPolicy, LegacyRuntimeBackend
 
 
-class AuditedRuntimeBackend(RuntimeBackend, Protocol):
+class AuditedRuntimeBackend(LegacyRuntimeBackend, Protocol):
     def audit_snapshot(self) -> dict[str, Any]: ...
 
 
@@ -57,7 +57,7 @@ def evaluate_formal_visual_policy(
     task_id: str,
     max_steps: int,
     environment_factory: Callable[[], AuditedRuntimeBackend],
-    policy: Policy,
+    policy: LegacyPolicy,
     seeds: Sequence[int],
 ) -> FormalEvaluationReport:
     if len(seeds) < 1:
@@ -73,7 +73,7 @@ def _evaluate_episode(
     task_id: str,
     max_steps: int,
     environment_factory: Callable[[], AuditedRuntimeBackend],
-    policy: Policy,
+    policy: LegacyPolicy,
     seed: int,
 ) -> FormalEpisodeEvaluation:
     environment = environment_factory()
