@@ -1,0 +1,45 @@
+{
+  "schema_version": "hwr.bimanual-tasks/v1",
+  "control_hz": 20.0,
+  "randomization": {
+    "mass_scale": [0.85, 1.15],
+    "friction_scale": [0.80, 1.20],
+    "light_scale": [0.75, 1.25],
+    "material_scale": [0.88, 1.12]
+  },
+  "tasks": [
+    {
+      "task_id": "carry_living_room_basket/v1",
+      "scene_id": "bimanual_living_room/v1",
+      "instruction": "用双手握住收纳篮两侧把手，把篮子搬到沙发旁的矮柜上并平稳放下。",
+      "objective": "carry_payload",
+      "max_steps": 1200,
+      "initial_base": {"x": [-0.10, 0.10], "y": [-0.05, 0.05], "z": [0.22, 0.22], "yaw": [-0.08, 0.08]},
+      "payload_reset": {"x": [0.64, 0.72], "y": [-0.04, 0.04], "z": [0.46, 0.46], "yaw": [-0.08, 0.08]},
+      "target_position": [1.55, 0.0, 0.62],
+      "criteria": {"hold_seconds": 2.0, "minimum_concurrent_seconds": 0.5, "maximum_target_distance": 0.13, "maximum_tilt_radians": 0.16, "maximum_linear_speed": 0.045, "maximum_angular_speed": 0.10}
+    },
+    {
+      "task_id": "carry_dining_tray/v1",
+      "scene_id": "bimanual_dining_room/v1",
+      "instruction": "双手端住托盘两侧把手，把装有杯盘的托盘平稳搬到餐边柜上。",
+      "objective": "carry_payload",
+      "max_steps": 1200,
+      "initial_base": {"x": [-0.10, 0.10], "y": [-0.05, 0.05], "z": [0.22, 0.22], "yaw": [-0.08, 0.08]},
+      "payload_reset": {"x": [0.65, 0.73], "y": [-0.04, 0.04], "z": [0.76, 0.76], "yaw": [-0.06, 0.06]},
+      "target_position": [1.50, 0.0, 0.78],
+      "criteria": {"hold_seconds": 2.0, "minimum_concurrent_seconds": 0.5, "maximum_target_distance": 0.11, "maximum_tilt_radians": 0.10, "maximum_linear_speed": 0.035, "maximum_angular_speed": 0.08}
+    },
+    {
+      "task_id": "hold_drawer_place_item/v1",
+      "scene_id": "bimanual_kitchen/v1",
+      "instruction": "左手持续拉住会回弹的抽屉，右手把清洁剂放进抽屉并保持稳定。",
+      "objective": "hold_drawer_place",
+      "max_steps": 1600,
+      "initial_base": {"x": [-0.08, 0.08], "y": [-0.05, 0.05], "z": [0.22, 0.22], "yaw": [-0.06, 0.06]},
+      "payload_reset": {"x": [0.63, 0.71], "y": [-0.28, -0.22], "z": [0.79, 0.79], "yaw": [-0.08, 0.08]},
+      "target_position": [1.22, 0.20, 0.73],
+      "criteria": {"hold_seconds": 2.0, "minimum_concurrent_seconds": 0.5, "maximum_target_distance": 0.14, "maximum_tilt_radians": 0.20, "maximum_linear_speed": 0.045, "maximum_angular_speed": 0.12, "minimum_articulation_position": 0.28, "maximum_articulation_speed": 0.06}
+    }
+  ]
+}
