@@ -20,12 +20,12 @@ from hwr.policy.vla_model import VLAActorModel, VLAActorOutput
 
 @dataclass(frozen=True)
 class AsymmetricRLConfig:
-    actor_learning_rate: float = 1e-4
+    actor_learning_rate: float = 3e-5
     critic_learning_rate: float = 3e-4
     discount: float = 0.99
     target_update_rate: float = 0.005
     behavior_regularization: float = 0.02
-    policy_delay: int = 2
+    policy_delay: int = 10
     actor_warmup_updates: int = 2000
     reward_scale: float = 0.25
     target_action_noise: float = 0.15

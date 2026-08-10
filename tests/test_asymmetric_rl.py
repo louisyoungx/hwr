@@ -130,6 +130,7 @@ def test_actor_optimizes_the_pessimistic_twin_critic_value() -> None:
 
 def test_td3_target_smoothing_and_action_regularization_are_enabled() -> None:
     config = _trainer().config
+    defaults = AsymmetricRLConfig()
 
     assert config.target_action_noise > 0
     assert config.target_noise_clip > config.target_action_noise
@@ -138,6 +139,9 @@ def test_td3_target_smoothing_and_action_regularization_are_enabled() -> None:
     assert config.reward_scale == 0.25
     assert config.conservative_critic_weight == 0.05
     assert config.conservative_action_samples > 1
+    assert defaults.actor_learning_rate < defaults.critic_learning_rate
+    assert defaults.actor_learning_rate < defaults.safety_learning_rate
+    assert defaults.policy_delay >= 5
 
 
 def test_unsupervised_actor_does_not_optimize_unused_stop_head() -> None:
