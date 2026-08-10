@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-root", type=Path, default=Path("runs/bimanual-rl"))
     parser.add_argument("--episodes", type=int, default=120)
     parser.add_argument("--episode-steps", type=int, default=240)
+    parser.add_argument("--replay-capacity", type=int, default=80_000)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--learning-starts", type=int, default=512)
     parser.add_argument("--initial-random-episodes", type=int, default=9)
@@ -71,6 +72,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     config = BimanualRLTrainingConfig(
         episodes=arguments.episodes,
         episode_step_limit=arguments.episode_steps,
+        replay_capacity=arguments.replay_capacity,
         batch_size=arguments.batch_size,
         learning_starts=arguments.learning_starts,
         initial_random_episodes=arguments.initial_random_episodes,

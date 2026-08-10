@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from hwr.apps.train_bimanual_rl import build_parser
 from hwr.train import (
     BimanualRLTrainingConfig,
     BimanualTrainingRunner,
@@ -10,6 +11,14 @@ from hwr.train import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
+    arguments = build_parser().parse_args(
+        ["--run-id", "capacity-smoke", "--replay-capacity", "12000"]
+    )
+
+    assert arguments.replay_capacity == 12_000
 
 
 def test_local_training_collects_all_three_tasks_without_action_labels() -> None:
