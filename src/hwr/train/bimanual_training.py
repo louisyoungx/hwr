@@ -66,6 +66,7 @@ class BimanualRLTrainingConfig:
     actuator_dwell_steps: int = 240
     frontier_reset_probability: float = 0.50
     frontier_capacity_per_task: int = 16
+    frontier_signature_uniform_fraction: float = 0.20
     failure_replay_fraction: float = 0.5
     discovery_replay_fraction: float = 0.35
     safety_replay_fraction: float = 0.15
@@ -126,6 +127,7 @@ class BimanualRLTrainingConfig:
             self.global_random_burst_probability,
             self.actuator_dwell_probability,
             self.frontier_reset_probability,
+            self.frontier_signature_uniform_fraction,
             self.failure_replay_fraction,
             self.discovery_replay_fraction,
             self.safety_replay_fraction,
@@ -339,6 +341,9 @@ class BimanualTrainingRunner:
             FrontierCurriculumConfig(
                 capacity_per_task=config.frontier_capacity_per_task,
                 reset_probability=config.frontier_reset_probability,
+                signature_uniform_fraction=(
+                    config.frontier_signature_uniform_fraction
+                ),
             ),
         )
         self.task_sampler = OutcomeAdaptiveTaskSampler(self.task_ids)

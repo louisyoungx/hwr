@@ -20,12 +20,15 @@ class FrontierCurriculumConfig:
     score_distance_scale_meters: float = 0.08
     maximum_payload_linear_speed: float = 0.05
     maximum_payload_angular_speed: float = 0.15
+    signature_uniform_fraction: float = 0.20
 
     def __post_init__(self) -> None:
         if self.capacity_per_task <= 0:
             raise ValueError("frontier capacity must be positive")
         if not 0.0 <= self.reset_probability <= 1.0:
             raise ValueError("frontier reset probability must be in [0, 1]")
+        if not 0.0 <= self.signature_uniform_fraction <= 1.0:
+            raise ValueError("frontier signature uniform fraction must be in [0, 1]")
         if min(
             self.discovery_reach_meters,
             self.bilateral_reach_meters,
@@ -169,7 +172,18 @@ class OutcomeFrontierCurriculum:
             return None
         self.reset_count += 1
         signatures = sorted({item.signature for item in values})
-        signature = signatures[int(rng.integers(0, len(signatures)))]
+        best_scores = np.asarray(
+            [
+                max(item.score for item in values if item.signature == signature)
+                for signature in signatures
+            ],
+            dtype=np.float64,
+        )
+        quality = best_scores / best_scores.sum()
+        uniform = np.full(len(signatures), 1.0 / len(signatures))
+        mix = self.config.signature_uniform_fraction
+        probabilities = mix * uniform + (1.0 - mix) * quality
+        signature = signatures[int(rng.choice(len(signatures), p=probabilities))]
         matching = [item for item in values if item.signature == signature]
         candidate_count = max(1, (len(matching) + 1) // 2)
         return matching[int(rng.integers(0, candidate_count))]
@@ -186,7 +200,8 @@ class OutcomeFrontierCurriculum:
             "actor_input_fields": [],
             "task_stages": False,
             "source": "autonomous_physical_state_discovery",
-            "selection": "uniform_signature_then_uniform_top_score_half",
+            "selection": "quality_weighted_signature_with_uniform_diversity_floor",
+            "signature_uniform_fraction": self.config.signature_uniform_fraction,
             "score": "exp(-max(left_reach,right_reach)/scale)",
             "contact_affects_score": False,
             "physical_stability_filter": {
@@ -224,7 +239,11 @@ class OutcomeFrontierCurriculum:
     def load_state_dict(self, value: Mapping[str, object]) -> None:
         if tuple(value["task_ids"]) != self.task_ids:
             raise ValueError("frontier checkpoint task identities differ")
-        if dict(value["config"]) != asdict(self.config):
+        saved_config = dict(value["config"])
+        current_config = asdict(self.config)
+        saved_config.pop("signature_uniform_fraction", None)
+        current_config.pop("signature_uniform_fraction")
+        if saved_config != current_config:
             raise ValueError("frontier checkpoint configuration differs")
         self.reset_count = int(value["reset_count"])
         states = value["entries"]

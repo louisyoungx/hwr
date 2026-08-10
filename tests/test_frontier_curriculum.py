@@ -211,12 +211,15 @@ def test_frontier_selection_replays_each_discovered_contact_signature() -> None:
             source_step=index,
         )
 
-    selected_signatures = {
+    selected = [
         frontier.select("tray", np.random.default_rng(seed)).signature
-        for seed in range(32)
-    }
+        for seed in range(256)
+    ]
+    selected_signatures = set(selected)
 
     assert selected_signatures == {1, 2}
+    assert selected.count(1) > selected.count(2)
     assert frontier.audit()["selection"] == (
-        "uniform_signature_then_uniform_top_score_half"
+        "quality_weighted_signature_with_uniform_diversity_floor"
     )
+    assert frontier.audit()["signature_uniform_fraction"] == 0.2

@@ -36,6 +36,7 @@ FORKABLE_TRAINING_FIELDS = frozenset(
         "global_random_burst_steps",
         "actuator_dwell_probability",
         "actuator_dwell_steps",
+        "frontier_signature_uniform_fraction",
     }
 )
 
@@ -301,8 +302,12 @@ def resume_bimanual_training_run(
         "policy_gripper_hold_steps",
         "frontier_reset_probability",
         "frontier_capacity_per_task",
+        "frontier_signature_uniform_fraction",
     ):
-        saved.setdefault(name, requested[name])
+        legacy_default = (
+            1.0 if name == "frontier_signature_uniform_fraction" else requested[name]
+        )
+        saved.setdefault(name, legacy_default)
     saved.pop("episodes")
     requested.pop("episodes")
     if saved != requested:
@@ -362,4 +367,6 @@ def _normalized_training_config(value: Mapping[str, Any]) -> dict[str, Any]:
     defaults = BimanualRLTrainingConfig().to_dict()
     for name, default in defaults.items():
         saved.setdefault(name, default)
+    if "frontier_signature_uniform_fraction" not in value:
+        saved["frontier_signature_uniform_fraction"] = 1.0
     return saved
