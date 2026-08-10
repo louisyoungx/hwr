@@ -223,3 +223,32 @@ def test_frontier_selection_replays_each_discovered_contact_signature() -> None:
         "quality_weighted_signature_with_uniform_diversity_floor"
     )
     assert frontier.audit()["signature_uniform_fraction"] == 0.2
+
+
+def test_frontier_limits_duplicate_frames_from_one_episode_and_prunes_legacy() -> None:
+    config = FrontierCurriculumConfig(
+        capacity_per_task=8,
+        reset_probability=1.0,
+        maximum_entries_per_source_signature=2,
+    )
+    frontier = OutcomeFrontierCurriculum(("tray",), config)
+    for index in range(4):
+        assert frontier.consider(
+            "tray",
+            _snapshot("tray", float(index)),
+            FrontierOutcome(0.04, 0.08 - index * 0.005, True, False),
+            source_episode=7,
+            source_step=index,
+        )
+    assert sum(
+        item.source_episode == 7 for item in frontier.entries["tray"]
+    ) == 2
+
+    legacy = frontier.state_dict()
+    legacy["config"].pop("maximum_entries_per_source_signature")
+    legacy["entries"]["tray"] = legacy["entries"]["tray"] * 2
+    restored = OutcomeFrontierCurriculum(("tray",), config)
+    restored.load_state_dict(legacy)
+
+    assert len(restored.entries["tray"]) == 2
+    assert restored.audit()["maximum_entries_per_source_signature"] == 2

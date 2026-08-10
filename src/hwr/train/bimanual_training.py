@@ -67,6 +67,7 @@ class BimanualRLTrainingConfig:
     frontier_reset_probability: float = 0.50
     frontier_capacity_per_task: int = 16
     frontier_signature_uniform_fraction: float = 0.20
+    frontier_max_entries_per_source_signature: int = 2
     failure_replay_fraction: float = 0.5
     discovery_replay_fraction: float = 0.35
     safety_replay_fraction: float = 0.15
@@ -98,6 +99,7 @@ class BimanualRLTrainingConfig:
             self.global_random_burst_steps,
             self.actuator_dwell_steps,
             self.frontier_capacity_per_task,
+            self.frontier_max_entries_per_source_signature,
             self.raw_image_width,
             self.raw_image_height,
             self.image_width,
@@ -343,6 +345,9 @@ class BimanualTrainingRunner:
                 reset_probability=config.frontier_reset_probability,
                 signature_uniform_fraction=(
                     config.frontier_signature_uniform_fraction
+                ),
+                maximum_entries_per_source_signature=(
+                    config.frontier_max_entries_per_source_signature
                 ),
             ),
         )

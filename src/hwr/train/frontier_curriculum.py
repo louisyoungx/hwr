@@ -21,6 +21,7 @@ class FrontierCurriculumConfig:
     maximum_payload_linear_speed: float = 0.05
     maximum_payload_angular_speed: float = 0.15
     signature_uniform_fraction: float = 0.20
+    maximum_entries_per_source_signature: int = 2
 
     def __post_init__(self) -> None:
         if self.capacity_per_task <= 0:
@@ -29,6 +30,8 @@ class FrontierCurriculumConfig:
             raise ValueError("frontier reset probability must be in [0, 1]")
         if not 0.0 <= self.signature_uniform_fraction <= 1.0:
             raise ValueError("frontier signature uniform fraction must be in [0, 1]")
+        if self.maximum_entries_per_source_signature <= 0:
+            raise ValueError("frontier per-source signature capacity must be positive")
         if min(
             self.discovery_reach_meters,
             self.bilateral_reach_meters,
@@ -146,8 +149,18 @@ class OutcomeFrontierCurriculum:
         )
         values = self.entries[task_id]
         same = [item for item in values if item.signature == signature]
+        same_source = [
+            item
+            for item in same
+            if item.source_episode == source_episode
+        ]
         signature_capacity = max(1, self.config.capacity_per_task // 4)
-        if len(same) >= signature_capacity:
+        if len(same_source) >= self.config.maximum_entries_per_source_signature:
+            worst = min(same_source, key=lambda item: item.score)
+            if score <= worst.score + 1.0e-6:
+                return False
+            values.remove(worst)
+        elif len(same) >= signature_capacity:
             worst = min(same, key=lambda item: item.score)
             if score <= worst.score + 1.0e-6:
                 return False
@@ -202,6 +215,9 @@ class OutcomeFrontierCurriculum:
             "source": "autonomous_physical_state_discovery",
             "selection": "quality_weighted_signature_with_uniform_diversity_floor",
             "signature_uniform_fraction": self.config.signature_uniform_fraction,
+            "maximum_entries_per_source_signature": (
+                self.config.maximum_entries_per_source_signature
+            ),
             "score": "exp(-max(left_reach,right_reach)/scale)",
             "contact_affects_score": False,
             "physical_stability_filter": {
@@ -241,8 +257,13 @@ class OutcomeFrontierCurriculum:
             raise ValueError("frontier checkpoint task identities differ")
         saved_config = dict(value["config"])
         current_config = asdict(self.config)
-        saved_config.pop("signature_uniform_fraction", None)
-        current_config.pop("signature_uniform_fraction")
+        mutable_fields = (
+            "signature_uniform_fraction",
+            "maximum_entries_per_source_signature",
+        )
+        for name in mutable_fields:
+            saved_config.pop(name, None)
+            current_config.pop(name)
         if saved_config != current_config:
             raise ValueError("frontier checkpoint configuration differs")
         self.reset_count = int(value["reset_count"])
@@ -259,12 +280,30 @@ class OutcomeFrontierCurriculum:
                 )
                 for item in states[task_id]
             ]
+            entries = self._prune_source_duplicates(entries)
             entries.sort(
                 key=lambda item: (
                     -item.score, item.source_episode, item.source_step
                 )
             )
             self.entries[task_id] = entries
+
+    def _prune_source_duplicates(
+        self, entries: Sequence[FrontierEntry]
+    ) -> list[FrontierEntry]:
+        retained: list[FrontierEntry] = []
+        limit = self.config.maximum_entries_per_source_signature
+        groups = sorted({(item.signature, item.source_episode) for item in entries})
+        for signature, source_episode in groups:
+            matching = [
+                item
+                for item in entries
+                if item.signature == signature
+                and item.source_episode == source_episode
+            ]
+            matching.sort(key=lambda item: -item.score)
+            retained.extend(matching[:limit])
+        return retained
 
     def _score(self, outcome: FrontierOutcome) -> float:
         worst = max(outcome.left_reach_distance, outcome.right_reach_distance)

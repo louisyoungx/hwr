@@ -40,6 +40,8 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
             "12",
             "--frontier-signature-uniform",
             "0.25",
+            "--frontier-source-capacity",
+            "3",
         ]
     )
 
@@ -51,6 +53,7 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
     assert arguments.frontier_reset == 0.4
     assert arguments.frontier_capacity == 12
     assert arguments.frontier_signature_uniform == 0.25
+    assert arguments.frontier_source_capacity == 3
     assert arguments.episode_steps is None
 
 
