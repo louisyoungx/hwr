@@ -77,6 +77,7 @@ class LearnedVisualPolicy:
         control_hz: float,
         task_instructions: Mapping[str, tuple[int, str]],
         phase_names: Sequence[str],
+        phase_action_mask: Sequence[Sequence[bool]],
         device: str = "cpu",
     ) -> None:
         self.model = model.to(device).eval()
@@ -87,6 +88,9 @@ class LearnedVisualPolicy:
         self.phase_names = tuple(phase_names)
         if len(self.phase_names) != model.config.phase_count:
             raise ValueError("phase vocabulary does not match the visual model")
+        self.phase_action_mask = np.asarray(phase_action_mask, dtype=bool)
+        if self.phase_action_mask.shape != (model.config.phase_count, 8):
+            raise ValueError("phase action mask does not match the visual model")
         self.device = torch.device(device)
         self._history = [np.zeros(9, dtype=np.float32) for _ in range(model.config.action_history)]
         self._task_id: str | None = None
@@ -145,7 +149,7 @@ class LearnedVisualPolicy:
             self._phase_candidate_steps += 1
         else:
             self._phase_candidate_steps = 0
-        if self._phase_candidate_steps >= 3:
+        if self._phase_candidate_steps >= 10:
             self._phase_index = next_index
             self._phase_candidate_steps = 0
         return self._phase_index
@@ -154,6 +158,9 @@ class LearnedVisualPolicy:
         mean = np.asarray(self.normalization.action_mean, dtype=np.float32)
         std = np.asarray(self.normalization.action_std, dtype=np.float32)
         continuous = prediction[:8] * std + mean
+        continuous = np.where(
+            self.phase_action_mask[self._phase_index], continuous, 0.0
+        )
         continuous[:2] = np.clip(continuous[:2], (-0.5, -1.0), (0.5, 1.0))
         continuous[2:] = np.clip(continuous[2:], -1.0, 1.0)
         gripper = float(prediction[8] >= 0.0)

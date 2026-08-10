@@ -15,6 +15,7 @@ from hwr.data.visual import (
 )
 from hwr.data.visual_generation import generate_visual_expert_dataset
 from hwr.data.visual_loading import LoadedVisualDataset, load_visual_dataset
+from hwr.data.visual_phases import compact_household_phase, compact_visual_dataset
 
 __all__ = [
     "BehaviorDataset",
@@ -26,6 +27,8 @@ __all__ = [
     "VisualBehaviorSample",
     "VisualDatasetBuilder",
     "aggregate_policy_dataset",
+    "compact_household_phase",
+    "compact_visual_dataset",
     "extract_formal_policy_input",
     "formal_action_vector",
     "generate_expert_dataset",

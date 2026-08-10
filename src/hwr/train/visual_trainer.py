@@ -47,6 +47,7 @@ class VisualTrainingResult:
     history: list[dict[str, float]]
     best_validation_loss: float
     device: str
+    phase_action_mask: tuple[tuple[bool, ...], ...]
 
 
 def _select_device(requested: str) -> str:
@@ -161,10 +162,28 @@ def train_visual_policy(
         dataset.phase_indices[train_indices], minlength=len(dataset.phase_names)
     )
     phase_weights = torch.from_numpy(
-        (phase_counts.sum() / np.maximum(phase_counts, 1) / len(phase_counts)).astype(
-            np.float32
-        )
+        np.sqrt(
+            phase_counts.sum() / np.maximum(phase_counts, 1) / len(phase_counts)
+        ).astype(np.float32)
     ).to(device)
+    phase_action_mask = tuple(
+        tuple(
+            bool(value)
+            for value in np.max(
+                np.abs(
+                    dataset.actions[
+                        train_indices[
+                            dataset.phase_indices[train_indices] == phase_index
+                        ],
+                        :8,
+                    ]
+                ),
+                axis=0,
+            )
+            > 1e-4
+        )
+        for phase_index in range(len(dataset.phase_names))
+    )
     history: list[dict[str, float]] = []
     best_loss = float("inf")
     best_state: dict[str, torch.Tensor] | None = None
@@ -206,4 +225,5 @@ def train_visual_policy(
         history,
         best_loss,
         device_name,
+        phase_action_mask,
     )
