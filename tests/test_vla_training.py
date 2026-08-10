@@ -4,8 +4,10 @@ import json
 
 import numpy as np
 import pytest
+import torch
 
 from hwr.data import load_vla_dataset
+from hwr.policy.vla_model import VLAActorConfig, VLAActorModel
 from hwr.policy.vla_runtime import vla_input_tensors
 from hwr.train import (
     VLABehaviorTrainingConfig,
@@ -14,6 +16,37 @@ from hwr.train import (
     train_vla_behavior_cloning,
 )
 from tests.vla_fixtures import actor_input, build_dataset
+
+
+def test_vla_actor_action_head_starts_randomized_around_zero() -> None:
+    scale = 1.0e-3
+    actor = VLAActorModel(
+        VLAActorConfig(
+            visual_history=2,
+            action_history=2,
+            proprioception_dim=37,
+            language_dim=12,
+            point_count=8,
+            action_chunk_size=3,
+            hidden_dim=32,
+            attention_heads=4,
+            transformer_layers=1,
+            action_head_init_scale=scale,
+        )
+    )
+
+    weights = actor.action_head.weight.detach()
+    bias = actor.action_head.bias.detach()
+    assert torch.count_nonzero(weights) > 0
+    assert weights.abs().max() <= scale
+    assert abs(float(weights.mean())) < scale / 4.0
+    assert torch.count_nonzero(bias) == 0
+
+
+@pytest.mark.parametrize("scale", [0.0, float("inf"), 0.02])
+def test_vla_actor_rejects_invalid_action_head_initialization(scale: float) -> None:
+    with pytest.raises(ValueError, match="initialization scale"):
+        VLAActorConfig(2, 2, 37, 12, 8, 3, action_head_init_scale=scale)
 
 
 def test_vla_behavior_clone_saves_reloads_and_predicts_action_chunk(tmp_path) -> None:

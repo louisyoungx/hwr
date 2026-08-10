@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import math
 from typing import Mapping, NamedTuple
 
 import torch
@@ -25,6 +26,7 @@ class VLAActorConfig:
     transformer_layers: int = 2
     dropout: float = 0.0
     action_dim: int = DUAL_ARM_ACTION_DIM
+    action_head_init_scale: float = 1.0e-3
 
     def __post_init__(self) -> None:
         dimensions = (
@@ -44,6 +46,10 @@ class VLAActorConfig:
             raise ValueError("VLA hidden size must be divisible by attention heads")
         if not 0.0 <= self.dropout < 1.0:
             raise ValueError("VLA dropout must be in [0, 1)")
+        if not math.isfinite(self.action_head_init_scale) or not (
+            0.0 < self.action_head_init_scale <= 1.0e-2
+        ):
+            raise ValueError("VLA action head initialization scale must be in (0, 0.01]")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -117,6 +123,12 @@ class VLAActorModel(nn.Module):
         self.action_head = nn.Linear(
             hidden, config.action_chunk_size * config.action_dim
         )
+        nn.init.uniform_(
+            self.action_head.weight,
+            -config.action_head_init_scale,
+            config.action_head_init_scale,
+        )
+        nn.init.zeros_(self.action_head.bias)
         self.stop_head = nn.Linear(hidden, config.action_chunk_size)
 
     def forward(self, inputs: Mapping[str, torch.Tensor]) -> VLAActorOutput:
