@@ -7,6 +7,20 @@ from pathlib import Path
 
 
 ALLOWED_MUJOCO_PREFIX = Path("src/hwr/adapters/mujoco")
+CORE_ROOT = Path("src/hwr/core")
+FORBIDDEN_CORE_PREFIXES = (
+    "hwr.adapters",
+    "hwr.apps",
+    "hwr.data",
+    "hwr.eval",
+    "hwr.perception",
+    "hwr.policy",
+    "hwr.render",
+    "hwr.safety",
+    "hwr.scenarios",
+    "hwr.sim",
+    "hwr.train",
+)
 
 
 def _imports_mujoco(path: Path) -> bool:
@@ -33,15 +47,44 @@ def find_mujoco_import_violations(root: Path) -> tuple[Path, ...]:
     return tuple(violations)
 
 
+def _imported_modules(path: Path) -> tuple[str, ...]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    modules: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.append(node.module)
+    return tuple(modules)
+
+
+def find_core_dependency_violations(root: Path) -> tuple[tuple[Path, str], ...]:
+    violations: list[tuple[Path, str]] = []
+    for path in sorted((root / CORE_ROOT).rglob("*.py")):
+        for module in _imported_modules(path):
+            if any(
+                module == prefix or module.startswith(prefix + ".")
+                for prefix in FORBIDDEN_CORE_PREFIXES
+            ):
+                violations.append((path.relative_to(root), module))
+    return tuple(violations)
+
+
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
-    violations = find_mujoco_import_violations(root)
-    if violations:
+    engine_violations = find_mujoco_import_violations(root)
+    if engine_violations:
         print("MuJoCo imports escaped the adapter boundary:")
-        for path in violations:
+        for path in engine_violations:
             print(f"- {path}")
         return 1
-    print("Architecture check passed: MuJoCo imports are confined to hwr.adapters.mujoco")
+    core_violations = find_core_dependency_violations(root)
+    if core_violations:
+        print("Core schemas import an outward platform layer:")
+        for path, module in core_violations:
+            print(f"- {path}: {module}")
+        return 1
+    print("Architecture check passed: engine and core dependency boundaries are intact")
     return 0
 
 

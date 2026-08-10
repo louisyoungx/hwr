@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.check_architecture import find_mujoco_import_violations
+from scripts.check_architecture import (
+    find_core_dependency_violations,
+    find_mujoco_import_violations,
+)
 from scripts.verify_physics_integrity import find_engine_state_write_violations
 
 
@@ -10,6 +13,22 @@ def test_mujoco_dependency_is_confined_to_adapter() -> None:
     root = Path(__file__).resolve().parents[1]
 
     assert find_mujoco_import_violations(root) == ()
+
+
+def test_core_schemas_do_not_depend_on_outward_layers() -> None:
+    root = Path(__file__).resolve().parents[1]
+
+    assert find_core_dependency_violations(root) == ()
+
+
+def test_core_dependency_scanner_detects_outward_import(tmp_path) -> None:
+    core = tmp_path / "src/hwr/core"
+    core.mkdir(parents=True)
+    (core / "leaky.py").write_text("from hwr.train.trainer import TrainingResult\n")
+
+    assert find_core_dependency_violations(tmp_path) == (
+        (Path("src/hwr/core/leaky.py"), "hwr.train.trainer"),
+    )
 
 
 def test_mujoco_runtime_does_not_teleport_engine_state() -> None:
