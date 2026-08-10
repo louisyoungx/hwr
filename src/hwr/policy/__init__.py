@@ -10,6 +10,8 @@ from hwr.policy.vla_input import (
     VLAActorInput,
     build_vla_actor_input,
 )
+from hwr.policy.vla_model import VLAActorConfig, VLAActorModel, VLAActorOutput
+from hwr.policy.vla_runtime import DeployableVLAActor, VLANormalization
 
 __all__ = [
     "BehaviorMLP",
@@ -25,4 +27,9 @@ __all__ = [
     "VLAActorInput",
     "VLA_POLICY_INPUT_FIELDS",
     "build_vla_actor_input",
+    "DeployableVLAActor",
+    "VLAActorConfig",
+    "VLAActorModel",
+    "VLAActorOutput",
+    "VLANormalization",
 ]

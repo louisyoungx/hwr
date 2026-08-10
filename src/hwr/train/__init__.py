@@ -9,6 +9,12 @@ from hwr.train.visual_trainer import (
     VisualTrainingResult,
     train_visual_policy,
 )
+from hwr.train.vla_registry import load_deployable_vla_actor, save_vla_behavior_result
+from hwr.train.vla_trainer import (
+    VLABehaviorTrainingConfig,
+    VLABehaviorTrainingResult,
+    train_vla_behavior_cloning,
+)
 
 __all__ = [
     "TrainingConfig",
@@ -23,4 +29,9 @@ __all__ = [
     "save_visual_knn_policy",
     "train_behavior_policy",
     "train_visual_policy",
+    "VLABehaviorTrainingConfig",
+    "VLABehaviorTrainingResult",
+    "load_deployable_vla_actor",
+    "save_vla_behavior_result",
+    "train_vla_behavior_cloning",
 ]

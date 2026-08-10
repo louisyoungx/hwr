@@ -17,6 +17,12 @@ from hwr.data.visual_aggregation import aggregate_visual_policy_dataset
 from hwr.data.visual_generation import generate_visual_expert_dataset
 from hwr.data.visual_loading import LoadedVisualDataset, load_visual_dataset
 from hwr.data.visual_phases import compact_household_phase, compact_visual_dataset
+from hwr.data.vla_dataset import (
+    VLABehaviorDatasetBuilder,
+    VLABehaviorSample,
+    verify_vla_dataset,
+)
+from hwr.data.vla_loading import LoadedVLADataset, load_vla_dataset
 
 __all__ = [
     "BehaviorDataset",
@@ -37,4 +43,9 @@ __all__ = [
     "generate_visual_expert_dataset",
     "load_visual_dataset",
     "verify_visual_dataset",
+    "LoadedVLADataset",
+    "VLABehaviorDatasetBuilder",
+    "VLABehaviorSample",
+    "load_vla_dataset",
+    "verify_vla_dataset",
 ]
