@@ -1,10 +1,13 @@
 # 正式三维视觉训练运行说明
 
-> 状态：数据采集与首轮实际训练完成，闭环评测待执行
+> 状态：历史 V1/V2 基线；不再代表当前训练架构
+>
+> 当前方案：[端到端视觉—语言—动作训练范式](./end-to-end-training-paradigm.md)
+>
 > 配置：[formal_visual_v1.json](../configs/training/formal_visual_v1.json)
 > 训练结果：[formal_visual_v1_results.json](../configs/training/formal_visual_v1_results.json)
 
-首轮普通行为克隆在餐厅未见种子 30000 上能导航到餐桌附近，但混淆机械臂操作与后续导航阶段，6000 步超时且没有夹持接触。该结果保留为 V1 基线。V2 在不改变策略输入白名单的前提下增加训练标签 `phase`，模型同时学习阶段分类和分阶段动作头；推理阶段由模型从允许观测预测阶段，运行时不读取专家阶段。
+首轮普通行为克隆在餐厅未见种子 30000 上能导航到餐桌附近，但混淆机械臂操作与后续导航阶段，6000 步超时且没有夹持接触。该结果保留为 V1 基线。V2 曾通过训练标签 `phase` 增加阶段分类和分阶段动作头；这一做法只保留作历史对照，后续端到端 Actor 不读取、预测或监督人工任务阶段。
 
 V2 数据与训练配置见 [formal_visual_v2.json](../configs/training/formal_visual_v2.json)。三个 V2 数据集仍使用相同的 9 个成功专家 Episode，但按 `hwr.visual-behavior-dataset/v2` 重采并锁定新的 shard 哈希。
 

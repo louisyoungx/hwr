@@ -68,6 +68,7 @@ hwr-render-benchmarks --output-path artifacts/benchmark-rollouts.mp4
 ## 文档
 
 - [平台架构与模块边界](docs/architecture.md)
+- [端到端视觉—语言—动作训练范式](docs/end-to-end-training-paradigm.md)
 - [训练与拟真环境方案](docs/training-and-simulation-plan.md)
 - [万元内平台方案](docs/low-cost-platform-proposal.md)
 - [训练基准与复现命令](benchmarks/README.md)

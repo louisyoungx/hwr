@@ -4,7 +4,7 @@
 > 日期：2026-08-09  
 > 预算上限：人民币 10,000 元（不含现有 Mac）
 
-配套文档：[训练与拟真环境方案](./training-and-simulation-plan.md)
+配套文档：[训练与拟真环境方案](./training-and-simulation-plan.md)；训练架构以[端到端视觉—语言—动作训练范式](./end-to-end-training-paradigm.md)为准。本文中关于固定路线、任务编排和学习范围的早期描述只作为预算与硬件降级参考，不再约束当前仿真训练。
 
 ## 1. 方案结论
 
