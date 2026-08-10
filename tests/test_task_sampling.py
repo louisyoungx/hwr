@@ -46,3 +46,19 @@ def test_outcome_sampler_initial_coverage_and_state_are_reproducible() -> None:
     assert initial == ["basket", "drawer", "tray"]
     assert restored.state_dict() == sampler.state_dict()
     assert sampler.audit()["actor_input_fields"] == []
+
+
+def test_outcome_sampler_uses_weighted_fair_credits_not_random_luck() -> None:
+    config = OutcomeAdaptiveTaskSamplingConfig(initial_cycles=1)
+    sampler = OutcomeAdaptiveTaskSampler(("basket", "drawer", "tray"), config)
+    for _ in range(6):
+        sampler.record("basket", _outcome(0, 0, 0, 0.22))
+        sampler.record("drawer", _outcome(20, 0, 0, 0.10))
+        sampler.record("tray", _outcome(20, 20, 12, 0.04))
+    rng = np.random.default_rng(999)
+    selected = [sampler.sample(rng)[0] for _ in range(33)]
+    adaptive = selected[3:]
+
+    assert adaptive.count("basket") > adaptive.count("drawer")
+    assert adaptive.count("drawer") > adaptive.count("tray")
+    assert max(adaptive.count(name) for name in sampler.task_ids) < 20

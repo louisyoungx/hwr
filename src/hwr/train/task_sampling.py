@@ -69,19 +69,23 @@ class OutcomeAdaptiveTaskSampler:
         self.history = {
             task_id: deque(maxlen=self.config.window) for task_id in identities
         }
+        self.credits = {task_id: 0.0 for task_id in identities}
         self.sample_count = 0
 
     def sample(self, rng: np.random.Generator) -> tuple[str, float]:
+        del rng
         initial = self.config.initial_cycles * len(self.task_ids)
         if self.sample_count < initial:
             task_id = self.task_ids[self.sample_count % len(self.task_ids)]
             self.sample_count += 1
             return task_id, 1.0
         probabilities = self.probabilities()
-        values = np.asarray([probabilities[name] for name in self.task_ids])
-        index = int(rng.choice(len(self.task_ids), p=values))
+        for task_id, probability in probabilities.items():
+            self.credits[task_id] += probability
+        task_id = max(self.task_ids, key=lambda name: self.credits[name])
+        self.credits[task_id] -= 1.0
         self.sample_count += 1
-        return self.task_ids[index], float(values[index])
+        return task_id, probabilities[task_id]
 
     def record(self, task_id: str, outcome: TaskOutcome) -> None:
         try:
@@ -121,6 +125,7 @@ class OutcomeAdaptiveTaskSampler:
             "task_ids": self.task_ids,
             "config": asdict(self.config),
             "sample_count": self.sample_count,
+            "credits": dict(self.credits),
             "history": {
                 task_id: [asdict(outcome) for outcome in outcomes]
                 for task_id, outcomes in self.history.items()
@@ -133,6 +138,10 @@ class OutcomeAdaptiveTaskSampler:
         if dict(value["config"]) != asdict(self.config):
             raise ValueError("task sampler checkpoint configuration differs")
         self.sample_count = int(value["sample_count"])
+        self.credits = {
+            task_id: float(value["credits"][task_id])
+            for task_id in self.task_ids
+        }
         for task_id in self.task_ids:
             self.history[task_id].clear()
             self.history[task_id].extend(
