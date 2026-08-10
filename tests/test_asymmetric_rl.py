@@ -22,6 +22,7 @@ from hwr.train import (
     save_asymmetric_training_checkpoint,
     save_vla_actor_checkpoint,
 )
+from hwr.train.asymmetric_rl import _scale_gripper_actor_gradient
 from tests.vla_fixtures import actor_input, build_dataset
 
 
@@ -159,12 +160,24 @@ def test_maximum_entropy_actor_and_action_regularization_are_enabled() -> None:
     )
     assert config.action_magnitude_penalty > 0
     assert config.action_slew_penalty > 0
+    assert config.gripper_actor_gradient_scale > 1.0
     assert config.reward_scale == 0.25
     assert config.conservative_critic_weight == 0.05
     assert config.conservative_action_samples > 1
     assert defaults.actor_learning_rate < defaults.critic_learning_rate
     assert defaults.actor_learning_rate < defaults.safety_learning_rate
     assert defaults.policy_delay >= 5
+
+
+def test_gripper_actor_gradient_scaling_preserves_forward_action() -> None:
+    actions = torch.linspace(-0.5, 1.0, 16, requires_grad=True)
+
+    scaled = _scale_gripper_actor_gradient(actions, 4.0)
+    scaled.sum().backward()
+
+    assert torch.equal(scaled, actions.detach())
+    assert torch.equal(actions.grad[:14], torch.ones(14))
+    assert torch.equal(actions.grad[14:], torch.full((2,), 4.0))
 
 
 def test_stochastic_actor_samples_bounded_actions_and_finite_density() -> None:

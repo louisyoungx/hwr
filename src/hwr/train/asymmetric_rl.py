@@ -43,6 +43,7 @@ class AsymmetricRLConfig:
     maximum_gripper_log_standard_deviation: float = 0.2
     action_magnitude_penalty: float = 0.08
     action_slew_penalty: float = 0.04
+    gripper_actor_gradient_scale: float = 4.0
     safety_learning_rate: float = 3e-4
     safety_actor_penalty: float = 3.0
     conservative_critic_weight: float = 0.05
@@ -60,6 +61,7 @@ class AsymmetricRLConfig:
             self.arm_velocity_scale,
             self.safety_learning_rate,
             self.reward_scale,
+            self.gripper_actor_gradient_scale,
         ) <= 0:
             raise ValueError("asymmetric RL learning rates must be positive")
         if not 0.0 <= self.discount <= 1.0:
@@ -148,6 +150,16 @@ def _action_scales(config: AsymmetricRLConfig, reference: torch.Tensor) -> torch
         dtype=reference.dtype,
         device=reference.device,
     )
+
+
+def _scale_gripper_actor_gradient(
+    actions: torch.Tensor, scale: float
+) -> torch.Tensor:
+    if actions.shape[-1] != 16 or scale <= 0.0:
+        raise ValueError("gripper gradient scaling requires 16D actions and positive scale")
+    grippers = actions[..., 14:]
+    scaled = grippers.detach() + scale * (grippers - grippers.detach())
+    return torch.cat((actions[..., :14], scaled), dim=-1)
 
 
 def _executed_action_representation(batch: AsymmetricRLBatch) -> torch.Tensor:
@@ -382,7 +394,10 @@ class AsymmetricActorCriticTrainer:
         output = self.actor(batch.actor_inputs)
         sample = self._sample_action(output)
         bounded = sample.values
-        action = self._critic_action(output, bounded)
+        critic_bounded = _scale_gripper_actor_gradient(
+            bounded, self.config.gripper_actor_gradient_scale
+        )
+        action = self._critic_action(output, critic_bounded)
         q1, q2 = self.critic(batch.privileged_state, action)
         reward_value = torch.minimum(q1, q2)
         safety_risk = torch.zeros_like(q1)
