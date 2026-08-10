@@ -160,8 +160,9 @@ def save_bimanual_training_run(
         "failure_return": True,
         "discovery_criteria": {
             "physical_contact": "either_arm",
-            "reach_distance_meters": 0.06,
-            "reach_sides": "either_arm",
+            "one_side_reach_meters": 0.06,
+            "bilateral_reach_meters": 0.10,
+            "bilateral_metric": "same_transition_worst_side_distance",
         },
         "proposed_actions_for_safety_cost": True,
         "safety_cost_labels": "deterministic_runtime_intervention",

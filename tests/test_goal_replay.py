@@ -180,6 +180,33 @@ def test_rare_one_sided_near_grasp_states_enter_discovery_replay() -> None:
     assert outside.discovery_size == 0
 
 
+def test_jointly_near_states_enter_discovery_replay_without_one_close_side() -> None:
+    episode = _episode(success=False, mirrorable=False)
+    jointly_near = episode.batch.next_privileged_state.clone()
+    jointly_near[:, 24] = 0.08
+    jointly_near[:, 25] = 0.09
+    replay = GoalConditionedReplayBuffer(64, seed=15)
+
+    replay.add_episode(
+        replace(
+            episode,
+            batch=replace(episode.batch, next_privileged_state=jointly_near),
+        )
+    )
+
+    assert replay.discovery_size == 4
+    outside = jointly_near.clone()
+    outside[:, 25] = 0.101
+    rejected = GoalConditionedReplayBuffer(64, seed=16)
+    rejected.add_episode(
+        replace(
+            episode,
+            batch=replace(episode.batch, next_privileged_state=outside),
+        )
+    )
+    assert rejected.discovery_size == 0
+
+
 def test_automatic_curriculum_expands_only_after_safe_success_window() -> None:
     curriculum = AutomaticCurriculum(
         ("basket",),
