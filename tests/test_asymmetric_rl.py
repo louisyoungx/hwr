@@ -134,6 +134,11 @@ def test_asymmetric_replay_and_training_checkpoint_resume(tmp_path) -> None:
     trainer = _trainer()
     replay = AsymmetricReplayBuffer(8, seed=7)
     replay.add(_batch())
+    replay_state = replay.state_dict()
+    assert all(
+        tensor.shape[0] == replay.size
+        for tensor in replay_state["storage"].values()
+    )
     trainer.update(replay.sample(3))
     path = save_asymmetric_training_checkpoint(
         tmp_path / "resume", trainer, replay, run_metadata={"scene": "kitchen"}

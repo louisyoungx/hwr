@@ -55,7 +55,10 @@ class AsymmetricReplayBuffer:
             "capacity": self.capacity,
             "size": self.size,
             "position": self.position,
-            "storage": {name: value.clone() for name, value in self._storage.items()},
+            "storage": {
+                name: value[: self.size].clone()
+                for name, value in self._storage.items()
+            },
             "generator_state": self._generator.get_state(),
         }
 
@@ -64,9 +67,15 @@ class AsymmetricReplayBuffer:
             raise ValueError("replay checkpoint capacity differs")
         self.size = int(value["size"])
         self.position = int(value["position"])
-        self._storage = {
-            name: tensor.clone() for name, tensor in value["storage"].items()
-        }
+        self._storage = {}
+        for name, tensor in value["storage"].items():
+            if tensor.shape[0] not in (self.size, self.capacity):
+                raise ValueError("replay checkpoint storage length is invalid")
+            expanded = torch.empty(
+                (self.capacity, *tensor.shape[1:]), dtype=tensor.dtype
+            )
+            expanded[: self.size].copy_(tensor[: self.size])
+            self._storage[name] = expanded
         self._generator.set_state(value["generator_state"])
 
     def _flatten_batch(self, batch: AsymmetricRLBatch) -> dict[str, torch.Tensor]:
