@@ -13,7 +13,7 @@ from hwr.train import (
     BimanualTrainingRunner,
     FrontierOutcome,
 )
-from hwr.train.bimanual_training import _bilateral_near_statistics
+from hwr.train.bimanual_metrics import bilateral_near_statistics
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +46,8 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
             "0.25",
             "--frontier-source-capacity",
             "3",
+            "--frontier-contact-stability",
+            "50",
         ]
     )
 
@@ -60,6 +62,7 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
     assert arguments.frontier_capacity == 12
     assert arguments.frontier_signature_uniform == 0.25
     assert arguments.frontier_source_capacity == 3
+    assert arguments.frontier_contact_stability == 50
     assert arguments.episode_steps is None
 
 
@@ -105,7 +108,7 @@ def test_bilateral_near_statistics_require_both_sides_in_same_state() -> None:
     def state(left: float, right: float) -> tuple[float, ...]:
         return (*([0.0] * 24), left, right)
 
-    total, longest = _bilateral_near_statistics(
+    total, longest = bilateral_near_statistics(
         [
             state(0.05, 0.20),
             state(0.20, 0.05),

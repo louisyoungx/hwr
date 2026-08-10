@@ -22,6 +22,7 @@ class FrontierCurriculumConfig:
     maximum_payload_angular_speed: float = 0.15
     signature_uniform_fraction: float = 0.20
     maximum_entries_per_source_signature: int = 2
+    minimum_contact_stability_steps: int = 40
 
     def __post_init__(self) -> None:
         if self.capacity_per_task <= 0:
@@ -32,6 +33,8 @@ class FrontierCurriculumConfig:
             raise ValueError("frontier signature uniform fraction must be in [0, 1]")
         if self.maximum_entries_per_source_signature <= 0:
             raise ValueError("frontier per-source signature capacity must be positive")
+        if self.minimum_contact_stability_steps <= 0:
+            raise ValueError("frontier contact stability steps must be positive")
         if min(
             self.discovery_reach_meters,
             self.bilateral_reach_meters,
@@ -74,6 +77,7 @@ class FrontierEntry:
     signature: int
     source_episode: int
     source_step: int
+    contact_stability_steps: int
 
 
 class OutcomeFrontierCurriculum:
@@ -106,6 +110,19 @@ class OutcomeFrontierCurriculum:
             payload_angular_speed=float(metrics["payload_angular_speed"]),
         )
 
+    def advance_contact_stability(
+        self,
+        outcome: FrontierOutcome,
+        previous_signature: int,
+        previous_steps: int,
+    ) -> tuple[int, int]:
+        signature = int(outcome.left_contact) | (int(outcome.right_contact) << 1)
+        if signature == 0:
+            return 0, 0
+        if signature == previous_signature:
+            return signature, previous_steps + 1
+        return signature, 1
+
     def qualifies(self, outcome: FrontierOutcome) -> bool:
         physically_supported = (
             outcome.support_contact
@@ -137,15 +154,27 @@ class OutcomeFrontierCurriculum:
         *,
         source_episode: int,
         source_step: int,
+        contact_stability_steps: int = 0,
     ) -> bool:
         if task_id not in self.entries or snapshot.task_id != task_id:
             raise ValueError("frontier candidate task identity differs")
         if not self.qualifies(outcome):
             return False
+        if (
+            (outcome.left_contact or outcome.right_contact)
+            and contact_stability_steps < self.config.minimum_contact_stability_steps
+        ):
+            return False
         score = self._score(outcome)
         signature = self._signature(outcome)
         candidate = FrontierEntry(
-            snapshot, outcome, score, signature, source_episode, source_step
+            snapshot,
+            outcome,
+            score,
+            signature,
+            source_episode,
+            source_step,
+            contact_stability_steps,
         )
         values = self.entries[task_id]
         same = [item for item in values if item.signature == signature]
@@ -218,6 +247,9 @@ class OutcomeFrontierCurriculum:
             "maximum_entries_per_source_signature": (
                 self.config.maximum_entries_per_source_signature
             ),
+            "minimum_contact_stability_steps": (
+                self.config.minimum_contact_stability_steps
+            ),
             "score": "exp(-max(left_reach,right_reach)/scale)",
             "contact_affects_score": False,
             "physical_stability_filter": {
@@ -245,6 +277,7 @@ class OutcomeFrontierCurriculum:
                         "signature": item.signature,
                         "source_episode": item.source_episode,
                         "source_step": item.source_step,
+                        "contact_stability_steps": item.contact_stability_steps,
                     }
                     for item in values
                 ]
@@ -260,6 +293,7 @@ class OutcomeFrontierCurriculum:
         mutable_fields = (
             "signature_uniform_fraction",
             "maximum_entries_per_source_signature",
+            "minimum_contact_stability_steps",
         )
         for name in mutable_fields:
             saved_config.pop(name, None)
@@ -277,8 +311,20 @@ class OutcomeFrontierCurriculum:
                     signature=self._signature(FrontierOutcome(**item["outcome"])),
                     source_episode=int(item["source_episode"]),
                     source_step=int(item["source_step"]),
+                    contact_stability_steps=int(
+                        item.get("contact_stability_steps", 0)
+                    ),
                 )
                 for item in states[task_id]
+            ]
+            entries = [
+                item
+                for item in entries
+                if not (
+                    item.signature == 3
+                    and item.contact_stability_steps
+                    < self.config.minimum_contact_stability_steps
+                )
             ]
             entries = self._prune_source_duplicates(entries)
             entries.sort(

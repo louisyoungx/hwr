@@ -40,6 +40,7 @@ FORKABLE_TRAINING_FIELDS = frozenset(
         "actuator_dwell_closed_probability",
         "frontier_signature_uniform_fraction",
         "frontier_max_entries_per_source_signature",
+        "frontier_minimum_contact_stability_steps",
     }
 )
 
@@ -309,11 +310,14 @@ def resume_bimanual_training_run(
         "frontier_capacity_per_task",
         "frontier_signature_uniform_fraction",
         "frontier_max_entries_per_source_signature",
+        "frontier_minimum_contact_stability_steps",
     ):
         if name == "frontier_signature_uniform_fraction":
             legacy_default = 1.0
         elif name == "frontier_max_entries_per_source_signature":
             legacy_default = max(1, saved["frontier_capacity_per_task"] // 4)
+        elif name == "frontier_minimum_contact_stability_steps":
+            legacy_default = 1
         else:
             legacy_default = requested[name]
         saved.setdefault(name, legacy_default)
@@ -382,4 +386,6 @@ def _normalized_training_config(value: Mapping[str, Any]) -> dict[str, Any]:
         saved["frontier_max_entries_per_source_signature"] = max(
             1, int(saved["frontier_capacity_per_task"]) // 4
         )
+    if "frontier_minimum_contact_stability_steps" not in value:
+        saved["frontier_minimum_contact_stability_steps"] = 1
     return saved

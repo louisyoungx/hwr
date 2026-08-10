@@ -95,6 +95,7 @@ def test_frontier_rejects_unsupported_or_moving_instantaneous_near_states() -> N
         ),
         source_episode=0,
         source_step=2,
+        contact_stability_steps=40,
     )
 
     audit = frontier.audit()
@@ -123,6 +124,7 @@ def test_frontier_preserves_side_diversity_and_round_trips_checkpoint() -> None:
             outcome,
             source_episode=index,
             source_step=index + 10,
+            contact_stability_steps=40,
         )
 
     restored = OutcomeFrontierCurriculum(("tray",), config)
@@ -154,6 +156,7 @@ def test_frontier_prioritizes_worst_side_progress_over_far_single_contact() -> N
             outcome,
             source_episode=index,
             source_step=index,
+            contact_stability_steps=40,
         )
 
     ranked = frontier.entries["tray"]
@@ -183,6 +186,7 @@ def test_frontier_contact_cannot_outrank_better_bilateral_reach() -> None:
             outcome,
             source_episode=index,
             source_step=index,
+            contact_stability_steps=40,
         )
 
     audit = frontier.audit()
@@ -209,6 +213,7 @@ def test_frontier_selection_replays_each_discovered_contact_signature() -> None:
             outcome,
             source_episode=index,
             source_step=index,
+            contact_stability_steps=40,
         )
 
     selected = [
@@ -239,6 +244,7 @@ def test_frontier_limits_duplicate_frames_from_one_episode_and_prunes_legacy() -
             FrontierOutcome(0.04, 0.08 - index * 0.005, True, False),
             source_episode=7,
             source_step=index,
+            contact_stability_steps=40,
         )
     assert sum(
         item.source_episode == 7 for item in frontier.entries["tray"]
@@ -252,3 +258,37 @@ def test_frontier_limits_duplicate_frames_from_one_episode_and_prunes_legacy() -
 
     assert len(restored.entries["tray"]) == 2
     assert restored.audit()["maximum_entries_per_source_signature"] == 2
+
+
+def test_frontier_requires_two_seconds_of_contact_before_snapshotting() -> None:
+    frontier = OutcomeFrontierCurriculum(
+        ("tray",),
+        FrontierCurriculumConfig(minimum_contact_stability_steps=40),
+    )
+    outcome = FrontierOutcome(0.04, 0.05, True, True)
+
+    assert not frontier.consider(
+        "tray",
+        _snapshot("tray", 0.0),
+        outcome,
+        source_episode=3,
+        source_step=38,
+        contact_stability_steps=39,
+    )
+    assert frontier.consider(
+        "tray",
+        _snapshot("tray", 1.0),
+        outcome,
+        source_episode=3,
+        source_step=39,
+        contact_stability_steps=40,
+    )
+    assert frontier.entries["tray"][0].contact_stability_steps == 40
+    assert frontier.audit()["minimum_contact_stability_steps"] == 40
+
+    legacy = frontier.state_dict()
+    legacy["config"].pop("minimum_contact_stability_steps")
+    legacy["entries"]["tray"][0].pop("contact_stability_steps")
+    restored = OutcomeFrontierCurriculum(("tray",), frontier.config)
+    restored.load_state_dict(legacy)
+    assert restored.entries["tray"] == []

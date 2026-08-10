@@ -27,6 +27,7 @@ from hwr.train.asymmetric_rl import (
     AsymmetricRLBatch,
     AsymmetricRLConfig,
 )
+from hwr.train.bimanual_metrics import bilateral_near_statistics
 from hwr.train.action_exploration import (
     TemporalActionExplorer,
     TemporalExplorationConfig,
@@ -70,6 +71,7 @@ class BimanualRLTrainingConfig:
     frontier_capacity_per_task: int = 16
     frontier_signature_uniform_fraction: float = 0.20
     frontier_max_entries_per_source_signature: int = 2
+    frontier_minimum_contact_stability_steps: int = 40
     failure_replay_fraction: float = 0.5
     discovery_replay_fraction: float = 0.35
     safety_replay_fraction: float = 0.15
@@ -102,6 +104,7 @@ class BimanualRLTrainingConfig:
             self.actuator_dwell_steps,
             self.frontier_capacity_per_task,
             self.frontier_max_entries_per_source_signature,
+            self.frontier_minimum_contact_stability_steps,
             self.raw_image_width,
             self.raw_image_height,
             self.image_width,
@@ -359,6 +362,9 @@ class BimanualTrainingRunner:
                 maximum_entries_per_source_signature=(
                     config.frontier_max_entries_per_source_signature
                 ),
+                minimum_contact_stability_steps=(
+                    config.frontier_minimum_contact_stability_steps
+                ),
             ),
         )
         self.task_sampler = OutcomeAdaptiveTaskSampler(self.task_ids)
@@ -475,6 +481,8 @@ class BimanualTrainingRunner:
         total_reward = 0.0
         success = False
         safety_interventions = 0
+        previous_contact_signature = 0
+        contact_stability_steps = 0
         step_limit = self.config.episode_step_limit or self.tasks[task_id].max_steps
         for step in range(step_limit):
             random_phase = episode_index < self.config.initial_random_episodes
@@ -504,6 +512,13 @@ class BimanualTrainingRunner:
                 frontier_outcome = self.frontier.outcome_from_metrics(
                     next_state.metrics
                 )
+                previous_contact_signature, contact_stability_steps = (
+                    self.frontier.advance_contact_stability(
+                        frontier_outcome,
+                        previous_contact_signature,
+                        contact_stability_steps,
+                    )
+                )
                 if self.frontier.qualifies(frontier_outcome):
                     self.frontier.consider(
                         task_id,
@@ -511,6 +526,7 @@ class BimanualTrainingRunner:
                         frontier_outcome,
                         source_episode=episode_index,
                         source_step=step,
+                        contact_stability_steps=contact_stability_steps,
                     )
             terminal = outcome.terminated or outcome.truncated
             limit = step + 1 >= step_limit
@@ -561,7 +577,7 @@ class BimanualTrainingRunner:
             ),
         )
         bilateral_near_steps, maximum_bilateral_near_steps = (
-            _bilateral_near_statistics(buffers.states)
+            bilateral_near_statistics(buffers.states)
         )
         return TrainingEpisodeRecord(
             episode=episode_index,
@@ -738,20 +754,6 @@ class BimanualTrainingRunner:
             )
             metrics.append(self.trainer.update(batch))
         return _summarize_updates(metrics)
-
-
-def _bilateral_near_statistics(
-    states: list[tuple[float, ...]], threshold: float = 0.10
-) -> tuple[int, int]:
-    total = 0
-    current = 0
-    longest = 0
-    for state in states:
-        near = max(state[24], state[25]) <= threshold
-        total += int(near)
-        current = current + 1 if near else 0
-        longest = max(longest, current)
-    return total, longest
 
 
 def _summarize_updates(metrics: list[Mapping[str, float]]) -> dict[str, float]:
