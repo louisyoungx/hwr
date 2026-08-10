@@ -61,6 +61,7 @@ from hwr.train.bimanual_training import (
     TrainingEpisodeRecord,
 )
 from hwr.train.bimanual_registry import (
+    fork_bimanual_training_run,
     load_bimanual_actor,
     resume_bimanual_training_run,
     save_bimanual_live_progress,
@@ -101,6 +102,7 @@ __all__ = [
     "FrontierCurriculumConfig",
     "FrontierEntry",
     "FrontierOutcome",
+    "fork_bimanual_training_run",
     "OutcomeFrontierCurriculum",
     "GoalConditionedReplayBuffer",
     "GoalEpisode",

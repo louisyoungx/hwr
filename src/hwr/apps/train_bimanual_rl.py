@@ -15,6 +15,7 @@ from hwr.adapters.mujoco import (
 from hwr.train import (
     BimanualRLTrainingConfig,
     BimanualTrainingRunner,
+    fork_bimanual_training_run,
     resume_bimanual_training_run,
     save_bimanual_live_progress,
 )
@@ -28,6 +29,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--resume",
         action="store_true",
         help="resume --run-id and treat --episodes as the new total",
+    )
+    parser.add_argument(
+        "--fork-from",
+        type=Path,
+        help="start a new audited run from a verified no-demonstration checkpoint",
     )
     parser.add_argument("--output-root", type=Path, default=Path("runs/bimanual-rl"))
     parser.add_argument("--episodes", type=int, default=120)
@@ -84,6 +90,8 @@ def _source_commit(root: Path) -> str:
 def run(arguments: argparse.Namespace) -> dict[str, object]:
     if arguments.checkpoint_interval <= 0:
         raise ValueError("checkpoint interval must be positive")
+    if arguments.resume and arguments.fork_from is not None:
+        raise ValueError("--resume and --fork-from are mutually exclusive")
     root = Path(__file__).resolve().parents[3]
     tasks, bindings = load_default_bimanual_training_catalogs(root)
     config = BimanualRLTrainingConfig(
@@ -134,10 +142,18 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     runner = BimanualTrainingRunner(
         tasks, MujocoBimanualBackendFactory(bindings), config
     )
+    parent_training_run = None
     if arguments.resume:
         resume_bimanual_training_run(path, runner)
     elif path.exists():
         raise FileExistsError(f"training run already exists: {path}")
+    elif arguments.fork_from is not None:
+        parent_path = (
+            arguments.fork_from
+            if arguments.fork_from.is_absolute()
+            else root / arguments.fork_from
+        )
+        parent_training_run = fork_bimanual_training_run(parent_path, runner)
     created = path.exists()
 
     def save_progress(result) -> None:
@@ -155,6 +171,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
                 result,
                 source_commit=source_commit,
                 overwrite=created,
+                parent_training_run=parent_training_run,
             )
             created = True
         else:

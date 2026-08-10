@@ -13,6 +13,7 @@ from hwr.adapters.mujoco import (
 from hwr.train import (
     BimanualRLTrainingConfig,
     BimanualTrainingRunner,
+    fork_bimanual_training_run,
     load_bimanual_actor,
     resume_bimanual_training_run,
     save_bimanual_live_progress,
@@ -159,3 +160,65 @@ def test_training_run_rejects_a_different_critic_state_layout(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="Critic architecture"):
         resume_bimanual_training_run(path, runner)
+
+
+def test_training_fork_records_parent_hashes_and_only_exploration_changes(
+    tmp_path,
+) -> None:
+    parent = _small_result()
+    parent_path = save_bimanual_training_run(
+        tmp_path, "parent-run", parent, source_commit="d" * 40
+    )
+    tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
+    config_values = parent.config.to_dict()
+    config_values.update(
+        episodes=2,
+        actuator_dwell_probability=0.001,
+        actuator_dwell_steps=260,
+    )
+    runner = BimanualTrainingRunner(
+        tasks,
+        MujocoBimanualBackendFactory(bindings),
+        BimanualRLTrainingConfig(**config_values),
+    )
+
+    provenance = fork_bimanual_training_run(parent_path, runner)
+    result = runner.train()
+    fork_path = save_bimanual_training_run(
+        tmp_path,
+        "fork-run",
+        result,
+        source_commit="e" * 40,
+        parent_training_run=provenance,
+    )
+    manifest = verify_bimanual_training_run(fork_path)
+    lineage = json.loads((fork_path / "lineage.json").read_text(encoding="utf-8"))
+
+    assert provenance["fork_record_count"] == 1
+    assert set(provenance["config_changes"]) == {
+        "actuator_dwell_probability",
+        "actuator_dwell_steps",
+        "episodes",
+    }
+    assert len(provenance["parent_checkpoint_sha256"]) == 64
+    assert manifest["parent_training_run"] == provenance
+    assert lineage["initialization"] == "audited-no-demonstration-checkpoint"
+    assert lineage["parent_training_run"] == provenance
+
+
+def test_training_fork_rejects_non_exploration_config_changes(tmp_path) -> None:
+    parent = _small_result()
+    parent_path = save_bimanual_training_run(
+        tmp_path, "fixed-parent", parent, source_commit="f" * 40
+    )
+    tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
+    config_values = parent.config.to_dict()
+    config_values["replay_capacity"] = 64
+    runner = BimanualTrainingRunner(
+        tasks,
+        MujocoBimanualBackendFactory(bindings),
+        BimanualRLTrainingConfig(**config_values),
+    )
+
+    with pytest.raises(ValueError, match="replay_capacity"):
+        fork_bimanual_training_run(parent_path, runner)

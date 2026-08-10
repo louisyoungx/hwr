@@ -21,6 +21,23 @@ from hwr.train.bimanual_training import (
 
 
 BIMANUAL_RUN_SCHEMA = "hwr.bimanual-rl-run/v1"
+FORKABLE_TRAINING_FIELDS = frozenset(
+    {
+        "episodes",
+        "exploration_noise",
+        "exploration_correlation",
+        "action_smoothing",
+        "gripper_exploration_probability",
+        "gripper_exploration_hold_steps",
+        "policy_gripper_hold_steps",
+        "reflection_coupled_exploration_probability",
+        "paired_gripper_exploration_probability",
+        "global_random_burst_probability",
+        "global_random_burst_steps",
+        "actuator_dwell_probability",
+        "actuator_dwell_steps",
+    }
+)
 
 
 def _sha256(path: Path) -> str:
@@ -73,6 +90,7 @@ def save_bimanual_training_run(
     *,
     source_commit: str,
     overwrite: bool = False,
+    parent_training_run: Mapping[str, Any] | None = None,
 ) -> Path:
     if not run_id or not source_commit:
         raise ValueError("training run and source commit identities are required")
@@ -102,7 +120,11 @@ def save_bimanual_training_run(
     _write_episode_records(path / "live-episodes.jsonl", result)
     lineage = {
         "schema_version": "hwr.no-demonstration-lineage/v1",
-        "initialization": "random_actor",
+        "initialization": (
+            "audited-no-demonstration-checkpoint"
+            if parent_training_run
+            else "random_actor"
+        ),
         "action_label_sources": [],
         "expert_policies": [],
         "demonstration_datasets": [],
@@ -116,6 +138,9 @@ def save_bimanual_training_run(
             "autonomous-physical-frontier-resets-without-action-labels"
         ),
         "hindsight_actor_weight": 0.0,
+        "parent_training_run": (
+            dict(parent_training_run) if parent_training_run else None
+        ),
     }
     _write_json(path / "lineage.json", lineage)
     actor_audit = {
@@ -202,6 +227,9 @@ def save_bimanual_training_run(
             item.name: {"sha256": _sha256(item), "bytes": item.stat().st_size}
             for item in files
         },
+        "parent_training_run": (
+            dict(parent_training_run) if parent_training_run else None
+        ),
     }
     _write_json(path / "manifest.json", manifest)
     return path
@@ -285,3 +313,53 @@ def resume_bimanual_training_run(
         weights_only=False,
     )
     runner.load_training_state(checkpoint)
+
+
+def fork_bimanual_training_run(
+    path: Path,
+    runner: BimanualTrainingRunner,
+) -> dict[str, Any]:
+    """Load an audited no-demonstration run with explicit exploration changes."""
+    manifest = verify_bimanual_training_run(path)
+    critic_config = manifest.get("critic_config")
+    if critic_config != runner.trainer.critic_config.to_dict():
+        raise ValueError("fork Critic architecture differs")
+    saved = _normalized_training_config(manifest["training_config"])
+    requested = runner.config.to_dict()
+    changes = {
+        name: {"parent": saved[name], "fork": requested[name]}
+        for name in sorted(saved)
+        if saved[name] != requested[name]
+    }
+    prohibited = sorted(set(changes) - FORKABLE_TRAINING_FIELDS)
+    if prohibited:
+        raise ValueError(
+            "fork changes non-exploration training fields: "
+            + ", ".join(prohibited)
+        )
+    checkpoint_path = path / "training-checkpoint.pt"
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location=runner.trainer.device,
+        weights_only=False,
+    )
+    runner.load_training_state(checkpoint)
+    return {
+        "schema_version": "hwr.training-fork/v1",
+        "parent_run_id": manifest["run_id"],
+        "parent_source_commit": manifest["source_commit"],
+        "parent_manifest_sha256": _sha256(path / "manifest.json"),
+        "parent_checkpoint_sha256": _sha256(checkpoint_path),
+        "fork_record_count": len(runner.records),
+        "config_changes": changes,
+        "inherited_action_labels": False,
+        "inherited_expert_policies": False,
+    }
+
+
+def _normalized_training_config(value: Mapping[str, Any]) -> dict[str, Any]:
+    saved = dict(value)
+    defaults = BimanualRLTrainingConfig().to_dict()
+    for name, default in defaults.items():
+        saved.setdefault(name, default)
+    return saved
