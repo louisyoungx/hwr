@@ -9,6 +9,7 @@ from hwr.data.visual_loading import load_visual_dataset
 
 
 DRAWER_PHASES = {
+    "stow_for_drawer": "approach_drawer",
     "navigate_to_drawer": "approach_drawer",
     "unfold_arm_for_drawer": "approach_drawer",
     "approach_drawer_handle": "approach_drawer",
@@ -20,7 +21,15 @@ DRAWER_PHASES = {
     "back_away_from_open_drawer": "clear_drawer",
 }
 OBJECT_PHASE_PREFIXES = (
-    (("nav_object_", "unstow_arm_", "arm_object_above_"), "approach_object_"),
+    (
+        (
+            "stow_for_nav_object_",
+            "nav_object_",
+            "unstow_arm_",
+            "arm_object_above_",
+        ),
+        "approach_object_",
+    ),
     (("arm_object_descend_", "grip_object_"), "grasp_object_"),
     (("arm_object_lift_", "transport_arm_"), "lift_object_"),
     (

@@ -83,7 +83,9 @@ class PrivilegedHouseholdExpert:
         stage = self.stage
         current_index = self.stage_index
         current_step = self.stage_step
-        if stage.kind.startswith("nav_"):
+        if stage.kind.startswith("stow_for_"):
+            action = self._stow_phase_action(observation)
+        elif stage.kind.startswith("nav_"):
             action = self._navigation_action(observation)
         elif stage.kind == "transport_arm":
             action = self._transport_action(observation)
@@ -153,6 +155,7 @@ class PrivilegedHouseholdExpert:
             stages.extend(
                 ExpertStage(name, kind)
                 for name, kind in (
+                    ("stow_for_drawer", "stow_for_nav_drawer"),
                     ("navigate_to_drawer", "nav_drawer"),
                     ("unfold_arm_for_drawer", "unstow_arm"),
                     ("approach_drawer_handle", "arm_drawer_above"),
@@ -165,6 +168,7 @@ class PrivilegedHouseholdExpert:
                 )
             )
         object_kinds = [
+            "stow_for_nav_object",
             "nav_object",
             "unstow_arm",
             "arm_object_above",
@@ -257,9 +261,6 @@ class PrivilegedHouseholdExpert:
         if not self.nav_targets:
             self._advance()
             return self._stop(observation)
-        stow_action = self._stow_action(observation)
-        if stow_action is not None:
-            return stow_action
         navigation_timeout = (
             1299
             if self.task.task_id.startswith("store_kitchen")
@@ -320,6 +321,13 @@ class PrivilegedHouseholdExpert:
         angular = float(np.clip(1.8 * yaw_error, -0.85, 0.85))
         return self._action(observation, linear=linear, angular=angular, gripper=self._gripper())
 
+    def _stow_phase_action(self, observation: ObservationFrame) -> ActionFrame:
+        action = self._stow_action(observation)
+        if action is not None:
+            return action
+        self._advance()
+        return self._stop(observation)
+
     def _unstow_action(self, observation: ObservationFrame) -> ActionFrame:
         error = np.asarray(self._operation_ready()) - np.asarray(observation.joint_position)
         if float(np.max(np.abs(error))) <= 0.04 and self._base_is_settled(observation):
@@ -370,7 +378,7 @@ class PrivilegedHouseholdExpert:
         target = (
             ARM_READY_KITCHEN
             if self.task.task_id.startswith("store_kitchen")
-            and self.stage.kind == "nav_object"
+            and self.stage.kind in {"nav_object", "stow_for_nav_object"}
             else ARM_STOW
         )
         error = np.asarray(target) - np.asarray(observation.joint_position)

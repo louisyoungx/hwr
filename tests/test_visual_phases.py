@@ -43,6 +43,7 @@ def _input():
 
 
 def test_macro_phase_mapping_groups_micro_stages() -> None:
+    assert compact_household_phase("stow_for_nav_object_cup") == "approach_object_cup"
     assert compact_household_phase("nav_object_cup") == "approach_object_cup"
     assert compact_household_phase("arm_object_above_cup") == "approach_object_cup"
     assert compact_household_phase("grip_object_cup") == "grasp_object_cup"

@@ -46,6 +46,10 @@ def test_household_expert_completes_contact_only_household_task(
     try:
         observation = backend.reset(seed=seed, task_id=task_id)
         expert = PrivilegedHouseholdExpert(backend)
+        if task_id.startswith("store_kitchen"):
+            assert expert.phase_names[0] == "stow_for_drawer"
+        else:
+            assert expert.phase_names[0].startswith("stow_for_nav_object_")
         for _ in range(TASKS[task_id].max_steps):
             output = expert.action(observation)
             outcome = backend.apply(output.action)
