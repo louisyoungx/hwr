@@ -145,6 +145,7 @@ def save_bimanual_training_run(
         "size": result.replay.size,
         "failure_size": result.replay.failure_size,
         "discovery_size": result.replay.discovery_size,
+        "safety_event_size": result.replay.safety_size,
         "episode_count": result.replay.episode_count,
         "hindsight_transition_count": result.replay.hindsight_count,
         "mirror_transition_count": result.replay.mirror_count,
@@ -229,6 +230,9 @@ def resume_bimanual_training_run(
     requested = runner.config.to_dict()
     saved.setdefault(
         "discovery_replay_fraction", requested["discovery_replay_fraction"]
+    )
+    saved.setdefault(
+        "safety_replay_fraction", requested["safety_replay_fraction"]
     )
     for name in (
         "reflection_coupled_exploration_probability",

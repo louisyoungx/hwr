@@ -125,6 +125,29 @@ def test_failed_episode_returns_original_her_and_mirrors_to_priority_replay() ->
     assert set(sampled.actor_weights.tolist()).issubset({0.0, 1.0})
 
 
+def test_runtime_interventions_receive_a_dedicated_safety_replay_quota() -> None:
+    episode = _episode(success=False, mirrorable=False)
+    batch = replace(
+        episode.batch,
+        proposed_action_chunks=episode.batch.action_chunks.clone(),
+        safety_costs=torch.ones(4),
+    )
+    replay = GoalConditionedReplayBuffer(64, seed=11)
+
+    replay.add_episode(replace(episode, batch=batch))
+    sampled = replay.sample(
+        8,
+        failure_fraction=0.0,
+        discovery_fraction=0.0,
+        safety_fraction=0.5,
+    )
+
+    assert replay.safety_size == 4
+    assert sampled.safety_costs is not None
+    assert int((sampled.safety_costs > 0.5).sum()) >= 4
+    assert torch.all(sampled.actor_weights[-4:] == 1.0)
+
+
 def test_automatic_curriculum_expands_only_after_safe_success_window() -> None:
     curriculum = AutomaticCurriculum(
         ("basket",),

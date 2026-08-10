@@ -62,6 +62,7 @@ class BimanualRLTrainingConfig:
     paired_gripper_exploration_probability: float = 0.60
     failure_replay_fraction: float = 0.5
     discovery_replay_fraction: float = 0.35
+    safety_replay_fraction: float = 0.15
     seed: int = 20260810
     device: str = "cpu"
     raw_image_width: int = 64
@@ -105,9 +106,17 @@ class BimanualRLTrainingConfig:
             self.paired_gripper_exploration_probability,
             self.failure_replay_fraction,
             self.discovery_replay_fraction,
+            self.safety_replay_fraction,
         )
         if min(fractions) < 0 or any(value > 1 for value in fractions[1:]):
             raise ValueError("bimanual training fractions are invalid")
+        replay_fraction = (
+            self.failure_replay_fraction
+            + self.discovery_replay_fraction
+            + self.safety_replay_fraction
+        )
+        if replay_fraction > 1.0 + 1e-9:
+            raise ValueError("bimanual replay fractions exceed one batch")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -526,6 +535,7 @@ class BimanualTrainingRunner:
                 self.config.batch_size,
                 failure_fraction=self.config.failure_replay_fraction,
                 discovery_fraction=self.config.discovery_replay_fraction,
+                safety_fraction=self.config.safety_replay_fraction,
             )
             self.trainer.update(batch)
         return count
