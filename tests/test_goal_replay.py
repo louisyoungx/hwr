@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 import torch
 
@@ -70,8 +72,9 @@ def test_mirror_swaps_arms_wrists_actions_and_continuous_goal_sides() -> None:
     batch = _episode().batch
     batch.actor_inputs["left_wrist_rgb"].fill_(1.0)
     batch.actor_inputs["right_wrist_rgb"].fill_(2.0)
-    batch.action_chunks[:, :, 2:8] = 3.0
-    batch.action_chunks[:, :, 8:14] = 4.0
+    batch.action_chunks[:, :, 2:8] = torch.arange(1.0, 7.0)
+    batch.action_chunks[:, :, 8:14] = torch.arange(7.0, 13.0)
+    batch = replace(batch, proposed_action_chunks=batch.action_chunks + 1.0)
     batch.action_chunks[:, :, 14] = 0.25
     batch.action_chunks[:, :, 15] = 0.75
     batch.privileged_state[:, 1] = 0.2
@@ -82,13 +85,27 @@ def test_mirror_swaps_arms_wrists_actions_and_continuous_goal_sides() -> None:
 
     assert torch.all(mirrored.actor_inputs["left_wrist_rgb"] == 2.0)
     assert torch.all(mirrored.actor_inputs["right_wrist_rgb"] == 1.0)
-    assert torch.all(mirrored.action_chunks[:, :, 2:8] == torch.tensor((-4, 4, 4, -4, 4, -4)))
-    assert torch.all(mirrored.action_chunks[:, :, 8:14] == torch.tensor((-3, 3, 3, -3, 3, -3)))
+    assert torch.all(
+        mirrored.action_chunks[:, :, 2:8]
+        == torch.tensor((7, -8, 9, -10, 11, -12))
+    )
+    assert torch.all(
+        mirrored.action_chunks[:, :, 8:14]
+        == torch.tensor((1, -2, 3, -4, 5, -6))
+    )
+    assert torch.all(
+        mirrored.proposed_action_chunks[:, :, 2:8]
+        == torch.tensor((8, -9, 10, -11, 12, -13))
+    )
     assert torch.all(mirrored.action_chunks[:, :, 14] == 0.75)
     assert torch.all(mirrored.action_chunks[:, :, 15] == 0.25)
     assert torch.all(mirrored.privileged_state[:, 1] == -0.2)
     assert torch.all(mirrored.privileged_state[:, 24] == 2.0)
     assert torch.all(mirrored.privileged_state[:, 25] == 1.0)
+
+    restored = mirror_batch(mirrored)
+    assert torch.equal(restored.action_chunks, batch.action_chunks)
+    assert torch.equal(restored.proposed_action_chunks, batch.proposed_action_chunks)
 
 
 def test_failed_episode_returns_original_her_and_mirrors_to_priority_replay() -> None:

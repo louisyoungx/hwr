@@ -152,7 +152,10 @@ def _mirror_goal(goal: torch.Tensor) -> torch.Tensor:
 
 def _mirror_action(value: torch.Tensor) -> torch.Tensor:
     mirrored = value.clone()
-    signs = torch.tensor((-1, 1, 1, -1, 1, -1), dtype=value.dtype)
+    # Reflection across the robot's x-z plane. Linear velocity is a polar
+    # vector (vx, -vy, vz), while angular velocity is an axial vector and
+    # therefore gains the extra determinant sign (-wx, wy, -wz).
+    signs = torch.tensor((1, -1, 1, -1, 1, -1), dtype=value.dtype)
     mirrored[..., 1] *= -1
     mirrored[..., 2:8] = value[..., 8:14] * signs.to(value.device)
     mirrored[..., 8:14] = value[..., 2:8] * signs.to(value.device)
