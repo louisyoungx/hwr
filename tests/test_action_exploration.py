@@ -116,3 +116,30 @@ def test_global_random_bursts_escape_a_local_policy_without_task_inputs() -> Non
     assert not np.array_equal(third, fourth)
     assert explorer.audit()["observation_fields"] == []
     assert explorer.audit()["task_conditioned"] is False
+
+
+def test_actuator_dwell_holds_random_grippers_without_motion_or_task_inputs() -> None:
+    explorer = TemporalActionExplorer(
+        TemporalExplorationConfig(
+            noise_standard_deviation=1.0,
+            actuator_dwell_probability=1.0,
+            actuator_dwell_steps=3,
+            paired_gripper_probability=1.0,
+        ),
+        np.random.default_rng(23),
+    )
+
+    actions = [explorer.perturb(np.ones(16)) for _ in range(3)]
+
+    assert all(np.array_equal(action, actions[0]) for action in actions)
+    assert np.array_equal(actions[0][:14], np.zeros(14))
+    assert actions[0][14] == actions[0][15]
+    assert actions[0][14] in (0.0, 1.0)
+    assert explorer.audit()["actuator_dwell"] == {
+        "probability": 1.0,
+        "hold_steps": 3,
+        "motion": "zero",
+        "grippers": "paired-or-independent-uniform-binary",
+    }
+    assert explorer.audit()["observation_fields"] == []
+    assert explorer.audit()["task_conditioned"] is False

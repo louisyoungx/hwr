@@ -62,6 +62,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--paired-gripper-exploration", type=float, default=0.60)
     parser.add_argument("--global-random-burst", type=float, default=0.01)
     parser.add_argument("--global-random-burst-steps", type=int, default=8)
+    parser.add_argument("--actuator-dwell", type=float, default=0.0)
+    parser.add_argument("--actuator-dwell-steps", type=int, default=240)
     parser.add_argument("--frontier-reset", type=float, default=0.50)
     parser.add_argument("--frontier-capacity", type=int, default=16)
     parser.add_argument("--checkpoint-interval", type=int, default=10)
@@ -117,6 +119,8 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         ),
         global_random_burst_probability=arguments.global_random_burst,
         global_random_burst_steps=arguments.global_random_burst_steps,
+        actuator_dwell_probability=arguments.actuator_dwell,
+        actuator_dwell_steps=arguments.actuator_dwell_steps,
         frontier_reset_probability=arguments.frontier_reset,
         frontier_capacity_per_task=arguments.frontier_capacity,
     )

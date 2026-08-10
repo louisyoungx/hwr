@@ -268,6 +268,8 @@ def resume_bimanual_training_run(
         "paired_gripper_exploration_probability",
         "global_random_burst_probability",
         "global_random_burst_steps",
+        "actuator_dwell_probability",
+        "actuator_dwell_steps",
         "policy_gripper_hold_steps",
         "frontier_reset_probability",
         "frontier_capacity_per_task",

@@ -30,6 +30,10 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
             "0.02",
             "--global-random-burst-steps",
             "6",
+            "--actuator-dwell",
+            "0.003",
+            "--actuator-dwell-steps",
+            "180",
             "--frontier-reset",
             "0.4",
             "--frontier-capacity",
@@ -40,6 +44,8 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
     assert arguments.replay_capacity == 12_000
     assert arguments.global_random_burst == 0.02
     assert arguments.global_random_burst_steps == 6
+    assert arguments.actuator_dwell == 0.003
+    assert arguments.actuator_dwell_steps == 180
     assert arguments.frontier_reset == 0.4
     assert arguments.frontier_capacity == 12
     assert arguments.episode_steps is None
