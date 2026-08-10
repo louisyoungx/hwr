@@ -16,6 +16,7 @@ class FrontierCurriculumConfig:
     capacity_per_task: int = 16
     reset_probability: float = 0.50
     discovery_reach_meters: float = 0.06
+    bilateral_reach_meters: float = 0.10
     score_distance_scale_meters: float = 0.08
 
     def __post_init__(self) -> None:
@@ -24,9 +25,13 @@ class FrontierCurriculumConfig:
         if not 0.0 <= self.reset_probability <= 1.0:
             raise ValueError("frontier reset probability must be in [0, 1]")
         if min(
-            self.discovery_reach_meters, self.score_distance_scale_meters
+            self.discovery_reach_meters,
+            self.bilateral_reach_meters,
+            self.score_distance_scale_meters,
         ) <= 0.0:
             raise ValueError("frontier distance scales must be positive")
+        if self.bilateral_reach_meters < self.discovery_reach_meters:
+            raise ValueError("bilateral frontier reach cannot be stricter than discovery")
 
 
 @dataclass(frozen=True)
@@ -87,6 +92,9 @@ class OutcomeFrontierCurriculum:
             or min(
                 outcome.left_reach_distance, outcome.right_reach_distance
             ) <= self.config.discovery_reach_meters
+            or max(
+                outcome.left_reach_distance, outcome.right_reach_distance
+            ) <= self.config.bilateral_reach_meters
         )
 
     def consider(

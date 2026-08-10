@@ -31,6 +31,20 @@ def test_frontier_rejects_ordinary_and_unsafe_states_without_action_outputs() ->
         source_episode=0,
         source_step=2,
     )
+    assert frontier.consider(
+        "tray",
+        _snapshot("tray", 2.0),
+        FrontierOutcome(0.09, 0.099, False, False),
+        source_episode=1,
+        source_step=3,
+    )
+    assert not frontier.consider(
+        "tray",
+        _snapshot("tray", 3.0),
+        FrontierOutcome(0.09, 0.101, False, False),
+        source_episode=1,
+        source_step=4,
+    )
     audit = frontier.audit()
     assert audit["action_outputs"] is False
     assert audit["actor_input_fields"] == []
