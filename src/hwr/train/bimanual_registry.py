@@ -48,6 +48,18 @@ def _write_episode_records(path: Path, result: BimanualTrainingResult) -> None:
     os.replace(temporary, path)
 
 
+def save_bimanual_live_progress(
+    path: Path,
+    result: BimanualTrainingResult,
+) -> Path:
+    """Publish episode metrics without rewriting the replay checkpoint."""
+    if not path.is_dir():
+        raise FileNotFoundError(f"training run does not exist: {path}")
+    progress_path = path / "live-episodes.jsonl"
+    _write_episode_records(progress_path, result)
+    return progress_path
+
+
 def _save_torch(path: Path, value: object) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     torch.save(value, temporary)
@@ -83,6 +95,7 @@ def save_bimanual_training_run(
     _save_torch(actor_path, result.trainer.actor.state_dict())
     episodes_path = path / "episodes.jsonl"
     _write_episode_records(episodes_path, result)
+    _write_episode_records(path / "live-episodes.jsonl", result)
     lineage = {
         "schema_version": "hwr.no-demonstration-lineage/v1",
         "initialization": "random_actor",

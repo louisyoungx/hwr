@@ -9,6 +9,7 @@ from hwr.train import (
     load_bimanual_actor,
     load_default_bimanual_training_catalogs,
     resume_bimanual_training_run,
+    save_bimanual_live_progress,
     save_bimanual_training_run,
     verify_bimanual_training_run,
 )
@@ -61,6 +62,11 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert replay["hindsight_transition_count"] == 2
     assert model["contains_critic"] is False
     assert actor.config.action_dim == 16
+
+    result.records.append(result.records[0])
+    progress = save_bimanual_live_progress(path, result)
+    assert len(progress.read_text(encoding="utf-8").splitlines()) == 2
+    assert verify_bimanual_training_run(path)["record_count"] == 1
 
 
 def test_training_run_resumes_at_next_episode_with_replay_and_rng(tmp_path) -> None:

@@ -13,6 +13,7 @@ from hwr.train import (
     BimanualTrainingRunner,
     load_default_bimanual_training_catalogs,
     resume_bimanual_training_run,
+    save_bimanual_live_progress,
 )
 from hwr.train.bimanual_registry import save_bimanual_training_run
 
@@ -45,6 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--action-smoothing", type=float, default=0.65)
     parser.add_argument("--gripper-exploration", type=float, default=0.35)
     parser.add_argument("--gripper-hold-steps", type=int, default=16)
+    parser.add_argument("--checkpoint-interval", type=int, default=10)
     return parser
 
 
@@ -60,6 +62,8 @@ def _source_commit(root: Path) -> str:
 
 
 def run(arguments: argparse.Namespace) -> dict[str, object]:
+    if arguments.checkpoint_interval <= 0:
+        raise ValueError("checkpoint interval must be positive")
     root = Path(__file__).resolve().parents[3]
     tasks, bindings = load_default_bimanual_training_catalogs(root)
     config = BimanualRLTrainingConfig(
@@ -99,14 +103,23 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
 
     def save_progress(result) -> None:
         nonlocal created
-        save_bimanual_training_run(
-            output_root,
-            arguments.run_id,
-            result,
-            source_commit=source_commit,
-            overwrite=created,
+        episode_count = len(result.records)
+        checkpoint_due = (
+            not created
+            or episode_count % arguments.checkpoint_interval == 0
+            or episode_count == config.episodes
         )
-        created = True
+        if checkpoint_due:
+            save_bimanual_training_run(
+                output_root,
+                arguments.run_id,
+                result,
+                source_commit=source_commit,
+                overwrite=created,
+            )
+            created = True
+        else:
+            save_bimanual_live_progress(path, result)
 
     result = runner.train(on_episode=save_progress)
     if not created:
