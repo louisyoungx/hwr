@@ -154,6 +154,18 @@ def _action_scales(config: AsymmetricRLConfig, reference: torch.Tensor) -> torch
     )
 
 
+def _motion_slew_penalty(
+    previous: torch.Tensor,
+    bounded: torch.Tensor,
+    scales: torch.Tensor,
+) -> torch.Tensor:
+    if previous.shape[-1] != 16 or bounded.shape[-1] != 16:
+        raise ValueError("motion slew penalty requires 16D actions")
+    trajectory = torch.cat((previous, bounded), dim=1)[..., :14]
+    differences = (trajectory[:, 1:] - trajectory[:, :-1]) / scales[:14]
+    return differences.square().mean(dim=(1, 2))
+
+
 def _executed_action_representation(batch: AsymmetricRLBatch) -> torch.Tensor:
     stop = batch.stop_decisions.unsqueeze(-1).to(batch.action_chunks.dtype)
     return torch.cat((batch.action_chunks, stop), dim=2).flatten(1)
@@ -446,10 +458,7 @@ class AsymmetricActorCriticTrainer:
         normalized_motion = bounded[..., :14] / scales[:14]
         magnitude = normalized_motion.square().mean(dim=(1, 2))
         previous = batch.actor_inputs["action_history"][:, -1:, :]
-        trajectory = torch.cat((previous, bounded), dim=1)
-        slew = (
-            (trajectory[:, 1:] - trajectory[:, :-1]) / scales
-        ).square().mean(dim=(1, 2))
+        slew = _motion_slew_penalty(previous, bounded, scales)
         weights = (
             batch.actor_weights
             if batch.actor_weights is not None

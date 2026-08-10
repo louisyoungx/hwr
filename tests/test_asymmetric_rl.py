@@ -22,6 +22,7 @@ from hwr.train import (
     save_asymmetric_training_checkpoint,
     save_vla_actor_checkpoint,
 )
+from hwr.train.asymmetric_rl import _motion_slew_penalty
 from tests.vla_fixtures import actor_input, build_dataset
 
 
@@ -204,6 +205,20 @@ def test_gripper_head_uses_faster_optimizer_group_only() -> None:
     assert fast["lr"] == pytest.approx(
         config.actor_learning_rate * config.gripper_head_learning_rate_scale
     )
+
+
+def test_motion_slew_penalty_does_not_hold_grippers_open() -> None:
+    previous = torch.zeros(2, 1, 16)
+    bounded = torch.zeros(2, 1, 16)
+    scales = torch.ones(16)
+    bounded[..., 14:] = 1.0
+
+    gripper_only = _motion_slew_penalty(previous, bounded, scales)
+    bounded[..., 2] = 1.0
+    with_motion = _motion_slew_penalty(previous, bounded, scales)
+
+    assert torch.equal(gripper_only, torch.zeros(2))
+    assert torch.all(with_motion > 0.0)
 
 
 def test_stochastic_actor_samples_bounded_actions_and_finite_density() -> None:
