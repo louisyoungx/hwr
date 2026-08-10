@@ -46,6 +46,7 @@ from hwr.train.bimanual_training import (
 )
 from hwr.train.bimanual_registry import (
     load_bimanual_actor,
+    resume_bimanual_training_run,
     save_bimanual_training_run,
     verify_bimanual_training_run,
 )
@@ -89,6 +90,7 @@ __all__ = [
     "TrainingEpisodeRecord",
     "load_default_bimanual_training_catalogs",
     "load_bimanual_actor",
+    "resume_bimanual_training_run",
     "save_bimanual_training_run",
     "verify_bimanual_training_run",
 ]

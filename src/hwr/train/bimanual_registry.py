@@ -13,7 +13,11 @@ import torch
 
 from hwr.policy.vla_input import VLA_POLICY_INPUT_FIELDS
 from hwr.policy.vla_model import VLAActorConfig, VLAActorModel
-from hwr.train.bimanual_training import BimanualTrainingResult
+from hwr.train.bimanual_training import (
+    BimanualRLTrainingConfig,
+    BimanualTrainingResult,
+    BimanualTrainingRunner,
+)
 
 
 BIMANUAL_RUN_SCHEMA = "hwr.bimanual-rl-run/v1"
@@ -44,28 +48,39 @@ def _write_episode_records(path: Path, result: BimanualTrainingResult) -> None:
     os.replace(temporary, path)
 
 
+def _save_torch(path: Path, value: object) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    torch.save(value, temporary)
+    os.replace(temporary, path)
+
+
 def save_bimanual_training_run(
     root: Path,
     run_id: str,
     result: BimanualTrainingResult,
     *,
     source_commit: str,
+    overwrite: bool = False,
 ) -> Path:
     if not run_id or not source_commit:
         raise ValueError("training run and source commit identities are required")
     path = root / run_id
-    path.mkdir(parents=True, exist_ok=False)
+    path.mkdir(parents=True, exist_ok=overwrite)
     checkpoint_path = path / "training-checkpoint.pt"
     actor_path = path / "actor.pt"
-    torch.save(
+    _save_torch(
+        checkpoint_path,
         {
             "trainer": result.trainer.state_dict(),
             "replay": result.replay.state_dict(),
             "curriculum": result.curriculum.state_dict(),
+            "records": [asdict(record) for record in result.records],
+            "environment_steps": result.environment_steps,
+            "numpy_rng_state": result.numpy_rng_state,
+            "torch_rng_state": result.torch_rng_state,
         },
-        checkpoint_path,
     )
-    torch.save(result.trainer.actor.state_dict(), actor_path)
+    _save_torch(actor_path, result.trainer.actor.state_dict())
     episodes_path = path / "episodes.jsonl"
     _write_episode_records(episodes_path, result)
     lineage = {
@@ -180,3 +195,23 @@ def load_bimanual_actor(path: Path, *, device: str = "cpu") -> VLAActorModel:
     actor = VLAActorModel(VLAActorConfig(**manifest["actor_config"]))
     actor.load_state_dict(torch.load(actor_path, map_location=device, weights_only=True))
     return actor.to(device).eval()
+
+
+def resume_bimanual_training_run(
+    path: Path,
+    runner: BimanualTrainingRunner,
+) -> None:
+    """Verify and restore a run; only its total episode target may increase."""
+    manifest = verify_bimanual_training_run(path)
+    saved = dict(manifest["training_config"])
+    requested = runner.config.to_dict()
+    saved.pop("episodes")
+    requested.pop("episodes")
+    if saved != requested:
+        raise ValueError("resume training configuration differs")
+    checkpoint = torch.load(
+        path / "training-checkpoint.pt",
+        map_location=runner.trainer.device,
+        weights_only=False,
+    )
+    runner.load_training_state(checkpoint)

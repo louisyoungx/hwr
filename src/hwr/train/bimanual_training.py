@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Callable, Mapping
 
 import numpy as np
 import torch
@@ -122,6 +122,9 @@ class BimanualTrainingResult:
     records: list[TrainingEpisodeRecord]
     language_encoder: FrozenNgramLanguageEncoder
     preprocess_fingerprint: str
+    environment_steps: int
+    numpy_rng_state: Mapping[str, object]
+    torch_rng_state: torch.Tensor
 
 
 @dataclass
@@ -200,7 +203,10 @@ class BimanualTrainingRunner:
         self.records: list[TrainingEpisodeRecord] = []
         self._environment_steps = 0
 
-    def train(self) -> BimanualTrainingResult:
+    def train(
+        self,
+        on_episode: Callable[[BimanualTrainingResult], None] | None = None,
+    ) -> BimanualTrainingResult:
         environments = {
             task_id: MujocoBimanualTaskBackend(
                 self.tasks[task_id],
@@ -211,15 +217,20 @@ class BimanualTrainingRunner:
             for task_id in self.task_ids
         }
         try:
-            for episode_index in range(self.config.episodes):
+            for episode_index in range(len(self.records), self.config.episodes):
                 task_id = self.task_ids[episode_index % len(self.task_ids)]
                 record = self._run_episode(
                     episode_index, task_id, environments[task_id]
                 )
                 self.records.append(record)
+                if on_episode is not None:
+                    on_episode(self.result())
         finally:
             for environment in environments.values():
                 environment.close()
+        return self.result()
+
+    def result(self) -> BimanualTrainingResult:
         return BimanualTrainingResult(
             self.config,
             self.actor_config,
@@ -230,7 +241,24 @@ class BimanualTrainingRunner:
             self.records,
             self.language,
             self.pipeline.preprocessor.fingerprint,
+            self._environment_steps,
+            self.rng.bit_generator.state,
+            torch.get_rng_state(),
         )
+
+    def load_training_state(self, value: Mapping[str, object]) -> None:
+        """Restore all learning state before continuing at the next episode."""
+        self.trainer.load_state_dict(value["trainer"])
+        self.replay.load_state_dict(value["replay"])
+        self.curriculum.load_state_dict(value["curriculum"])
+        self.records = [
+            TrainingEpisodeRecord(**record) for record in value["records"]
+        ]
+        self._environment_steps = int(value["environment_steps"])
+        self.rng.bit_generator.state = value["numpy_rng_state"]
+        torch.set_rng_state(value["torch_rng_state"])
+        if len(self.records) > self.config.episodes:
+            raise ValueError("resume checkpoint exceeds configured total episodes")
 
     def _run_episode(
         self,

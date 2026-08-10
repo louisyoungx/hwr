@@ -8,6 +8,7 @@ from hwr.train import (
     BimanualTrainingRunner,
     load_bimanual_actor,
     load_default_bimanual_training_catalogs,
+    resume_bimanual_training_run,
     save_bimanual_training_run,
     verify_bimanual_training_run,
 )
@@ -60,3 +61,23 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert replay["hindsight_transition_count"] == 2
     assert model["contains_critic"] is False
     assert actor.config.action_dim == 16
+
+
+def test_training_run_resumes_at_next_episode_with_replay_and_rng(tmp_path) -> None:
+    result = _small_result()
+    path = save_bimanual_training_run(
+        tmp_path, "resume-run", result, source_commit="b" * 40
+    )
+    tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
+    config_values = result.config.to_dict()
+    config_values["episodes"] = 2
+    runner = BimanualTrainingRunner(
+        tasks, bindings, BimanualRLTrainingConfig(**config_values)
+    )
+
+    resume_bimanual_training_run(path, runner)
+    resumed = runner.train()
+
+    assert [record.episode for record in resumed.records] == [0, 1]
+    assert resumed.replay.episode_count == 2
+    assert resumed.environment_steps == sum(record.steps for record in resumed.records)

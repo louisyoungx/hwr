@@ -12,6 +12,7 @@ from hwr.train import (
     BimanualRLTrainingConfig,
     BimanualTrainingRunner,
     load_default_bimanual_training_catalogs,
+    resume_bimanual_training_run,
 )
 from hwr.train.bimanual_registry import save_bimanual_training_run
 
@@ -19,6 +20,11 @@ from hwr.train.bimanual_registry import save_bimanual_training_run
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id", required=True)
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="resume --run-id and treat --episodes as the new total",
+    )
     parser.add_argument("--output-root", type=Path, default=Path("runs/bimanual-rl"))
     parser.add_argument("--episodes", type=int, default=120)
     parser.add_argument("--episode-steps", type=int, default=240)
@@ -65,18 +71,34 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         hidden_dim=arguments.hidden_dim,
         exploration_noise=arguments.exploration_noise,
     )
-    result = BimanualTrainingRunner(tasks, bindings, config).train()
     output_root = (
         arguments.output_root
         if arguments.output_root.is_absolute()
         else root / arguments.output_root
     )
-    path = save_bimanual_training_run(
-        output_root,
-        arguments.run_id,
-        result,
-        source_commit=_source_commit(root),
-    )
+    path = output_root / arguments.run_id
+    source_commit = _source_commit(root)
+    runner = BimanualTrainingRunner(tasks, bindings, config)
+    if arguments.resume:
+        resume_bimanual_training_run(path, runner)
+    elif path.exists():
+        raise FileExistsError(f"training run already exists: {path}")
+    created = path.exists()
+
+    def save_progress(result) -> None:
+        nonlocal created
+        save_bimanual_training_run(
+            output_root,
+            arguments.run_id,
+            result,
+            source_commit=source_commit,
+            overwrite=created,
+        )
+        created = True
+
+    result = runner.train(on_episode=save_progress)
+    if not created:
+        save_progress(result)
     return {
         "run_path": str(path),
         "episodes": len(result.records),
