@@ -41,6 +41,12 @@ from hwr.train.goal_replay import (
     hindsight_relabel,
     mirror_batch,
 )
+from hwr.train.task_replay import TaskPartitionedGoalReplayBuffer
+from hwr.train.task_sampling import (
+    OutcomeAdaptiveTaskSampler,
+    OutcomeAdaptiveTaskSamplingConfig,
+    TaskOutcome,
+)
 from hwr.train.bimanual_training import (
     BimanualRLTrainingConfig,
     BimanualTrainingResult,
@@ -95,6 +101,10 @@ __all__ = [
     "BimanualTrainingResult",
     "BimanualTrainingRunner",
     "TrainingEpisodeRecord",
+    "TaskPartitionedGoalReplayBuffer",
+    "OutcomeAdaptiveTaskSampler",
+    "OutcomeAdaptiveTaskSamplingConfig",
+    "TaskOutcome",
     "load_default_bimanual_training_catalogs",
     "load_bimanual_actor",
     "resume_bimanual_training_run",

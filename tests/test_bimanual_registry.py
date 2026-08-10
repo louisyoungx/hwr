@@ -59,6 +59,12 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert lineage["expert_policies"] == []
     assert lineage["behavior_cloning"] is False
     assert replay["action_labels"] is False
+    assert set(replay["task_partition_sizes"]) == {
+        "carry_dining_tray/v1",
+        "carry_living_room_basket/v1",
+        "hold_drawer_place_item/v1",
+    }
+    assert replay["task_sampling"]["task_stages"] is False
     assert replay["hindsight_transition_count"] == 2
     assert model["contains_critic"] is False
     assert actor.config.action_dim == 16

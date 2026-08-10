@@ -38,7 +38,9 @@ from hwr.train.action_exploration import (
     TemporalExplorationConfig,
 )
 from hwr.train.curriculum import AutomaticCurriculum, CurriculumConfig
-from hwr.train.goal_replay import GoalConditionedReplayBuffer, GoalEpisode
+from hwr.train.goal_replay import GoalEpisode
+from hwr.train.task_replay import TaskPartitionedGoalReplayBuffer
+from hwr.train.task_sampling import OutcomeAdaptiveTaskSampler, TaskOutcome
 
 
 @dataclass(frozen=True)
@@ -131,6 +133,7 @@ class TrainingEpisodeRecord:
     replay_size: int
     updates: int
     safety_interventions: int = 0
+    sampling_probability: float = 1.0 / 3.0
 
 
 @dataclass
@@ -139,8 +142,9 @@ class BimanualTrainingResult:
     actor_config: VLAActorConfig
     rl_config: AsymmetricRLConfig
     trainer: AsymmetricActorCriticTrainer
-    replay: GoalConditionedReplayBuffer
+    replay: TaskPartitionedGoalReplayBuffer
     curriculum: AutomaticCurriculum
+    task_sampler: OutcomeAdaptiveTaskSampler
     records: list[TrainingEpisodeRecord]
     language_encoder: FrozenNgramLanguageEncoder
     preprocess_fingerprint: str
@@ -237,12 +241,13 @@ class BimanualTrainingRunner:
             self.rl_config,
             device=config.device,
         )
-        self.replay = GoalConditionedReplayBuffer(
-            config.replay_capacity, seed=config.seed
+        self.replay = TaskPartitionedGoalReplayBuffer(
+            config.replay_capacity, self.task_ids, seed=config.seed
         )
         self.curriculum = AutomaticCurriculum(
             self.task_ids, CurriculumConfig(initial_level=0.1)
         )
+        self.task_sampler = OutcomeAdaptiveTaskSampler(self.task_ids)
         self.records: list[TrainingEpisodeRecord] = []
         self._environment_steps = 0
 
@@ -261,9 +266,12 @@ class BimanualTrainingRunner:
         }
         try:
             for episode_index in range(len(self.records), self.config.episodes):
-                task_id = self.task_ids[episode_index % len(self.task_ids)]
+                task_id, sampling_probability = self.task_sampler.sample(self.rng)
                 record = self._run_episode(
-                    episode_index, task_id, environments[task_id]
+                    episode_index,
+                    task_id,
+                    environments[task_id],
+                    sampling_probability=sampling_probability,
                 )
                 self.records.append(record)
                 if on_episode is not None:
@@ -281,6 +289,7 @@ class BimanualTrainingRunner:
             self.trainer,
             self.replay,
             self.curriculum,
+            self.task_sampler,
             self.records,
             self.language,
             self.pipeline.preprocessor.fingerprint,
@@ -294,6 +303,7 @@ class BimanualTrainingRunner:
         self.trainer.load_state_dict(value["trainer"])
         self.replay.load_state_dict(value["replay"])
         self.curriculum.load_state_dict(value["curriculum"])
+        self.task_sampler.load_state_dict(value["task_sampler"])
         self.records = [
             TrainingEpisodeRecord(**record) for record in value["records"]
         ]
@@ -308,6 +318,8 @@ class BimanualTrainingRunner:
         episode_index: int,
         task_id: str,
         environment: MujocoBimanualTaskBackend,
+        *,
+        sampling_probability: float,
     ) -> TrainingEpisodeRecord:
         seed = self.config.seed + episode_index * 104729
         level = self.curriculum.level(task_id)
@@ -370,13 +382,28 @@ class BimanualTrainingRunner:
                 break
         audit = environment.task_audit()
         self.replay.add_episode(
-            self._goal_episode(buffers, success, self.tasks[task_id].objective == "carry_payload")
+            task_id,
+            self._goal_episode(
+                buffers,
+                success,
+                self.tasks[task_id].objective == "carry_payload",
+            ),
         )
         updates = self._update_after_episode(len(buffers.rewards))
         self.curriculum.record(
             task_id,
             success=success,
             severe_collision=int(audit["severe_collision_count"]) > 0,
+        )
+        self.task_sampler.record(
+            task_id,
+            TaskOutcome(
+                int(audit["left_contact_steps"]),
+                int(audit["right_contact_steps"]),
+                int(audit["simultaneous_contact_steps"]),
+                min(state[24] for state in buffers.states),
+                min(state[25] for state in buffers.states),
+            ),
         )
         return TrainingEpisodeRecord(
             episode=episode_index,
@@ -397,6 +424,7 @@ class BimanualTrainingRunner:
             replay_size=self.replay.size,
             updates=self.trainer.update_count,
             safety_interventions=safety_interventions,
+            sampling_probability=sampling_probability,
         )
 
     def _select_action(

@@ -34,11 +34,13 @@ def test_local_training_collects_all_three_tasks_without_action_labels() -> None
 
     assert {record.task_id for record in result.records} == set(tasks)
     assert result.replay.episode_count == 3
+    assert all(size > 0 for size in result.replay.task_sizes().values())
     assert result.replay.hindsight_count == 9
     assert result.replay.failure_size > 0
     assert result.trainer.config.behavior_regularization == 0.0
     assert not hasattr(result, "expert")
     assert not hasattr(result, "demonstrations")
+    assert result.task_sampler.audit()["action_outputs"] is False
 
 
 def test_local_training_executes_actor_critic_update_from_random_experience() -> None:

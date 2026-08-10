@@ -86,6 +86,7 @@ def save_bimanual_training_run(
             "trainer": result.trainer.state_dict(),
             "replay": result.replay.state_dict(),
             "curriculum": result.curriculum.state_dict(),
+            "task_sampler": result.task_sampler.state_dict(),
             "records": [asdict(record) for record in result.records],
             "environment_steps": result.environment_steps,
             "numpy_rng_state": result.numpy_rng_state,
@@ -151,6 +152,8 @@ def save_bimanual_training_run(
         "failure_return": True,
         "proposed_actions_for_safety_cost": True,
         "safety_cost_labels": "deterministic_runtime_intervention",
+        "task_partition_sizes": result.replay.task_sizes(),
+        "task_sampling": result.task_sampler.audit(),
     }
     _write_json(path / "replay-manifest.json", replay_manifest)
     files = (
