@@ -26,6 +26,9 @@ from hwr.tasks import (
 )
 
 
+BIMANUAL_READY_HOME = (0.0, 0.80, -0.40, 0.0, -0.40, 0.0)
+
+
 def _entity_id(model: mujoco.MjModel, kind: mujoco.mjtObj, name: str) -> int:
     entity_id = int(mujoco.mj_name2id(model, kind, name))
     if entity_id < 0:
@@ -88,6 +91,8 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
                 camera_width=camera_width,
                 camera_height=camera_height,
                 primary_object_joint_name=binding.payload_joint,
+                left_arm_home=BIMANUAL_READY_HOME,
+                right_arm_home=BIMANUAL_READY_HOME,
             )
         )
         self.task_ids = self._resolve_task_ids()

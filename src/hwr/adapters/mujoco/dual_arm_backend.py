@@ -45,6 +45,8 @@ class MujocoDualArmConfig:
     max_base_angular: float = 1.0
     max_arm_velocity: float = 1.2
     max_arm_servo_error: float = 0.30
+    left_arm_home: tuple[float, ...] = SECONDARY_ARM_HOME
+    right_arm_home: tuple[float, ...] = ARM_HOME
     primary_object_joint_name: str | None = "smoke_object_free"
     primary_object_reset_z: float = 0.805
 
@@ -62,6 +64,13 @@ class MujocoDualArmConfig:
         )
         if not self.task_id or not self.instruction_text or min(numeric) <= 0:
             raise ValueError("dual-arm MuJoCo configuration values must be positive")
+        if len(self.left_arm_home) != 6 or len(self.right_arm_home) != 6:
+            raise ValueError("dual-arm home posture requires six values per side")
+        if not all(
+            math.isfinite(value)
+            for value in (*self.left_arm_home, *self.right_arm_home)
+        ):
+            raise ValueError("dual-arm home posture must be finite")
 
 
 class MujocoDualArmBackend:
@@ -97,8 +106,8 @@ class MujocoDualArmBackend:
         self._sequence = 0
         self._steps = 0
         self._result: EpisodeResult | None = None
-        self._left_targets = np.asarray(SECONDARY_ARM_HOME, dtype=np.float64)
-        self._right_targets = np.asarray(ARM_HOME, dtype=np.float64)
+        self._left_targets = np.asarray(config.left_arm_home, dtype=np.float64)
+        self._right_targets = np.asarray(config.right_arm_home, dtype=np.float64)
 
     def reset(self, *, seed: int, task_id: str) -> DualArmObservation:
         if task_id != self.config.task_id:
@@ -181,8 +190,8 @@ class MujocoDualArmBackend:
         self.data.qvel[dof_address : dof_address + 6] = 0.0
 
     def _reset_arms(self) -> None:
-        self._left_targets = np.asarray(SECONDARY_ARM_HOME, dtype=np.float64)
-        self._right_targets = np.asarray(ARM_HOME, dtype=np.float64)
+        self._left_targets = np.asarray(self.config.left_arm_home, dtype=np.float64)
+        self._right_targets = np.asarray(self.config.right_arm_home, dtype=np.float64)
         for targets, joint_ids in (
             (self._left_targets, self.bundle.ids.secondary_arm_joints),
             (self._right_targets, self.bundle.ids.arm_joints),
