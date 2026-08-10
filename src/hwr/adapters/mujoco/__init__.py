@@ -1,6 +1,11 @@
 """MuJoCo implementation of the project-owned three-dimensional runtime."""
 
 from hwr.adapters.mujoco.backend import Mujoco3DBackend, Mujoco3DConfig
+from hwr.adapters.mujoco.bimanual_backend import MujocoBimanualTaskBackend
+from hwr.adapters.mujoco.bimanual_bindings import (
+    BimanualMujocoBinding,
+    load_bimanual_mujoco_bindings,
+)
 from hwr.adapters.mujoco.bindings import MujocoTaskBinding, load_mujoco_task_bindings
 from hwr.adapters.mujoco.contact import GraspContactMonitor, GraspContactSample
 from hwr.adapters.mujoco.dual_arm_backend import MujocoDualArmBackend, MujocoDualArmConfig
@@ -14,10 +19,12 @@ from hwr.adapters.mujoco.smoke_trial import ContactGraspReport, run_contact_gras
 __all__ = [
     "Mujoco3DBackend",
     "Mujoco3DConfig",
+    "MujocoBimanualTaskBackend",
     "MujocoDualArmBackend",
     "MujocoDualArmConfig",
     "MujocoHouseholdBackend",
     "MujocoTaskBinding",
+    "BimanualMujocoBinding",
     "GraspContactMonitor",
     "GraspContactSample",
     "ContactGraspReport",
@@ -28,6 +35,7 @@ __all__ = [
     "ScenePreview",
     "inspect_robot_model",
     "load_mujoco_task_bindings",
+    "load_bimanual_mujoco_bindings",
     "render_scene_preview",
     "run_contact_grasp_trial",
 ]

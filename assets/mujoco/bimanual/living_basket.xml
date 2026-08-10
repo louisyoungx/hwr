@@ -1,0 +1,62 @@
+<mujoco model="hwr_bimanual_living_basket_v1">
+  <compiler angle="radian" autolimits="true" inertiafromgeom="true"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast">
+    <flag multiccd="enable"/>
+  </option>
+  <size memory="128M"/>
+  <visual><global offwidth="960" offheight="640"/><quality shadowsize="4096"/></visual>
+  <asset>
+    <include file="../common/robot_assets.xml"/>
+    <texture name="wood_floor_tex" type="2d" builtin="checker" width="512" height="512" rgb1="0.28 0.18 0.10" rgb2="0.42 0.29 0.17"/>
+    <texture name="wall_tex" type="2d" builtin="gradient" width="256" height="256" rgb1="0.84 0.82 0.75" rgb2="0.61 0.67 0.68"/>
+    <texture name="wicker_tex" type="2d" builtin="checker" width="256" height="256" rgb1="0.48 0.27 0.10" rgb2="0.72 0.48 0.22"/>
+    <material name="wood_floor" texture="wood_floor_tex" texrepeat="10 8" roughness="0.75"/>
+    <material name="wall" texture="wall_tex" roughness="0.9"/>
+    <material name="wicker" texture="wicker_tex" texrepeat="5 4" roughness="0.88"/>
+    <material name="sofa_fabric" rgba="0.16 0.42 0.48 1" roughness="0.92"/>
+    <material name="cabinet_wood" rgba="0.44 0.24 0.10 1" roughness="0.65"/>
+  </asset>
+  <default><include file="../common/robot_defaults.xml"/></default>
+  <worldbody>
+    <geom name="floor" type="plane" size="3 2.5 0.1" material="wood_floor"/>
+    <geom name="wall_north" type="box" pos="0 2.48 1.35" size="3 0.04 1.35" material="wall"/>
+    <geom name="wall_west" type="box" pos="-2.98 0 1.35" size="0.04 2.5 1.35" material="wall"/>
+    <light name="key" pos="-1.5 -1.0 2.8" dir="0.4 0.3 -1" directional="true" castshadow="true" diffuse="0.9 0.78 0.62"/>
+    <light name="window" pos="2.2 -1.4 2.1" dir="-0.8 0.3 -0.5" directional="true" castshadow="true" diffuse="0.45 0.62 0.82"/>
+    <camera name="third_person" pos="3.8 -4.4 3.0" xyaxes="0.75 0.66 0 -0.33 0.38 0.86" fovy="48"/>
+    <camera name="room_overview" pos="0 0 5.2" xyaxes="1 0 0 0 1 0" fovy="54"/>
+    <include file="../common/robot_body.xml"/>
+    <body name="living_sofa" pos="0.3 1.35 0">
+      <geom name="sofa_seat" type="box" pos="0 0 0.34" size="0.90 0.38 0.18" material="sofa_fabric"/>
+      <geom name="sofa_back" type="box" pos="0 0.34 0.67" size="0.90 0.10 0.42" material="sofa_fabric"/>
+      <geom name="sofa_left_arm" type="box" pos="0 0 0.50" size="0.10 0.44 0.28" material="sofa_fabric"/>
+      <geom name="sofa_right_arm" type="box" pos="0 0 0.50" size="0.10 0.44 0.28" material="sofa_fabric"/>
+    </body>
+    <body name="basket_start_table" pos="0.82 0 0">
+      <geom name="basket_start_support" type="box" pos="0 0 0.205" size="0.36 0.40 0.205" material="cabinet_wood"/>
+    </body>
+    <body name="living_target_cabinet" pos="1.70 0 0">
+      <geom name="living_target_support" type="box" pos="0 0 0.295" size="0.42 0.42 0.295" material="cabinet_wood"/>
+      <site name="payload_target" pos="0 0 0.62" size="0.12 0.12 0.10" rgba="0.1 0.9 0.2 0.08"/>
+    </body>
+    <body name="basket_payload" pos="0.82 0 0.46">
+      <freejoint name="payload_free"/>
+      <geom name="basket_bottom" type="box" pos="0 0 0" size="0.28 0.25 0.025" mass="0.70" material="wicker"/>
+      <geom name="basket_front" type="box" pos="0.26 0 0.12" size="0.025 0.25 0.12" mass="0.35" material="wicker"/>
+      <geom name="basket_back" type="box" pos="-0.26 0 0.12" size="0.025 0.25 0.12" mass="0.35" material="wicker"/>
+      <geom name="basket_left_wall" type="box" pos="0 0.23 0.12" size="0.25 0.025 0.12" mass="0.30" material="wicker"/>
+      <geom name="basket_right_wall" type="box" pos="0 -0.23 0.12" size="0.25 0.025 0.12" mass="0.30" material="wicker"/>
+      <geom name="basket_left_handle" type="capsule" fromto="-0.12 0.31 0.18 0.12 0.31 0.18" size="0.022" mass="0.20" material="wicker"/>
+      <geom name="basket_right_handle" type="capsule" fromto="-0.12 -0.31 0.18 0.12 -0.31 0.18" size="0.022" mass="0.20" material="wicker"/>
+    </body>
+  </worldbody>
+  <contact>
+    <include file="../common/robot_contacts.xml"/>
+    <pair geom1="left_gripper_left_pad" geom2="basket_left_handle" condim="4" friction="4 4 0.05 0.005 0.005"/>
+    <pair geom1="left_gripper_right_pad" geom2="basket_left_handle" condim="4" friction="4 4 0.05 0.005 0.005"/>
+    <pair geom1="right_gripper_left_pad" geom2="basket_right_handle" condim="4" friction="4 4 0.05 0.005 0.005"/>
+    <pair geom1="right_gripper_right_pad" geom2="basket_right_handle" condim="4" friction="4 4 0.05 0.005 0.005"/>
+  </contact>
+  <actuator><include file="../common/robot_actuators.xml"/></actuator>
+  <sensor><include file="../common/robot_sensors.xml"/></sensor>
+</mujoco>

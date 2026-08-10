@@ -1,0 +1,45 @@
+{
+  "schema_version": "hwr.mujoco-bimanual-bindings/v1",
+  "bindings": [
+    {
+      "task_id": "carry_living_room_basket/v1",
+      "model": "assets/mujoco/bimanual/living_basket.xml",
+      "payload_body": "basket_payload",
+      "payload_joint": "payload_free",
+      "payload_geoms": ["basket_bottom", "basket_front", "basket_back", "basket_left_wall", "basket_right_wall", "basket_left_handle", "basket_right_handle"],
+      "payload_reference_geom": "basket_bottom",
+      "left_interaction_geom": "basket_left_handle",
+      "right_interaction_geom": "basket_right_handle",
+      "target_site": "payload_target",
+      "target_support_geom": "living_target_support",
+      "allowed_robot_contact_geoms": ["floor", "basket_bottom", "basket_front", "basket_back", "basket_left_wall", "basket_right_wall", "basket_left_handle", "basket_right_handle"]
+    },
+    {
+      "task_id": "carry_dining_tray/v1",
+      "model": "assets/mujoco/bimanual/dining_tray.xml",
+      "payload_body": "tray_payload",
+      "payload_joint": "payload_free",
+      "payload_geoms": ["tray_base", "tray_front_rim", "tray_back_rim", "tray_left_handle", "tray_right_handle", "tray_cup", "tray_plate"],
+      "payload_reference_geom": "tray_base",
+      "left_interaction_geom": "tray_left_handle",
+      "right_interaction_geom": "tray_right_handle",
+      "target_site": "payload_target",
+      "target_support_geom": "tray_target_support",
+      "allowed_robot_contact_geoms": ["floor", "tray_base", "tray_front_rim", "tray_back_rim", "tray_left_handle", "tray_right_handle", "tray_cup", "tray_plate"]
+    },
+    {
+      "task_id": "hold_drawer_place_item/v1",
+      "model": "assets/mujoco/bimanual/kitchen_drawer.xml",
+      "payload_body": "cleaner_payload",
+      "payload_joint": "payload_free",
+      "payload_geoms": ["cleaner_body", "cleaner_neck", "cleaner_cap"],
+      "payload_reference_geom": "cleaner_body",
+      "left_interaction_geom": "drawer_handle",
+      "right_interaction_geom": "cleaner_body",
+      "target_site": "payload_target",
+      "target_support_geom": "drawer_bottom",
+      "articulation_joint": "drawer_slide",
+      "allowed_robot_contact_geoms": ["floor", "drawer_handle", "cleaner_body", "cleaner_neck", "cleaner_cap"]
+    }
+  ]
+}

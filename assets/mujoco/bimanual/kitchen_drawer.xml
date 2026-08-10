@@ -1,0 +1,60 @@
+<mujoco model="hwr_bimanual_kitchen_drawer_v1">
+  <compiler angle="radian" autolimits="true" inertiafromgeom="true"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"><flag multiccd="enable"/></option>
+  <size memory="128M"/>
+  <visual><global offwidth="960" offheight="640"/><quality shadowsize="4096"/></visual>
+  <asset>
+    <include file="../common/robot_assets.xml"/>
+    <texture name="tile_tex" type="2d" builtin="checker" width="512" height="512" rgb1="0.34 0.35 0.37" rgb2="0.58 0.59 0.60"/>
+    <material name="tile" texture="tile_tex" texrepeat="12 10" roughness="0.72"/>
+    <material name="cabinet" rgba="0.52 0.30 0.12 1" roughness="0.62"/>
+    <material name="counter" rgba="0.70 0.71 0.68 1" roughness="0.34"/>
+    <material name="drawer" rgba="0.62 0.38 0.17 1" roughness="0.55"/>
+    <material name="steel" rgba="0.52 0.56 0.60 1" metallic="0.75" roughness="0.20"/>
+    <material name="cleaner" rgba="0.96 0.76 0.08 1" roughness="0.38"/>
+  </asset>
+  <default><include file="../common/robot_defaults.xml"/></default>
+  <worldbody>
+    <geom name="floor" type="plane" size="3 2.5 0.1" material="tile"/>
+    <geom name="wall_north" type="box" pos="0 2.48 1.35" size="3 0.04 1.35" rgba="0.82 0.81 0.76 1"/>
+    <light name="key" pos="-1.4 -1.0 2.9" dir="0.4 0.3 -1" directional="true" castshadow="true" diffuse="0.90 0.80 0.68"/>
+    <light name="fill" pos="2.2 -1.0 2.1" dir="-0.8 0.3 -0.5" directional="true" castshadow="true" diffuse="0.45 0.62 0.82"/>
+    <camera name="third_person" pos="3.8 -4.3 3.0" xyaxes="0.75 0.66 0 -0.33 0.38 0.86" fovy="48"/>
+    <camera name="room_overview" pos="0 0 5.2" xyaxes="1 0 0 0 1 0" fovy="54"/>
+    <include file="../common/robot_body.xml"/>
+    <body name="cleaner_start_counter" pos="0.67 -0.25 0">
+      <geom name="cleaner_start_support" type="box" pos="0 0 0.38" size="0.24 0.22 0.38" material="counter"/>
+    </body>
+    <body name="kitchen_cabinet" pos="1.25 0 0">
+      <geom name="cabinet_left" type="box" pos="0 0.40 0.65" size="0.52 0.05 0.65" material="cabinet"/>
+      <geom name="cabinet_right" type="box" pos="0 -0.40 0.65" size="0.52 0.05 0.65" material="cabinet"/>
+      <geom name="cabinet_back" type="box" pos="0.48 0 0.65" size="0.05 0.35 0.65" material="cabinet"/>
+      <geom name="counter_top" type="box" pos="0 0 1.32" size="0.54 0.45 0.05" material="counter"/>
+      <body name="spring_drawer" pos="0 0 0.62">
+        <joint name="drawer_slide" type="slide" axis="-1 0 0" range="0 0.36" springref="0" stiffness="180" damping="12"/>
+        <geom name="drawer_bottom" type="box" pos="0 0 0.04" size="0.42 0.34 0.025" mass="1.3" material="drawer"/>
+        <geom name="drawer_front" type="box" pos="-0.42 0 0.18" size="0.035 0.37 0.20" mass="0.45" material="drawer"/>
+        <geom name="drawer_back" type="box" pos="0.40 0 0.16" size="0.025 0.34 0.14" mass="0.25" material="drawer"/>
+        <geom name="drawer_left_wall" type="box" pos="0 0.33 0.15" size="0.40 0.025 0.13" mass="0.20" material="drawer"/>
+        <geom name="drawer_right_wall" type="box" pos="0 -0.33 0.15" size="0.40 0.025 0.13" mass="0.20" material="drawer"/>
+        <geom name="drawer_handle" type="capsule" fromto="-0.49 0.10 0.20 -0.49 0.32 0.20" size="0.025" mass="0.15" material="steel"/>
+        <site name="payload_target" pos="0 -0.10 0.15" size="0.22 0.16 0.11" rgba="0.1 0.9 0.2 0.08"/>
+      </body>
+    </body>
+    <body name="cleaner_payload" pos="0.67 -0.25 0.79">
+      <freejoint name="payload_free"/>
+      <geom name="cleaner_body" type="box" pos="0 0 0.10" size="0.065 0.055 0.10" mass="0.52" material="cleaner"/>
+      <geom name="cleaner_neck" type="cylinder" pos="0 0 0.23" size="0.032 0.04" mass="0.08" material="cleaner"/>
+      <geom name="cleaner_cap" type="cylinder" pos="0 0 0.28" size="0.040 0.025" mass="0.05" material="steel"/>
+    </body>
+  </worldbody>
+  <contact>
+    <include file="../common/robot_contacts.xml"/>
+    <pair geom1="left_gripper_left_pad" geom2="drawer_handle" condim="4" friction="4 4 0.05 0.005 0.005"/>
+    <pair geom1="left_gripper_right_pad" geom2="drawer_handle" condim="4" friction="4 4 0.05 0.005 0.005"/>
+    <pair geom1="right_gripper_left_pad" geom2="cleaner_body" condim="4" friction="4 4 0.05 0.005 0.005"/>
+    <pair geom1="right_gripper_right_pad" geom2="cleaner_body" condim="4" friction="4 4 0.05 0.005 0.005"/>
+  </contact>
+  <actuator><include file="../common/robot_actuators.xml"/></actuator>
+  <sensor><include file="../common/robot_sensors.xml"/></sensor>
+</mujoco>

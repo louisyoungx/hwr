@@ -196,6 +196,22 @@ class TaskUpdate:
     metrics: Mapping[str, float]
 
 
+@dataclass(frozen=True)
+class PrivilegedTaskState:
+    """Training-only continuous state; never part of a deployable observation."""
+
+    critic_state: tuple[float, ...]
+    achieved_goal: tuple[float, ...]
+    desired_goal: tuple[float, ...]
+    metrics: Mapping[str, float]
+
+    def __post_init__(self) -> None:
+        for name in ("critic_state", "achieved_goal", "desired_goal"):
+            object.__setattr__(self, name, _finite(getattr(self, name), name))
+        if len(self.achieved_goal) != len(self.desired_goal):
+            raise ValueError("achieved and desired goal dimensions differ")
+
+
 class BimanualTaskTracker:
     """Stateful result/reward tracker with no prescribed action sequence."""
 
@@ -211,6 +227,9 @@ class BimanualTaskTracker:
         self.stable_steps = 0
         self.concurrent_steps = 0
         self.maximum_concurrent_steps = 0
+
+    def desired_goal(self) -> tuple[float, ...]:
+        return self._desired_goal()
 
     def update(self, sample: BimanualTaskSample) -> TaskUpdate:
         if self._previous_potential is None:
