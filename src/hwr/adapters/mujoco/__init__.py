@@ -9,6 +9,10 @@ from hwr.adapters.mujoco.bimanual_bindings import (
 from hwr.adapters.mujoco.bindings import MujocoTaskBinding, load_mujoco_task_bindings
 from hwr.adapters.mujoco.contact import GraspContactMonitor, GraspContactSample
 from hwr.adapters.mujoco.dual_arm_backend import MujocoDualArmBackend, MujocoDualArmConfig
+from hwr.adapters.mujoco.evidence import (
+    BIMANUAL_EVIDENCE_VIEWS,
+    MujocoBimanualEvidenceSource,
+)
 from hwr.adapters.mujoco.expert import PrivilegedCartesianExpert
 from hwr.adapters.mujoco.formal_expert import FormalExpertOutput, PrivilegedHouseholdExpert
 from hwr.adapters.mujoco.household_backend import MujocoHouseholdBackend
@@ -22,6 +26,7 @@ __all__ = [
     "MujocoBimanualTaskBackend",
     "MujocoDualArmBackend",
     "MujocoDualArmConfig",
+    "MujocoBimanualEvidenceSource",
     "MujocoHouseholdBackend",
     "MujocoTaskBinding",
     "BimanualMujocoBinding",
@@ -32,6 +37,7 @@ __all__ = [
     "PrivilegedCartesianExpert",
     "PrivilegedHouseholdExpert",
     "RobotModelReport",
+    "BIMANUAL_EVIDENCE_VIEWS",
     "ScenePreview",
     "inspect_robot_model",
     "load_mujoco_task_bindings",
