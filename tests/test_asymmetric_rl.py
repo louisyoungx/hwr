@@ -106,8 +106,8 @@ def test_td3_target_smoothing_and_action_regularization_are_enabled() -> None:
     assert config.target_noise_clip > config.target_action_noise
     assert config.action_magnitude_penalty > 0
     assert config.action_slew_penalty > 0
-    assert 0 < config.reward_scale < 1
-    assert config.conservative_critic_weight > 0
+    assert config.reward_scale == 0.25
+    assert config.conservative_critic_weight == 0.05
     assert config.conservative_action_samples > 1
 
 

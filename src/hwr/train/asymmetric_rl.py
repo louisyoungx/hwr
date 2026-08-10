@@ -27,14 +27,14 @@ class AsymmetricRLConfig:
     behavior_regularization: float = 0.02
     policy_delay: int = 2
     actor_warmup_updates: int = 2000
-    reward_scale: float = 0.10
+    reward_scale: float = 0.25
     target_action_noise: float = 0.15
     target_noise_clip: float = 0.30
     action_magnitude_penalty: float = 0.08
     action_slew_penalty: float = 0.04
     safety_learning_rate: float = 3e-4
     safety_actor_penalty: float = 3.0
-    conservative_critic_weight: float = 0.10
+    conservative_critic_weight: float = 0.05
     conservative_action_samples: int = 4
     base_linear_scale: float = 0.18
     base_angular_scale: float = 0.50
