@@ -169,6 +169,30 @@ def test_expired_action_stops_both_arms_and_holds_measured_grippers() -> None:
     assert stopped.events[0].details["reason"] == "outside_validity_window"
 
 
+def test_predictive_safety_rejects_motion_before_physics_commit() -> None:
+    backend = _backend()
+    try:
+        observation = backend.reset(seed=8, task_id=backend.config.task_id)
+        backend._predictive_safety_enabled = lambda: True  # type: ignore[method-assign]  # noqa: SLF001
+        backend._predictive_safety_violation = lambda: True  # type: ignore[method-assign]  # noqa: SLF001
+        outcome = backend.apply(
+            _frame(
+                observation.timestamp_ns,
+                left=(1.0,) * 6,
+                right=(-1.0,) * 6,
+            )
+        )
+    finally:
+        backend.close()
+
+    applied = outcome.info["applied_action"]
+    assert applied.source == "safety"
+    assert applied.action.left_arm == (0.0,) * 6
+    assert applied.action.right_arm == (0.0,) * 6
+    assert outcome.info["safety_intervened"] is True
+    assert outcome.events[-1].details["reason"] == "predicted_severe_collision"
+
+
 def test_runtime_rejects_legacy_single_arm_action_frame() -> None:
     from hwr.core.types import ActionFrame
 

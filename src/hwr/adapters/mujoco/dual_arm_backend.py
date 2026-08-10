@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import mujoco
@@ -27,7 +27,7 @@ from hwr.core.embodied import (
     NaturalLanguageInstruction,
 )
 from hwr.core.runtime import RuntimeStepOutcome
-from hwr.core.types import EpisodeResult, SafetyState
+from hwr.core.types import EpisodeEvent, EpisodeResult, SafetyState
 from hwr.safety import DualArmSafetySupervisor, SafetyLimits
 
 
@@ -150,6 +150,10 @@ class MujocoDualArmBackend:
             now_ns=timestamp_ns,
             hold_grippers=hold_grippers,
         )
+        applied, predictive_events = self._predictive_filter(
+            applied, hold_grippers
+        )
+        events = (*events, *predictive_events)
         self._write_controls(applied.action)
         for _ in range(self._substeps):
             mujoco.mj_step(self.model, self.data)
@@ -172,8 +176,57 @@ class MujocoDualArmBackend:
             info={
                 "applied_action": applied,
                 "physics_contacts": int(self.data.ncon),
+                "safety_intervened": bool(predictive_events),
             },
         )
+
+    def _predictive_filter(
+        self,
+        frame: DualArmActionFrame,
+        hold_grippers: tuple[float, float],
+    ) -> tuple[DualArmActionFrame, tuple[EpisodeEvent, ...]]:
+        if not self._predictive_safety_enabled():
+            return frame, ()
+        actual_data = self.data
+        trial_data = mujoco.MjData(self.model)
+        mujoco.mj_copyData(trial_data, self.model, actual_data)
+        left_targets = self._left_targets.copy()
+        right_targets = self._right_targets.copy()
+        unsafe = False
+        try:
+            self.data = trial_data
+            self._write_controls(frame.action)
+            for _ in range(self._substeps):
+                mujoco.mj_step(self.model, self.data)
+                if self._predictive_safety_violation():
+                    unsafe = True
+                    break
+        finally:
+            self.data = actual_data
+            self._left_targets = left_targets
+            self._right_targets = right_targets
+        if not unsafe:
+            return frame, ()
+        stopped = replace(
+            frame,
+            action=_hold_action(hold_grippers),
+            source="safety",
+            confidence=1.0,
+        )
+        return stopped, (
+            EpisodeEvent(
+                timestamp_ns=self._timestamp_ns(),
+                event_type="action_rejected",
+                source="safety",
+                details={"reason": "predicted_severe_collision"},
+            ),
+        )
+
+    def _predictive_safety_enabled(self) -> bool:
+        return False
+
+    def _predictive_safety_violation(self) -> bool:
+        return False
 
     def result(self) -> EpisodeResult | None:
         return self._result
@@ -451,6 +504,17 @@ def _control_substeps(control_hz: float, timestep: float) -> int:
 
 def _zero_action() -> DualArmAction:
     return DualArmAction(0.0, 0.0, (0.0,) * 6, (0.0,) * 6, 0.0, 0.0)
+
+
+def _hold_action(grippers: tuple[float, float]) -> DualArmAction:
+    return DualArmAction(
+        0.0,
+        0.0,
+        (0.0,) * 6,
+        (0.0,) * 6,
+        grippers[0],
+        grippers[1],
+    )
 
 
 def _quaternion_yaw(quaternion: np.ndarray) -> float:

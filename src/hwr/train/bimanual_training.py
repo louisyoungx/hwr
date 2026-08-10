@@ -126,6 +126,7 @@ class TrainingEpisodeRecord:
     curriculum_level: float
     replay_size: int
     updates: int
+    safety_interventions: int = 0
 
 
 @dataclass
@@ -305,6 +306,7 @@ class BimanualTrainingRunner:
         previous_action: DualArmAction | None = None
         total_reward = 0.0
         success = False
+        safety_interventions = 0
         for step in range(self.config.episode_step_limit):
             random_phase = episode_index < self.config.initial_random_episodes
             action = self._select_action(
@@ -320,8 +322,13 @@ class BimanualTrainingRunner:
                     "random_actor" if random_phase else "learned:asymmetric_rl"
                 ),
             )
-            self.pipeline.record_action(action)
             outcome = environment.apply(frame)
+            applied_frame = outcome.info["applied_action"]
+            if not isinstance(applied_frame, DualArmActionFrame):
+                raise TypeError("runtime did not report its applied dual-arm action")
+            applied_action = applied_frame.action
+            safety_interventions += int(outcome.info["safety_intervened"])
+            self.pipeline.record_action(applied_action)
             next_input = self.pipeline.build(outcome.observation)
             next_state = environment.privileged_training_state()
             terminal = outcome.terminated or outcome.truncated
@@ -332,7 +339,7 @@ class BimanualTrainingRunner:
                 next_input,
                 state,
                 next_state,
-                action,
+                applied_action,
                 outcome.reward,
                 terminal or limit,
             )
@@ -340,7 +347,7 @@ class BimanualTrainingRunner:
             self._environment_steps += 1
             actor_input, state = next_input, next_state
             observation = outcome.observation
-            previous_action = action
+            previous_action = applied_action
             success = bool(environment.result() and environment.result().success)
             if terminal or limit:
                 break
@@ -372,6 +379,7 @@ class BimanualTrainingRunner:
             curriculum_level=level,
             replay_size=self.replay.size,
             updates=self.trainer.update_count,
+            safety_interventions=safety_interventions,
         )
 
     def _select_action(

@@ -416,8 +416,19 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
         return float(np.linalg.norm(self.data.site_xpos[site] - self.data.geom_xpos[geom]))
 
     def _scan_forbidden_contacts(self) -> None:
+        force = self._current_maximum_forbidden_force()
+        self._maximum_forbidden_force = max(self._maximum_forbidden_force, force)
+        self._severe_collision_count += int(force >= self.severe_force_threshold)
+
+    def _predictive_safety_enabled(self) -> bool:
+        return True
+
+    def _predictive_safety_violation(self) -> bool:
+        return self._current_maximum_forbidden_force() >= self.severe_force_threshold
+
+    def _current_maximum_forbidden_force(self) -> float:
         ids = self.task_ids
-        severe_this_step = False
+        maximum = 0.0
         for index in range(self.data.ncon):
             contact = self.data.contact[index]
             first, second = int(contact.geom1), int(contact.geom2)
@@ -431,9 +442,8 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
             force = np.zeros(6, dtype=np.float64)
             mujoco.mj_contactForce(self.model, self.data, index, force)
             normal = abs(float(force[0]))
-            self._maximum_forbidden_force = max(self._maximum_forbidden_force, normal)
-            severe_this_step = severe_this_step or normal >= self.severe_force_threshold
-        self._severe_collision_count += int(severe_this_step)
+            maximum = max(maximum, normal)
+        return maximum
 
     def _initial_metrics(self, sample: BimanualTaskSample) -> dict[str, float]:
         return {
