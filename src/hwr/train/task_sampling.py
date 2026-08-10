@@ -34,6 +34,7 @@ class TaskOutcome:
     simultaneous_contact_steps: int
     minimum_left_reach_distance: float
     minimum_right_reach_distance: float
+    minimum_worst_side_reach_distance: float
 
     def __post_init__(self) -> None:
         steps = (
@@ -44,11 +45,18 @@ class TaskOutcome:
         distances = (
             self.minimum_left_reach_distance,
             self.minimum_right_reach_distance,
+            self.minimum_worst_side_reach_distance,
         )
         if min(steps) < 0 or min(distances) < 0 or not all(
             math.isfinite(value) for value in distances
         ):
             raise ValueError("task sampling outcome values are invalid")
+        separate_lower_bound = max(
+            self.minimum_left_reach_distance,
+            self.minimum_right_reach_distance,
+        )
+        if self.minimum_worst_side_reach_distance + 1.0e-9 < separate_lower_bound:
+            raise ValueError("worst-side reach cannot beat separate-side minima")
 
 
 class OutcomeAdaptiveTaskSampler:
@@ -118,6 +126,7 @@ class OutcomeAdaptiveTaskSampler:
             "actor_input_fields": [],
             "action_outputs": False,
             "task_stages": False,
+            "reach_metric": "minimum_over_time_of_worst_side_distance",
         }
 
     def state_dict(self) -> dict[str, object]:
@@ -144,9 +153,18 @@ class OutcomeAdaptiveTaskSampler:
         }
         for task_id in self.task_ids:
             self.history[task_id].clear()
-            self.history[task_id].extend(
-                TaskOutcome(**item) for item in value["history"][task_id]
-            )
+            outcomes = []
+            for item in value["history"][task_id]:
+                fields = dict(item)
+                fields.setdefault(
+                    "minimum_worst_side_reach_distance",
+                    max(
+                        fields["minimum_left_reach_distance"],
+                        fields["minimum_right_reach_distance"],
+                    ),
+                )
+                outcomes.append(TaskOutcome(**fields))
+            self.history[task_id].extend(outcomes)
 
     def _competence(self, task_id: str) -> float:
         outcomes = self.history[task_id]
@@ -154,10 +172,7 @@ class OutcomeAdaptiveTaskSampler:
             return 0.0
         values = []
         for outcome in outcomes:
-            worst_reach = max(
-                outcome.minimum_left_reach_distance,
-                outcome.minimum_right_reach_distance,
-            )
+            worst_reach = outcome.minimum_worst_side_reach_distance
             reach = math.exp(-worst_reach / self.config.reach_scale_meters)
             sides = 0.5 * (
                 (outcome.left_contact_steps > 0)

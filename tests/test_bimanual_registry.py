@@ -71,6 +71,9 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
         "hold_drawer_place_item/v1",
     }
     assert replay["task_sampling"]["task_stages"] is False
+    assert replay["task_sampling"]["reach_metric"] == (
+        "minimum_over_time_of_worst_side_distance"
+    )
     assert replay["frontier_curriculum"]["task_stages"] is False
     assert replay["frontier_curriculum"]["action_outputs"] is False
     assert replay["action_exploration"]["task_conditioned"] is False

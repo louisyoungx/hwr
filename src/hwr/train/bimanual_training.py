@@ -150,6 +150,7 @@ class TrainingEpisodeRecord:
     stable_steps: int
     minimum_left_reach_distance: float
     minimum_right_reach_distance: float
+    minimum_worst_side_reach_distance: float
     curriculum_level: float
     replay_size: int
     updates: int
@@ -371,9 +372,18 @@ class BimanualTrainingRunner:
         if "frontier" in value:
             self.frontier.load_state_dict(value["frontier"])
         self.task_sampler.load_state_dict(value["task_sampler"])
-        self.records = [
-            TrainingEpisodeRecord(**record) for record in value["records"]
-        ]
+        records = []
+        for record in value["records"]:
+            fields = dict(record)
+            fields.setdefault(
+                "minimum_worst_side_reach_distance",
+                max(
+                    fields["minimum_left_reach_distance"],
+                    fields["minimum_right_reach_distance"],
+                ),
+            )
+            records.append(TrainingEpisodeRecord(**fields))
+        self.records = records
         self._environment_steps = int(value["environment_steps"])
         self.rng.bit_generator.state = value["numpy_rng_state"]
         torch.set_rng_state(value["torch_rng_state"])
@@ -490,6 +500,7 @@ class BimanualTrainingRunner:
                 int(audit["simultaneous_contact_steps"]),
                 min(state[24] for state in buffers.states),
                 min(state[25] for state in buffers.states),
+                min(max(state[24], state[25]) for state in buffers.states),
             ),
         )
         return TrainingEpisodeRecord(
@@ -507,6 +518,9 @@ class BimanualTrainingRunner:
             stable_steps=int(audit["stable_steps"]),
             minimum_left_reach_distance=min(state[24] for state in buffers.states),
             minimum_right_reach_distance=min(state[25] for state in buffers.states),
+            minimum_worst_side_reach_distance=min(
+                max(state[24], state[25]) for state in buffers.states
+            ),
             curriculum_level=level,
             replay_size=self.replay.size,
             updates=self.trainer.update_count,

@@ -87,7 +87,18 @@ def test_local_training_collects_all_three_tasks_without_action_labels() -> None
     assert not hasattr(result, "expert")
     assert not hasattr(result, "demonstrations")
     assert result.task_sampler.audit()["action_outputs"] is False
+    assert result.task_sampler.audit()["reach_metric"] == (
+        "minimum_over_time_of_worst_side_distance"
+    )
     assert result.frontier.audit()["action_outputs"] is False
+    assert all(
+        record.minimum_worst_side_reach_distance
+        >= max(
+            record.minimum_left_reach_distance,
+            record.minimum_right_reach_distance,
+        )
+        for record in result.records
+    )
 
 
 def test_local_training_executes_actor_critic_update_from_random_experience() -> None:

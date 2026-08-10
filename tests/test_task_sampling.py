@@ -12,7 +12,7 @@ from hwr.train import (
 def _outcome(
     left: int, right: int, simultaneous: int, distance: float
 ) -> TaskOutcome:
-    return TaskOutcome(left, right, simultaneous, distance, distance)
+    return TaskOutcome(left, right, simultaneous, distance, distance, distance)
 
 
 def test_outcome_sampler_prioritizes_weak_task_without_starving_others() -> None:
@@ -62,3 +62,12 @@ def test_outcome_sampler_uses_weighted_fair_credits_not_random_luck() -> None:
     assert adaptive.count("basket") > adaptive.count("drawer")
     assert adaptive.count("drawer") > adaptive.count("tray")
     assert max(adaptive.count(name) for name in sampler.task_ids) < 20
+
+
+def test_outcome_rejects_separate_side_minima_as_joint_reach_evidence() -> None:
+    with np.testing.assert_raises(ValueError):
+        TaskOutcome(0, 0, 0, 0.04, 0.05, 0.03)
+
+    outcome = TaskOutcome(0, 0, 0, 0.04, 0.05, 0.18)
+
+    assert outcome.minimum_worst_side_reach_distance == 0.18
