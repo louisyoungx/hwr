@@ -234,7 +234,7 @@ def _mirror_privileged(value: torch.Tensor) -> torch.Tensor:
 
 
 def mirror_batch(batch: AsymmetricRLBatch) -> AsymmetricRLBatch:
-    if batch.privileged_state.shape[1] != 60:
+    if batch.privileged_state.shape[1] != 62:
         raise ValueError("mirror augmentation requires the bimanual critic layout")
     return AsymmetricRLBatch(
         actor_inputs=_mirror_actor_inputs(batch.actor_inputs),

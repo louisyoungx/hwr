@@ -192,6 +192,8 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
             *self._gripper_positions(),
             *base_pose,
             *base_twist,
+            float(metrics.get("controlled_target_progress", 0.0)),
+            float(metrics.get("controlled_articulation_progress", 0.0)),
         )
         return PrivilegedTaskState(
             critic_state=critic_state,
@@ -463,5 +465,7 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
             "target_distance": sample.target_distance,
             "stable_steps": 0.0,
             "maximum_concurrent_steps": 0.0,
+            "controlled_target_progress": 0.0,
+            "controlled_articulation_progress": 0.0,
             "severe_collisions": float(self._severe_collision_count),
         }

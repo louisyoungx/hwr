@@ -28,8 +28,8 @@ def _episode(*, success: bool = False, mirrorable: bool = True) -> GoalEpisode:
     desired = torch.zeros_like(achieved)
     desired[:, 0] = 1.0
     desired[:, 7:10] = 1.0
-    state = torch.zeros(count, 60)
-    next_state = torch.zeros(count, 60)
+    state = torch.zeros(count, 62)
+    next_state = torch.zeros(count, 62)
     state[:, :BIMANUAL_GOAL_DIM] = achieved
     state[:, BIMANUAL_GOAL_DIM : 2 * BIMANUAL_GOAL_DIM] = desired
     next_state[:, :BIMANUAL_GOAL_DIM] = next_achieved

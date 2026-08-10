@@ -60,7 +60,7 @@ def test_bimanual_scene_compiles_without_welds_and_exposes_four_actor_cameras(
         "right_wrist_rgb",
     )
     assert observation.instruction.text == TASKS[task_id].instruction
-    assert len(state.critic_state) == 60
+    assert len(state.critic_state) == 62
     assert len(state.achieved_goal) == len(state.desired_goal) == 12
     assert not hasattr(observation, "achieved_goal")
     assert not hasattr(observation, "critic_state")

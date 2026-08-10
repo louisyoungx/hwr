@@ -318,7 +318,7 @@ class BimanualTrainingRunner:
         actor = VLAActorModel(self.actor_config)
         self.trainer = AsymmetricActorCriticTrainer(
             actor,
-            PrivilegedCriticConfig(60, 1, hidden_dim=max(128, config.hidden_dim)),
+            PrivilegedCriticConfig(62, 1, hidden_dim=max(128, config.hidden_dim)),
             self.rl_config,
             device=config.device,
         )

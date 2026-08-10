@@ -255,3 +255,73 @@ def test_reward_contains_bilateral_contact_synergy() -> None:
     )
 
     assert both.reward - single.reward > spec.reward.contact
+
+
+@pytest.mark.parametrize(
+    "task_id",
+    ("carry_living_room_basket/v1", "carry_dining_tray/v1"),
+)
+def test_carry_progress_requires_sustained_bilateral_contact(task_id: str) -> None:
+    spec = SPECS[task_id]
+    initial = _sample(task_id, payload_position=(0.7, 0.0, 0.7))
+    closer = replace(initial, payload_position=spec.target_position)
+
+    pushed_tracker = BimanualTaskTracker(spec)
+    pushed_tracker.reset(initial)
+    pushed = pushed_tracker.update(closer)
+
+    carried_initial = replace(initial, left_contact=True, right_contact=True)
+    carried_tracker = BimanualTaskTracker(spec)
+    carried_tracker.reset(carried_initial)
+    carried = carried_tracker.update(
+        replace(closer, left_contact=True, right_contact=True)
+    )
+
+    assert pushed.metrics["controlled_target_progress"] == 0.0
+    assert carried.metrics["controlled_target_progress"] > 0.0
+    assert carried.reward > pushed.reward
+
+
+def test_releasing_payload_withdraws_unfinished_carry_progress() -> None:
+    task_id = "carry_dining_tray/v1"
+    spec = SPECS[task_id]
+    initial = _sample(
+        task_id,
+        payload_position=(0.7, 0.0, 0.7),
+        left_contact=True,
+        right_contact=True,
+    )
+    closer = replace(initial, payload_position=spec.target_position)
+    tracker = BimanualTaskTracker(spec)
+    tracker.reset(initial)
+
+    carried = tracker.update(closer)
+    released = tracker.update(
+        replace(closer, left_contact=False, right_contact=False)
+    )
+
+    assert carried.metrics["controlled_target_progress"] > 0.0
+    assert released.metrics["controlled_target_progress"] == 0.0
+    assert released.reward < 0.0
+
+
+def test_drawer_opening_progress_requires_sustained_left_contact() -> None:
+    task_id = "hold_drawer_place_item/v1"
+    spec = SPECS[task_id]
+    initial = _sample(task_id, articulation_position=0.0)
+    opened = replace(initial, articulation_position=0.3)
+
+    pushed_tracker = BimanualTaskTracker(spec)
+    pushed_tracker.reset(initial)
+    pushed = pushed_tracker.update(opened)
+
+    held_initial = replace(initial, left_contact=True)
+    held_tracker = BimanualTaskTracker(spec)
+    held_tracker.reset(held_initial)
+    held = held_tracker.update(replace(opened, left_contact=True))
+
+    assert pushed.metrics["controlled_articulation_progress"] == 0.0
+    assert held.metrics["controlled_articulation_progress"] == pytest.approx(
+        spec.criteria.minimum_articulation_position
+    )
+    assert held.reward > pushed.reward

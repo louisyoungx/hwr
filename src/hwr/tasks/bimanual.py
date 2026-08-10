@@ -231,6 +231,12 @@ class BimanualTaskTracker:
     def __init__(self, spec: BimanualTaskSpec) -> None:
         self.spec = spec
         self._previous_potential: float | None = None
+        self._previous_target_distance: float | None = None
+        self._previous_articulation_position: float | None = None
+        self._previous_bilateral_contact = False
+        self._previous_left_contact = False
+        self._controlled_target_progress = 0.0
+        self._controlled_articulation_progress = 0.0
         self.stable_steps = 0
         self.concurrent_steps = 0
         self.maximum_concurrent_steps = 0
@@ -239,6 +245,12 @@ class BimanualTaskTracker:
         self.simultaneous_contact_steps = 0
 
     def reset(self, initial: BimanualTaskSample) -> None:
+        self._previous_target_distance = initial.target_distance
+        self._previous_articulation_position = initial.articulation_position
+        self._previous_bilateral_contact = initial.left_contact and initial.right_contact
+        self._previous_left_contact = initial.left_contact
+        self._controlled_target_progress = 0.0
+        self._controlled_articulation_progress = 0.0
         self._previous_potential = self._potential(initial)
         self.stable_steps = 0
         self.concurrent_steps = 0
@@ -253,6 +265,7 @@ class BimanualTaskTracker:
     def update(self, sample: BimanualTaskSample) -> TaskUpdate:
         if self._previous_potential is None:
             raise RuntimeError("task tracker must be reset before update")
+        self._update_controlled_progress(sample)
         concurrent = sample.left_contact and sample.right_contact
         self.left_contact_steps += int(sample.left_contact)
         self.right_contact_steps += int(sample.right_contact)
@@ -270,6 +283,10 @@ class BimanualTaskTracker:
             - self.spec.reward.step_cost
         )
         self._previous_potential = potential
+        self._previous_target_distance = sample.target_distance
+        self._previous_articulation_position = sample.articulation_position
+        self._previous_bilateral_contact = concurrent
+        self._previous_left_contact = sample.left_contact
         severe = sample.severe_collision_count > 0
         bimanual = self.maximum_concurrent_steps >= self.spec.concurrent_steps
         success = self.stable_steps >= self.spec.hold_steps and bimanual and not severe
@@ -313,7 +330,7 @@ class BimanualTaskTracker:
 
     def _potential(self, sample: BimanualTaskSample) -> float:
         weights = self.spec.reward
-        value = -weights.target_distance * sample.target_distance
+        value = weights.target_distance * self._controlled_target_progress
         value -= weights.left_reach * sample.left_reach_distance
         value -= weights.right_reach * sample.right_reach_distance
         value -= weights.worst_side_reach * max(
@@ -338,10 +355,40 @@ class BimanualTaskTracker:
         )
         value += weights.support * sample.support_contact
         if self.spec.objective == "hold_drawer_place":
-            required = self.spec.criteria.minimum_articulation_position
-            value += weights.articulation * min(sample.articulation_position, required)
+            value += (
+                weights.articulation * self._controlled_articulation_progress
+            )
             value += weights.support * sample.inside_target
         return float(value)
+
+    def _update_controlled_progress(self, sample: BimanualTaskSample) -> None:
+        if (
+            self._previous_target_distance is None
+            or self._previous_articulation_position is None
+        ):
+            raise RuntimeError("task progress requires a reset physical state")
+        bilateral = sample.left_contact and sample.right_contact
+        if bilateral and self._previous_bilateral_contact:
+            delta = self._previous_target_distance - sample.target_distance
+            self._controlled_target_progress = max(
+                0.0, self._controlled_target_progress + delta
+            )
+        elif not bilateral:
+            self._controlled_target_progress = 0.0
+        if self.spec.objective != "hold_drawer_place":
+            return
+        if sample.left_contact and self._previous_left_contact:
+            delta = (
+                sample.articulation_position
+                - self._previous_articulation_position
+            )
+            required = self.spec.criteria.minimum_articulation_position
+            self._controlled_articulation_progress = min(
+                required,
+                max(0.0, self._controlled_articulation_progress + delta),
+            )
+        elif not sample.left_contact:
+            self._controlled_articulation_progress = 0.0
 
     def _bilateral_reach_occupancy(self, sample: BimanualTaskSample) -> float:
         worst = max(sample.left_reach_distance, sample.right_reach_distance)
@@ -380,6 +427,10 @@ class BimanualTaskTracker:
             "left_gripper_position": sample.left_gripper_position,
             "right_gripper_position": sample.right_gripper_position,
             "bilateral_reach_occupancy": self._bilateral_reach_occupancy(sample),
+            "controlled_target_progress": self._controlled_target_progress,
+            "controlled_articulation_progress": (
+                self._controlled_articulation_progress
+            ),
             "support_contact": float(sample.support_contact),
             "inside_target": float(sample.inside_target),
             "severe_collisions": float(sample.severe_collision_count),

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import torch
 
 from hwr.adapters.mujoco import (
@@ -97,6 +98,7 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert manifest["rl_config"]["actor_learning_rate"] == (
         result.config.actor_learning_rate
     )
+    assert manifest["critic_config"]["privileged_state_dim"] == 62
 
     result.records.append(result.records[0])
     progress = save_bimanual_live_progress(path, result)
@@ -129,3 +131,25 @@ def test_training_run_resumes_at_next_episode_with_replay_and_rng(tmp_path) -> N
     assert [record.episode for record in resumed.records] == [0, 1]
     assert resumed.replay.episode_count == 2
     assert resumed.environment_steps == sum(record.steps for record in resumed.records)
+
+
+def test_training_run_rejects_a_different_critic_state_layout(tmp_path) -> None:
+    result = _small_result()
+    path = save_bimanual_training_run(
+        tmp_path, "critic-layout", result, source_commit="c" * 40
+    )
+    manifest_path = path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["critic_config"]["privileged_state_dim"] = 60
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
+    config_values = result.config.to_dict()
+    config_values["episodes"] = 2
+    runner = BimanualTrainingRunner(
+        tasks,
+        MujocoBimanualBackendFactory(bindings),
+        BimanualRLTrainingConfig(**config_values),
+    )
+
+    with pytest.raises(ValueError, match="Critic architecture"):
+        resume_bimanual_training_run(path, runner)

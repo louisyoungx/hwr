@@ -194,6 +194,7 @@ def save_bimanual_training_run(
         "source_commit": source_commit,
         "training_config": result.config.to_dict(),
         "rl_config": result.rl_config.to_dict(),
+        "critic_config": result.trainer.critic_config.to_dict(),
         "record_count": len(result.records),
         "success_count": sum(record.success for record in result.records),
         "update_count": result.trainer.update_count,
@@ -248,6 +249,12 @@ def resume_bimanual_training_run(
 ) -> None:
     """Verify and restore a run; only its total episode target may increase."""
     manifest = verify_bimanual_training_run(path)
+    critic_config = manifest.get("critic_config")
+    if (
+        critic_config is not None
+        and critic_config != runner.trainer.critic_config.to_dict()
+    ):
+        raise ValueError("resume Critic architecture differs")
     saved = dict(manifest["training_config"])
     requested = runner.config.to_dict()
     saved.setdefault(
