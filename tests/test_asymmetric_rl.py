@@ -9,6 +9,7 @@ import torch
 
 from hwr.data import load_vla_dataset
 from hwr.policy import PrivilegedCriticConfig, VLAActorConfig, VLAActorModel
+from hwr.policy.vla_actions import bounded_vla_actions
 from hwr.policy.vla_input import VLA_POLICY_INPUT_FIELDS
 from hwr.policy.vla_runtime import VLANormalization
 from hwr.train import (
@@ -97,6 +98,34 @@ def test_asymmetric_update_changes_actor_using_separate_privileged_critic() -> N
         for previous, current in zip(before, trainer.actor.parameters(), strict=True)
     )
     assert not any("critic" in name for name, _ in trainer.actor.named_parameters())
+
+
+def test_actor_optimizes_the_pessimistic_twin_critic_value() -> None:
+    class ConflictingCritic(torch.nn.Module):
+        def forward(self, state, action):
+            del state
+            return torch.full_like(action[:, 0], 10.0), action[:, 0]
+
+    trainer = _trainer()
+    trainer.config = AsymmetricRLConfig(
+        policy_delay=1,
+        actor_warmup_updates=0,
+        behavior_regularization=0.0,
+        action_magnitude_penalty=0.0,
+        action_slew_penalty=0.0,
+        safety_actor_penalty=0.0,
+    )
+    trainer.critic = ConflictingCritic()
+    batch = trainer._to_device(_batch())
+    with torch.no_grad():
+        output = trainer.actor(batch.actor_inputs)
+        expected = -bounded_vla_actions(
+            output, trainer.config.action_scaling()
+        )[:, 0, 0].mean()
+
+    loss = trainer._update_actor(batch)
+
+    assert float(loss.detach()) == pytest.approx(float(expected), abs=1e-6)
 
 
 def test_td3_target_smoothing_and_action_regularization_are_enabled() -> None:

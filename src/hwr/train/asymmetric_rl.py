@@ -328,7 +328,8 @@ class AsymmetricActorCriticTrainer:
         bounded = bounded_vla_actions(output, self.config.action_scaling())
         stop = torch.zeros_like(output.stop_logits).unsqueeze(-1)
         action = torch.cat((bounded, stop), dim=2).flatten(1)
-        q1, _ = self.critic(batch.privileged_state, action)
+        q1, q2 = self.critic(batch.privileged_state, action)
+        reward_value = torch.minimum(q1, q2)
         safety_risk = torch.zeros_like(q1)
         if batch.safety_costs is not None:
             safety_first, safety_second = self.safety_critic(
@@ -363,7 +364,7 @@ class AsymmetricActorCriticTrainer:
         loss = (
             weights
             * (
-                -q1
+                -reward_value
                 + self.config.behavior_regularization * behavior
                 + self.config.action_magnitude_penalty * magnitude
                 + self.config.action_slew_penalty * slew
