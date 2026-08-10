@@ -47,7 +47,7 @@ def generate_visual_expert_dataset(
     *,
     image_size: tuple[int, int] = (48, 36),
     action_history: int = 8,
-    sample_stride: int = 4,
+    sample_stride: int = 1,
 ) -> Path:
     """Run successful physical episodes and store deployment-visible inputs only."""
     if not seeds or sample_stride <= 0:

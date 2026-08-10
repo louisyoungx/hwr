@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--image-width", type=int, default=48)
     parser.add_argument("--image-height", type=int, default=36)
     parser.add_argument("--action-history", type=int, default=8)
-    parser.add_argument("--sample-stride", type=int, default=4)
+    parser.add_argument("--sample-stride", type=int, default=1)
     return parser
 
 

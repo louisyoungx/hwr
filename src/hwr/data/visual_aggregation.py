@@ -67,7 +67,7 @@ def aggregate_visual_policy_dataset(
     seeds: Sequence[int],
     *,
     max_steps: int | None = None,
-    sample_stride: int = 4,
+    sample_stride: int = 1,
 ) -> Path:
     if not seeds or sample_stride <= 0:
         raise ValueError("aggregation seeds and sample stride are required")

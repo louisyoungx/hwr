@@ -48,6 +48,7 @@ class VisualTrainingResult:
     best_validation_loss: float
     device: str
     phase_action_mask: tuple[tuple[bool, ...], ...]
+    phase_step_limits: tuple[tuple[int, int], ...]
 
 
 def _select_device(requested: str) -> str:
@@ -85,6 +86,27 @@ def _tensor_dataset(
     actions[:, :8] = (actions[:, :8] - mean) / std
     phases = dataset.phase_indices[indices].astype(np.int64, copy=True)
     return TensorDataset(*inputs, torch.from_numpy(actions), torch.from_numpy(phases))
+
+
+def _phase_step_limits(
+    dataset: LoadedVisualDataset,
+) -> tuple[tuple[int, int], ...]:
+    stride = int(dataset.manifest.get("metadata", {}).get("sample_stride", 1))
+    episodes = np.unique(dataset.episode_ids)
+    limits = []
+    for phase in range(len(dataset.phase_names)):
+        durations = []
+        for episode in episodes:
+            mask = (dataset.episode_ids == episode) & (dataset.phase_indices == phase)
+            steps = dataset.step_indices[mask]
+            if len(steps):
+                durations.append(int(steps[-1] - steps[0] + stride))
+        if not durations:
+            raise ValueError(f"phase {phase} has no episode timing evidence")
+        minimum = max(1, int(min(durations) * 0.85))
+        maximum = max(minimum + 1, int(max(durations) * 1.25 + 0.5))
+        limits.append((minimum, maximum))
+    return tuple(limits)
 
 
 def _loss(
@@ -226,4 +248,5 @@ def train_visual_policy(
         best_loss,
         device_name,
         phase_action_mask,
+        _phase_step_limits(dataset),
     )

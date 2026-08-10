@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--episodes", type=int, default=3)
     parser.add_argument("--seed", type=int, default=4000)
     parser.add_argument("--max-steps", type=int)
-    parser.add_argument("--sample-stride", type=int, default=4)
+    parser.add_argument("--sample-stride", type=int, default=1)
     parser.add_argument("--device", default="cpu")
     return parser
 

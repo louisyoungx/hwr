@@ -112,6 +112,7 @@ def test_visual_policy_trains_saves_reloads_and_infers(tmp_path) -> None:
     assert len(dataset) == 16
     assert dataset.phase_names == ("navigate", "manipulate")
     assert result.model_config.phase_count == 2
+    assert result.phase_step_limits == ((3, 5), (3, 5))
     assert len(result.history) == 2
     assert np.isfinite(result.best_validation_loss)
     assert len(action.arm_command) == 6

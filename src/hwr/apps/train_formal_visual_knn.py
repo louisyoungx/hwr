@@ -36,6 +36,8 @@ def _write_json_atomic(path: Path, value: dict[str, object]) -> None:
 
 def train(arguments: argparse.Namespace) -> dict[str, object]:
     dataset = load_visual_dataset(arguments.dataset)
+    if int(dataset.manifest.get("metadata", {}).get("sample_stride", 0)) != 1:
+        raise ValueError("formal contact training requires full-rate sample_stride=1 data")
     task_id = str(dataset.manifest["task_id"])
     instruction = str(dataset.manifest["instruction"])
     model_path = save_visual_knn_policy(

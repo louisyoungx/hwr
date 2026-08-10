@@ -78,6 +78,7 @@ class LearnedVisualPolicy:
         task_instructions: Mapping[str, tuple[int, str]],
         phase_names: Sequence[str],
         phase_action_mask: Sequence[Sequence[bool]],
+        phase_step_limits: Sequence[Sequence[int]] | None = None,
         device: str = "cpu",
     ) -> None:
         self.model = model.to(device).eval()
@@ -91,11 +92,21 @@ class LearnedVisualPolicy:
         self.phase_action_mask = np.asarray(phase_action_mask, dtype=bool)
         if self.phase_action_mask.shape != (model.config.phase_count, 8):
             raise ValueError("phase action mask does not match the visual model")
+        limits = phase_step_limits or ((0, 2**31 - 1),) * len(self.phase_names)
+        self.phase_step_limits = tuple(
+            (int(value[0]), int(value[1])) for value in limits
+        )
+        if len(self.phase_step_limits) != len(self.phase_names) or any(
+            minimum < 0 or maximum <= minimum
+            for minimum, maximum in self.phase_step_limits
+        ):
+            raise ValueError("phase step limits do not match the visual model")
         self.device = torch.device(device)
         self._history = [np.zeros(9, dtype=np.float32) for _ in range(model.config.action_history)]
         self._task_id: str | None = None
         self._phase_index = 0
         self._phase_candidate_steps = 0
+        self._phase_steps = 0
 
     def spec(self) -> PolicySpec:
         return PolicySpec(self.policy_version, 1, 1, self.control_hz, 6)
@@ -110,6 +121,7 @@ class LearnedVisualPolicy:
         ]
         self._phase_index = 0
         self._phase_candidate_steps = 0
+        self._phase_steps = 0
 
     def infer(self, observations: Sequence[ObservationFrame]) -> tuple[ActionFrame, ...]:
         if not observations or self._task_id is None:
@@ -144,14 +156,23 @@ class LearnedVisualPolicy:
     def _select_phase(self, logits: torch.Tensor) -> int:
         next_index = self._phase_index + 1
         if next_index >= len(self.phase_names):
+            self._phase_steps += 1
             return self._phase_index
-        if float(logits[next_index].cpu()) > float(logits[self._phase_index].cpu()):
+        minimum, maximum = self.phase_step_limits[self._phase_index]
+        candidate = (
+            self._phase_steps >= minimum
+            and float(logits[next_index].cpu()) > float(logits[self._phase_index].cpu())
+        )
+        if candidate:
             self._phase_candidate_steps += 1
         else:
             self._phase_candidate_steps = 0
-        if self._phase_candidate_steps >= 10:
+        if self._phase_candidate_steps >= 10 or self._phase_steps >= maximum:
             self._phase_index = next_index
             self._phase_candidate_steps = 0
+            self._phase_steps = 0
+        else:
+            self._phase_steps += 1
         return self._phase_index
 
     def _action(self, prediction: np.ndarray, observation: ObservationFrame) -> ActionFrame:

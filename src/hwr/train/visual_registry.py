@@ -62,6 +62,7 @@ def save_visual_training_result(
         "dataset": dict(dataset_manifest),
         "phase_names": list(dataset_manifest["phase_names"]),
         "phase_action_mask": [list(row) for row in result.phase_action_mask],
+        "phase_step_limits": [list(row) for row in result.phase_step_limits],
         "task_instructions": {
             task_id: {"instruction_id": value[0], "text": value[1]}
             for task_id, value in task_instructions.items()
@@ -110,6 +111,13 @@ def load_visual_policy(path: Path, *, device: str = "cpu") -> LearnedVisualPolic
         phase_action_mask=tuple(
             tuple(bool(value) for value in row)
             for row in manifest["phase_action_mask"]
+        ),
+        phase_step_limits=tuple(
+            tuple(int(value) for value in row)
+            for row in manifest.get(
+                "phase_step_limits",
+                [[0, 2**31 - 1] for _ in manifest["phase_names"]],
+            )
         ),
         device=device,
     )
