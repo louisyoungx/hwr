@@ -52,6 +52,7 @@ FORKABLE_TRAINING_FIELDS = frozenset(
         "actuator_dwell_steps",
         "actuator_initial_dwell_probability",
         "actuator_dwell_closed_probability",
+        "frontier_reset_probability",
         "frontier_signature_uniform_fraction",
         "frontier_max_entries_per_source_signature",
         "frontier_minimum_contact_stability_steps",

@@ -284,6 +284,31 @@ def test_frontier_preserves_side_diversity_and_round_trips_checkpoint() -> None:
     assert restored.reset_count == 1
 
 
+def test_frontier_reset_probability_can_change_on_audited_fork() -> None:
+    source = OutcomeFrontierCurriculum(
+        ("tray",),
+        FrontierCurriculumConfig(reset_probability=1.0),
+    )
+    outcome = FrontierOutcome(0.08, 0.09, False, False)
+    assert source.consider(
+        "tray",
+        _snapshot("tray", 1.0),
+        outcome,
+        source_episode=3,
+        source_step=12,
+    )
+
+    fork = OutcomeFrontierCurriculum(
+        ("tray",),
+        FrontierCurriculumConfig(reset_probability=0.0),
+    )
+    fork.load_state_dict(source.state_dict())
+
+    assert len(fork.entries["tray"]) == 1
+    assert fork.config.reset_probability == 0.0
+    assert fork.select("tray", np.random.default_rng(7)) is None
+
+
 def test_frontier_prioritizes_worst_side_progress_over_far_single_contact() -> None:
     config = FrontierCurriculumConfig(
         capacity_per_task=8, reset_probability=1.0

@@ -197,6 +197,7 @@ def test_training_fork_records_parent_hashes_and_only_exploration_changes(
         replay_capacity=24,
         actuator_dwell_probability=0.001,
         actuator_dwell_steps=260,
+        frontier_reset_probability=0.70,
     )
     runner = BimanualTrainingRunner(
         tasks,
@@ -225,6 +226,7 @@ def test_training_fork_records_parent_hashes_and_only_exploration_changes(
         "actuator_dwell_probability",
         "actuator_dwell_steps",
         "episodes",
+        "frontier_reset_probability",
         "replay_capacity",
     }
     assert len(provenance["parent_checkpoint_sha256"]) == 64

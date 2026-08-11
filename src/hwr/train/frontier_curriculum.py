@@ -503,6 +503,7 @@ class OutcomeFrontierCurriculum:
         saved_config = dict(value["config"])
         current_config = asdict(self.config)
         mutable_fields = (
+            "reset_probability",
             "signature_uniform_fraction",
             "maximum_entries_per_source_signature",
             "minimum_contact_stability_steps",
