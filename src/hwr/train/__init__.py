@@ -55,11 +55,8 @@ from hwr.train.task_sampling import (
 )
 from hwr.train.n_step import NStepTargets, build_n_step_targets
 from hwr.train.bimanual_records import TrainingEpisodeRecord
-from hwr.train.bimanual_training import (
-    BimanualRLTrainingConfig,
-    BimanualTrainingResult,
-    BimanualTrainingRunner,
-)
+from hwr.train.bimanual_config import BimanualRLTrainingConfig
+from hwr.train.bimanual_training import BimanualTrainingResult, BimanualTrainingRunner
 from hwr.train.bimanual_registry import (
     fork_bimanual_training_run,
     load_bimanual_actor,

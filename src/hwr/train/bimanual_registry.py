@@ -17,11 +17,8 @@ from hwr.train.asymmetric_replay import (
     COMPRESSIBLE_ACTOR_VISUAL_FIELDS,
     REPLAY_STORAGE_SCHEMA,
 )
-from hwr.train.bimanual_training import (
-    BimanualRLTrainingConfig,
-    BimanualTrainingResult,
-    BimanualTrainingRunner,
-)
+from hwr.train.bimanual_config import BimanualRLTrainingConfig
+from hwr.train.bimanual_training import BimanualTrainingResult, BimanualTrainingRunner
 
 
 BIMANUAL_RUN_SCHEMA = "hwr.bimanual-rl-run/v1"
