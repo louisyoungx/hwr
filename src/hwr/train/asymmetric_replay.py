@@ -72,18 +72,28 @@ class AsymmetricReplayBuffer:
         }
 
     def load_state_dict(self, value: Mapping[str, object]) -> None:
-        if int(value["capacity"]) != self.capacity:
-            raise ValueError("replay checkpoint capacity differs")
-        self.size = int(value["size"])
-        self.position = int(value["position"])
+        saved_capacity = int(value["capacity"])
+        saved_size = int(value["size"])
+        saved_position = int(value["position"])
+        if saved_size < 0 or saved_size > saved_capacity:
+            raise ValueError("replay checkpoint size is invalid")
+        self.size = min(saved_size, self.capacity)
+        self.position = self.size % self.capacity
         self._storage = {}
         for name, tensor in value["storage"].items():
-            if tensor.shape[0] not in (self.size, self.capacity):
+            if tensor.shape[0] not in (saved_size, saved_capacity):
                 raise ValueError("replay checkpoint storage length is invalid")
             expanded = torch.empty(
                 (self.capacity, *tensor.shape[1:]), dtype=tensor.dtype
             )
-            expanded[: self.size].copy_(tensor[: self.size])
+            if saved_capacity == self.capacity:
+                expanded[: self.size].copy_(tensor[: self.size])
+                self.position = saved_position
+            else:
+                indices = _newest_indices(
+                    saved_capacity, saved_size, saved_position, self.size
+                )
+                expanded[: self.size].copy_(tensor[indices])
             self._storage[name] = expanded
         self._generator.set_state(value["generator_state"])
 
@@ -149,3 +159,15 @@ class AsymmetricReplayBuffer:
             safety_costs=values.get("safety_costs"),
             bootstrap_discounts=values.get("bootstrap_discounts"),
         )
+
+
+def _newest_indices(
+    capacity: int, size: int, position: int, keep: int
+) -> torch.Tensor:
+    if not 0 <= position < capacity or not 0 <= keep <= size:
+        raise ValueError("replay checkpoint ring position is invalid")
+    if size < capacity:
+        order = torch.arange(size)
+    else:
+        order = torch.cat((torch.arange(position, size), torch.arange(position)))
+    return order[-keep:]

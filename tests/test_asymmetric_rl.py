@@ -400,6 +400,20 @@ def test_asymmetric_replay_and_training_checkpoint_resume(tmp_path) -> None:
     assert restored_replay.sample(2).action_chunks.shape == (2, 3, 16)
 
 
+def test_asymmetric_replay_shrink_keeps_newest_ring_transitions() -> None:
+    replay = AsymmetricReplayBuffer(6, seed=7)
+    first = replace(_batch(), rewards=torch.arange(4, dtype=torch.float32))
+    second = replace(_batch(), rewards=torch.arange(4, 8, dtype=torch.float32))
+    replay.add(first)
+    replay.add(second)
+    restored = AsymmetricReplayBuffer(3, seed=8)
+
+    restored.load_state_dict(replay.state_dict())
+
+    assert restored.size == 3
+    assert sorted(restored.all().rewards.tolist()) == [5.0, 6.0, 7.0]
+
+
 def test_rl_export_contains_actor_only_and_reloads(tmp_path) -> None:
     trainer = _trainer()
     trainer.update(_batch())

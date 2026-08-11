@@ -182,6 +182,7 @@ def test_training_fork_records_parent_hashes_and_only_exploration_changes(
     config_values = parent.config.to_dict()
     config_values.update(
         episodes=2,
+        replay_capacity=24,
         actuator_dwell_probability=0.001,
         actuator_dwell_steps=260,
     )
@@ -208,6 +209,7 @@ def test_training_fork_records_parent_hashes_and_only_exploration_changes(
         "actuator_dwell_probability",
         "actuator_dwell_steps",
         "episodes",
+        "replay_capacity",
     }
     assert len(provenance["parent_checkpoint_sha256"]) == 64
     assert manifest["parent_training_run"] == provenance
@@ -215,19 +217,19 @@ def test_training_fork_records_parent_hashes_and_only_exploration_changes(
     assert lineage["parent_training_run"] == provenance
 
 
-def test_training_fork_rejects_non_exploration_config_changes(tmp_path) -> None:
+def test_training_fork_rejects_non_forkable_config_changes(tmp_path) -> None:
     parent = _small_result()
     parent_path = save_bimanual_training_run(
         tmp_path, "fixed-parent", parent, source_commit="f" * 40
     )
     tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
     config_values = parent.config.to_dict()
-    config_values["replay_capacity"] = 64
+    config_values["batch_size"] = 8
     runner = BimanualTrainingRunner(
         tasks,
         MujocoBimanualBackendFactory(bindings),
         BimanualRLTrainingConfig(**config_values),
     )
 
-    with pytest.raises(ValueError, match="replay_capacity"):
+    with pytest.raises(ValueError, match="batch_size"):
         fork_bimanual_training_run(parent_path, runner)

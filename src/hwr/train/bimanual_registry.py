@@ -24,6 +24,7 @@ BIMANUAL_RUN_SCHEMA = "hwr.bimanual-rl-run/v1"
 FORKABLE_TRAINING_FIELDS = frozenset(
     {
         "episodes",
+        "replay_capacity",
         "exploration_noise",
         "exploration_correlation",
         "action_smoothing",

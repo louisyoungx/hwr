@@ -31,3 +31,17 @@ def test_task_partitioned_replay_round_trips_all_partition_state() -> None:
     assert restored.discovery_size == replay.discovery_size
     assert restored.progress_size == replay.progress_size
     assert restored.safety_size == replay.safety_size
+
+
+def test_task_partitioned_replay_can_shrink_during_audited_fork() -> None:
+    replay = TaskPartitionedGoalReplayBuffer(96, ("basket", "drawer", "tray"), seed=5)
+    for _ in range(3):
+        replay.add_episode("tray", _episode())
+    restored = TaskPartitionedGoalReplayBuffer(
+        48, ("basket", "drawer", "tray"), seed=6
+    )
+
+    restored.load_state_dict(replay.state_dict())
+
+    assert restored.task_sizes()["tray"] == 16
+    assert restored.size == 16

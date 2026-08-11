@@ -167,8 +167,8 @@ class TaskPartitionedGoalReplayBuffer:
         }
 
     def load_state_dict(self, value: Mapping[str, object]) -> None:
-        if int(value["capacity"]) != self.capacity:
-            raise ValueError("partitioned replay checkpoint capacity differs")
+        if int(value["capacity"]) < len(self.task_ids):
+            raise ValueError("partitioned replay checkpoint capacity is invalid")
         if tuple(value["task_ids"]) != self.task_ids:
             raise ValueError("partitioned replay checkpoint tasks differ")
         states = value["partitions"]
