@@ -2,15 +2,16 @@
 
 set -uo pipefail
 
-if [[ "$#" -lt 5 ]]; then
-  echo "usage: $0 RUN_ID RECIPIENT_OPEN_ID LOG_PATH COMMAND [ARG ...]" >&2
+if [[ "$#" -lt 4 ]]; then
+  echo "usage: $0 RUN_ID LOG_PATH COMMAND [ARG ...]" >&2
   exit 2
 fi
 
 run_id="$1"
-recipient_open_id="$2"
-log_path="$3"
-shift 3
+log_path="$2"
+shift 2
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+notification_script="$script_dir/send_lark_agent_message.sh"
 
 mkdir -p "$(dirname "$log_path")"
 started_at="$(date '+%Y-%m-%d %H:%M:%S %Z')"
@@ -46,29 +47,10 @@ message="$(printf '%s\nRun: %s\n状态码: %s\nEpisode 记录数: %s\nCheckpoint
   "$outcome" "$run_id" "$training_status" "$episode_count" \
   "$checkpoint_sha256" "$source_commit" "$ended_at" "$log_path" "$run_path")"
 idempotency_key="$(printf '%s:%s' "$run_id" "$ended_at" | shasum -a 256 | cut -c1-32)"
-lark_cli="$(command -v lark-cli || true)"
-notify_status=127
-
-if [[ -n "$lark_cli" ]]; then
-  for attempt in 1 2 3; do
-    if LARKSUITE_CLI_NO_UPDATE_NOTIFIER=1 \
-      LARKSUITE_CLI_NO_SKILLS_NOTIFIER=1 \
-      "$lark_cli" im +messages-send \
-        --as bot \
-        --user-id "$recipient_open_id" \
-        --text "$message" \
-        --idempotency-key "$idempotency_key" >>"$log_path" 2>&1; then
-      notify_status=0
-      break
-    fi
-    notify_status="$?"
-    if [[ "$attempt" -lt 3 ]]; then
-      sleep "$((attempt * 10))"
-    fi
-  done
-else
-  printf 'lark-cli is unavailable; notification was not sent\n' >>"$log_path"
-fi
+"$notification_script" \
+  --idempotency-key "$idempotency_key" \
+  "$message" >>"$log_path" 2>&1
+notify_status="$?"
 
 if [[ "$training_status" -ne 0 ]]; then
   exit "$training_status"

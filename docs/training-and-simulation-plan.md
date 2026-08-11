@@ -572,6 +572,22 @@ Episode 进入训练集前必须通过：
 
 大型数据、视频、模型和生成资产不提交到 Git；仓库只保存 schema、manifest、配置、代码和小型测试样本。
 
+### 训练完成通知
+
+飞书消息发送统一由 `scripts/send_lark_agent_message.sh` 封装。它固定使用机器人（agent）身份，默认接收人为本项目发起人，并负责幂等键和失败重试；如需临时改发其他人，可设置 `HWR_LARK_RECIPIENT_OPEN_ID`。直接发送消息只需：
+
+```bash
+scripts/send_lark_agent_message.sh "消息内容"
+```
+
+长时间训练统一通过包装器启动，调用方不再传飞书身份或接收人：
+
+```bash
+scripts/run_training_with_lark_notify.sh RUN_ID LOG_PATH COMMAND [ARG ...]
+```
+
+包装器会保留训练退出码，汇总 Episode 数、checkpoint 哈希、源码提交和产物路径，再调用统一消息脚本通知。
+
 ## 13. 实施阶段
 
 ### T0：规范冻结（第 1 周）
