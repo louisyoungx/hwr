@@ -17,6 +17,7 @@ from hwr.train.asymmetric_rl import AsymmetricRLBatch
 DISCOVERY_REACH_DISTANCE_METERS = 0.06
 BILATERAL_DISCOVERY_REACH_DISTANCE_METERS = 0.10
 CONTROLLED_PROGRESS_EPSILON = 1.0e-5
+PROGRESS_REPLAY_MAX_TARGET_DISTANCE_METERS = 1.50
 
 
 @dataclass(frozen=True)
@@ -501,7 +502,15 @@ class GoalConditionedReplayBuffer:
         progressed = (target_delta > CONTROLLED_PROGRESS_EPSILON) | (
             articulation_delta > CONTROLLED_PROGRESS_EPSILON
         )
-        indices = torch.nonzero(progressed & actor_eligible).flatten()
+        target_distance = torch.linalg.vector_norm(
+            batch.next_privileged_state[:, 0:3]
+            - batch.next_privileged_state[:, 12:15],
+            dim=1,
+        )
+        in_workspace = target_distance <= PROGRESS_REPLAY_MAX_TARGET_DISTANCE_METERS
+        indices = torch.nonzero(
+            progressed & in_workspace & actor_eligible
+        ).flatten()
         if indices.numel():
             self.progress_events.add(_slice_batch(batch, indices))
 

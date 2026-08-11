@@ -204,6 +204,7 @@ def save_bimanual_training_run(
             "controlled_target_progress_increase": True,
             "controlled_articulation_progress_increase": True,
             "minimum_delta": 1.0e-5,
+            "maximum_target_distance_meters": 1.5,
             "action_labels": False,
         },
         "proposed_actions_for_safety_cost": True,

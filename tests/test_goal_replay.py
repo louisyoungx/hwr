@@ -243,6 +243,21 @@ def test_controlled_task_progress_receives_a_dedicated_replay_quota() -> None:
     restored.load_state_dict(legacy)
     assert restored.progress_size == 3
 
+    far_next = next_state.clone()
+    far_next[:, 0] = 4.0
+    far = GoalConditionedReplayBuffer(64, seed=19)
+    far.add_episode(
+        replace(
+            episode,
+            batch=replace(
+                episode.batch,
+                privileged_state=state,
+                next_privileged_state=far_next,
+            ),
+        )
+    )
+    assert far.progress_size == 0
+
 
 def test_automatic_curriculum_expands_only_after_safe_success_window() -> None:
     curriculum = AutomaticCurriculum(
