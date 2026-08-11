@@ -18,6 +18,8 @@ class FrontierCurriculumConfig:
     discovery_reach_meters: float = 0.06
     bilateral_reach_meters: float = 0.10
     score_distance_scale_meters: float = 0.08
+    score_target_scale_meters: float = 0.50
+    score_articulation_scale_meters: float = 0.15
     maximum_payload_linear_speed: float = 0.05
     maximum_payload_angular_speed: float = 0.15
     signature_uniform_fraction: float = 0.20
@@ -39,6 +41,8 @@ class FrontierCurriculumConfig:
             self.discovery_reach_meters,
             self.bilateral_reach_meters,
             self.score_distance_scale_meters,
+            self.score_target_scale_meters,
+            self.score_articulation_scale_meters,
             self.maximum_payload_linear_speed,
             self.maximum_payload_angular_speed,
         ) <= 0.0:
@@ -57,6 +61,8 @@ class FrontierOutcome:
     support_contact: bool = True
     payload_linear_speed: float = 0.0
     payload_angular_speed: float = 0.0
+    target_distance: float = 10.0
+    articulation_position: float = 0.0
 
     def __post_init__(self) -> None:
         physical = (
@@ -64,8 +70,11 @@ class FrontierOutcome:
             self.right_reach_distance,
             self.payload_linear_speed,
             self.payload_angular_speed,
+            self.target_distance,
         )
-        if min(physical) < 0.0 or not all(math.isfinite(item) for item in physical):
+        if min(physical) < 0.0 or not all(
+            math.isfinite(item) for item in (*physical, self.articulation_position)
+        ):
             raise ValueError("frontier physical values must be finite and non-negative")
 
 
@@ -111,6 +120,8 @@ class OutcomeFrontierCurriculum:
             support_contact=float(metrics["support_contact"]) > 0.5,
             payload_linear_speed=float(metrics["payload_linear_speed"]),
             payload_angular_speed=float(metrics["payload_angular_speed"]),
+            target_distance=float(metrics.get("target_distance", 10.0)),
+            articulation_position=float(metrics.get("articulation_position", 0.0)),
         )
 
     def advance_contact_stability(
@@ -324,7 +335,9 @@ class OutcomeFrontierCurriculum:
             "minimum_contact_stability_steps": (
                 self.config.minimum_contact_stability_steps
             ),
-            "score": "exp(-max(left_reach,right_reach)/scale)",
+            "score": (
+                "bilateral_reach_quality_times_one_plus_target_and_articulation_quality"
+            ),
             "contact_affects_score": False,
             "physical_stability_filter": {
                 "requires_support_or_arm_contact": True,
@@ -371,6 +384,8 @@ class OutcomeFrontierCurriculum:
             "signature_uniform_fraction",
             "maximum_entries_per_source_signature",
             "minimum_contact_stability_steps",
+            "score_target_scale_meters",
+            "score_articulation_scale_meters",
         )
         for name in mutable_fields:
             saved_config.pop(name, None)
@@ -468,7 +483,15 @@ class OutcomeFrontierCurriculum:
 
     def _score(self, outcome: FrontierOutcome) -> float:
         worst = max(outcome.left_reach_distance, outcome.right_reach_distance)
-        return float(math.exp(-worst / self.config.score_distance_scale_meters))
+        reach = math.exp(-worst / self.config.score_distance_scale_meters)
+        target = math.exp(
+            -outcome.target_distance / self.config.score_target_scale_meters
+        )
+        articulation = 1.0 - math.exp(
+            -max(0.0, outcome.articulation_position)
+            / self.config.score_articulation_scale_meters
+        )
+        return float(reach * (1.0 + target + articulation))
 
     def _signature(self, outcome: FrontierOutcome) -> int:
         contact = int(outcome.left_contact) | (int(outcome.right_contact) << 1)

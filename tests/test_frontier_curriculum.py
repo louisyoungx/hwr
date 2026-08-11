@@ -206,6 +206,48 @@ def test_frontier_contact_cannot_outrank_better_bilateral_reach() -> None:
     assert audit["contact_affects_score"] is False
 
 
+def test_frontier_prefers_autonomous_physical_task_progress_at_equal_reach() -> None:
+    frontier = OutcomeFrontierCurriculum(
+        ("drawer",),
+        FrontierCurriculumConfig(capacity_per_task=4, reset_probability=1.0),
+    )
+    for source, target_distance, articulation in (
+        (1, 0.70, 0.02),
+        (2, 0.30, 0.22),
+    ):
+        assert frontier.consider(
+            "drawer",
+            _complete_snapshot("drawer", float(source)),
+            FrontierOutcome(
+                0.04,
+                0.05,
+                True,
+                True,
+                target_distance=target_distance,
+                articulation_position=articulation,
+            ),
+            source_episode=source,
+            source_step=40,
+            contact_stability_steps=40,
+        )
+
+    assert frontier.entries["drawer"][0].source_episode == 2
+    assert "target_and_articulation" in frontier.audit()["score"]
+
+
+def test_frontier_outcome_migrates_checkpoint_without_progress_fields() -> None:
+    frontier = OutcomeFrontierCurriculum(("tray",))
+    value = FrontierOutcome(0.04, 0.05, True, True)
+    fields = value.__dict__.copy()
+    fields.pop("target_distance")
+    fields.pop("articulation_position")
+
+    migrated = FrontierOutcome(**fields)
+
+    assert migrated.target_distance == 10.0
+    assert migrated.articulation_position == 0.0
+
+
 def test_frontier_selection_replays_each_discovered_contact_signature() -> None:
     frontier = OutcomeFrontierCurriculum(
         ("tray",),
