@@ -192,7 +192,11 @@ def test_training_fork_records_parent_hashes_and_only_exploration_changes(
         BimanualRLTrainingConfig(**config_values),
     )
 
-    provenance = fork_bimanual_training_run(parent_path, runner)
+    reset_task = "carry_dining_tray/v1"
+    provenance = fork_bimanual_training_run(
+        parent_path, runner, reset_task_ids=(reset_task,)
+    )
+    assert runner.replay.task_sizes()[reset_task] == 0
     result = runner.train()
     fork_path = save_bimanual_training_run(
         tmp_path,
@@ -212,6 +216,10 @@ def test_training_fork_records_parent_hashes_and_only_exploration_changes(
         "replay_capacity",
     }
     assert len(provenance["parent_checkpoint_sha256"]) == 64
+    discarded = provenance["discarded_task_state"]
+    assert discarded["task_ids"] == [reset_task]
+    assert discarded["replay"][reset_task]["episode_count"] == 1
+    assert discarded["shared_actor_critic_parameters"] == "inherited"
     assert manifest["parent_training_run"] == provenance
     assert lineage["initialization"] == "audited-no-demonstration-checkpoint"
     assert lineage["parent_training_run"] == provenance

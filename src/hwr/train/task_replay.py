@@ -56,6 +56,7 @@ class TaskPartitionedGoalReplayBuffer:
         if capacity < len(identities) or not identities:
             raise ValueError("partitioned replay capacity or task identities are invalid")
         self.capacity = int(capacity)
+        self.seed = int(seed)
         self.task_ids = identities
         per_task = max(1, capacity // len(identities))
         self.partitions = {
@@ -125,6 +126,33 @@ class TaskPartitionedGoalReplayBuffer:
         except KeyError as exc:
             raise ValueError(f"partitioned replay does not know {task_id}") from exc
         return partition.add_episode(episode)
+
+    def discard_tasks(
+        self, task_ids: Sequence[str]
+    ) -> dict[str, dict[str, int]]:
+        identities = tuple(dict.fromkeys(task_ids))
+        unknown = sorted(set(identities) - set(self.task_ids))
+        if unknown:
+            raise ValueError(
+                "partitioned replay cannot discard unknown tasks: "
+                + ", ".join(unknown)
+            )
+        per_task = max(1, self.capacity // len(self.task_ids))
+        discarded = {}
+        for task_id in identities:
+            partition = self.partitions[task_id]
+            discarded[task_id] = {
+                "size": partition.size,
+                "failure_size": partition.failure_size,
+                "discovery_size": partition.discovery_size,
+                "progress_size": partition.progress_size,
+                "safety_size": partition.safety_size,
+                "episode_count": partition.episode_count,
+            }
+            self.partitions[task_id] = GoalConditionedReplayBuffer(
+                per_task, seed=self.seed ^ _stable_seed(task_id)
+            )
+        return discarded
 
     def sample(
         self,

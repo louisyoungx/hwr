@@ -61,6 +61,27 @@ class AutomaticCurriculum:
         except KeyError as error:
             raise KeyError(f"unknown curriculum task: {task_id}") from error
 
+    def discard_tasks(
+        self, task_ids: Sequence[str]
+    ) -> dict[str, dict[str, float | int]]:
+        identities = tuple(dict.fromkeys(task_ids))
+        unknown = sorted(set(identities) - set(self._levels))
+        if unknown:
+            raise ValueError(
+                "curriculum cannot discard unknown tasks: "
+                + ", ".join(unknown)
+            )
+        discarded = {}
+        for task_id in identities:
+            discarded[task_id] = {
+                "level": self._levels[task_id],
+                "success_count": len(self._success[task_id]),
+                "severe_count": len(self._severe[task_id]),
+            }
+            self._levels[task_id] = self.config.initial_level
+            self._clear_window(task_id)
+        return discarded
+
     def record(
         self, task_id: str, *, success: bool, severe_collision: bool
     ) -> CurriculumUpdate:

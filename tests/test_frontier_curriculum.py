@@ -193,6 +193,27 @@ def test_frontier_audits_each_physical_qualification_failure() -> None:
     assert restored.audit()["qualification_counts"]["tray"] == expected
 
 
+def test_frontier_discards_only_changed_task_state() -> None:
+    frontier = OutcomeFrontierCurriculum(("basket", "tray"))
+    for task_id in frontier.task_ids:
+        outcome = FrontierOutcome(0.08, 0.09, False, False)
+        assert frontier.observe(task_id, outcome)
+        assert frontier.consider(
+            task_id,
+            _snapshot(task_id, 1.0),
+            outcome,
+            source_episode=1,
+            source_step=2,
+        )
+
+    discarded = frontier.discard_tasks(("tray",))
+
+    assert discarded["tray"]["entry_count"] == 1
+    assert frontier.entries["tray"] == []
+    assert len(frontier.entries["basket"]) == 1
+    assert frontier.audit()["qualification_counts"]["tray"]["observed"] == 0
+
+
 def test_frontier_rejects_observed_states_that_regress_far_from_task_target() -> None:
     frontier = OutcomeFrontierCurriculum(("tray",))
 

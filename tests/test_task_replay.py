@@ -45,3 +45,15 @@ def test_task_partitioned_replay_can_shrink_during_audited_fork() -> None:
 
     assert restored.task_sizes()["tray"] == 16
     assert restored.size == 16
+
+
+def test_task_partitioned_replay_discards_only_requested_task() -> None:
+    replay = TaskPartitionedGoalReplayBuffer(96, ("basket", "drawer", "tray"), seed=5)
+    replay.add_episode("basket", _episode())
+    replay.add_episode("tray", _episode())
+
+    discarded = replay.discard_tasks(("tray",))
+
+    assert discarded["tray"]["size"] == 16
+    assert discarded["tray"]["episode_count"] == 1
+    assert replay.task_sizes() == {"basket": 16, "drawer": 0, "tray": 0}

@@ -35,6 +35,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="start a new audited run from a verified no-demonstration checkpoint",
     )
+    parser.add_argument(
+        "--reset-task",
+        action="append",
+        default=[],
+        help="discard a changed task's replay, frontier, sampler, and curriculum state",
+    )
     parser.add_argument("--output-root", type=Path, default=Path("runs/bimanual-rl"))
     parser.add_argument("--episodes", type=int, default=120)
     parser.add_argument(
@@ -103,6 +109,8 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         raise ValueError("checkpoint interval must be positive")
     if arguments.resume and arguments.fork_from is not None:
         raise ValueError("--resume and --fork-from are mutually exclusive")
+    if arguments.reset_task and arguments.fork_from is None:
+        raise ValueError("--reset-task requires --fork-from")
     root = Path(__file__).resolve().parents[3]
     tasks, bindings = load_default_bimanual_training_catalogs(root)
     config = BimanualRLTrainingConfig(
@@ -183,7 +191,9 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
             if arguments.fork_from.is_absolute()
             else root / arguments.fork_from
         )
-        parent_training_run = fork_bimanual_training_run(parent_path, runner)
+        parent_training_run = fork_bimanual_training_run(
+            parent_path, runner, reset_task_ids=arguments.reset_task
+        )
     created = path.exists()
 
     def save_progress(result) -> None:

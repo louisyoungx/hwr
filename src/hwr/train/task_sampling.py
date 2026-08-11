@@ -101,6 +101,26 @@ class OutcomeAdaptiveTaskSampler:
         except KeyError as exc:
             raise ValueError(f"task sampler does not know {task_id}") from exc
 
+    def discard_tasks(
+        self, task_ids: Sequence[str]
+    ) -> dict[str, dict[str, float | int]]:
+        identities = tuple(dict.fromkeys(task_ids))
+        unknown = sorted(set(identities) - set(self.task_ids))
+        if unknown:
+            raise ValueError(
+                "task sampler cannot discard unknown tasks: "
+                + ", ".join(unknown)
+            )
+        discarded = {}
+        for task_id in identities:
+            discarded[task_id] = {
+                "history_count": len(self.history[task_id]),
+                "credit": self.credits[task_id],
+            }
+            self.history[task_id].clear()
+            self.credits[task_id] = 0.0
+        return discarded
+
     def probabilities(self) -> dict[str, float]:
         competence = np.asarray(
             [self._competence(task_id) for task_id in self.task_ids],

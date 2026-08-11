@@ -71,3 +71,17 @@ def test_outcome_rejects_separate_side_minima_as_joint_reach_evidence() -> None:
     outcome = TaskOutcome(0, 0, 0, 0.04, 0.05, 0.18)
 
     assert outcome.minimum_worst_side_reach_distance == 0.18
+
+
+def test_outcome_sampler_discards_only_changed_task_history() -> None:
+    sampler = OutcomeAdaptiveTaskSampler(("basket", "drawer", "tray"))
+    sampler.record("basket", _outcome(1, 1, 1, 0.05))
+    sampler.record("tray", _outcome(1, 1, 1, 0.05))
+    sampler.credits["tray"] = 0.4
+
+    discarded = sampler.discard_tasks(("tray",))
+
+    assert discarded["tray"] == {"history_count": 1, "credit": 0.4}
+    assert len(sampler.history["basket"]) == 1
+    assert len(sampler.history["tray"]) == 0
+    assert sampler.credits["tray"] == 0.0

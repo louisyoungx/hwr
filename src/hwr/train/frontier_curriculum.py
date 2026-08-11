@@ -364,6 +364,29 @@ class OutcomeFrontierCurriculum:
             None,
         )
 
+    def discard_tasks(
+        self, task_ids: Sequence[str]
+    ) -> dict[str, dict[str, object]]:
+        identities = tuple(dict.fromkeys(task_ids))
+        unknown = sorted(set(identities) - set(self.task_ids))
+        if unknown:
+            raise ValueError(
+                "frontier cannot discard unknown tasks: " + ", ".join(unknown)
+            )
+        discarded = {}
+        for task_id in identities:
+            discarded[task_id] = {
+                "entry_count": len(self.entries[task_id]),
+                "qualification_counts": dict(
+                    self.qualification_counts[task_id]
+                ),
+            }
+            self.entries[task_id] = []
+            self.qualification_counts[task_id] = {
+                name: 0 for name in FRONTIER_QUALIFICATION_COUNTERS
+            }
+        return discarded
+
     def report_reset_outcome(
         self, entry: FrontierEntry, contact_steps: int
     ) -> bool | None:

@@ -293,6 +293,26 @@ def test_automatic_curriculum_expands_only_after_safe_success_window() -> None:
     assert update.severe_collision_rate == 1.0
 
 
+def test_automatic_curriculum_discards_only_changed_task_window() -> None:
+    curriculum = AutomaticCurriculum(
+        ("basket", "tray"),
+        CurriculumConfig(window=4, initial_level=0.1, step=0.2),
+    )
+    curriculum.record("basket", success=True, severe_collision=False)
+    curriculum.record("tray", success=True, severe_collision=False)
+
+    discarded = curriculum.discard_tasks(("tray",))
+
+    assert discarded["tray"] == {
+        "level": 0.1,
+        "success_count": 1,
+        "severe_count": 1,
+    }
+    state = curriculum.state_dict()
+    assert state["success"]["basket"] == [True]
+    assert state["success"]["tray"] == []
+
+
 def test_curriculum_level_contracts_and_expands_backend_randomization() -> None:
     from pathlib import Path
 

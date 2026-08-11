@@ -7,7 +7,7 @@ import json
 import os
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 import torch
 
@@ -361,6 +361,8 @@ def resume_bimanual_training_run(
 def fork_bimanual_training_run(
     path: Path,
     runner: BimanualTrainingRunner,
+    *,
+    reset_task_ids: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Load an audited no-demonstration run with explicit exploration changes."""
     manifest = verify_bimanual_training_run(path)
@@ -387,6 +389,9 @@ def fork_bimanual_training_run(
         weights_only=False,
     )
     runner.load_training_state(checkpoint)
+    discarded_task_state = _discard_task_training_state(
+        runner, reset_task_ids
+    )
     return {
         "schema_version": "hwr.training-fork/v1",
         "parent_run_id": manifest["run_id"],
@@ -395,8 +400,34 @@ def fork_bimanual_training_run(
         "parent_checkpoint_sha256": _sha256(checkpoint_path),
         "fork_record_count": len(runner.records),
         "config_changes": changes,
+        "discarded_task_state": discarded_task_state,
         "inherited_action_labels": False,
         "inherited_expert_policies": False,
+    }
+
+
+def _discard_task_training_state(
+    runner: BimanualTrainingRunner,
+    task_ids: Sequence[str],
+) -> dict[str, Any] | None:
+    identities = tuple(dict.fromkeys(task_ids))
+    if not identities:
+        return None
+    unknown = sorted(set(identities) - set(runner.task_ids))
+    if unknown:
+        raise ValueError(
+            "fork cannot reset unknown tasks: " + ", ".join(unknown)
+        )
+    return {
+        "schema_version": "hwr.fork-task-state-discard/v1",
+        "task_ids": list(identities),
+        "reason": "task_environment_or_asset_distribution_changed",
+        "replay": runner.replay.discard_tasks(identities),
+        "frontier": runner.frontier.discard_tasks(identities),
+        "task_sampler": runner.task_sampler.discard_tasks(identities),
+        "curriculum": runner.curriculum.discard_tasks(identities),
+        "shared_actor_critic_parameters": "inherited",
+        "parent_episode_records": "retained_as_historical_lineage",
     }
 
 
