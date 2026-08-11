@@ -30,6 +30,7 @@ from hwr.train.asymmetric_rl import (
 from hwr.train.bimanual_metrics import (
     bilateral_near_statistics,
     physical_progress_record_fields,
+    transition_safety_cost,
 )
 from hwr.train.bimanual_records import TrainingEpisodeRecord
 from hwr.train.bimanual_runtime import dual_arm_action_frame
@@ -549,7 +550,7 @@ class BimanualTrainingRunner:
                 next_state,
                 action,
                 applied_action,
-                bool(outcome.info["safety_intervened"]),
+                transition_safety_cost(outcome.info, next_state.metrics),
                 outcome.reward,
                 terminal or limit,
             )

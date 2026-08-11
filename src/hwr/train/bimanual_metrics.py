@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Mapping
 
 
 @dataclass(frozen=True)
@@ -12,6 +13,15 @@ class PhysicalProgressStatistics:
     maximum_articulation_position: float
     maximum_controlled_target_progress: float
     maximum_controlled_articulation_progress: float
+
+
+def transition_safety_cost(
+    runtime_info: Mapping[str, object], metrics: Mapping[str, float]
+) -> bool:
+    """Label autonomous transitions from runtime intervention or severe contact."""
+    return bool(runtime_info["safety_intervened"]) or float(
+        metrics["severe_collisions"]
+    ) > 0.0
 
 
 def physical_progress_statistics(

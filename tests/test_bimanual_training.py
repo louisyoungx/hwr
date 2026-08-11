@@ -16,6 +16,7 @@ from hwr.train import (
 from hwr.train.bimanual_metrics import (
     bilateral_near_statistics,
     physical_progress_statistics,
+    transition_safety_cost,
 )
 
 
@@ -155,6 +156,15 @@ def test_physical_progress_statistics_report_real_task_motion() -> None:
     assert summary.maximum_articulation_position == 0.31
     assert summary.maximum_controlled_target_progress == 0.24
     assert summary.maximum_controlled_articulation_progress == 0.20
+
+
+def test_transition_safety_cost_includes_observed_severe_collision() -> None:
+    safe = {"severe_collisions": 0.0}
+    severe = {"severe_collisions": 1.0}
+
+    assert not transition_safety_cost({"safety_intervened": False}, safe)
+    assert transition_safety_cost({"safety_intervened": True}, safe)
+    assert transition_safety_cost({"safety_intervened": False}, severe)
 
 
 def test_local_training_collects_all_three_tasks_without_action_labels() -> None:

@@ -72,6 +72,7 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert lineage["behavior_cloning"] is False
     assert replay["action_labels"] is False
     assert replay["safety_event_size"] == 0
+    assert replay["safety_cost_labels"].endswith("observed_severe_collision")
     assert replay["physical_progress_size"] == 0
     assert replay["physical_progress_criteria"]["action_labels"] is False
     assert set(replay["task_partition_sizes"]) == {

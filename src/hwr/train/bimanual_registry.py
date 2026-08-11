@@ -211,7 +211,9 @@ def save_bimanual_training_run(
             "action_labels": False,
         },
         "proposed_actions_for_safety_cost": True,
-        "safety_cost_labels": "deterministic_runtime_intervention",
+        "safety_cost_labels": (
+            "deterministic_runtime_intervention_or_observed_severe_collision"
+        ),
         "task_partition_sizes": result.replay.task_sizes(),
         "task_sampling": result.task_sampler.audit(),
         "frontier_curriculum": result.frontier.audit(),
