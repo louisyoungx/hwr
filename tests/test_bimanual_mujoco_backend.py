@@ -156,6 +156,40 @@ def test_procedural_reset_is_seeded_and_changes_continuous_physics() -> None:
     assert changed_randomization != first_randomization
 
 
+@pytest.mark.parametrize("seed", (20260811, 20260822, 20260837))
+def test_tray_reset_settles_on_table_without_robot_interpenetration(seed: int) -> None:
+    task_id = "carry_dining_tray/v1"
+    backend = _backend(task_id)
+    binding = BINDINGS[task_id]
+    assert binding.arm_home is not None
+    try:
+        observation = backend.reset(seed=seed, task_id=task_id)
+        initial_target_distance = backend.privileged_training_state().metrics[
+            "target_distance"
+        ]
+        payload_geoms = backend.task_ids.payload_geoms
+        robot_geoms = backend.task_ids.robot_geoms
+        for _ in range(40):
+            outcome = backend.apply(_idle(observation.timestamp_ns))
+            observation = outcome.observation
+            for pair in backend._contact_pairs():
+                assert not (
+                    bool(pair & payload_geoms)
+                    and bool((pair - payload_geoms) & robot_geoms)
+                )
+        metrics = backend.privileged_training_state().metrics
+    finally:
+        backend.close()
+
+    assert backend.config.left_arm_home == binding.arm_home
+    assert backend.config.right_arm_home == binding.arm_home
+    assert metrics["physical_support_contact"] == 1.0
+    assert metrics["severe_collisions"] == 0.0
+    assert metrics["payload_linear_speed"] < 1.0e-4
+    assert metrics["payload_angular_speed"] < 1.0e-4
+    assert abs(metrics["target_distance"] - initial_target_distance) < 1.0e-3
+
+
 def test_adapter_restores_self_discovered_position_as_a_fresh_episode() -> None:
     task_id = "carry_dining_tray/v1"
     backend = _backend(task_id)

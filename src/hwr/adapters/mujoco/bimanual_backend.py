@@ -83,6 +83,7 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
         self.binding = binding
         self.severe_force_threshold = float(severe_force_threshold)
         self._curriculum_level = 1.0
+        arm_home = binding.arm_home or BIMANUAL_READY_HOME
         super().__init__(
             MujocoDualArmConfig(
                 model_path=binding.model_path,
@@ -93,8 +94,8 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
                 camera_width=camera_width,
                 camera_height=camera_height,
                 primary_object_joint_name=binding.payload_joint,
-                left_arm_home=BIMANUAL_READY_HOME,
-                right_arm_home=BIMANUAL_READY_HOME,
+                left_arm_home=arm_home,
+                right_arm_home=arm_home,
             )
         )
         self.task_ids = self._resolve_task_ids()

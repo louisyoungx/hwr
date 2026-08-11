@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +22,7 @@ class BimanualMujocoBinding:
     target_support_geom: str
     allowed_robot_contact_geoms: frozenset[str]
     articulation_joint: str | None = None
+    arm_home: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
         required = (
@@ -35,6 +37,11 @@ class BimanualMujocoBinding:
         )
         if not all(required) or not self.payload_geoms:
             raise ValueError("bimanual MuJoCo binding names are required")
+        if self.arm_home is not None and (
+            len(self.arm_home) != 6
+            or not all(math.isfinite(value) for value in self.arm_home)
+        ):
+            raise ValueError("bimanual MuJoCo arm home requires six finite values")
 
 
 def load_bimanual_mujoco_bindings(
@@ -58,6 +65,11 @@ def load_bimanual_mujoco_bindings(
                 item["allowed_robot_contact_geoms"]
             ),
             articulation_joint=item.get("articulation_joint"),
+            arm_home=(
+                tuple(float(value) for value in item["arm_home"])
+                if "arm_home" in item
+                else None
+            ),
         )
         if binding.task_id in bindings:
             raise ValueError(f"duplicate bimanual MuJoCo binding: {binding.task_id}")

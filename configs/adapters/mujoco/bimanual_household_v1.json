@@ -23,6 +23,7 @@
       "payload_reference_geom": "tray_base",
       "left_interaction_geom": "tray_left_handle",
       "right_interaction_geom": "tray_right_handle",
+      "arm_home": [0.0, 0.8, -0.8, 0.0, -0.4, 0.0],
       "target_site": "payload_target",
       "target_support_geom": "tray_target_support",
       "allowed_robot_contact_geoms": ["floor", "tray_base", "tray_front_rim", "tray_back_rim", "tray_left_handle", "tray_right_handle", "tray_cup", "tray_plate"]
