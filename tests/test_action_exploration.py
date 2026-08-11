@@ -105,7 +105,7 @@ def test_global_random_bursts_escape_a_local_policy_without_task_inputs() -> Non
         ),
         np.random.default_rng(19),
     )
-    policy = np.zeros(16)
+    policy = np.asarray((*([0.0] * 14), 0.25, 0.75))
 
     first, second, third, fourth = (
         explorer.perturb(policy) for _ in range(4)
@@ -114,8 +114,11 @@ def test_global_random_bursts_escape_a_local_policy_without_task_inputs() -> Non
     assert np.array_equal(first, second)
     assert np.array_equal(second, third)
     assert not np.array_equal(third, fourth)
+    assert np.array_equal(first[14:], policy[14:])
+    assert np.array_equal(fourth[14:], policy[14:])
     assert explorer.audit()["observation_fields"] == []
     assert explorer.audit()["task_conditioned"] is False
+    assert explorer.audit()["global_random_bursts"]["grippers"] == "policy-held"
 
 
 def test_actuator_dwell_holds_random_grippers_without_motion_or_task_inputs() -> None:

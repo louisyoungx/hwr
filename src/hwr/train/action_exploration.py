@@ -115,7 +115,7 @@ class TemporalActionExplorer:
             raise ValueError("temporal explorer requires one 16D action")
         initial = self._first_perturb
         self._first_perturb = False
-        burst = self._global_random_burst()
+        burst = self._global_random_burst(value)
         if burst is not None:
             self._previous = burst.copy()
             return burst
@@ -201,12 +201,15 @@ class TemporalActionExplorer:
             )
         self._gripper_remaining = self.config.gripper_hold_steps
 
-    def _global_random_burst(self) -> np.ndarray | None:
+    def _global_random_burst(
+        self, policy_action: np.ndarray
+    ) -> np.ndarray | None:
         probability = self.config.global_random_burst_probability
         if self._burst_remaining <= 0:
             if probability <= 0.0 or self.rng.random() >= probability:
                 return None
             self._burst_action = self.sample_random()
+            self._burst_action[14:] = np.clip(policy_action[14:], 0.0, 1.0)
             self._burst_remaining = self.config.global_random_burst_steps
         if self._burst_action is None:
             raise RuntimeError("global exploration burst has no sampled action")
@@ -253,6 +256,8 @@ class TemporalActionExplorer:
             "global_random_bursts": {
                 "probability": self.config.global_random_burst_probability,
                 "hold_steps": self.config.global_random_burst_steps,
+                "motion": "task-agnostic-uniform",
+                "grippers": "policy-held",
             },
             "actuator_dwell": {
                 "probability": self.config.actuator_dwell_probability,

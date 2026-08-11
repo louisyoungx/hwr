@@ -89,6 +89,8 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert replay["action_exploration"]["global_random_bursts"] == {
         "probability": 0.01,
         "hold_steps": 8,
+        "motion": "task-agnostic-uniform",
+        "grippers": "policy-held",
     }
     assert replay["action_exploration"]["actuator_dwell"] == {
         "probability": 0.0,
