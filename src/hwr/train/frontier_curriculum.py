@@ -20,7 +20,7 @@ class FrontierCurriculumConfig:
     score_distance_scale_meters: float = 0.08
     score_target_scale_meters: float = 0.50
     score_articulation_scale_meters: float = 0.15
-    maximum_candidate_target_distance_meters: float = 1.50
+    maximum_candidate_target_distance_meters: float = 1.10
     maximum_target_regression_meters: float = 0.15
     maximum_payload_linear_speed: float = 0.05
     maximum_payload_angular_speed: float = 0.15

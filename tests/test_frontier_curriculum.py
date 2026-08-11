@@ -126,7 +126,7 @@ def test_frontier_rejects_unsupported_or_moving_instantaneous_near_states() -> N
     audit = frontier.audit()
     assert audit["physical_stability_filter"] == {
         "requires_support_or_arm_contact": True,
-        "maximum_candidate_target_distance_meters": 1.5,
+        "maximum_candidate_target_distance_meters": 1.1,
         "maximum_target_regression_meters": 0.15,
         "maximum_payload_linear_speed": 0.05,
         "maximum_payload_angular_speed": 0.15,
@@ -144,7 +144,7 @@ def test_frontier_rejects_observed_states_that_regress_far_from_task_target() ->
             0.05,
             True,
             True,
-            target_distance=1.51,
+            target_distance=1.11,
             initial_target_distance=0.80,
             task_progress_observed=True,
         ),
