@@ -8,7 +8,10 @@ from typing import Mapping
 
 import torch
 
-from hwr.train.asymmetric_replay import AsymmetricReplayBuffer
+from hwr.train.asymmetric_replay import (
+    AsymmetricReplayBuffer,
+    select_batch_rows,
+)
 from hwr.train.asymmetric_rl import AsymmetricRLBatch
 from hwr.train.environment_augmentation import (
     environment_transform_index,
@@ -18,9 +21,10 @@ from hwr.train.environment_augmentation import (
     transform_privileged,
 )
 from hwr.train.learning_signals import reward_improvement_speeds
+from hwr.train.ranked_replay import RankedReplayRetention
 
 
-PROGRESS_REPLAY_SCHEMA = "hwr.task-agnostic-reward-improvement-speed/v4"
+PROGRESS_REPLAY_SCHEMA = "hwr.task-agnostic-reward-improvement-speed/v5"
 AUTONOMOUS_REPLAY_STORAGE_SCHEMA = "hwr.autonomous-replay-storage/v1"
 SAMPLE_AUGMENTATION_PROBABILITY = 0.50
 
@@ -49,41 +53,6 @@ class AutonomousReplayAddResult:
     original_count: int
     augmentation_count: int
     failure_return_count: int
-
-
-def _slice_batch(batch: AsymmetricRLBatch, indices: torch.Tensor) -> AsymmetricRLBatch:
-    select = lambda values: {name: value[indices] for name, value in values.items()}
-    return AsymmetricRLBatch(
-        actor_inputs=select(batch.actor_inputs),
-        next_actor_inputs=select(batch.next_actor_inputs),
-        privileged_state=batch.privileged_state[indices],
-        next_privileged_state=batch.next_privileged_state[indices],
-        action_chunks=batch.action_chunks[indices],
-        stop_decisions=batch.stop_decisions[indices],
-        rewards=batch.rewards[indices],
-        done=batch.done[indices],
-        actor_weights=(
-            batch.actor_weights[indices] if batch.actor_weights is not None else None
-        ),
-        augmentation_transform_indices=(
-            batch.augmentation_transform_indices[indices]
-            if batch.augmentation_transform_indices is not None
-            else None
-        ),
-        proposed_action_chunks=(
-            batch.proposed_action_chunks[indices]
-            if batch.proposed_action_chunks is not None
-            else None
-        ),
-        safety_costs=(
-            batch.safety_costs[indices] if batch.safety_costs is not None else None
-        ),
-        bootstrap_discounts=(
-            batch.bootstrap_discounts[indices]
-            if batch.bootstrap_discounts is not None
-            else None
-        ),
-    )
 
 
 def _with_actor_weights(batch: AsymmetricRLBatch, value: float) -> AsymmetricRLBatch:
@@ -238,6 +207,7 @@ class AutonomousReplayBuffer:
         self.progress_events = AsymmetricReplayBuffer(
             max(1, capacity // 8), seed=seed ^ 0xA091
         )
+        self._ranked_progress = RankedReplayRetention(self.progress_events)
         self.safety_events = AsymmetricReplayBuffer(
             max(1, capacity // 8), seed=seed ^ 0x5AFE
         )
@@ -373,7 +343,7 @@ class AutonomousReplayBuffer:
         novelty = 1.0 - (state * next_state).sum(dim=1)
         indices = _top_ranked_indices(novelty, actor_eligible)
         if indices.numel():
-            self.discoveries.add(_slice_batch(batch, indices))
+            self.discoveries.add(select_batch_rows(batch, indices))
 
     def _add_safety_events(self, batch: AsymmetricRLBatch) -> None:
         if batch.safety_costs is None:
@@ -387,7 +357,7 @@ class AutonomousReplayBuffer:
             (batch.safety_costs > 0.5) & actor_eligible
         ).flatten()
         if indices.numel():
-            self.safety_events.add(_slice_batch(batch, indices))
+            self.safety_events.add(select_batch_rows(batch, indices))
 
     def _add_progress_events(
         self,
@@ -408,16 +378,10 @@ class AutonomousReplayBuffer:
         actor_eligible &= values > 0.0
         indices = _top_ranked_indices(values, actor_eligible, keep=keep)
         if indices.numel():
-            self.progress_events.add(_slice_batch(batch, indices))
-        return int(indices.numel())
-
-    def _rebuild_progress_events(self) -> int:
-        if not self.regular.size:
-            return 0
-        return self._add_progress_events(
-            self.regular.chronological(),
-            keep=self.progress_events.capacity,
-        )
+            return self._ranked_progress.add(
+                select_batch_rows(batch, indices), values[indices]
+            )
+        return 0
 
     def priority_migration_audit(self) -> dict[str, object] | None:
         discarded = self._load_migration_discarded_reward_priority_count
@@ -425,11 +389,14 @@ class AutonomousReplayBuffer:
         if not discarded and not rebuilt:
             return None
         return {
-            "schema_version": "hwr.reward-priority-migration/v1",
-            "reason": "derived_priority_changed_to_local_reward_improvement_speed",
+            "schema_version": "hwr.reward-priority-migration/v2",
+            "reason": "priority_changed_to_global_reward_improvement_top_k",
             "discarded_legacy_priority_rows": discarded,
             "rebuilt_priority_rows": rebuilt,
             "primary_autonomous_rows_retained": self.regular.size,
+            "legacy_priority_rebuild": (
+                "disabled-because-main-replay-stores-n-step-targets-not-raw-rewards"
+            ),
             "action_labels": False,
             "task_semantic_fields": [],
         }
@@ -442,6 +409,7 @@ class AutonomousReplayBuffer:
             "discoveries": self.discoveries.state_dict(),
             "progress_events": self.progress_events.state_dict(),
             "progress_event_schema": PROGRESS_REPLAY_SCHEMA,
+            "progress_event_scores": self._ranked_progress.score_state(),
             "safety_events": self.safety_events.state_dict(),
             "generator_state": self._generator.get_state(),
             "episode_count": self.episode_count,
@@ -481,13 +449,14 @@ class AutonomousReplayBuffer:
             current_schema
             and "progress_events" in value
             and value.get("progress_event_schema") == PROGRESS_REPLAY_SCHEMA
+            and "progress_event_scores" in value
         ):
             self.progress_events.load_state_dict(value["progress_events"])
+            self._ranked_progress.load_scores(value["progress_event_scores"])
         elif self.regular.size:
             discarded = int(value.get("progress_events", {}).get("size", 0))
-            rebuilt = self._rebuild_progress_events()
             self._load_migration_discarded_reward_priority_count = discarded
-            self._load_migration_rebuilt_reward_priority_count = rebuilt
+            self._load_migration_rebuilt_reward_priority_count = 0
         self._generator.set_state(value["generator_state"])
         self.episode_count = int(value["episode_count"])
         self.legacy_discarded_reward_priority_count = (
@@ -505,7 +474,7 @@ class AutonomousReplayBuffer:
             actor = torch.nonzero(batch.actor_weights > 0).flatten()
             critic = torch.nonzero(batch.actor_weights <= 0).flatten()
             if actor.numel():
-                self.regular.add(_slice_batch(batch, actor))
+                self.regular.add(select_batch_rows(batch, actor))
             self.legacy_discarded_hindsight_count += int(critic.numel())
         self.legacy_discarded_hindsight_count = max(
             self.legacy_discarded_hindsight_count,
@@ -516,7 +485,7 @@ class AutonomousReplayBuffer:
             batch = failures.all()
             actor = torch.nonzero(batch.actor_weights > 0).flatten()
             if actor.numel():
-                self.failures.add(_slice_batch(batch, actor))
+                self.failures.add(select_batch_rows(batch, actor))
 
 
 def _load_legacy_buffer(value: Mapping[str, object]) -> AsymmetricReplayBuffer:

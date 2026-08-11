@@ -124,7 +124,7 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert replay["legacy_discarded_hindsight_transition_count"] == 0
     assert replay["legacy_discarded_reward_priority_transition_count"] == 0
     assert replay["task_agnostic_priority_replay"]["reward_improvement"] == (
-        "ranked-positive-episode-local-reward-improvement-speed"
+        "global-top-k-positive-episode-local-reward-improvement-speed"
     )
     assert replay["schema_version"] == "hwr.autonomous-replay/v1"
     assert replay["augmentation_eligible_transition_count"] == 2

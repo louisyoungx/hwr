@@ -235,7 +235,7 @@ def save_bimanual_training_run(
         "task_agnostic_priority_replay": {
             "state_novelty": "ranked-normalized-critic-state-change",
             "reward_improvement": (
-                "ranked-positive-episode-local-reward-improvement-speed"
+                "global-top-k-positive-episode-local-reward-improvement-speed"
             ),
             "distance_thresholds": False,
             "task_semantic_fields": [],

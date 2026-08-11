@@ -33,27 +33,35 @@ class AsymmetricReplayBuffer:
         self._storage: dict[str, torch.Tensor] = {}
         self._generator = torch.Generator().manual_seed(seed)
 
-    def add(self, batch: AsymmetricRLBatch) -> None:
+    def add(self, batch: AsymmetricRLBatch) -> torch.Tensor:
         values = self._flatten_batch(batch)
         batch_size = batch.rewards.shape[0]
-        if not self._storage:
-            self._storage = {
-                name: torch.empty(
-                    (self.capacity, *value.shape[1:]),
-                    dtype=_storage_dtype(name, value.dtype),
-                )
-                for name, value in values.items()
-            }
-        if set(values) != set(self._storage) or any(
-            value.shape[1:] != self._storage[name].shape[1:]
-            for name, value in values.items()
-        ):
-            raise ValueError("replay transition shapes changed")
+        self._prepare_storage(values)
+        positions = torch.empty(batch_size, dtype=torch.int64)
         for row in range(batch_size):
+            positions[row] = self.position
             for name, value in values.items():
                 self._storage[name][self.position].copy_(value[row].detach().cpu())
             self.position = (self.position + 1) % self.capacity
             self.size = min(self.size + 1, self.capacity)
+        return positions
+
+    def replace_rows(
+        self, indices: torch.Tensor, batch: AsymmetricRLBatch
+    ) -> None:
+        """Replace retained physical rows without changing ring chronology."""
+        positions = indices.detach().cpu().to(torch.int64).flatten()
+        values = self._flatten_batch(batch)
+        if positions.numel() != batch.rewards.shape[0]:
+            raise ValueError("replacement indices must align with replay batch")
+        if positions.numel() and (
+            int(positions.min()) < 0 or int(positions.max()) >= self.size
+        ):
+            raise ValueError("replacement index is outside retained replay")
+        self._prepare_storage(values)
+        for row, position in enumerate(positions.tolist()):
+            for name, value in values.items():
+                self._storage[name][position].copy_(value[row].detach().cpu())
 
     def sample(self, batch_size: int) -> AsymmetricRLBatch:
         if batch_size <= 0 or self.size < batch_size:
@@ -180,6 +188,21 @@ class AsymmetricReplayBuffer:
             raise ValueError("replay transition batch sizes differ")
         return values
 
+    def _prepare_storage(self, values: Mapping[str, torch.Tensor]) -> None:
+        if not self._storage:
+            self._storage = {
+                name: torch.empty(
+                    (self.capacity, *value.shape[1:]),
+                    dtype=_storage_dtype(name, value.dtype),
+                )
+                for name, value in values.items()
+            }
+        if set(values) != set(self._storage) or any(
+            value.shape[1:] != self._storage[name].shape[1:]
+            for name, value in values.items()
+        ):
+            raise ValueError("replay transition shapes changed")
+
     def _unflatten_batch(
         self, values: Mapping[str, torch.Tensor]
     ) -> AsymmetricRLBatch:
@@ -239,3 +262,28 @@ def _newest_indices(
     else:
         order = torch.cat((torch.arange(position, size), torch.arange(position)))
     return order[-keep:]
+
+
+def select_batch_rows(
+    batch: AsymmetricRLBatch, indices: torch.Tensor
+) -> AsymmetricRLBatch:
+    """Select aligned rows from every Actor, Critic and action field."""
+    select = lambda values: {name: value[indices] for name, value in values.items()}
+    optional = lambda value: value[indices] if value is not None else None
+    return AsymmetricRLBatch(
+        actor_inputs=select(batch.actor_inputs),
+        next_actor_inputs=select(batch.next_actor_inputs),
+        privileged_state=batch.privileged_state[indices],
+        next_privileged_state=batch.next_privileged_state[indices],
+        action_chunks=batch.action_chunks[indices],
+        stop_decisions=batch.stop_decisions[indices],
+        rewards=batch.rewards[indices],
+        done=batch.done[indices],
+        actor_weights=optional(batch.actor_weights),
+        augmentation_transform_indices=optional(
+            batch.augmentation_transform_indices
+        ),
+        proposed_action_chunks=optional(batch.proposed_action_chunks),
+        safety_costs=optional(batch.safety_costs),
+        bootstrap_discounts=optional(batch.bootstrap_discounts),
+    )

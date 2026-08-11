@@ -22,6 +22,7 @@ from hwr.train import (
     save_asymmetric_training_checkpoint,
     save_vla_actor_checkpoint,
 )
+from hwr.train.asymmetric_replay import select_batch_rows
 from hwr.train.asymmetric_rl import _motion_slew_penalty
 from tests.vla_fixtures import actor_input, build_dataset
 
@@ -457,6 +458,22 @@ def test_asymmetric_replay_exposes_ring_rows_in_chronological_order() -> None:
     ordered = replay.chronological()
 
     assert ordered.rewards.tolist() == [2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+
+
+def test_asymmetric_replay_replaces_selected_rows_without_advancing_ring() -> None:
+    replay = AsymmetricReplayBuffer(6, seed=7)
+    positions = replay.add(
+        replace(_batch(), rewards=torch.arange(4, dtype=torch.float32))
+    )
+    replacement = replace(
+        _batch(), rewards=torch.tensor((8.0, 9.0, 10.0, 11.0))
+    )
+
+    replay.replace_rows(positions[1:3], select_batch_rows(replacement, positions[:2]))
+
+    assert replay.size == 4
+    assert replay.position == 4
+    assert replay.all().rewards.tolist() == [0.0, 8.0, 9.0, 3.0]
 
 
 def test_asymmetric_replay_compresses_visual_storage_and_restores_compute_dtype() -> None:

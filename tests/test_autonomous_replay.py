@@ -276,8 +276,9 @@ def test_positive_local_reward_improvements_receive_a_ranked_replay_quota() -> N
     audit = restored.priority_migration_audit()
     assert audit is not None
     assert audit["discarded_legacy_priority_rows"] == old_priority_size
+    assert audit["rebuilt_priority_rows"] == 0
     assert restored.legacy_discarded_reward_priority_count == old_priority_size
-    assert restored.progress_size > 0
+    assert restored.progress_size == 0
 
     passive = AutonomousReplayBuffer(64, seed=20)
     passive.add_episode(
@@ -325,6 +326,38 @@ def test_reward_priority_ignores_a_high_stationary_reward_plateau() -> None:
     )
 
     assert replay.progress_size == 0
+
+
+def test_reward_priority_retains_global_top_score_across_episodes() -> None:
+    episode = _episode(success=False, legal_transforms=())
+    high = replace(
+        episode,
+        batch=replace(
+            episode.batch,
+            rewards=torch.tensor((9.0, 0.0, 0.0, 0.0)),
+        ),
+        reward_improvements=torch.tensor((2.0, 0.0, 0.0, 0.0)),
+    )
+    low = replace(
+        episode,
+        batch=replace(
+            episode.batch,
+            rewards=torch.tensor((1.0, 0.0, 0.0, 0.0)),
+        ),
+        reward_improvements=torch.tensor((0.5, 0.0, 0.0, 0.0)),
+    )
+    replay = AutonomousReplayBuffer(8, seed=22)
+
+    replay.add_episode(high)
+    replay.add_episode(low)
+    restored = AutonomousReplayBuffer(8, seed=23)
+    restored.load_state_dict(replay.state_dict())
+    restored.add_episode(low)
+
+    assert replay.progress_size == restored.progress_size == 1
+    assert replay.progress_events.all().rewards.tolist() == [9.0]
+    assert restored.progress_events.all().rewards.tolist() == [9.0]
+    assert restored.state_dict()["progress_event_scores"].tolist() == [2.0]
 
 
 def test_automatic_curriculum_expands_only_after_safe_success_window() -> None:
