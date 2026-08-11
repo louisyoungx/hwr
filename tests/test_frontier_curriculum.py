@@ -110,9 +110,47 @@ def test_frontier_rejects_unsupported_or_moving_instantaneous_near_states() -> N
     audit = frontier.audit()
     assert audit["physical_stability_filter"] == {
         "requires_support_or_arm_contact": True,
+        "maximum_candidate_target_distance_meters": 1.5,
         "maximum_payload_linear_speed": 0.05,
         "maximum_payload_angular_speed": 0.15,
     }
+
+
+def test_frontier_rejects_observed_states_that_regress_far_from_task_target() -> None:
+    frontier = OutcomeFrontierCurriculum(("tray",))
+
+    assert not frontier.consider(
+        "tray",
+        _complete_snapshot("tray", 1.0),
+        FrontierOutcome(
+            0.04,
+            0.05,
+            True,
+            True,
+            target_distance=1.51,
+            task_progress_observed=True,
+        ),
+        source_episode=1,
+        source_step=40,
+        contact_stability_steps=40,
+    )
+    assert frontier.consider(
+        "tray",
+        _complete_snapshot("tray", 2.0),
+        FrontierOutcome(0.04, 0.05, True, True),
+        source_episode=2,
+        source_step=40,
+        contact_stability_steps=40,
+    )
+
+    checkpoint = frontier.state_dict()
+    checkpoint["entries"]["tray"][0]["outcome"].update(
+        target_distance=1.60,
+        task_progress_observed=True,
+    )
+    restored = OutcomeFrontierCurriculum(("tray",))
+    restored.load_state_dict(checkpoint)
+    assert restored.entries["tray"] == []
 
 
 def test_frontier_preserves_side_diversity_and_round_trips_checkpoint() -> None:
@@ -225,6 +263,7 @@ def test_frontier_prefers_autonomous_physical_task_progress_at_equal_reach() -> 
                 True,
                 target_distance=target_distance,
                 articulation_position=articulation,
+                task_progress_observed=True,
             ),
             source_episode=source,
             source_step=40,
@@ -246,6 +285,7 @@ def test_frontier_outcome_migrates_checkpoint_without_progress_fields() -> None:
 
     assert migrated.target_distance == 10.0
     assert migrated.articulation_position == 0.0
+    assert migrated.task_progress_observed is False
 
 
 def test_frontier_selection_replays_each_discovered_contact_signature() -> None:
