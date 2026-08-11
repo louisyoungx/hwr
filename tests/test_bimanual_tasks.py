@@ -279,6 +279,7 @@ def test_carry_progress_requires_sustained_bilateral_contact(task_id: str) -> No
 
     assert pushed.metrics["controlled_target_progress"] == 0.0
     assert carried.metrics["controlled_target_progress"] > 0.0
+    assert carried.metrics["initial_target_distance"] == initial.target_distance
     assert carried.reward > pushed.reward
 
 

@@ -232,6 +232,7 @@ class BimanualTaskTracker:
         self.spec = spec
         self._previous_potential: float | None = None
         self._previous_target_distance: float | None = None
+        self._initial_target_distance: float | None = None
         self._previous_articulation_position: float | None = None
         self._previous_bilateral_contact = False
         self._previous_left_contact = False
@@ -246,6 +247,7 @@ class BimanualTaskTracker:
 
     def reset(self, initial: BimanualTaskSample) -> None:
         self._previous_target_distance = initial.target_distance
+        self._initial_target_distance = initial.target_distance
         self._previous_articulation_position = initial.articulation_position
         self._previous_bilateral_contact = initial.left_contact and initial.right_contact
         self._previous_left_contact = initial.left_contact
@@ -412,8 +414,11 @@ class BimanualTaskTracker:
         )
 
     def _metrics(self, sample: BimanualTaskSample) -> dict[str, float]:
+        if self._initial_target_distance is None:
+            raise RuntimeError("task metrics require a reset physical state")
         return {
             "target_distance": sample.target_distance,
+            "initial_target_distance": self._initial_target_distance,
             "payload_tilt_radians": sample.payload_tilt_radians,
             "payload_linear_speed": sample.payload_linear_speed,
             "payload_angular_speed": sample.payload_angular_speed,

@@ -21,6 +21,7 @@ class FrontierCurriculumConfig:
     score_target_scale_meters: float = 0.50
     score_articulation_scale_meters: float = 0.15
     maximum_candidate_target_distance_meters: float = 1.50
+    maximum_target_regression_meters: float = 0.15
     maximum_payload_linear_speed: float = 0.05
     maximum_payload_angular_speed: float = 0.15
     signature_uniform_fraction: float = 0.20
@@ -45,6 +46,7 @@ class FrontierCurriculumConfig:
             self.score_target_scale_meters,
             self.score_articulation_scale_meters,
             self.maximum_candidate_target_distance_meters,
+            self.maximum_target_regression_meters,
             self.maximum_payload_linear_speed,
             self.maximum_payload_angular_speed,
         ) <= 0.0:
@@ -65,6 +67,7 @@ class FrontierOutcome:
     payload_angular_speed: float = 0.0
     target_distance: float = 10.0
     articulation_position: float = 0.0
+    initial_target_distance: float = 10.0
     task_progress_observed: bool = False
 
     def __post_init__(self) -> None:
@@ -74,6 +77,7 @@ class FrontierOutcome:
             self.payload_linear_speed,
             self.payload_angular_speed,
             self.target_distance,
+            self.initial_target_distance,
         )
         if min(physical) < 0.0 or not all(
             math.isfinite(item) for item in (*physical, self.articulation_position)
@@ -125,8 +129,12 @@ class OutcomeFrontierCurriculum:
             payload_angular_speed=float(metrics["payload_angular_speed"]),
             target_distance=float(metrics.get("target_distance", 10.0)),
             articulation_position=float(metrics.get("articulation_position", 0.0)),
+            initial_target_distance=float(
+                metrics.get("initial_target_distance", 10.0)
+            ),
             task_progress_observed=(
-                "target_distance" in metrics and "articulation_position" in metrics
+                "target_distance" in metrics
+                and "articulation_position" in metrics
             ),
         )
 
@@ -159,6 +167,11 @@ class OutcomeFrontierCurriculum:
             not outcome.task_progress_observed
             or outcome.target_distance
             <= self.config.maximum_candidate_target_distance_meters
+        ) and (
+            not outcome.task_progress_observed
+            or outcome.target_distance
+            <= outcome.initial_target_distance
+            + self.config.maximum_target_regression_meters
         )
         return (
             not outcome.severe_collision
@@ -361,6 +374,9 @@ class OutcomeFrontierCurriculum:
                 "maximum_candidate_target_distance_meters": (
                     self.config.maximum_candidate_target_distance_meters
                 ),
+                "maximum_target_regression_meters": (
+                    self.config.maximum_target_regression_meters
+                ),
                 "maximum_payload_linear_speed": (
                     self.config.maximum_payload_linear_speed
                 ),
@@ -407,6 +423,7 @@ class OutcomeFrontierCurriculum:
             "score_target_scale_meters",
             "score_articulation_scale_meters",
             "maximum_candidate_target_distance_meters",
+            "maximum_target_regression_meters",
         )
         for name in mutable_fields:
             saved_config.pop(name, None)
@@ -537,6 +554,7 @@ def _restore_frontier_outcome(value: Mapping[str, object]) -> FrontierOutcome:
     fields = dict(value)
     fields.setdefault(
         "task_progress_observed",
-        "target_distance" in fields and "articulation_position" in fields,
+        "target_distance" in fields
+        and "articulation_position" in fields,
     )
     return FrontierOutcome(**fields)

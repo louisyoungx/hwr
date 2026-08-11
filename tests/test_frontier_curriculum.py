@@ -106,11 +106,28 @@ def test_frontier_rejects_unsupported_or_moving_instantaneous_near_states() -> N
         source_step=2,
         contact_stability_steps=40,
     )
+    assert not frontier.consider(
+        "tray",
+        _complete_snapshot("tray", 1.5),
+        FrontierOutcome(
+            0.04,
+            0.05,
+            True,
+            True,
+            target_distance=1.0,
+            initial_target_distance=0.8,
+            task_progress_observed=True,
+        ),
+        source_episode=1,
+        source_step=41,
+        contact_stability_steps=40,
+    )
 
     audit = frontier.audit()
     assert audit["physical_stability_filter"] == {
         "requires_support_or_arm_contact": True,
         "maximum_candidate_target_distance_meters": 1.5,
+        "maximum_target_regression_meters": 0.15,
         "maximum_payload_linear_speed": 0.05,
         "maximum_payload_angular_speed": 0.15,
     }
@@ -128,6 +145,7 @@ def test_frontier_rejects_observed_states_that_regress_far_from_task_target() ->
             True,
             True,
             target_distance=1.51,
+            initial_target_distance=0.80,
             task_progress_observed=True,
         ),
         source_episode=1,
@@ -263,6 +281,7 @@ def test_frontier_prefers_autonomous_physical_task_progress_at_equal_reach() -> 
                 True,
                 target_distance=target_distance,
                 articulation_position=articulation,
+                initial_target_distance=0.70,
                 task_progress_observed=True,
             ),
             source_episode=source,
@@ -285,6 +304,7 @@ def test_frontier_outcome_migrates_checkpoint_without_progress_fields() -> None:
 
     assert migrated.target_distance == 10.0
     assert migrated.articulation_position == 0.0
+    assert migrated.initial_target_distance == 10.0
     assert migrated.task_progress_observed is False
 
 
