@@ -42,6 +42,7 @@ def test_sampler_prioritizes_generic_learning_pressure_without_starvation() -> N
 
     assert probabilities["a"] > probabilities["b"] > probabilities["c"]
     assert all(value >= 0.10 for value in probabilities.values())
+    assert all(value <= config.maximum_probability for value in probabilities.values())
     assert np.isclose(sum(probabilities.values()), 1.0)
     assert sampler.audit()["distance_thresholds"] is False
     assert sampler.audit()["task_semantic_fields"] == []
@@ -52,6 +53,9 @@ def test_sampler_initial_coverage_state_and_reward_improvement() -> None:
     sampler = OutcomeAdaptiveTaskSampler(("a", "b", "c"), config)
     rng = np.random.default_rng(7)
 
+    np.testing.assert_allclose(
+        tuple(sampler.probabilities().values()), (1.0 / 3.0,) * 3
+    )
     initial = [sampler.sample(rng)[0] for _ in range(3)]
     sampler.record("a", _outcome(episode_return=2.0))
     assert sampler.reward_improvement("a", 3.5) == 1.5
@@ -104,3 +108,21 @@ def test_sampler_discards_legacy_geometry_histories() -> None:
     assert sampler.legacy_discarded_outcome_count == 1
     assert sampler.sample_count == 0
     assert sampler.credits["a"] == 0.0
+
+
+def test_sampler_schema_change_resets_concentrated_history_and_counts_it() -> None:
+    previous = OutcomeAdaptiveTaskSampler(("a", "b", "c"))
+    for _ in range(2):
+        previous.record("a", _outcome())
+        previous.record("b", _outcome())
+        previous.record("c", _outcome())
+    state = previous.state_dict()
+    state["schema_version"] = "hwr.task-agnostic-learning-sampling/v2"
+    state["legacy_discarded_outcome_count"] = 4
+    restored = OutcomeAdaptiveTaskSampler(("a", "b", "c"))
+
+    restored.load_state_dict(state)
+
+    assert all(not history for history in restored.history.values())
+    assert restored.legacy_discarded_outcome_count == 10
+    assert restored.sample_count == 0

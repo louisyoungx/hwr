@@ -52,6 +52,8 @@ FORKABLE_TRAINING_FIELDS = frozenset(
         "frontier_reset_probability",
         "frontier_signature_uniform_fraction",
         "frontier_max_entries_per_source_signature",
+        "task_sampling_temperature",
+        "task_sampling_maximum_probability",
         "failure_replay_fraction",
         "discovery_replay_fraction",
         "progress_replay_fraction",
@@ -355,6 +357,8 @@ def resume_bimanual_training_run(
         "frontier_capacity_per_task",
         "frontier_signature_uniform_fraction",
         "frontier_max_entries_per_source_signature",
+        "task_sampling_temperature",
+        "task_sampling_maximum_probability",
     ):
         if name == "frontier_signature_uniform_fraction":
             legacy_default = 1.0

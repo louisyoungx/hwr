@@ -93,6 +93,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--frontier-capacity", type=int, default=16)
     parser.add_argument("--frontier-signature-uniform", type=float, default=0.20)
     parser.add_argument("--frontier-source-capacity", type=int, default=2)
+    parser.add_argument("--task-sampling-temperature", type=float, default=0.75)
+    parser.add_argument("--task-sampling-maximum", type=float, default=0.55)
     parser.add_argument("--checkpoint-interval", type=int, default=10)
     return parser
 
@@ -172,6 +174,8 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         frontier_max_entries_per_source_signature=(
             arguments.frontier_source_capacity
         ),
+        task_sampling_temperature=arguments.task_sampling_temperature,
+        task_sampling_maximum_probability=arguments.task_sampling_maximum,
     )
     output_root = (
         arguments.output_root

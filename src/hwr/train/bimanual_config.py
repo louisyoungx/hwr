@@ -33,6 +33,8 @@ class BimanualRLTrainingConfig:
     frontier_capacity_per_task: int = 16
     frontier_signature_uniform_fraction: float = 0.20
     frontier_max_entries_per_source_signature: int = 2
+    task_sampling_temperature: float = 0.75
+    task_sampling_maximum_probability: float = 0.55
     failure_replay_fraction: float = 0.25
     discovery_replay_fraction: float = 0.25
     progress_replay_fraction: float = 0.35
@@ -100,6 +102,7 @@ class BimanualRLTrainingConfig:
             self.actuator_dwell_closed_probability,
             self.frontier_reset_probability,
             self.frontier_signature_uniform_fraction,
+            self.task_sampling_maximum_probability,
             self.failure_replay_fraction,
             self.discovery_replay_fraction,
             self.progress_replay_fraction,
@@ -109,6 +112,8 @@ class BimanualRLTrainingConfig:
         )
         if min(fractions) < 0 or any(value > 1 for value in fractions[1:]):
             raise ValueError("bimanual training fractions are invalid")
+        if self.task_sampling_temperature <= 0.0:
+            raise ValueError("task sampling temperature must be positive")
         replay_fraction = (
             self.failure_replay_fraction
             + self.discovery_replay_fraction

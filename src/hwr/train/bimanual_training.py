@@ -48,10 +48,18 @@ from hwr.train.learning_frontier import (
     TaskAgnosticLearningFrontier,
     prepare_learning_frontier_reset,
 )
+from hwr.train.learning_signals import (
+    failure_boundary_step,
+    reward_improvement_speeds,
+)
 from hwr.train.goal_replay import GoalEpisode
 from hwr.train.n_step import build_n_step_targets
 from hwr.train.task_replay import TaskPartitionedGoalReplayBuffer
-from hwr.train.task_sampling import OutcomeAdaptiveTaskSampler, TaskOutcome
+from hwr.train.task_sampling import (
+    OutcomeAdaptiveTaskSampler,
+    OutcomeAdaptiveTaskSamplingConfig,
+    TaskOutcome,
+)
 
 
 @dataclass
@@ -225,7 +233,13 @@ class BimanualTrainingRunner:
                 ),
             ),
         )
-        self.task_sampler = OutcomeAdaptiveTaskSampler(self.task_ids)
+        self.task_sampler = OutcomeAdaptiveTaskSampler(
+            self.task_ids,
+            OutcomeAdaptiveTaskSamplingConfig(
+                temperature=config.task_sampling_temperature,
+                maximum_probability=config.task_sampling_maximum_probability,
+            ),
+        )
         self.records: list[TrainingEpisodeRecord] = []
         self._environment_steps = 0
 
@@ -340,11 +354,7 @@ class BimanualTrainingRunner:
         frontier_entry = None
         if episode_index >= self.config.initial_random_episodes:
             frontier_entry = self.frontier.select(task_id, self.frontier_rng)
-        source_seed = (
-            self.config.seed + frontier_entry.source_episode * 104729
-            if frontier_entry
-            else seed
-        )
+        source_seed = self.config.seed + (frontier_entry.source_episode if frontier_entry else episode_index) * 104729
         prepared = prepare_learning_frontier_reset(
             environment,
             frontier_entry,
@@ -361,6 +371,7 @@ class BimanualTrainingRunner:
         previous_action: DualArmAction | None = None
         total_reward, success = 0.0, False
         safety_interventions = 0
+        environment_terminated = environment_truncated = False
         step_limit = self.config.episode_step_limit or self.tasks[task_id].max_steps
         for step in range(step_limit):
             random_phase = episode_index < self.config.initial_random_episodes
@@ -409,6 +420,8 @@ class BimanualTrainingRunner:
             previous_action = applied_action
             success = bool(environment.result() and environment.result().success)
             if terminal or limit:
+                environment_terminated = outcome.terminated
+                environment_truncated = bool(outcome.truncated or limit and not terminal)
                 break
         audit = environment.task_audit()
         episode = self._goal_episode(
@@ -423,13 +436,13 @@ class BimanualTrainingRunner:
         reward_improvement = self.task_sampler.reward_improvement(
             task_id, total_reward
         )
+        terminated_failure = environment_terminated and not success
         candidates = self._learning_frontier_candidates(
             task_id,
             episode_index,
             buffers,
             td_errors,
-            reward_improvement,
-            success,
+            terminated_failure,
         )
         self.frontier.consider_episode(task_id, candidates)
         self.replay.add_episode(task_id, episode)
@@ -446,7 +459,7 @@ class BimanualTrainingRunner:
                 _mean_signal(candidates, "state_novelty"),
                 float(td_errors.mean()),
                 reward_improvement,
-                float(not success),
+                float(terminated_failure),
                 success,
                 sum(buffers.safety_costs) / len(buffers.safety_costs),
             ),
@@ -479,7 +492,7 @@ class BimanualTrainingRunner:
             mean_state_novelty=_mean_signal(candidates, "state_novelty"),
             mean_td_error=float(td_errors.mean()),
             reward_improvement=reward_improvement,
-            failure_boundary=float(not success),
+            failure_boundary=float(terminated_failure),
             sampling_probability=sampling_probability,
             actor_updates=int(update_summary["actor_updates"]),
             mean_critic_loss=update_summary["mean_critic_loss"],
@@ -523,6 +536,8 @@ class BimanualTrainingRunner:
             frontier_reset_validated=prepared.validated,
             frontier_reset_reproduced=prepared.reproduced,
             frontier_reset_applied=prepared.applied,
+            environment_terminated=environment_terminated,
+            environment_truncated=environment_truncated,
             **physical_progress_record_fields(buffers.next_states),
         )
 
@@ -583,15 +598,12 @@ class BimanualTrainingRunner:
         episode_index: int,
         buffers: _EpisodeBuffers,
         td_errors: torch.Tensor,
-        reward_improvement: float,
-        success: bool,
+        terminated_failure: bool,
     ) -> list[LearningFrontierCandidate]:
-        safe_steps = [
-            index
-            for index, cost in enumerate(buffers.safety_costs)
-            if cost <= 0.0
-        ]
-        boundary_step = safe_steps[-1] if safe_steps and not success else -1
+        boundary_step = failure_boundary_step(
+            buffers.safety_costs, terminated_failure=terminated_failure
+        )
+        improvement_speeds = reward_improvement_speeds(buffers.rewards)
         candidates = []
         for step, (snapshot, state, safety_cost) in enumerate(
             zip(
@@ -608,7 +620,7 @@ class BimanualTrainingRunner:
                     LearningSignal(
                         self.frontier.state_novelty(task_id, state),
                         float(td_errors[step]),
-                        reward_improvement,
+                        improvement_speeds[step],
                         float(step == boundary_step),
                         safe=safety_cost <= 0.0,
                     ),

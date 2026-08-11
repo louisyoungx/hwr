@@ -33,7 +33,7 @@ def _candidate(step: int, **signals: float) -> LearningFrontierCandidate:
 
 def test_frontier_uses_only_generic_learning_signals() -> None:
     frontier = TaskAgnosticLearningFrontier(
-        ("task",), LearningFrontierConfig(candidates_per_episode=2)
+        ("task",), LearningFrontierConfig(candidates_per_episode=4)
     )
 
     added = frontier.consider_episode(
@@ -46,9 +46,10 @@ def test_frontier_uses_only_generic_learning_signals() -> None:
         ),
     )
 
-    assert added == 2
-    assert len(frontier.entries["task"]) == 2
+    assert added == 3
+    assert len(frontier.entries["task"]) == 3
     assert all(item.source_step != 4 for item in frontier.entries["task"])
+    assert {item.signature for item in frontier.entries["task"]} == {0, 1, 3}
     assert frontier.audit()["distance_thresholds"] is False
     assert frontier.audit()["task_semantic_fields"] == []
     assert frontier.audit()["action_outputs"] is False
@@ -79,6 +80,20 @@ def test_frontier_discards_legacy_distance_candidates_on_load() -> None:
 
     assert frontier.entries["task"] == []
     assert frontier.legacy_discarded_entry_count == 1
+
+
+def test_frontier_schema_change_discards_poisoned_entries_and_keeps_audit_count() -> None:
+    previous = TaskAgnosticLearningFrontier(("task",))
+    previous.consider_episode("task", (_candidate(1), _candidate(2)))
+    state = previous.state_dict()
+    state["schema_version"] = "hwr.task-agnostic-learning-frontier/v1"
+    state["legacy_discarded_entry_count"] = 7
+    restored = TaskAgnosticLearningFrontier(("task",))
+
+    restored.load_state_dict(state)
+
+    assert restored.entries["task"] == []
+    assert restored.legacy_discarded_entry_count == 9
 
 
 def test_frontier_novelty_is_geometry_agnostic_cosine_distance() -> None:

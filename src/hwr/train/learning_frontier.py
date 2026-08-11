@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections import deque
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Mapping, Protocol, Sequence
 
 import numpy as np
@@ -13,7 +13,7 @@ from hwr.core.state_snapshot import PhysicalStateSnapshot
 from hwr.core.embodied import DualArmObservation
 
 
-LEARNING_FRONTIER_SCHEMA = "hwr.task-agnostic-learning-frontier/v1"
+LEARNING_FRONTIER_SCHEMA = "hwr.task-agnostic-learning-frontier/v2"
 LEARNING_SIGNAL_NAMES = (
     "state_novelty",
     "td_error",
@@ -169,19 +169,13 @@ class TaskAgnosticLearningFrontier:
             for item in candidates
             if item.signal.safe and item.snapshot.task_id == task_id
         ]
-        ranked = sorted(
-            (
-                self._entry(task_id, candidate)
-                for candidate in safe
-            ),
-            key=lambda item: (item.score, item.source_step),
-            reverse=True,
-        )[: self.config.candidates_per_episode]
+        ranked = self._rank_episode(task_id, safe)
+        selected = self._select_episode_entries(ranked)
         for candidate in candidates:
             self._record_signal(task_id, candidate.signal)
-        for entry in ranked:
+        for entry in selected:
             self._insert(task_id, entry)
-        return len(ranked)
+        return len(selected)
 
     def select(
         self, task_id: str, rng: np.random.Generator
@@ -267,7 +261,9 @@ class TaskAgnosticLearningFrontier:
         if tuple(value["task_ids"]) != self.task_ids:
             raise ValueError("learning frontier checkpoint tasks differ")
         if value.get("schema_version") != LEARNING_FRONTIER_SCHEMA:
-            self.legacy_discarded_entry_count += sum(
+            self.legacy_discarded_entry_count = int(
+                value.get("legacy_discarded_entry_count", 0)
+            ) + sum(
                 len(items) for items in value.get("entries", {}).values()
             )
             return
@@ -291,19 +287,74 @@ class TaskAgnosticLearningFrontier:
             value.get("legacy_discarded_entry_count", 0)
         )
 
+    def _rank_episode(
+        self,
+        task_id: str,
+        candidates: Sequence[LearningFrontierCandidate],
+    ) -> list[tuple[LearningFrontierEntry, tuple[float, ...]]]:
+        if not candidates:
+            return []
+        columns = {
+            name: np.asarray(
+                [*self.signal_history[task_id][name], *(
+                    float(getattr(candidate.signal, name))
+                    for candidate in candidates
+                )],
+                dtype=np.float64,
+            )
+            for name in LEARNING_SIGNAL_NAMES
+        }
+        ranked = []
+        for candidate in candidates:
+            ranks = tuple(
+                _midrank_percentile(columns[name], float(getattr(candidate.signal, name)))
+                for name in LEARNING_SIGNAL_NAMES
+            )
+            ranked.append((self._entry(candidate, ranks), ranks))
+        return ranked
+
+    def _select_episode_entries(
+        self,
+        ranked: Sequence[tuple[LearningFrontierEntry, tuple[float, ...]]],
+    ) -> list[LearningFrontierEntry]:
+        selected: list[LearningFrontierEntry] = []
+        used: set[tuple[int, int]] = set()
+        for signature, name in enumerate(LEARNING_SIGNAL_NAMES):
+            eligible = [
+                (entry, ranks)
+                for entry, ranks in ranked
+                if float(getattr(entry.signal, name)) > 0.0
+                and (entry.source_episode, entry.source_step) not in used
+            ]
+            if not eligible:
+                continue
+            entry, ranks = max(
+                eligible,
+                key=lambda item: (
+                    item[1][signature],
+                    float(getattr(item[0].signal, name)),
+                    item[0].source_step,
+                ),
+            )
+            selected.append(replace(entry, signature=signature))
+            used.add((entry.source_episode, entry.source_step))
+        remaining = sorted(
+            (
+                entry
+                for entry, _ in ranked
+                if (entry.source_episode, entry.source_step) not in used
+            ),
+            key=lambda item: (item.score, item.source_step),
+            reverse=True,
+        )
+        selected.extend(remaining)
+        return selected[: self.config.candidates_per_episode]
+
     def _entry(
-        self, task_id: str, candidate: LearningFrontierCandidate
+        self,
+        candidate: LearningFrontierCandidate,
+        ranks: tuple[float, ...],
     ) -> LearningFrontierEntry:
-        values = (
-            candidate.signal.state_novelty,
-            candidate.signal.td_error,
-            candidate.signal.reward_improvement,
-            candidate.signal.failure_boundary,
-        )
-        ranks = tuple(
-            self._percentile(task_id, name, value)
-            for name, value in zip(LEARNING_SIGNAL_NAMES, values, strict=True)
-        )
         signature = int(np.argmax(np.asarray(ranks)))
         return LearningFrontierEntry(
             candidate.snapshot,
@@ -314,13 +365,6 @@ class TaskAgnosticLearningFrontier:
             candidate.source_episode,
             candidate.source_step,
         )
-
-    def _percentile(self, task_id: str, name: str, value: float) -> float:
-        history = self.signal_history[task_id][name]
-        if not history:
-            return 0.5
-        values = np.asarray(history, dtype=np.float64)
-        return float((np.count_nonzero(values <= value) + 0.5) / (len(values) + 1.0))
 
     def _record_signal(self, task_id: str, signal: LearningSignal) -> None:
         for name in LEARNING_SIGNAL_NAMES:
@@ -340,8 +384,29 @@ class TaskAgnosticLearningFrontier:
                 return
             entries.remove(weakest)
         entries.append(candidate)
-        entries.sort(key=lambda item: item.score, reverse=True)
-        del entries[self.config.capacity_per_task :]
+        leaders = sorted([
+            max(
+                (item for item in entries if item.signature == signature),
+                key=lambda item: item.score,
+            )
+            for signature in sorted({item.signature for item in entries})
+        ], key=lambda item: item.score, reverse=True)[: self.config.capacity_per_task]
+        leader_ids = {id(item) for item in leaders}
+        remaining = sorted(
+            (item for item in entries if id(item) not in leader_ids),
+            key=lambda item: item.score,
+            reverse=True,
+        )
+        retained = leaders + remaining[: max(0, self.config.capacity_per_task - len(leaders))]
+        entries[:] = sorted(retained, key=lambda item: item.score, reverse=True)
+
+
+def _midrank_percentile(values: np.ndarray, target: float) -> float:
+    if values.size == 0:
+        return 0.5
+    below = np.count_nonzero(values < target)
+    equal = np.count_nonzero(values == target)
+    return float((below + 0.5 * equal) / values.size)
 
 
 def _restore_entry(value: Mapping[str, object]) -> LearningFrontierEntry:

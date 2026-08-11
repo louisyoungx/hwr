@@ -10,7 +10,7 @@ from typing import Mapping, Sequence
 import numpy as np
 
 
-TASK_SAMPLING_SCHEMA = "hwr.task-agnostic-learning-sampling/v2"
+TASK_SAMPLING_SCHEMA = "hwr.task-agnostic-learning-sampling/v3"
 
 
 @dataclass(frozen=True)
@@ -18,7 +18,8 @@ class OutcomeAdaptiveTaskSamplingConfig:
     window: int = 12
     initial_cycles: int = 2
     minimum_probability: float = 0.12
-    temperature: float = 0.25
+    temperature: float = 0.75
+    maximum_probability: float = 0.55
 
     def __post_init__(self) -> None:
         if min(self.window, self.initial_cycles) <= 0:
@@ -27,6 +28,8 @@ class OutcomeAdaptiveTaskSamplingConfig:
             raise ValueError("task sampling probability floor is invalid")
         if self.temperature <= 0.0:
             raise ValueError("task sampling temperature must be positive")
+        if not self.minimum_probability < self.maximum_probability <= 1.0:
+            raise ValueError("task sampling probability ceiling is invalid")
 
 
 @dataclass(frozen=True)
@@ -74,6 +77,8 @@ class OutcomeAdaptiveTaskSampler:
         self.config = config or OutcomeAdaptiveTaskSamplingConfig()
         if self.config.minimum_probability * len(identities) >= 1.0:
             raise ValueError("task sampling probability floors consume all mass")
+        if len(identities) > 1 and self.config.maximum_probability * len(identities) < 1.0:
+            raise ValueError("task sampling probability ceilings cannot sum to one")
         self.history = {
             task_id: deque(maxlen=self.config.window) for task_id in identities
         }
@@ -136,13 +141,16 @@ class OutcomeAdaptiveTaskSampler:
         )
         priorities = np.zeros(len(self.task_ids), dtype=np.float64)
         for column in range(features.shape[1]):
-            order = np.argsort(np.argsort(features[:, column], kind="stable"), kind="stable")
-            priorities += (order + 1.0) / len(self.task_ids)
+            priorities += _midranks(features[:, column])
         logits = priorities / self.config.temperature
         weights = np.exp(logits - logits.max())
         weights /= weights.sum()
         floor = self.config.minimum_probability
         probabilities = floor + (1.0 - floor * len(self.task_ids)) * weights
+        probabilities = _cap_probabilities(
+            probabilities,
+            max(self.config.maximum_probability, 1.0 / len(self.task_ids)),
+        )
         return {
             task_id: float(probability)
             for task_id, probability in zip(
@@ -192,7 +200,9 @@ class OutcomeAdaptiveTaskSampler:
             for task_id in self.task_ids
         }
         if value.get("schema_version") != TASK_SAMPLING_SCHEMA:
-            self.legacy_discarded_outcome_count += sum(
+            self.legacy_discarded_outcome_count = int(
+                value.get("legacy_discarded_outcome_count", 0)
+            ) + sum(
                 len(items) for items in value.get("history", {}).values()
             )
             self.sample_count = 0
@@ -220,3 +230,31 @@ class OutcomeAdaptiveTaskSampler:
             -mean("reward_improvement"),
             mean("failure_boundary"),
         )
+
+
+def _cap_probabilities(values: np.ndarray, maximum: float) -> np.ndarray:
+    result = np.zeros_like(values)
+    active = np.ones(len(values), dtype=bool)
+    remaining = 1.0
+    while active.any():
+        weights = values[active]
+        allocated = remaining * weights / weights.sum()
+        high = allocated > maximum
+        indices = np.flatnonzero(active)
+        if not high.any():
+            result[indices] = allocated
+            break
+        capped = indices[high]
+        result[capped] = maximum
+        active[capped] = False
+        remaining -= maximum * len(capped)
+    return result
+
+
+def _midranks(values: np.ndarray) -> np.ndarray:
+    result = np.empty_like(values, dtype=np.float64)
+    for target in np.unique(values):
+        mask = values == target
+        below = np.count_nonzero(values < target)
+        result[mask] = (below + 0.5 * np.count_nonzero(mask)) / len(values)
+    return result
