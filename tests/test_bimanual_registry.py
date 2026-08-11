@@ -241,3 +241,47 @@ def test_training_fork_rejects_non_forkable_config_changes(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="batch_size"):
         fork_bimanual_training_run(parent_path, runner)
+
+
+def test_training_fork_requires_audited_replay_discard_for_input_shapes(
+    tmp_path,
+) -> None:
+    parent = _small_result()
+    parent_path = save_bimanual_training_run(
+        tmp_path, "visual-parent", parent, source_commit="1" * 40
+    )
+    tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
+    config_values = parent.config.to_dict()
+    config_values.update(
+        episodes=2,
+        raw_image_width=24,
+        raw_image_height=18,
+        image_width=12,
+        image_height=9,
+        point_count=12,
+    )
+    runner = BimanualTrainingRunner(
+        tasks,
+        MujocoBimanualBackendFactory(bindings),
+        BimanualRLTrainingConfig(**config_values),
+    )
+
+    with pytest.raises(ValueError, match="discard-input-replay"):
+        fork_bimanual_training_run(parent_path, runner)
+
+    provenance = fork_bimanual_training_run(
+        parent_path, runner, discard_input_replay=True
+    )
+    discarded = provenance["discarded_actor_input_replay"]
+
+    assert runner.replay.size == 0
+    assert discarded["changed_fields"] == [
+        "image_height",
+        "image_width",
+        "point_count",
+        "raw_image_height",
+        "raw_image_width",
+    ]
+    assert discarded["replay"]["carry_dining_tray/v1"]["episode_count"] == 1
+    assert discarded["frontier"] == "inherited_physical_state_snapshots"
+    assert runner.actor_config.point_count == 12

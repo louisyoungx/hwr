@@ -21,6 +21,15 @@ from hwr.train.bimanual_training import (
 
 
 BIMANUAL_RUN_SCHEMA = "hwr.bimanual-rl-run/v1"
+ACTOR_INPUT_SHAPE_FIELDS = frozenset(
+    {
+        "raw_image_width",
+        "raw_image_height",
+        "image_width",
+        "image_height",
+        "point_count",
+    }
+)
 FORKABLE_TRAINING_FIELDS = frozenset(
     {
         "episodes",
@@ -48,6 +57,7 @@ FORKABLE_TRAINING_FIELDS = frozenset(
         "progress_replay_fraction",
         "safety_replay_fraction",
         "visual_temporal_contrastive_weight",
+        *ACTOR_INPUT_SHAPE_FIELDS,
     }
 )
 
@@ -363,6 +373,7 @@ def fork_bimanual_training_run(
     runner: BimanualTrainingRunner,
     *,
     reset_task_ids: Sequence[str] = (),
+    discard_input_replay: bool = False,
 ) -> dict[str, Any]:
     """Load an audited no-demonstration run with explicit exploration changes."""
     manifest = verify_bimanual_training_run(path)
@@ -382,6 +393,16 @@ def fork_bimanual_training_run(
             "fork changes non-exploration training fields: "
             + ", ".join(prohibited)
         )
+    input_shape_changes = sorted(set(changes) & ACTOR_INPUT_SHAPE_FIELDS)
+    if input_shape_changes and not discard_input_replay:
+        raise ValueError(
+            "fork changes Actor input shapes without --discard-input-replay: "
+            + ", ".join(input_shape_changes)
+        )
+    if discard_input_replay and reset_task_ids:
+        raise ValueError(
+            "input replay discard and task-state reset require separate forks"
+        )
     checkpoint_path = path / "training-checkpoint.pt"
     checkpoint = torch.load(
         checkpoint_path,
@@ -389,6 +410,11 @@ def fork_bimanual_training_run(
         weights_only=False,
     )
     runner.load_training_state(checkpoint)
+    discarded_input_replay = _discard_actor_input_replay(
+        runner,
+        enabled=discard_input_replay,
+        changed_fields=input_shape_changes,
+    )
     discarded_task_state = _discard_task_training_state(
         runner, reset_task_ids
     )
@@ -400,9 +426,31 @@ def fork_bimanual_training_run(
         "parent_checkpoint_sha256": _sha256(checkpoint_path),
         "fork_record_count": len(runner.records),
         "config_changes": changes,
+        "discarded_actor_input_replay": discarded_input_replay,
         "discarded_task_state": discarded_task_state,
         "inherited_action_labels": False,
         "inherited_expert_policies": False,
+    }
+
+
+def _discard_actor_input_replay(
+    runner: BimanualTrainingRunner,
+    *,
+    enabled: bool,
+    changed_fields: Sequence[str],
+) -> dict[str, Any] | None:
+    if not enabled:
+        return None
+    return {
+        "schema_version": "hwr.fork-actor-input-replay-discard/v1",
+        "reason": "actor_input_preprocessing_distribution_changed",
+        "changed_fields": list(changed_fields),
+        "replay": runner.replay.discard_tasks(runner.task_ids),
+        "frontier": "inherited_physical_state_snapshots",
+        "task_sampler": "inherited_outcome_history",
+        "curriculum": "inherited_environment_outcomes",
+        "shared_actor_critic_parameters": "inherited",
+        "parent_episode_records": "retained_as_historical_lineage",
     }
 
 

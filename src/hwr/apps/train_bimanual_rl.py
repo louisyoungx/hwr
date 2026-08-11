@@ -41,6 +41,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="discard a changed task's replay, frontier, sampler, and curriculum state",
     )
+    parser.add_argument(
+        "--discard-input-replay",
+        action="store_true",
+        help="discard all old replay when Actor preprocessing shapes change",
+    )
     parser.add_argument("--output-root", type=Path, default=Path("runs/bimanual-rl"))
     parser.add_argument("--episodes", type=int, default=120)
     parser.add_argument(
@@ -111,6 +116,8 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         raise ValueError("--resume and --fork-from are mutually exclusive")
     if arguments.reset_task and arguments.fork_from is None:
         raise ValueError("--reset-task requires --fork-from")
+    if arguments.discard_input_replay and arguments.fork_from is None:
+        raise ValueError("--discard-input-replay requires --fork-from")
     root = Path(__file__).resolve().parents[3]
     tasks, bindings = load_default_bimanual_training_catalogs(root)
     config = BimanualRLTrainingConfig(
@@ -192,7 +199,10 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
             else root / arguments.fork_from
         )
         parent_training_run = fork_bimanual_training_run(
-            parent_path, runner, reset_task_ids=arguments.reset_task
+            parent_path,
+            runner,
+            reset_task_ids=arguments.reset_task,
+            discard_input_replay=arguments.discard_input_replay,
         )
     created = path.exists()
 
