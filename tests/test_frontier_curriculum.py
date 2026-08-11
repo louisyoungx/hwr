@@ -133,6 +133,29 @@ def test_frontier_rejects_unsupported_or_moving_instantaneous_near_states() -> N
     }
 
 
+def test_frontier_accepts_start_support_without_claiming_target_support() -> None:
+    frontier = OutcomeFrontierCurriculum(("tray",))
+    metrics = {
+        "left_reach_distance": 0.08,
+        "right_reach_distance": 0.09,
+        "left_contact": 0.0,
+        "right_contact": 0.0,
+        "severe_collisions": 0.0,
+        "support_contact": 0.0,
+        "physical_support_contact": 1.0,
+        "payload_linear_speed": 0.0,
+        "payload_angular_speed": 0.0,
+        "target_distance": 0.8,
+        "initial_target_distance": 0.8,
+        "articulation_position": 0.0,
+    }
+
+    outcome = frontier.outcome_from_metrics(metrics)
+
+    assert outcome.support_contact is True
+    assert frontier.qualifies(outcome)
+
+
 def test_frontier_rejects_observed_states_that_regress_far_from_task_target() -> None:
     frontier = OutcomeFrontierCurriculum(("tray",))
 

@@ -177,6 +177,10 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
         update = self._last_update
         desired = update.desired_goal if update else self.tracker.desired_goal()
         metrics = update.metrics if update else self._initial_metrics(sample)
+        metrics = dict(metrics)
+        metrics["physical_support_contact"] = float(
+            self._physical_support_contact()
+        )
         base_pose, base_twist = self._base_state()
         critic_state = (
             *sample.achieved_goal(),
@@ -405,6 +409,16 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
         return any(
             frozenset((geom, self.task_ids.target_support_geom)) in pairs
             for geom in self.task_ids.payload_geoms
+        )
+
+    def _physical_support_contact(self) -> bool:
+        payload = self.task_ids.payload_geoms
+        robot = self.task_ids.robot_geoms
+        return any(
+            bool(pair & payload)
+            and bool(pair - payload)
+            and not bool((pair - payload) & robot)
+            for pair in self._contact_pairs()
         )
 
     def _inside_target(self, position: tuple[float, ...]) -> bool:

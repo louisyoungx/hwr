@@ -124,7 +124,9 @@ class OutcomeFrontierCurriculum:
             left_contact=float(metrics["left_contact"]) > 0.5,
             right_contact=float(metrics["right_contact"]) > 0.5,
             severe_collision=float(metrics["severe_collisions"]) > 0.0,
-            support_contact=float(metrics["support_contact"]) > 0.5,
+            support_contact=float(
+                metrics.get("physical_support_contact", metrics["support_contact"])
+            ) > 0.5,
             payload_linear_speed=float(metrics["payload_linear_speed"]),
             payload_angular_speed=float(metrics["payload_angular_speed"]),
             target_distance=float(metrics.get("target_distance", 10.0)),

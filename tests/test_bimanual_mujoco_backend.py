@@ -270,6 +270,7 @@ def test_idle_actor_runs_physics_without_false_success_or_truth_leak(task_id: st
 
     assert audit["severe_collision_count"] == 0
     assert audit["maximum_concurrent_steps"] == 0
+    assert audit["metrics"]["physical_support_contact"] == 1.0
     assert not {
         "achieved_goal",
         "desired_goal",
