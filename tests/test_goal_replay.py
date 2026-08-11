@@ -212,6 +212,8 @@ def test_controlled_task_progress_receives_a_dedicated_replay_quota() -> None:
     state = episode.batch.privileged_state.clone()
     next_state = episode.batch.next_privileged_state.clone()
     next_state[:, 60] = torch.tensor((0.0, 0.01, 0.02, 0.03))
+    actions = episode.batch.action_chunks.clone()
+    actions[:, :, 2] = 0.01
     replay = GoalConditionedReplayBuffer(64, seed=17)
 
     replay.add_episode(
@@ -221,6 +223,7 @@ def test_controlled_task_progress_receives_a_dedicated_replay_quota() -> None:
                 episode.batch,
                 privileged_state=state,
                 next_privileged_state=next_state,
+                action_chunks=actions,
             ),
         )
     )
@@ -238,10 +241,23 @@ def test_controlled_task_progress_receives_a_dedicated_replay_quota() -> None:
     assert torch.all(sampled.actor_weights[-3:] == 1.0)
 
     legacy = replay.state_dict()
-    legacy.pop("progress_events")
+    legacy.pop("progress_event_schema")
     restored = GoalConditionedReplayBuffer(64, seed=18)
     restored.load_state_dict(legacy)
     assert restored.progress_size == 3
+
+    passive = GoalConditionedReplayBuffer(64, seed=20)
+    passive.add_episode(
+        replace(
+            episode,
+            batch=replace(
+                episode.batch,
+                privileged_state=state,
+                next_privileged_state=next_state,
+            ),
+        )
+    )
+    assert passive.progress_size == 0
 
     far_next = next_state.clone()
     far_next[:, 0] = 4.0
@@ -253,6 +269,7 @@ def test_controlled_task_progress_receives_a_dedicated_replay_quota() -> None:
                 episode.batch,
                 privileged_state=state,
                 next_privileged_state=far_next,
+                action_chunks=actions,
             ),
         )
     )

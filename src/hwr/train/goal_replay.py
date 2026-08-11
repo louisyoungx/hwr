@@ -18,6 +18,8 @@ DISCOVERY_REACH_DISTANCE_METERS = 0.06
 BILATERAL_DISCOVERY_REACH_DISTANCE_METERS = 0.10
 CONTROLLED_PROGRESS_EPSILON = 1.0e-5
 PROGRESS_REPLAY_MAX_TARGET_DISTANCE_METERS = 1.10
+PROGRESS_REPLAY_MIN_APPLIED_MOTION = 1.0e-4
+PROGRESS_REPLAY_SCHEMA = "hwr.autonomous-physical-progress/v2"
 
 
 @dataclass(frozen=True)
@@ -508,8 +510,10 @@ class GoalConditionedReplayBuffer:
             dim=1,
         )
         in_workspace = target_distance <= PROGRESS_REPLAY_MAX_TARGET_DISTANCE_METERS
+        applied_motion = batch.action_chunks[..., :14].abs().amax(dim=(1, 2))
+        actively_moving = applied_motion > PROGRESS_REPLAY_MIN_APPLIED_MOTION
         indices = torch.nonzero(
-            progressed & in_workspace & actor_eligible
+            progressed & in_workspace & actively_moving & actor_eligible
         ).flatten()
         if indices.numel():
             self.progress_events.add(_slice_batch(batch, indices))
@@ -520,6 +524,7 @@ class GoalConditionedReplayBuffer:
             "failures": self.failures.state_dict(),
             "discoveries": self.discoveries.state_dict(),
             "progress_events": self.progress_events.state_dict(),
+            "progress_event_schema": PROGRESS_REPLAY_SCHEMA,
             "safety_events": self.safety_events.state_dict(),
             "generator_state": self._generator.get_state(),
             "episode_count": self.episode_count,
@@ -538,7 +543,10 @@ class GoalConditionedReplayBuffer:
             self.safety_events.load_state_dict(value["safety_events"])
         elif self.regular.size:
             self._add_safety_events(self.regular.all())
-        if "progress_events" in value:
+        if (
+            "progress_events" in value
+            and value.get("progress_event_schema") == PROGRESS_REPLAY_SCHEMA
+        ):
             self.progress_events.load_state_dict(value["progress_events"])
         elif self.regular.size:
             self._add_progress_events(self.regular.all())
