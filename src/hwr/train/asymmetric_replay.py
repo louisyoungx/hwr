@@ -10,6 +10,18 @@ from hwr.policy.vla_input import VLA_POLICY_INPUT_FIELDS
 from hwr.train.asymmetric_rl import AsymmetricRLBatch
 
 
+REPLAY_STORAGE_SCHEMA = "hwr.asymmetric-replay-storage/v2"
+COMPRESSIBLE_ACTOR_VISUAL_FIELDS = frozenset(
+    {
+        "head_rgb",
+        "head_depth",
+        "head_points",
+        "left_wrist_rgb",
+        "right_wrist_rgb",
+    }
+)
+
+
 class AsymmetricReplayBuffer:
     def __init__(self, capacity: int, *, seed: int = 0) -> None:
         if capacity <= 0:
@@ -26,7 +38,8 @@ class AsymmetricReplayBuffer:
         if not self._storage:
             self._storage = {
                 name: torch.empty(
-                    (self.capacity, *value.shape[1:]), dtype=value.dtype
+                    (self.capacity, *value.shape[1:]),
+                    dtype=_storage_dtype(name, value.dtype),
                 )
                 for name, value in values.items()
             }
@@ -61,6 +74,7 @@ class AsymmetricReplayBuffer:
 
     def state_dict(self) -> dict[str, object]:
         return {
+            "storage_schema": REPLAY_STORAGE_SCHEMA,
             "capacity": self.capacity,
             "size": self.size,
             "position": self.position,
@@ -84,7 +98,8 @@ class AsymmetricReplayBuffer:
             if tensor.shape[0] not in (saved_size, saved_capacity):
                 raise ValueError("replay checkpoint storage length is invalid")
             expanded = torch.empty(
-                (self.capacity, *tensor.shape[1:]), dtype=tensor.dtype
+                (self.capacity, *tensor.shape[1:]),
+                dtype=_storage_dtype(name, tensor.dtype),
             )
             if saved_capacity == self.capacity:
                 expanded[: self.size].copy_(tensor[: self.size])
@@ -140,10 +155,12 @@ class AsymmetricReplayBuffer:
         self, values: Mapping[str, torch.Tensor]
     ) -> AsymmetricRLBatch:
         actor = {
-            name: values[f"actor__{name}"] for name in VLA_POLICY_INPUT_FIELDS
+            name: _restore_actor_dtype(name, values[f"actor__{name}"])
+            for name in VLA_POLICY_INPUT_FIELDS
         }
         next_actor = {
-            name: values[f"next_actor__{name}"] for name in VLA_POLICY_INPUT_FIELDS
+            name: _restore_actor_dtype(name, values[f"next_actor__{name}"])
+            for name in VLA_POLICY_INPUT_FIELDS
         }
         return AsymmetricRLBatch(
             actor_inputs=actor,
@@ -159,6 +176,25 @@ class AsymmetricReplayBuffer:
             safety_costs=values.get("safety_costs"),
             bootstrap_discounts=values.get("bootstrap_discounts"),
         )
+
+
+def _storage_dtype(name: str, dtype: torch.dtype) -> torch.dtype:
+    field = name.split("__", 1)[-1]
+    if (
+        field in COMPRESSIBLE_ACTOR_VISUAL_FIELDS
+        and dtype == torch.float32
+    ):
+        return torch.float16
+    return dtype
+
+
+def _restore_actor_dtype(name: str, value: torch.Tensor) -> torch.Tensor:
+    if (
+        name in COMPRESSIBLE_ACTOR_VISUAL_FIELDS
+        and value.dtype == torch.float16
+    ):
+        return value.float()
+    return value
 
 
 def _newest_indices(

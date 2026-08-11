@@ -414,6 +414,41 @@ def test_asymmetric_replay_shrink_keeps_newest_ring_transitions() -> None:
     assert sorted(restored.all().rewards.tolist()) == [5.0, 6.0, 7.0]
 
 
+def test_asymmetric_replay_compresses_visual_storage_and_restores_compute_dtype() -> None:
+    replay = AsymmetricReplayBuffer(8, seed=7)
+    batch = _batch()
+
+    replay.add(batch)
+    state = replay.state_dict()
+    sampled = replay.all()
+
+    assert state["storage_schema"] == "hwr.asymmetric-replay-storage/v2"
+    assert state["storage"]["actor__head_rgb"].dtype == torch.float16
+    assert state["storage"]["next_actor__head_points"].dtype == torch.float16
+    assert state["storage"]["actor__proprioception"].dtype == torch.float32
+    assert sampled.actor_inputs["head_rgb"].dtype == torch.float32
+    assert sampled.next_actor_inputs["head_points"].dtype == torch.float32
+    assert sampled.actor_inputs["head_rgb"] == pytest.approx(
+        batch.actor_inputs["head_rgb"], abs=1.1e-3
+    )
+
+
+def test_asymmetric_replay_migrates_legacy_float_visual_storage() -> None:
+    replay = AsymmetricReplayBuffer(8, seed=7)
+    replay.add(_batch())
+    legacy = replay.state_dict()
+    legacy.pop("storage_schema")
+    legacy["storage"]["actor__head_rgb"] = legacy["storage"][
+        "actor__head_rgb"
+    ].float()
+    restored = AsymmetricReplayBuffer(8, seed=8)
+
+    restored.load_state_dict(legacy)
+
+    assert restored.state_dict()["storage"]["actor__head_rgb"].dtype == torch.float16
+    assert restored.all().actor_inputs["head_rgb"].dtype == torch.float32
+
+
 def test_rl_export_contains_actor_only_and_reloads(tmp_path) -> None:
     trainer = _trainer()
     trainer.update(_batch())
