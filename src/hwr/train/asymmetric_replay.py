@@ -8,9 +8,10 @@ import torch
 
 from hwr.policy.vla_input import VLA_POLICY_INPUT_FIELDS
 from hwr.train.asymmetric_rl import AsymmetricRLBatch
+from hwr.train.environment_augmentation import environment_transform_index
 
 
-REPLAY_STORAGE_SCHEMA = "hwr.asymmetric-replay-storage/v2"
+REPLAY_STORAGE_SCHEMA = "hwr.asymmetric-replay-storage/v3"
 COMPRESSIBLE_ACTOR_VISUAL_FIELDS = frozenset(
     {
         "head_rgb",
@@ -110,6 +111,16 @@ class AsymmetricReplayBuffer:
                 )
                 expanded[: self.size].copy_(tensor[indices])
             self._storage[name] = expanded
+        legacy = self._storage.pop("mirror_consistency_weights", None)
+        if self._storage and "augmentation_transform_indices" not in self._storage:
+            self._storage["augmentation_transform_indices"] = torch.zeros(
+                self.capacity, dtype=torch.int64
+            )
+            if legacy is not None:
+                reflected = environment_transform_index("lateral_reflection")
+                self._storage["augmentation_transform_indices"][: self.size] = (
+                    legacy[: self.size] > 0
+                ).to(torch.int64) * reflected
         self._generator.set_state(value["generator_state"])
 
     def _flatten_batch(self, batch: AsymmetricRLBatch) -> dict[str, torch.Tensor]:
@@ -144,6 +155,11 @@ class AsymmetricReplayBuffer:
                     if batch.actor_weights is not None
                     else torch.ones_like(batch.rewards)
                 ),
+                "augmentation_transform_indices": (
+                    batch.augmentation_transform_indices
+                    if batch.augmentation_transform_indices is not None
+                    else torch.zeros_like(batch.rewards, dtype=torch.int64)
+                ),
             }
         )
         batch_sizes = {value.shape[0] for value in values.values()}
@@ -172,6 +188,9 @@ class AsymmetricReplayBuffer:
             rewards=values["rewards"],
             done=values["done"],
             actor_weights=values["actor_weights"],
+            augmentation_transform_indices=values[
+                "augmentation_transform_indices"
+            ],
             proposed_action_chunks=values.get("proposed_action_chunks"),
             safety_costs=values.get("safety_costs"),
             bootstrap_discounts=values.get("bootstrap_discounts"),

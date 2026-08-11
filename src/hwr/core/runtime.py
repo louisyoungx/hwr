@@ -11,6 +11,23 @@ from hwr.core.types import ActionFrame, EpisodeEvent, EpisodeResult, Observation
 
 
 @dataclass(frozen=True)
+class LegalEnvironmentTransform:
+    """A simulator-declared, action-preserving data augmentation.
+
+    The identifier selects a transform from the platform-wide augmentation
+    registry.  It carries no task name, reward hint, target pose, or action.
+    """
+
+    transform_id: str
+
+    def __post_init__(self) -> None:
+        normalized = "_".join(self.transform_id.strip().lower().split())
+        if not normalized:
+            raise ValueError("environment transform identifier is required")
+        object.__setattr__(self, "transform_id", normalized)
+
+
+@dataclass(frozen=True)
 class StepOutcome:
     observation: ObservationFrame
     reward: float = 0.0
@@ -46,6 +63,10 @@ class SnapshotRuntimeBackend(RuntimeBackend, Protocol):
     ) -> DualArmObservation: ...
 
     def capture_state_snapshot(self) -> PhysicalStateSnapshot: ...
+
+    def legal_environment_transforms(
+        self,
+    ) -> tuple[LegalEnvironmentTransform, ...]: ...
 
 
 @dataclass(frozen=True)

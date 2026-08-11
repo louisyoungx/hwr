@@ -11,6 +11,7 @@ import torch
 
 from hwr.core.embodied import DualArmAction, DualArmActionFrame
 from hwr.core.runtime import SnapshotRuntimeBackend
+from hwr.core.state_snapshot import PhysicalStateSnapshot
 from hwr.policy.bimanual_input import (
     BimanualActorInputPipeline,
     BimanualInputConfig,
@@ -40,13 +41,12 @@ from hwr.train.action_exploration import (
     TemporalExplorationConfig,
 )
 from hwr.train.curriculum import AutomaticCurriculum, CurriculumConfig
-from hwr.train.frontier_curriculum import (
-    FrontierCurriculumConfig,
-    OutcomeFrontierCurriculum,
-)
-from hwr.train.frontier_validation import (
-    prepare_frontier_reset,
-    validate_frontier_reset,
+from hwr.train.learning_frontier import (
+    LearningFrontierCandidate,
+    LearningFrontierConfig,
+    LearningSignal,
+    TaskAgnosticLearningFrontier,
+    prepare_learning_frontier_reset,
 )
 from hwr.train.goal_replay import GoalEpisode
 from hwr.train.n_step import build_n_step_targets
@@ -62,7 +62,7 @@ class BimanualTrainingResult:
     trainer: AsymmetricActorCriticTrainer
     replay: TaskPartitionedGoalReplayBuffer
     curriculum: AutomaticCurriculum
-    frontier: OutcomeFrontierCurriculum
+    frontier: TaskAgnosticLearningFrontier
     task_sampler: OutcomeAdaptiveTaskSampler
     records: list[TrainingEpisodeRecord]
     language_encoder: FrozenNgramLanguageEncoder
@@ -89,10 +89,11 @@ class _EpisodeBuffers:
     safety_costs: list[float]
     rewards: list[float]
     done: list[float]
+    snapshots: list[PhysicalStateSnapshot]
 
     @classmethod
     def empty(cls) -> "_EpisodeBuffers":
-        return cls([], [], [], [], [], [], [], [], [], [], [], [])
+        return cls([], [], [], [], [], [], [], [], [], [], [], [], [])
 
 
 class BimanualTrainingBackend(SnapshotRuntimeBackend, Protocol):
@@ -140,6 +141,9 @@ class BimanualTrainingRunner:
             ),
             behavior_regularization=0.0,
             visual_temporal_contrastive_weight=config.visual_temporal_contrastive_weight,
+            augmentation_consistency_weight=(
+                config.augmentation_consistency_weight
+            ),
         )
         self.explorer = TemporalActionExplorer(
             TemporalExplorationConfig(
@@ -208,9 +212,9 @@ class BimanualTrainingRunner:
         self.curriculum = AutomaticCurriculum(
             self.task_ids, CurriculumConfig(initial_level=0.1)
         )
-        self.frontier = OutcomeFrontierCurriculum(
+        self.frontier = TaskAgnosticLearningFrontier(
             self.task_ids,
-            FrontierCurriculumConfig(
+            LearningFrontierConfig(
                 capacity_per_task=config.frontier_capacity_per_task,
                 reset_probability=config.frontier_reset_probability,
                 signature_uniform_fraction=(
@@ -218,9 +222,6 @@ class BimanualTrainingRunner:
                 ),
                 maximum_entries_per_source_signature=(
                     config.frontier_max_entries_per_source_signature
-                ),
-                minimum_contact_stability_steps=(
-                    config.frontier_minimum_contact_stability_steps
                 ),
             ),
         )
@@ -291,7 +292,6 @@ class BimanualTrainingRunner:
         records = []
         for record in value["records"]:
             fields = dict(record)
-            needs_reset_validation = "frontier_reset_validated" not in fields
             fields.setdefault(
                 "minimum_worst_side_reach_distance",
                 max(
@@ -314,13 +314,6 @@ class BimanualTrainingRunner:
             fields.setdefault(
                 "frontier_reset_applied", bool(fields.get("frontier_reset", False))
             )
-            if needs_reset_validation and entry is not None:
-                steps, validated, reproduced = validate_frontier_reset(
-                    self.frontier, entry, fields, self.config
-                )
-                fields["frontier_reset_contact_steps"] = steps
-                fields["frontier_reset_validated"] = validated
-                fields["frontier_reset_reproduced"] = reproduced
             records.append(TrainingEpisodeRecord(**fields))
         self.records = records
         self._environment_steps = int(value["environment_steps"])
@@ -352,14 +345,12 @@ class BimanualTrainingRunner:
             if frontier_entry
             else seed
         )
-        prepared = prepare_frontier_reset(
+        prepared = prepare_learning_frontier_reset(
             environment,
-            self.frontier,
             frontier_entry,
             task_id=task_id,
             episode_seed=seed,
             source_seed=source_seed,
-            config=self.config,
         )
         observation = prepared.observation
         self.explorer.reset()
@@ -370,8 +361,6 @@ class BimanualTrainingRunner:
         previous_action: DualArmAction | None = None
         total_reward, success = 0.0, False
         safety_interventions = 0
-        previous_contact_signature = 0
-        contact_stability_steps = 0
         step_limit = self.config.episode_step_limit or self.tasks[task_id].max_steps
         for step in range(step_limit):
             random_phase = episode_index < self.config.initial_random_episodes
@@ -397,28 +386,9 @@ class BimanualTrainingRunner:
             self.pipeline.record_action(applied_action)
             next_input = self.pipeline.build(outcome.observation)
             next_state = environment.privileged_training_state()
-            if not bool(outcome.info["safety_intervened"]):
-                frontier_outcome = self.frontier.outcome_from_metrics(
-                    next_state.metrics
-                )
-                previous_contact_signature, contact_stability_steps = (
-                    self.frontier.advance_contact_stability(
-                        frontier_outcome,
-                        previous_contact_signature,
-                        contact_stability_steps,
-                    )
-                )
-                if self.frontier.observe(task_id, frontier_outcome):
-                    self.frontier.consider(
-                        task_id,
-                        environment.capture_state_snapshot(),
-                        frontier_outcome,
-                        source_episode=episode_index,
-                        source_step=step,
-                        contact_stability_steps=contact_stability_steps,
-                    )
             terminal = outcome.terminated or outcome.truncated
             limit = step + 1 >= step_limit
+            safety_cost = transition_safety_cost(outcome.info, next_state.metrics)
             self._append_transition(
                 buffers,
                 actor_input,
@@ -427,9 +397,10 @@ class BimanualTrainingRunner:
                 next_state,
                 action,
                 applied_action,
-                transition_safety_cost(outcome.info, next_state.metrics),
+                safety_cost,
                 outcome.reward,
                 terminal or limit,
+                environment.capture_state_snapshot(),
             )
             total_reward += outcome.reward
             self._environment_steps += 1
@@ -440,14 +411,28 @@ class BimanualTrainingRunner:
             if terminal or limit:
                 break
         audit = environment.task_audit()
-        self.replay.add_episode(
-            task_id,
-            self._goal_episode(
-                buffers,
-                success,
-                self.tasks[task_id].objective == "carry_payload",
+        episode = self._goal_episode(
+            buffers,
+            success,
+            tuple(
+                item.transform_id
+                for item in environment.legal_environment_transforms()
             ),
         )
+        td_errors = self.trainer.estimate_td_error(episode.batch)
+        reward_improvement = self.task_sampler.reward_improvement(
+            task_id, total_reward
+        )
+        candidates = self._learning_frontier_candidates(
+            task_id,
+            episode_index,
+            buffers,
+            td_errors,
+            reward_improvement,
+            success,
+        )
+        self.frontier.consider_episode(task_id, candidates)
+        self.replay.add_episode(task_id, episode)
         update_summary = self._update_after_episode(len(buffers.rewards))
         self.curriculum.record(
             task_id,
@@ -457,12 +442,13 @@ class BimanualTrainingRunner:
         self.task_sampler.record(
             task_id,
             TaskOutcome(
-                int(audit["left_contact_steps"]),
-                int(audit["right_contact_steps"]),
-                int(audit["simultaneous_contact_steps"]),
-                min(state[24] for state in buffers.states),
-                min(state[25] for state in buffers.states),
-                min(max(state[24], state[25]) for state in buffers.states),
+                total_reward,
+                _mean_signal(candidates, "state_novelty"),
+                float(td_errors.mean()),
+                reward_improvement,
+                float(not success),
+                success,
+                sum(buffers.safety_costs) / len(buffers.safety_costs),
             ),
         )
         bilateral_near_steps, maximum_bilateral_near_steps = bilateral_near_statistics(buffers.states)
@@ -490,6 +476,10 @@ class BimanualTrainingRunner:
             bilateral_near_steps=bilateral_near_steps,
             maximum_bilateral_near_steps=maximum_bilateral_near_steps,
             safety_interventions=safety_interventions,
+            mean_state_novelty=_mean_signal(candidates, "state_novelty"),
+            mean_td_error=float(td_errors.mean()),
+            reward_improvement=reward_improvement,
+            failure_boundary=float(not success),
             sampling_probability=sampling_probability,
             actor_updates=int(update_summary["actor_updates"]),
             mean_critic_loss=update_summary["mean_critic_loss"],
@@ -514,6 +504,9 @@ class BimanualTrainingRunner:
             mean_actor_gripper_log_standard_deviation=update_summary[
                 "mean_actor_gripper_log_standard_deviation"
             ],
+            mean_actor_augmentation_consistency_loss=update_summary[
+                "mean_actor_augmentation_consistency_loss"
+            ],
             actor_learning_rate=update_summary["actor_learning_rate"],
             frontier_reset=frontier_entry is not None,
             frontier_source_episode=(
@@ -526,9 +519,9 @@ class BimanualTrainingRunner:
             frontier_source_signature=(
                 frontier_entry.signature if frontier_entry else -1
             ),
-            frontier_reset_contact_steps=prepared.probe.contact_steps,
-            frontier_reset_validated=prepared.probe.validated,
-            frontier_reset_reproduced=prepared.probe.reproduced,
+            frontier_reset_contact_steps=0,
+            frontier_reset_validated=prepared.validated,
+            frontier_reset_reproduced=prepared.reproduced,
             frontier_reset_applied=prepared.applied,
             **physical_progress_record_fields(buffers.next_states),
         )
@@ -568,6 +561,7 @@ class BimanualTrainingRunner:
         safety_intervened: bool,
         reward: float,
         done: bool,
+        snapshot: PhysicalStateSnapshot,
     ) -> None:
         buffers.actor_inputs.append(actor_input)
         buffers.next_actor_inputs.append(next_actor_input)
@@ -581,9 +575,54 @@ class BimanualTrainingRunner:
         buffers.safety_costs.append(float(safety_intervened))
         buffers.rewards.append(float(reward))
         buffers.done.append(float(done))
+        buffers.snapshots.append(snapshot)
+
+    def _learning_frontier_candidates(
+        self,
+        task_id: str,
+        episode_index: int,
+        buffers: _EpisodeBuffers,
+        td_errors: torch.Tensor,
+        reward_improvement: float,
+        success: bool,
+    ) -> list[LearningFrontierCandidate]:
+        safe_steps = [
+            index
+            for index, cost in enumerate(buffers.safety_costs)
+            if cost <= 0.0
+        ]
+        boundary_step = safe_steps[-1] if safe_steps and not success else -1
+        candidates = []
+        for step, (snapshot, state, safety_cost) in enumerate(
+            zip(
+                buffers.snapshots,
+                buffers.next_states,
+                buffers.safety_costs,
+                strict=True,
+            )
+        ):
+            candidates.append(
+                LearningFrontierCandidate(
+                    snapshot,
+                    tuple(float(item) for item in state),
+                    LearningSignal(
+                        self.frontier.state_novelty(task_id, state),
+                        float(td_errors[step]),
+                        reward_improvement,
+                        float(step == boundary_step),
+                        safe=safety_cost <= 0.0,
+                    ),
+                    episode_index,
+                    step,
+                )
+            )
+        return candidates
 
     def _goal_episode(
-        self, buffers: _EpisodeBuffers, success: bool, mirrorable: bool
+        self,
+        buffers: _EpisodeBuffers,
+        success: bool,
+        legal_transforms: tuple[str, ...],
     ) -> GoalEpisode:
         targets = build_n_step_targets(
             buffers.rewards,
@@ -607,6 +646,9 @@ class BimanualTrainingRunner:
             stop_decisions=torch.zeros(len(buffers.actions), 1),
             rewards=torch.tensor(targets.rewards, dtype=torch.float32),
             done=torch.tensor(targets.done, dtype=torch.float32),
+            augmentation_transform_indices=torch.zeros(
+                len(buffers.rewards), dtype=torch.int64
+            ),
             proposed_action_chunks=torch.tensor(
                 buffers.proposed_actions, dtype=torch.float32
             )[:, None],
@@ -621,7 +663,7 @@ class BimanualTrainingRunner:
             torch.tensor(next_achieved, dtype=torch.float32),
             torch.tensor(buffers.desired, dtype=torch.float32),
             success,
-            mirrorable,
+            legal_transforms,
         )
 
     def _update_after_episode(self, episode_steps: int) -> dict[str, float]:
@@ -671,5 +713,19 @@ def _summarize_updates(metrics: list[Mapping[str, float]]) -> dict[str, float]:
         "mean_actor_gripper_log_standard_deviation": mean(
             actor, "actor_gripper_log_standard_deviation"
         ),
+        "mean_actor_augmentation_consistency_loss": mean(
+            actor, "augmentation_consistency_loss"
+        ),
         "actor_learning_rate": mean(actor, "actor_learning_rate"),
     }
+
+
+def _mean_signal(
+    candidates: list[LearningFrontierCandidate], name: str
+) -> float:
+    values = [
+        float(getattr(candidate.signal, name))
+        for candidate in candidates
+        if candidate.signal.safe
+    ]
+    return sum(values) / len(values) if values else 0.0

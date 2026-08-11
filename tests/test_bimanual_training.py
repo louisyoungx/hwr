@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import torch
+
 from hwr.apps.train_bimanual_rl import build_parser
 from hwr.adapters.mujoco import (
     MujocoBimanualBackendFactory,
@@ -11,7 +13,8 @@ from hwr.adapters.mujoco import (
 from hwr.train import (
     BimanualRLTrainingConfig,
     BimanualTrainingRunner,
-    FrontierOutcome,
+    LearningFrontierCandidate,
+    LearningSignal,
 )
 from hwr.train.bimanual_metrics import (
     bilateral_near_statistics,
@@ -50,12 +53,10 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
             "0.25",
             "--frontier-source-capacity",
             "3",
-            "--frontier-contact-stability",
-            "50",
-            "--frontier-reset-validation-steps",
-            "60",
             "--visual-contrastive-weight",
             "0.08",
+            "--augmentation-consistency-weight",
+            "0.2",
         ]
     )
 
@@ -70,9 +71,8 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
     assert arguments.frontier_capacity == 12
     assert arguments.frontier_signature_uniform == 0.25
     assert arguments.frontier_source_capacity == 3
-    assert arguments.frontier_contact_stability == 50
-    assert arguments.frontier_reset_validation_steps == 60
     assert arguments.visual_contrastive_weight == 0.08
+    assert arguments.augmentation_consistency_weight == 0.2
     assert arguments.episode_steps is None
 
 
@@ -198,10 +198,13 @@ def test_local_training_collects_all_three_tasks_without_action_labels() -> None
     assert not hasattr(result, "expert")
     assert not hasattr(result, "demonstrations")
     assert result.task_sampler.audit()["action_outputs"] is False
-    assert result.task_sampler.audit()["reach_metric"] == (
-        "minimum_over_time_of_worst_side_distance"
-    )
+    assert result.task_sampler.audit()["distance_thresholds"] is False
+    assert result.task_sampler.audit()["task_semantic_fields"] == []
     assert result.frontier.audit()["action_outputs"] is False
+    for task_id, partition in result.replay.partitions.items():
+        indices = partition.regular.all().augmentation_transform_indices
+        expected = 1 if tasks[task_id].legal_transforms else 0
+        assert torch.all(indices == expected)
     assert all(
         record.minimum_worst_side_reach_distance
         >= max(
@@ -279,15 +282,21 @@ def test_training_episode_can_start_from_an_autonomous_frontier_snapshot() -> No
     try:
         backend.reset(seed=91, task_id=task_id)
         snapshot = backend.capture_state_snapshot()
+        state = backend.privileged_training_state().critic_state
     finally:
         backend.close()
-    assert runner.frontier.consider(
+    assert runner.frontier.consider_episode(
         task_id,
-        snapshot,
-        FrontierOutcome(0.05, 0.12, False, False),
-        source_episode=17,
-        source_step=23,
-    )
+        (
+            LearningFrontierCandidate(
+                snapshot,
+                state,
+                LearningSignal(1.0, 1.0, 0.0, 1.0),
+                source_episode=17,
+                source_step=23,
+            ),
+        ),
+    ) == 1
 
     result = runner.train()
 
@@ -300,7 +309,7 @@ def test_training_episode_can_start_from_an_autonomous_frontier_snapshot() -> No
     assert result.frontier.reset_count == 1
 
 
-def test_task_free_dwell_removes_contact_snapshot_that_does_not_reproduce() -> None:
+def test_frontier_reset_validates_snapshot_without_generating_probe_actions() -> None:
     tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
     config = BimanualRLTrainingConfig(
         episodes=1,
@@ -314,8 +323,6 @@ def test_task_free_dwell_removes_contact_snapshot_that_does_not_reproduce() -> N
         actuator_dwell_closed_probability=1.0,
         actuator_dwell_steps=1,
         frontier_reset_probability=1.0,
-        frontier_minimum_contact_stability_steps=1,
-        frontier_reset_validation_steps=1,
         raw_image_width=16,
         raw_image_height=12,
         image_width=8,
@@ -334,24 +341,28 @@ def test_task_free_dwell_removes_contact_snapshot_that_does_not_reproduce() -> N
     try:
         backend.reset(seed=91, task_id=task_id)
         snapshot = backend.capture_state_snapshot()
+        state = backend.privileged_training_state().critic_state
     finally:
         backend.close()
-    assert runner.frontier.consider(
+    assert runner.frontier.consider_episode(
         task_id,
-        snapshot,
-        FrontierOutcome(0.05, 0.12, True, False),
-        source_episode=17,
-        source_step=23,
-        contact_stability_steps=1,
-    )
+        (
+            LearningFrontierCandidate(
+                snapshot,
+                state,
+                LearningSignal(1.0, 1.0, 0.0, 1.0),
+                source_episode=17,
+                source_step=23,
+            ),
+        ),
+    ) == 1
 
     result = runner.train()
 
-    assert result.records[0].frontier_source_signature == 1
+    assert result.records[0].frontier_source_signature >= 0
     assert result.records[0].frontier_reset_validated is True
-    assert result.records[0].frontier_reset_reproduced is False
-    assert result.records[0].frontier_reset_applied is False
-    assert result.frontier.entries[task_id] == []
-    assert result.frontier.audit()["reset_validation_failure_count"] == 1
+    assert result.records[0].frontier_reset_reproduced is True
+    assert result.records[0].frontier_reset_applied is True
+    assert result.frontier.audit()["action_outputs"] is False
     assert result.records[0].steps == 2
     assert result.environment_steps == 2

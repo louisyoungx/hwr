@@ -61,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--progress-replay", type=float, default=0.35)
     parser.add_argument("--safety-replay", type=float, default=0.15)
     parser.add_argument("--visual-contrastive-weight", type=float, default=0.05)
+    parser.add_argument("--augmentation-consistency-weight", type=float, default=0.0)
     parser.add_argument("--actor-learning-rate", type=float, default=3.0e-5)
     parser.add_argument("--final-actor-learning-rate", type=float, default=1.0e-5)
     parser.add_argument("--actor-learning-rate-decay-updates", type=int, default=6500)
@@ -92,8 +93,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--frontier-capacity", type=int, default=16)
     parser.add_argument("--frontier-signature-uniform", type=float, default=0.20)
     parser.add_argument("--frontier-source-capacity", type=int, default=2)
-    parser.add_argument("--frontier-contact-stability", type=int, default=40)
-    parser.add_argument("--frontier-reset-validation-steps", type=int, default=40)
     parser.add_argument("--checkpoint-interval", type=int, default=10)
     return parser
 
@@ -131,6 +130,9 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         progress_replay_fraction=arguments.progress_replay,
         safety_replay_fraction=arguments.safety_replay,
         visual_temporal_contrastive_weight=arguments.visual_contrastive_weight,
+        augmentation_consistency_weight=(
+            arguments.augmentation_consistency_weight
+        ),
         actor_learning_rate=arguments.actor_learning_rate,
         final_actor_learning_rate=arguments.final_actor_learning_rate,
         actor_learning_rate_decay_updates=(
@@ -169,12 +171,6 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         ),
         frontier_max_entries_per_source_signature=(
             arguments.frontier_source_capacity
-        ),
-        frontier_minimum_contact_stability_steps=(
-            arguments.frontier_contact_stability
-        ),
-        frontier_reset_validation_steps=(
-            arguments.frontier_reset_validation_steps
         ),
     )
     output_root = (

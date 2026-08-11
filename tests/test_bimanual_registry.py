@@ -72,7 +72,7 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert lineage["behavior_cloning"] is False
     assert replay["action_labels"] is False
     assert replay["storage"] == {
-        "schema_version": "hwr.asymmetric-replay-storage/v2",
+        "schema_version": "hwr.asymmetric-replay-storage/v3",
         "compressed_actor_fields": [
             "head_depth",
             "head_points",
@@ -85,17 +85,16 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     }
     assert replay["safety_event_size"] == 0
     assert replay["safety_cost_labels"].endswith("observed_severe_collision")
-    assert replay["physical_progress_size"] == 0
-    assert replay["physical_progress_criteria"]["action_labels"] is False
+    assert replay["reward_improvement_size"] >= 0
+    assert replay["task_agnostic_priority_replay"]["action_labels"] is False
     assert set(replay["task_partition_sizes"]) == {
         "carry_dining_tray/v1",
         "carry_living_room_basket/v1",
         "hold_drawer_place_item/v1",
     }
     assert replay["task_sampling"]["task_stages"] is False
-    assert replay["task_sampling"]["reach_metric"] == (
-        "minimum_over_time_of_worst_side_distance"
-    )
+    assert replay["task_sampling"]["distance_thresholds"] is False
+    assert replay["task_sampling"]["task_semantic_fields"] == []
     assert replay["frontier_curriculum"]["task_stages"] is False
     assert replay["frontier_curriculum"]["action_outputs"] is False
     assert replay["action_exploration"]["task_conditioned"] is False
@@ -119,6 +118,10 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert "exploration_rng_state" in checkpoint
     assert "numpy_rng_state" not in checkpoint
     assert replay["hindsight_transition_count"] == 2
+    assert replay["environment_augmentation_consistency"]["actor_input_field"] is False
+    assert replay["environment_augmentation_consistency"]["target"].endswith(
+        "without-action-labels"
+    )
     assert model["contains_critic"] is False
     assert actor.config.action_dim == 16
     assert manifest["rl_config"]["actor_learning_rate"] == (
@@ -198,6 +201,7 @@ def test_training_fork_records_parent_hashes_and_only_exploration_changes(
         actuator_dwell_probability=0.001,
         actuator_dwell_steps=260,
         frontier_reset_probability=0.70,
+        augmentation_consistency_weight=0.20,
     )
     runner = BimanualTrainingRunner(
         tasks,
@@ -227,6 +231,7 @@ def test_training_fork_records_parent_hashes_and_only_exploration_changes(
         "actuator_dwell_steps",
         "episodes",
         "frontier_reset_probability",
+        "augmentation_consistency_weight",
         "replay_capacity",
     }
     assert len(provenance["parent_checkpoint_sha256"]) == 64

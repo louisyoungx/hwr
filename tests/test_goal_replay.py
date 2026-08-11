@@ -12,13 +12,16 @@ from hwr.train import (
     GoalConditionedReplayBuffer,
     GoalEpisode,
     hindsight_relabel,
-    mirror_batch,
+    transform_batch,
 )
 from hwr.train.asymmetric_rl import AsymmetricRLBatch
+from hwr.train.environment_augmentation import LATERAL_REFLECTION
 from tests.test_asymmetric_rl import _actor_inputs
 
 
-def _episode(*, success: bool = False, mirrorable: bool = True) -> GoalEpisode:
+def _episode(
+    *, success: bool = False, legal_transforms: tuple[str, ...] = (LATERAL_REFLECTION,)
+) -> GoalEpisode:
     count = 4
     achieved = torch.zeros(count, BIMANUAL_GOAL_DIM)
     achieved[:, 0] = torch.arange(count, dtype=torch.float32) * 0.1
@@ -44,6 +47,7 @@ def _episode(*, success: bool = False, mirrorable: bool = True) -> GoalEpisode:
         stop_decisions=torch.zeros(count, 3),
         rewards=torch.full((count,), -0.1),
         done=torch.zeros(count),
+        augmentation_transform_indices=torch.zeros(count, dtype=torch.int64),
     )
     return GoalEpisode(
         batch,
@@ -51,7 +55,7 @@ def _episode(*, success: bool = False, mirrorable: bool = True) -> GoalEpisode:
         next_achieved,
         desired,
         success=success,
-        mirrorable=mirrorable,
+        legal_transforms=legal_transforms,
     )
 
 
@@ -65,6 +69,7 @@ def test_hindsight_relabels_only_critic_goal_and_zero_weights_actor() -> None:
     assert not torch.equal(desired, episode.desired_goals)
     assert torch.equal(relabeled.actor_inputs["instruction_embedding"], episode.batch.actor_inputs["instruction_embedding"])
     assert torch.count_nonzero(relabeled.actor_weights) == 0
+    assert torch.count_nonzero(relabeled.augmentation_transform_indices) == 0
     assert torch.isfinite(relabeled.rewards).all()
 
 
@@ -81,7 +86,7 @@ def test_mirror_swaps_arms_wrists_actions_and_continuous_goal_sides() -> None:
     batch.privileged_state[:, 24] = 1.0
     batch.privileged_state[:, 25] = 2.0
 
-    mirrored = mirror_batch(batch)
+    mirrored = transform_batch(batch, LATERAL_REFLECTION)
 
     assert torch.all(mirrored.actor_inputs["left_wrist_rgb"] == 2.0)
     assert torch.all(mirrored.actor_inputs["right_wrist_rgb"] == 1.0)
@@ -103,30 +108,35 @@ def test_mirror_swaps_arms_wrists_actions_and_continuous_goal_sides() -> None:
     assert torch.all(mirrored.privileged_state[:, 24] == 2.0)
     assert torch.all(mirrored.privileged_state[:, 25] == 1.0)
 
-    restored = mirror_batch(mirrored)
+    restored = transform_batch(mirrored, LATERAL_REFLECTION)
     assert torch.equal(restored.action_chunks, batch.action_chunks)
     assert torch.equal(restored.proposed_action_chunks, batch.proposed_action_chunks)
+    assert torch.equal(
+        restored.augmentation_transform_indices,
+        batch.augmentation_transform_indices,
+    )
 
 
 def test_failed_episode_returns_original_her_and_mirrors_to_priority_replay() -> None:
     replay = GoalConditionedReplayBuffer(64, seed=7)
 
-    result = replay.add_episode(_episode(success=False, mirrorable=True))
+    result = replay.add_episode(_episode(success=False))
     sampled = replay.sample(8, failure_fraction=0.5)
 
     assert result.original_count == 4
     assert result.hindsight_count == 4
-    assert result.mirror_count == 8
+    assert result.augmentation_count == 8
     assert result.failure_return_count == 16
     assert replay.size == replay.failure_size == 16
-    assert replay.discovery_size == 8
+    assert replay.discovery_size == 4
     assert sampled.rewards.shape == (8,)
     assert sampled.actor_weights is not None
+    assert torch.all(sampled.augmentation_transform_indices == 1)
     assert set(sampled.actor_weights.tolist()).issubset({0.0, 1.0})
 
 
 def test_runtime_interventions_receive_a_dedicated_safety_replay_quota() -> None:
-    episode = _episode(success=False, mirrorable=False)
+    episode = _episode(success=False, legal_transforms=())
     batch = replace(
         episode.batch,
         proposed_action_chunks=episode.batch.action_chunks.clone(),
@@ -148,8 +158,8 @@ def test_runtime_interventions_receive_a_dedicated_safety_replay_quota() -> None
     assert torch.all(sampled.actor_weights[-4:] == 1.0)
 
 
-def test_rare_one_sided_near_grasp_states_enter_discovery_replay() -> None:
-    episode = _episode(success=False, mirrorable=False)
+def test_geometry_fields_do_not_control_state_novelty_replay() -> None:
+    episode = _episode(success=False, legal_transforms=())
     near_state = episode.batch.next_privileged_state.clone()
     near_state[:, 24] = 0.04
     near_state[:, 25] = 0.20
@@ -164,9 +174,8 @@ def test_rare_one_sided_near_grasp_states_enter_discovery_replay() -> None:
         safety_fraction=0.0,
     )
 
-    assert replay.discovery_size == 4
-    assert int((sampled.next_privileged_state[:, 24] < 0.06).sum()) >= 3
-    assert torch.all(sampled.actor_weights[-3:] == 1.0)
+    assert replay.discovery_size == 2
+    assert torch.all(sampled.actor_weights[-2:] == 1.0)
 
     outside_state = near_state.clone()
     outside_state[:, 24] = 0.061
@@ -177,11 +186,11 @@ def test_rare_one_sided_near_grasp_states_enter_discovery_replay() -> None:
             batch=replace(episode.batch, next_privileged_state=outside_state),
         )
     )
-    assert outside.discovery_size == 0
+    assert outside.discovery_size == replay.discovery_size
 
 
-def test_jointly_near_states_enter_discovery_replay_without_one_close_side() -> None:
-    episode = _episode(success=False, mirrorable=False)
+def test_joint_reach_values_do_not_create_a_training_branch() -> None:
+    episode = _episode(success=False, legal_transforms=())
     jointly_near = episode.batch.next_privileged_state.clone()
     jointly_near[:, 24] = 0.08
     jointly_near[:, 25] = 0.09
@@ -194,7 +203,7 @@ def test_jointly_near_states_enter_discovery_replay_without_one_close_side() -> 
         )
     )
 
-    assert replay.discovery_size == 4
+    assert replay.discovery_size == 2
     outside = jointly_near.clone()
     outside[:, 25] = 0.101
     rejected = GoalConditionedReplayBuffer(64, seed=16)
@@ -204,11 +213,11 @@ def test_jointly_near_states_enter_discovery_replay_without_one_close_side() -> 
             batch=replace(episode.batch, next_privileged_state=outside),
         )
     )
-    assert rejected.discovery_size == 0
+    assert rejected.discovery_size == replay.discovery_size
 
 
-def test_controlled_task_progress_receives_a_dedicated_replay_quota() -> None:
-    episode = _episode(success=False, mirrorable=False)
+def test_high_environment_rewards_receive_a_ranked_replay_quota() -> None:
+    episode = _episode(success=False, legal_transforms=())
     state = episode.batch.privileged_state.clone()
     next_state = episode.batch.next_privileged_state.clone()
     next_state[:, 60] = torch.tensor((0.0, 0.01, 0.02, 0.03))
@@ -224,6 +233,7 @@ def test_controlled_task_progress_receives_a_dedicated_replay_quota() -> None:
                 privileged_state=state,
                 next_privileged_state=next_state,
                 action_chunks=actions,
+                rewards=torch.tensor((-0.4, -0.3, 0.2, 0.9)),
             ),
         )
     )
@@ -235,16 +245,15 @@ def test_controlled_task_progress_receives_a_dedicated_replay_quota() -> None:
         safety_fraction=0.0,
     )
 
-    assert replay.progress_size == 3
-    deltas = sampled.next_privileged_state[:, 60] - sampled.privileged_state[:, 60]
-    assert int((deltas > 1.0e-5).sum()) >= 3
-    assert torch.all(sampled.actor_weights[-3:] == 1.0)
+    assert replay.progress_size == 2
+    assert int((sampled.rewards > 0.0).sum()) >= 2
+    assert torch.all(sampled.actor_weights[-2:] == 1.0)
 
     legacy = replay.state_dict()
     legacy.pop("progress_event_schema")
     restored = GoalConditionedReplayBuffer(64, seed=18)
     restored.load_state_dict(legacy)
-    assert restored.progress_size == 3
+    assert restored.progress_size == 2
 
     passive = GoalConditionedReplayBuffer(64, seed=20)
     passive.add_episode(
@@ -257,7 +266,7 @@ def test_controlled_task_progress_receives_a_dedicated_replay_quota() -> None:
             ),
         )
     )
-    assert passive.progress_size == 0
+    assert passive.progress_size == 2
 
     far_next = next_state.clone()
     far_next[:, 0] = 4.0
@@ -273,7 +282,7 @@ def test_controlled_task_progress_receives_a_dedicated_replay_quota() -> None:
             ),
         )
     )
-    assert far.progress_size == 0
+    assert far.progress_size == 2
 
 
 def test_automatic_curriculum_expands_only_after_safe_success_window() -> None:

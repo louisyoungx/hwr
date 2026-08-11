@@ -1,25 +1,25 @@
-"""Failure-aware replay with critic-only HER and bimanual mirror augmentation."""
+"""Failure-aware replay with critic-only HER and legal environment transforms."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Mapping
 
 import torch
 
-from hwr.policy.vla_input import VLA_POLICY_INPUT_FIELDS
-from hwr.core.embodied import DUAL_ARM_TOOL_TWIST_REFLECTION_SIGNS
 from hwr.tasks import BIMANUAL_GOAL_DIM
 from hwr.train.asymmetric_replay import AsymmetricReplayBuffer
 from hwr.train.asymmetric_rl import AsymmetricRLBatch
+from hwr.train.environment_augmentation import (
+    environment_transform_index,
+    transform_action,
+    transform_actor_inputs,
+    transform_privileged,
+)
 
 
-DISCOVERY_REACH_DISTANCE_METERS = 0.06
-BILATERAL_DISCOVERY_REACH_DISTANCE_METERS = 0.10
-CONTROLLED_PROGRESS_EPSILON = 1.0e-5
-PROGRESS_REPLAY_MAX_TARGET_DISTANCE_METERS = 1.10
-PROGRESS_REPLAY_MIN_APPLIED_MOTION = 1.0e-4
-PROGRESS_REPLAY_SCHEMA = "hwr.autonomous-physical-progress/v2"
+PROGRESS_REPLAY_SCHEMA = "hwr.task-agnostic-reward-improvement/v3"
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class GoalEpisode:
     next_achieved_goals: torch.Tensor
     desired_goals: torch.Tensor
     success: bool
-    mirrorable: bool
+    legal_transforms: tuple[str, ...]
 
     def __post_init__(self) -> None:
         count = self.batch.rewards.shape[0]
@@ -50,13 +50,15 @@ class GoalEpisode:
         desired_slice = state[:, BIMANUAL_GOAL_DIM : 2 * BIMANUAL_GOAL_DIM]
         if not torch.allclose(desired_slice, self.desired_goals):
             raise ValueError("privileged state desired-goal prefix differs")
+        for name in self.legal_transforms:
+            environment_transform_index(name)
 
 
 @dataclass(frozen=True)
 class GoalReplayAddResult:
     original_count: int
     hindsight_count: int
-    mirror_count: int
+    augmentation_count: int
     failure_return_count: int
 
 
@@ -73,6 +75,11 @@ def _slice_batch(batch: AsymmetricRLBatch, indices: torch.Tensor) -> AsymmetricR
         done=batch.done[indices],
         actor_weights=(
             batch.actor_weights[indices] if batch.actor_weights is not None else None
+        ),
+        augmentation_transform_indices=(
+            batch.augmentation_transform_indices[indices]
+            if batch.augmentation_transform_indices is not None
+            else None
         ),
         proposed_action_chunks=(
             batch.proposed_action_chunks[indices]
@@ -101,6 +108,29 @@ def _with_actor_weights(batch: AsymmetricRLBatch, value: float) -> AsymmetricRLB
         rewards=batch.rewards,
         done=batch.done,
         actor_weights=torch.full_like(batch.rewards, value),
+        augmentation_transform_indices=batch.augmentation_transform_indices,
+        proposed_action_chunks=batch.proposed_action_chunks,
+        safety_costs=batch.safety_costs,
+        bootstrap_discounts=batch.bootstrap_discounts,
+    )
+
+
+def _with_transform_index(
+    batch: AsymmetricRLBatch, index: int
+) -> AsymmetricRLBatch:
+    return AsymmetricRLBatch(
+        actor_inputs=batch.actor_inputs,
+        next_actor_inputs=batch.next_actor_inputs,
+        privileged_state=batch.privileged_state,
+        next_privileged_state=batch.next_privileged_state,
+        action_chunks=batch.action_chunks,
+        stop_decisions=batch.stop_decisions,
+        rewards=batch.rewards,
+        done=batch.done,
+        actor_weights=batch.actor_weights,
+        augmentation_transform_indices=torch.full_like(
+            batch.rewards, index, dtype=torch.int64
+        ),
         proposed_action_chunks=batch.proposed_action_chunks,
         safety_costs=batch.safety_costs,
         bootstrap_discounts=batch.bootstrap_discounts,
@@ -156,104 +186,45 @@ def hindsight_relabel(
         rewards=_hindsight_reward(episode.next_achieved_goals, desired),
         done=success.to(episode.batch.done.dtype),
         actor_weights=torch.zeros_like(episode.batch.rewards),
+        augmentation_transform_indices=(
+            episode.batch.augmentation_transform_indices
+        ),
         proposed_action_chunks=episode.batch.proposed_action_chunks,
         safety_costs=episode.batch.safety_costs,
         bootstrap_discounts=bootstrap,
     )
 
 
-def _mirror_goal(goal: torch.Tensor) -> torch.Tensor:
-    value = goal.clone()
-    value[:, 1] *= -1
-    value[:, [7, 8]] = value[:, [8, 7]]
-    return value
-
-
-def _mirror_action(value: torch.Tensor) -> torch.Tensor:
-    mirrored = value.clone()
-    # Reflection across the robot's x-z plane. Linear velocity is a polar
-    # vector (vx, -vy, vz), while angular velocity is an axial vector and
-    # therefore gains the extra determinant sign (-wx, wy, -wz).
-    signs = torch.tensor(
-        DUAL_ARM_TOOL_TWIST_REFLECTION_SIGNS, dtype=value.dtype
-    )
-    mirrored[..., 1] *= -1
-    mirrored[..., 2:8] = value[..., 8:14] * signs.to(value.device)
-    mirrored[..., 8:14] = value[..., 2:8] * signs.to(value.device)
-    mirrored[..., 14] = value[..., 15]
-    mirrored[..., 15] = value[..., 14]
-    return mirrored
-
-
-def _mirror_proprioception(value: torch.Tensor) -> torch.Tensor:
-    mirrored = value.clone()
-    signs = torch.tensor((-1, 1, 1, -1, 1, -1), dtype=value.dtype).to(value.device)
-    mirrored[:, 0:6] = value[:, 12:18] * signs
-    mirrored[:, 6:12] = value[:, 18:24] * signs
-    mirrored[:, 12:18] = value[:, 0:6] * signs
-    mirrored[:, 18:24] = value[:, 6:12] * signs
-    mirrored[:, 24] = value[:, 25]
-    mirrored[:, 25] = value[:, 24]
-    if value.shape[1] >= 31:
-        mirrored[:, 27] *= -1
-        mirrored[:, 28] *= -1
-        mirrored[:, 30] *= -1
-    return mirrored
-
-
-def _mirror_actor_inputs(inputs: Mapping[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    if frozenset(inputs) != VLA_POLICY_INPUT_FIELDS:
-        raise ValueError("mirror augmentation received non-deployable Actor fields")
-    value = {name: tensor.clone() for name, tensor in inputs.items()}
-    value["head_rgb"] = torch.flip(inputs["head_rgb"], dims=(-2,))
-    value["head_depth"] = torch.flip(inputs["head_depth"], dims=(-1,))
-    value["head_depth_valid"] = torch.flip(inputs["head_depth_valid"], dims=(-1,))
-    value["left_wrist_rgb"] = torch.flip(inputs["right_wrist_rgb"], dims=(-2,))
-    value["right_wrist_rgb"] = torch.flip(inputs["left_wrist_rgb"], dims=(-2,))
-    value["head_points"][..., 1] *= -1
-    value["camera_validity"][..., [2, 3]] = inputs["camera_validity"][..., [3, 2]]
-    value["proprioception"] = _mirror_proprioception(inputs["proprioception"])
-    value["action_history"] = _mirror_action(inputs["action_history"])
-    return value
-
-
-def _mirror_privileged(value: torch.Tensor) -> torch.Tensor:
-    mirrored = value.clone()
-    mirrored[:, :BIMANUAL_GOAL_DIM] = _mirror_goal(
-        value[:, :BIMANUAL_GOAL_DIM]
-    )
-    goal = slice(BIMANUAL_GOAL_DIM, 2 * BIMANUAL_GOAL_DIM)
-    mirrored[:, goal] = _mirror_goal(value[:, goal])
-    mirrored[:, [24, 25]] = value[:, [25, 24]]
-    mirrored[:, 27] *= -1
-    signs = torch.tensor((-1, 1, 1, -1, 1, -1), dtype=value.dtype).to(value.device)
-    for left, right in ((29, 35), (41, 47)):
-        mirrored[:, left : left + 6] = value[:, right : right + 6] * signs
-        mirrored[:, right : right + 6] = value[:, left : left + 6] * signs
-    mirrored[:, [53, 54]] = value[:, [54, 53]]
-    mirrored[:, 56] *= -1
-    mirrored[:, 57] *= -1
-    mirrored[:, 59] *= -1
-    return mirrored
-
-
-def mirror_batch(batch: AsymmetricRLBatch) -> AsymmetricRLBatch:
+def transform_batch(
+    batch: AsymmetricRLBatch, transform_id: str
+) -> AsymmetricRLBatch:
     if batch.privileged_state.shape[1] != 62:
-        raise ValueError("mirror augmentation requires the bimanual critic layout")
+        raise ValueError("environment augmentation requires the bimanual critic layout")
     return AsymmetricRLBatch(
-        actor_inputs=_mirror_actor_inputs(batch.actor_inputs),
-        next_actor_inputs=_mirror_actor_inputs(batch.next_actor_inputs),
-        privileged_state=_mirror_privileged(batch.privileged_state),
-        next_privileged_state=_mirror_privileged(batch.next_privileged_state),
-        action_chunks=_mirror_action(batch.action_chunks),
+        actor_inputs=transform_actor_inputs(batch.actor_inputs, transform_id),
+        next_actor_inputs=transform_actor_inputs(
+            batch.next_actor_inputs, transform_id
+        ),
+        privileged_state=transform_privileged(
+            batch.privileged_state, transform_id
+        ),
+        next_privileged_state=transform_privileged(
+            batch.next_privileged_state, transform_id
+        ),
+        action_chunks=transform_action(batch.action_chunks, transform_id),
         stop_decisions=batch.stop_decisions.clone(),
         rewards=batch.rewards.clone(),
         done=batch.done.clone(),
         actor_weights=(
             batch.actor_weights.clone() if batch.actor_weights is not None else None
         ),
+        augmentation_transform_indices=(
+            batch.augmentation_transform_indices.clone()
+            if batch.augmentation_transform_indices is not None
+            else None
+        ),
         proposed_action_chunks=(
-            _mirror_action(batch.proposed_action_chunks)
+            transform_action(batch.proposed_action_chunks, transform_id)
             if batch.proposed_action_chunks is not None
             else None
         ),
@@ -275,6 +246,17 @@ def _concat_batches(first: AsymmetricRLBatch, second: AsymmetricRLBatch) -> Asym
     weights = (
         torch.cat((first.actor_weights, second.actor_weights))
         if first.actor_weights is not None and second.actor_weights is not None
+        else None
+    )
+    transform_indices = (
+        torch.cat(
+            (
+                first.augmentation_transform_indices,
+                second.augmentation_transform_indices,
+            )
+        )
+        if first.augmentation_transform_indices is not None
+        and second.augmentation_transform_indices is not None
         else None
     )
     proposals = (
@@ -306,6 +288,7 @@ def _concat_batches(first: AsymmetricRLBatch, second: AsymmetricRLBatch) -> Asym
         rewards=torch.cat((first.rewards, second.rewards)),
         done=torch.cat((first.done, second.done)),
         actor_weights=weights,
+        augmentation_transform_indices=transform_indices,
         proposed_action_chunks=proposals,
         safety_costs=safety,
         bootstrap_discounts=bootstrap,
@@ -330,7 +313,7 @@ class GoalConditionedReplayBuffer:
         self._generator = torch.Generator().manual_seed(seed ^ 0x4E2)
         self.episode_count = 0
         self.hindsight_count = 0
-        self.mirror_count = 0
+        self.augmentation_count = 0
 
     @property
     def size(self) -> int:
@@ -356,10 +339,23 @@ class GoalConditionedReplayBuffer:
         original = _with_actor_weights(episode.batch, 1.0)
         hindsight = hindsight_relabel(episode, self._generator)
         batches = [original, hindsight]
-        mirror_count = 0
-        if episode.mirrorable:
-            batches.extend((mirror_batch(original), mirror_batch(hindsight)))
-            mirror_count = 2 * original.rewards.shape[0]
+        augmentation_count = 0
+        transforms = episode.legal_transforms
+        if transforms:
+            index = environment_transform_index(transforms[0])
+            original = _with_transform_index(original, index)
+            hindsight = _with_transform_index(hindsight, index)
+            batches = [original, hindsight]
+        for transform_id in transforms:
+            index = environment_transform_index(transform_id)
+            transformed_original = transform_batch(
+                _with_transform_index(original, index), transform_id
+            )
+            transformed_hindsight = transform_batch(
+                _with_transform_index(hindsight, index), transform_id
+            )
+            batches.extend((transformed_original, transformed_hindsight))
+            augmentation_count += 2 * original.rewards.shape[0]
         for batch in batches:
             self.regular.add(batch)
             if not episode.success:
@@ -367,19 +363,19 @@ class GoalConditionedReplayBuffer:
         self._add_discoveries(original)
         self._add_progress_events(original)
         self._add_safety_events(original)
-        if episode.mirrorable:
-            mirrored = mirror_batch(original)
-            self._add_discoveries(mirrored)
-            self._add_progress_events(mirrored)
-            self._add_safety_events(mirrored)
+        for transform_id in transforms:
+            transformed = transform_batch(original, transform_id)
+            self._add_discoveries(transformed)
+            self._add_progress_events(transformed)
+            self._add_safety_events(transformed)
         count = original.rewards.shape[0]
         self.episode_count += 1
         self.hindsight_count += count
-        self.mirror_count += mirror_count
+        self.augmentation_count += augmentation_count
         return GoalReplayAddResult(
             original_count=count,
             hindsight_count=count,
-            mirror_count=mirror_count,
+            augmentation_count=augmentation_count,
             failure_return_count=sum(batch.rewards.shape[0] for batch in batches)
             if not episode.success
             else 0,
@@ -453,25 +449,19 @@ class GoalConditionedReplayBuffer:
         return result
 
     def _add_discoveries(self, batch: AsymmetricRLBatch) -> None:
-        state = batch.next_privileged_state
-        any_contact = (state[:, 7] > 0.5) | (state[:, 8] > 0.5)
-        either_side_near = (
-            state[:, 24] < DISCOVERY_REACH_DISTANCE_METERS
-        ) | (state[:, 25] < DISCOVERY_REACH_DISTANCE_METERS)
-        bilateral_near = torch.maximum(state[:, 24], state[:, 25]) <= (
-            BILATERAL_DISCOVERY_REACH_DISTANCE_METERS
-        )
-        safe = state[:, 11] < 0.5
         actor_eligible = (
             batch.actor_weights > 0
             if batch.actor_weights is not None
-            else torch.ones_like(safe)
+            else torch.ones_like(batch.rewards, dtype=torch.bool)
         )
-        indices = torch.nonzero(
-            (any_contact | either_side_near | bilateral_near)
-            & safe
-            & actor_eligible
-        ).flatten()
+        if batch.safety_costs is not None:
+            actor_eligible &= batch.safety_costs <= 0.0
+        state = torch.nn.functional.normalize(batch.privileged_state, dim=1)
+        next_state = torch.nn.functional.normalize(
+            batch.next_privileged_state, dim=1
+        )
+        novelty = 1.0 - (state * next_state).sum(dim=1)
+        indices = _top_ranked_indices(novelty, actor_eligible)
         if indices.numel():
             self.discoveries.add(_slice_batch(batch, indices))
 
@@ -495,29 +485,11 @@ class GoalConditionedReplayBuffer:
             if batch.actor_weights is not None
             else torch.ones_like(batch.rewards, dtype=torch.bool)
         )
-        target_delta = (
-            batch.next_privileged_state[:, 60] - batch.privileged_state[:, 60]
-        )
-        articulation_delta = (
-            batch.next_privileged_state[:, 61] - batch.privileged_state[:, 61]
-        )
-        progressed = (target_delta > CONTROLLED_PROGRESS_EPSILON) | (
-            articulation_delta > CONTROLLED_PROGRESS_EPSILON
-        )
-        target_distance = torch.linalg.vector_norm(
-            batch.next_privileged_state[:, 0:3]
-            - batch.next_privileged_state[:, 12:15],
-            dim=1,
-        )
-        in_workspace = target_distance <= PROGRESS_REPLAY_MAX_TARGET_DISTANCE_METERS
-        applied_motion = batch.action_chunks[..., :14].abs().amax(dim=(1, 2))
-        actively_moving = applied_motion > PROGRESS_REPLAY_MIN_APPLIED_MOTION
-        indices = torch.nonzero(
-            progressed & in_workspace & actively_moving & actor_eligible
-        ).flatten()
+        if batch.safety_costs is not None:
+            actor_eligible &= batch.safety_costs <= 0.0
+        indices = _top_ranked_indices(batch.rewards, actor_eligible)
         if indices.numel():
             self.progress_events.add(_slice_batch(batch, indices))
-
     def state_dict(self) -> dict[str, object]:
         return {
             "regular": self.regular.state_dict(),
@@ -529,7 +501,7 @@ class GoalConditionedReplayBuffer:
             "generator_state": self._generator.get_state(),
             "episode_count": self.episode_count,
             "hindsight_count": self.hindsight_count,
-            "mirror_count": self.mirror_count,
+            "augmentation_count": self.augmentation_count,
         }
 
     def load_state_dict(self, value: Mapping[str, object]) -> None:
@@ -553,4 +525,17 @@ class GoalConditionedReplayBuffer:
         self._generator.set_state(value["generator_state"])
         self.episode_count = int(value["episode_count"])
         self.hindsight_count = int(value["hindsight_count"])
-        self.mirror_count = int(value["mirror_count"])
+        self.augmentation_count = int(
+            value.get("augmentation_count", value.get("mirror_count", 0))
+        )
+
+
+def _top_ranked_indices(
+    values: torch.Tensor, eligible: torch.Tensor
+) -> torch.Tensor:
+    indices = torch.nonzero(eligible).flatten()
+    if not indices.numel():
+        return indices
+    keep = max(1, math.ceil(math.sqrt(indices.numel())))
+    order = torch.argsort(values[indices], descending=True, stable=True)
+    return indices[order[:keep]]

@@ -110,6 +110,7 @@ class BimanualTaskSpec:
     criteria: SuccessCriteria
     reward: RewardWeights
     randomization: DomainRandomization
+    legal_transforms: tuple[str, ...] = ()
     schema_version: str = "hwr.bimanual-task/v1"
 
     def __post_init__(self) -> None:
@@ -124,6 +125,10 @@ class BimanualTaskSpec:
             raise ValueError("target position requires three values")
         object.__setattr__(self, "instruction", " ".join(self.instruction.split()))
         object.__setattr__(self, "target_position", target)
+        transforms = tuple(dict.fromkeys(self.legal_transforms))
+        if any(not item or item != "_".join(item.strip().lower().split()) for item in transforms):
+            raise ValueError("legal environment transforms must be normalized identifiers")
+        object.__setattr__(self, "legal_transforms", transforms)
 
     @property
     def hold_steps(self) -> int:
@@ -477,6 +482,7 @@ def load_bimanual_task_specs(path: Path) -> dict[str, BimanualTaskSpec]:
             criteria=criteria,
             reward=reward,
             randomization=randomization,
+            legal_transforms=tuple(item.get("legal_transforms", ())),
         )
         if spec.task_id in specs:
             raise ValueError(f"duplicate bimanual task: {spec.task_id}")

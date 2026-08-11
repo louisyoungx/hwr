@@ -21,6 +21,11 @@ from hwr.train.stochastic_action import (
     SquashedGaussianAction,
     sample_squashed_gaussian_action,
 )
+from hwr.train.environment_augmentation import (
+    environment_transform_name,
+    transform_action,
+    transform_actor_inputs,
+)
 from hwr.train.visual_self_supervision import temporal_visual_contrastive_loss
 
 
@@ -55,6 +60,7 @@ class AsymmetricRLConfig:
     arm_velocity_scale: float = 0.35
     visual_temporal_contrastive_weight: float = 0.0
     visual_contrastive_temperature: float = 0.1
+    augmentation_consistency_weight: float = 0.0
 
     def __post_init__(self) -> None:
         if min(
@@ -91,6 +97,7 @@ class AsymmetricRLConfig:
             self.safety_actor_penalty,
             self.conservative_critic_weight,
             self.visual_temporal_contrastive_weight,
+            self.augmentation_consistency_weight,
         )
         if min(regularizers) < 0.0:
             raise ValueError("entropy and action penalties cannot be negative")
@@ -142,6 +149,7 @@ class AsymmetricRLBatch:
     rewards: torch.Tensor
     done: torch.Tensor
     actor_weights: torch.Tensor | None = None
+    augmentation_transform_indices: torch.Tensor | None = None
     proposed_action_chunks: torch.Tensor | None = None
     safety_costs: torch.Tensor | None = None
     bootstrap_discounts: torch.Tensor | None = None
@@ -263,6 +271,7 @@ class AsymmetricActorCriticTrainer:
             "actor_gripper_log_standard_deviation": 0.0,
             "actor_learning_rate": 0.0,
             "visual_contrastive_loss": 0.0,
+            "augmentation_consistency_loss": 0.0,
         }
         actor_updated = (
             self.update_count >= self.config.actor_warmup_updates
@@ -282,6 +291,32 @@ class AsymmetricActorCriticTrainer:
             "update": float(self.update_count),
             **actor_metrics,
         }
+
+    def estimate_td_error(self, batch: AsymmetricRLBatch) -> torch.Tensor:
+        """Return deterministic per-transition Bellman error for curricula."""
+        batch = self._to_device(batch)
+        self._validate_batch(batch)
+        with torch.inference_mode():
+            next_output = self.target_actor(batch.next_actor_inputs)
+            next_values = bounded_vla_actions(
+                next_output, self.config.action_scaling()
+            )
+            next_action = self._critic_action(next_output, next_values)
+            target_q1, target_q2 = self.target_critic(
+                batch.next_privileged_state, next_action
+            )
+            bootstrap = (
+                batch.bootstrap_discounts
+                if batch.bootstrap_discounts is not None
+                else (1.0 - batch.done) * self.config.discount
+            )
+            target = batch.rewards * self.config.reward_scale + bootstrap * torch.minimum(
+                target_q1, target_q2
+            )
+            executed = _executed_action_representation(batch)
+            q1, q2 = self.critic(batch.privileged_state, executed)
+            error = 0.5 * ((q1 - target).abs() + (q2 - target).abs())
+        return error.detach().cpu()
 
     def _update_critic(
         self, batch: AsymmetricRLBatch
@@ -464,6 +499,8 @@ class AsymmetricActorCriticTrainer:
             )
         ).sum() / denominator
         loss += self.config.visual_temporal_contrastive_weight * visual_loss
+        augmentation_loss = self._augmentation_consistency_loss(batch)
+        loss += self.config.augmentation_consistency_weight * augmentation_loss
         self.actor_optimizer.zero_grad(set_to_none=True)
         loss.backward()
         nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
@@ -498,8 +535,48 @@ class AsymmetricActorCriticTrainer:
                 self.actor_optimizer.param_groups[0]["lr"]
             ),
             "visual_contrastive_loss": float(visual_loss.detach().cpu()),
+            "augmentation_consistency_loss": float(
+                augmentation_loss.detach().cpu()
+            ),
         }
         return loss, metrics
+
+    def _augmentation_consistency_loss(
+        self, batch: AsymmetricRLBatch
+    ) -> torch.Tensor:
+        indices = batch.augmentation_transform_indices
+        if self.config.augmentation_consistency_weight <= 0.0 or indices is None:
+            return torch.zeros((), device=self.device)
+        weights = (indices > 0).to(batch.rewards.dtype)
+        if batch.actor_weights is not None:
+            weights = weights * (batch.actor_weights > 0).to(weights.dtype)
+        denominator = weights.sum()
+        if denominator <= 0:
+            return torch.zeros((), device=self.device)
+        with torch.no_grad():
+            source = bounded_vla_actions(
+                self.target_actor(batch.actor_inputs),
+                self.config.action_scaling(),
+            )
+        per_transition = torch.zeros_like(weights)
+        for index in torch.unique(indices).tolist():
+            if int(index) <= 0:
+                continue
+            transform_id = environment_transform_name(int(index))
+            target = transform_action(source, transform_id)
+            predicted = bounded_vla_actions(
+                self.actor(transform_actor_inputs(batch.actor_inputs, transform_id)),
+                self.config.action_scaling(),
+            )
+            scales = _action_scales(self.config, predicted)
+            error = (predicted - target) / scales
+            row_loss = nn.functional.smooth_l1_loss(
+                error,
+                torch.zeros_like(error),
+                reduction="none",
+            ).mean(dim=(1, 2))
+            per_transition = torch.where(indices == index, row_loss, per_transition)
+        return (weights * per_transition).sum() / denominator
 
     def _schedule_actor_learning_rate(self) -> None:
         learning_rate = (
@@ -587,6 +664,10 @@ class AsymmetricActorCriticTrainer:
             batch_size,
         ):
             raise ValueError("asymmetric RL Actor weights shape is invalid")
+        if batch.augmentation_transform_indices is not None and tuple(
+            batch.augmentation_transform_indices.shape
+        ) != (batch_size,):
+            raise ValueError("augmentation transform indices shape is invalid")
         if batch.bootstrap_discounts is not None and tuple(
             batch.bootstrap_discounts.shape
         ) != (batch_size,):
@@ -614,6 +695,11 @@ class AsymmetricActorCriticTrainer:
             actor_weights=(
                 batch.actor_weights.to(self.device)
                 if batch.actor_weights is not None
+                else None
+            ),
+            augmentation_transform_indices=(
+                batch.augmentation_transform_indices.to(self.device)
+                if batch.augmentation_transform_indices is not None
                 else None
             ),
             proposed_action_chunks=(

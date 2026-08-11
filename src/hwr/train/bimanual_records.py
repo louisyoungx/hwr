@@ -28,6 +28,10 @@ class TrainingEpisodeRecord:
     bilateral_near_steps: int = 0
     maximum_bilateral_near_steps: int = 0
     safety_interventions: int = 0
+    mean_state_novelty: float = 0.0
+    mean_td_error: float = 0.0
+    reward_improvement: float = 0.0
+    failure_boundary: float = 0.0
     sampling_probability: float = 1.0 / 3.0
     actor_updates: int = 0
     mean_critic_loss: float = 0.0
@@ -42,6 +46,7 @@ class TrainingEpisodeRecord:
     mean_actor_entropy: float = 0.0
     mean_actor_motion_log_standard_deviation: float = 0.0
     mean_actor_gripper_log_standard_deviation: float = 0.0
+    mean_actor_augmentation_consistency_loss: float = 0.0
     actor_learning_rate: float = 0.0
     frontier_reset: bool = False
     frontier_source_episode: int = -1

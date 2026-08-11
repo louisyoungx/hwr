@@ -10,78 +10,93 @@ from hwr.train import (
 
 
 def _outcome(
-    left: int, right: int, simultaneous: int, distance: float
+    *,
+    episode_return: float = -1.0,
+    novelty: float = 0.5,
+    td_error: float = 0.5,
+    improvement: float = 0.0,
+    failure: float = 1.0,
 ) -> TaskOutcome:
-    return TaskOutcome(left, right, simultaneous, distance, distance, distance)
+    return TaskOutcome(
+        episode_return,
+        novelty,
+        td_error,
+        improvement,
+        failure,
+        success=not bool(failure),
+        safety_cost_rate=0.0,
+    )
 
 
-def test_outcome_sampler_prioritizes_weak_task_without_starving_others() -> None:
+def test_sampler_prioritizes_generic_learning_pressure_without_starvation() -> None:
     config = OutcomeAdaptiveTaskSamplingConfig(
         initial_cycles=1, minimum_probability=0.10
     )
-    sampler = OutcomeAdaptiveTaskSampler(("basket", "drawer", "tray"), config)
+    sampler = OutcomeAdaptiveTaskSampler(("a", "b", "c"), config)
     for _ in range(6):
-        sampler.record("basket", _outcome(0, 0, 0, 0.22))
-        sampler.record("drawer", _outcome(20, 0, 0, 0.10))
-        sampler.record("tray", _outcome(20, 20, 12, 0.04))
+        sampler.record("a", _outcome(novelty=0.9, td_error=0.9, improvement=-1.0))
+        sampler.record("b", _outcome(novelty=0.5, td_error=0.5, improvement=0.0))
+        sampler.record("c", _outcome(novelty=0.1, td_error=0.1, improvement=1.0, failure=0.0))
 
     probabilities = sampler.probabilities()
 
-    assert probabilities["basket"] > probabilities["drawer"]
-    assert probabilities["drawer"] > probabilities["tray"]
+    assert probabilities["a"] > probabilities["b"] > probabilities["c"]
     assert all(value >= 0.10 for value in probabilities.values())
     assert np.isclose(sum(probabilities.values()), 1.0)
+    assert sampler.audit()["distance_thresholds"] is False
+    assert sampler.audit()["task_semantic_fields"] == []
 
 
-def test_outcome_sampler_initial_coverage_and_state_are_reproducible() -> None:
+def test_sampler_initial_coverage_state_and_reward_improvement() -> None:
     config = OutcomeAdaptiveTaskSamplingConfig(initial_cycles=1)
-    sampler = OutcomeAdaptiveTaskSampler(("basket", "drawer", "tray"), config)
+    sampler = OutcomeAdaptiveTaskSampler(("a", "b", "c"), config)
     rng = np.random.default_rng(7)
 
     initial = [sampler.sample(rng)[0] for _ in range(3)]
-    sampler.record("basket", _outcome(0, 0, 0, 0.2))
-    restored = OutcomeAdaptiveTaskSampler(("basket", "drawer", "tray"), config)
+    sampler.record("a", _outcome(episode_return=2.0))
+    assert sampler.reward_improvement("a", 3.5) == 1.5
+    restored = OutcomeAdaptiveTaskSampler(("a", "b", "c"), config)
     restored.load_state_dict(sampler.state_dict())
 
-    assert initial == ["basket", "drawer", "tray"]
+    assert initial == ["a", "b", "c"]
     assert restored.state_dict() == sampler.state_dict()
     assert sampler.audit()["actor_input_fields"] == []
 
 
-def test_outcome_sampler_uses_weighted_fair_credits_not_random_luck() -> None:
+def test_sampler_uses_weighted_fair_credits_not_random_luck() -> None:
     config = OutcomeAdaptiveTaskSamplingConfig(initial_cycles=1)
-    sampler = OutcomeAdaptiveTaskSampler(("basket", "drawer", "tray"), config)
+    sampler = OutcomeAdaptiveTaskSampler(("a", "b", "c"), config)
     for _ in range(6):
-        sampler.record("basket", _outcome(0, 0, 0, 0.22))
-        sampler.record("drawer", _outcome(20, 0, 0, 0.10))
-        sampler.record("tray", _outcome(20, 20, 12, 0.04))
-    rng = np.random.default_rng(999)
-    selected = [sampler.sample(rng)[0] for _ in range(33)]
+        sampler.record("a", _outcome(novelty=0.9, td_error=0.9, improvement=-1.0))
+        sampler.record("b", _outcome(novelty=0.5, td_error=0.5))
+        sampler.record("c", _outcome(novelty=0.1, td_error=0.1, improvement=1.0, failure=0.0))
+    selected = [sampler.sample(np.random.default_rng(999))[0] for _ in range(33)]
     adaptive = selected[3:]
 
-    assert adaptive.count("basket") > adaptive.count("drawer")
-    assert adaptive.count("drawer") > adaptive.count("tray")
-    assert max(adaptive.count(name) for name in sampler.task_ids) < 20
+    assert adaptive.count("a") > adaptive.count("b") > adaptive.count("c")
+    assert max(adaptive.count(name) for name in sampler.task_ids) < 22
 
 
-def test_outcome_rejects_separate_side_minima_as_joint_reach_evidence() -> None:
-    with np.testing.assert_raises(ValueError):
-        TaskOutcome(0, 0, 0, 0.04, 0.05, 0.03)
+def test_sampler_discards_only_changed_task_history() -> None:
+    sampler = OutcomeAdaptiveTaskSampler(("a", "b", "c"))
+    sampler.record("a", _outcome())
+    sampler.record("c", _outcome())
+    sampler.credits["c"] = 0.4
 
-    outcome = TaskOutcome(0, 0, 0, 0.04, 0.05, 0.18)
+    discarded = sampler.discard_tasks(("c",))
 
-    assert outcome.minimum_worst_side_reach_distance == 0.18
+    assert discarded["c"] == {"history_count": 1, "credit": 0.4}
+    assert len(sampler.history["a"]) == 1
+    assert len(sampler.history["c"]) == 0
 
 
-def test_outcome_sampler_discards_only_changed_task_history() -> None:
-    sampler = OutcomeAdaptiveTaskSampler(("basket", "drawer", "tray"))
-    sampler.record("basket", _outcome(1, 1, 1, 0.05))
-    sampler.record("tray", _outcome(1, 1, 1, 0.05))
-    sampler.credits["tray"] = 0.4
+def test_sampler_discards_legacy_geometry_histories() -> None:
+    sampler = OutcomeAdaptiveTaskSampler(("a",))
+    legacy = sampler.state_dict()
+    legacy.pop("schema_version")
+    legacy["history"]["a"] = [{"minimum_left_reach_distance": 0.1}]
 
-    discarded = sampler.discard_tasks(("tray",))
+    sampler.load_state_dict(legacy)
 
-    assert discarded["tray"] == {"history_count": 1, "credit": 0.4}
-    assert len(sampler.history["basket"]) == 1
-    assert len(sampler.history["tray"]) == 0
-    assert sampler.credits["tray"] == 0.0
+    assert not sampler.history["a"]
+    assert sampler.legacy_discarded_outcome_count == 1

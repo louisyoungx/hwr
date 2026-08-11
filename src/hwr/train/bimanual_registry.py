@@ -52,13 +52,12 @@ FORKABLE_TRAINING_FIELDS = frozenset(
         "frontier_reset_probability",
         "frontier_signature_uniform_fraction",
         "frontier_max_entries_per_source_signature",
-        "frontier_minimum_contact_stability_steps",
-        "frontier_reset_validation_steps",
         "failure_replay_fraction",
         "discovery_replay_fraction",
         "progress_replay_fraction",
         "safety_replay_fraction",
         "visual_temporal_contrastive_weight",
+        "augmentation_consistency_weight",
         *ACTOR_INPUT_SHAPE_FIELDS,
     }
 )
@@ -208,27 +207,26 @@ def save_bimanual_training_run(
         },
         "size": result.replay.size,
         "failure_size": result.replay.failure_size,
-        "discovery_size": result.replay.discovery_size,
-        "physical_progress_size": result.replay.progress_size,
+        "state_novelty_size": result.replay.discovery_size,
+        "reward_improvement_size": result.replay.progress_size,
         "safety_event_size": result.replay.safety_size,
         "episode_count": result.replay.episode_count,
         "hindsight_transition_count": result.replay.hindsight_count,
-        "mirror_transition_count": result.replay.mirror_count,
+        "augmented_transition_count": result.replay.augmentation_count,
+        "environment_augmentation_consistency": {
+            "weight": result.config.augmentation_consistency_weight,
+            "eligibility": "runtime-declared-legal-transform",
+            "target": "ema-actor-transformed-action-without-action-labels",
+            "actor_input_field": False,
+            "privileged_actor_field": False,
+        },
         "action_labels": False,
         "failure_return": True,
-        "discovery_criteria": {
-            "physical_contact": "either_arm",
-            "one_side_reach_meters": 0.06,
-            "bilateral_reach_meters": 0.10,
-            "bilateral_metric": "same_transition_worst_side_distance",
-        },
-        "physical_progress_criteria": {
-            "controlled_target_progress_increase": True,
-            "controlled_articulation_progress_increase": True,
-            "minimum_delta": 1.0e-5,
-            "maximum_target_distance_meters": 1.1,
-            "minimum_applied_motion": 1.0e-4,
-            "passive_settling": False,
+        "task_agnostic_priority_replay": {
+            "state_novelty": "ranked-normalized-critic-state-change",
+            "reward_improvement": "ranked-environment-reward",
+            "distance_thresholds": False,
+            "task_semantic_fields": [],
             "action_labels": False,
         },
         "proposed_actions_for_safety_cost": True,
@@ -327,8 +325,8 @@ def resume_bimanual_training_run(
         and critic_config != runner.trainer.critic_config.to_dict()
     ):
         raise ValueError("resume Critic architecture differs")
-    saved = dict(manifest["training_config"])
     requested = runner.config.to_dict()
+    saved = dict(manifest["training_config"])
     saved.setdefault(
         "discovery_replay_fraction", requested["discovery_replay_fraction"]
     )
@@ -338,6 +336,11 @@ def resume_bimanual_training_run(
     saved.setdefault(
         "progress_replay_fraction", requested["progress_replay_fraction"]
     )
+    if "augmentation_consistency_weight" not in saved:
+        saved["augmentation_consistency_weight"] = saved.pop(
+            "mirror_consistency_weight", 0.0
+        )
+    saved = _normalized_training_config(saved)
     for name in (
         "reflection_coupled_exploration_probability",
         "paired_gripper_exploration_probability",
@@ -352,17 +355,11 @@ def resume_bimanual_training_run(
         "frontier_capacity_per_task",
         "frontier_signature_uniform_fraction",
         "frontier_max_entries_per_source_signature",
-        "frontier_minimum_contact_stability_steps",
-        "frontier_reset_validation_steps",
     ):
         if name == "frontier_signature_uniform_fraction":
             legacy_default = 1.0
         elif name == "frontier_max_entries_per_source_signature":
             legacy_default = max(1, saved["frontier_capacity_per_task"] // 4)
-        elif name == "frontier_minimum_contact_stability_steps":
-            legacy_default = 1
-        elif name == "frontier_reset_validation_steps":
-            legacy_default = requested[name]
         else:
             legacy_default = requested[name]
         saved.setdefault(name, legacy_default)
@@ -502,10 +499,6 @@ def _normalized_training_config(value: Mapping[str, Any]) -> dict[str, Any]:
         saved["frontier_max_entries_per_source_signature"] = max(
             1, int(saved["frontier_capacity_per_task"]) // 4
         )
-    if "frontier_minimum_contact_stability_steps" not in value:
-        saved["frontier_minimum_contact_stability_steps"] = 1
-    if "frontier_reset_validation_steps" not in value:
-        saved["frontier_reset_validation_steps"] = defaults[
-            "frontier_reset_validation_steps"
-        ]
+    saved.pop("frontier_minimum_contact_stability_steps", None)
+    saved.pop("frontier_reset_validation_steps", None)
     return saved

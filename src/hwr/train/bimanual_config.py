@@ -33,13 +33,12 @@ class BimanualRLTrainingConfig:
     frontier_capacity_per_task: int = 16
     frontier_signature_uniform_fraction: float = 0.20
     frontier_max_entries_per_source_signature: int = 2
-    frontier_minimum_contact_stability_steps: int = 40
-    frontier_reset_validation_steps: int = 40
     failure_replay_fraction: float = 0.25
     discovery_replay_fraction: float = 0.25
     progress_replay_fraction: float = 0.35
     safety_replay_fraction: float = 0.15
     visual_temporal_contrastive_weight: float = 0.05
+    augmentation_consistency_weight: float = 0.0
     n_step_horizon: int = 8
     actor_learning_rate: float = 3.0e-5
     final_actor_learning_rate: float = 1.0e-5
@@ -69,8 +68,6 @@ class BimanualRLTrainingConfig:
             self.actuator_dwell_steps,
             self.frontier_capacity_per_task,
             self.frontier_max_entries_per_source_signature,
-            self.frontier_minimum_contact_stability_steps,
-            self.frontier_reset_validation_steps,
             self.raw_image_width,
             self.raw_image_height,
             self.image_width,
@@ -87,11 +84,6 @@ class BimanualRLTrainingConfig:
         )
         if min(positive) <= 0 or self.initial_random_episodes < 0:
             raise ValueError("bimanual training dimensions must be positive")
-        if (
-            self.frontier_reset_validation_steps
-            < self.frontier_minimum_contact_stability_steps
-        ):
-            raise ValueError("frontier reset validation cannot be shorter than stability")
         if self.episode_step_limit is not None and self.episode_step_limit <= 0:
             raise ValueError("bimanual episode step limit must be positive when set")
         fractions = (
@@ -113,6 +105,7 @@ class BimanualRLTrainingConfig:
             self.progress_replay_fraction,
             self.safety_replay_fraction,
             self.visual_temporal_contrastive_weight,
+            self.augmentation_consistency_weight,
         )
         if min(fractions) < 0 or any(value > 1 for value in fractions[1:]):
             raise ValueError("bimanual training fractions are invalid")

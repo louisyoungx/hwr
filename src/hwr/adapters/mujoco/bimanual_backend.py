@@ -15,7 +15,7 @@ from hwr.adapters.mujoco.dual_arm_backend import (
     MujocoDualArmConfig,
 )
 from hwr.core.embodied import DualArmActionFrame, DualArmObservation
-from hwr.core.runtime import RuntimeStepOutcome
+from hwr.core.runtime import LegalEnvironmentTransform, RuntimeStepOutcome
 from hwr.core.state_snapshot import PhysicalStateSnapshot
 from hwr.core.types import EpisodeEvent, EpisodeResult
 from hwr.tasks import (
@@ -130,6 +130,13 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
         if not 0.0 <= level <= 1.0:
             raise ValueError("curriculum level must be in [0, 1]")
         self._curriculum_level = float(level)
+
+    def legal_environment_transforms(
+        self,
+    ) -> tuple[LegalEnvironmentTransform, ...]:
+        return tuple(
+            LegalEnvironmentTransform(name) for name in self.task.legal_transforms
+        )
 
     def apply(self, frame: DualArmActionFrame) -> RuntimeStepOutcome:
         outcome = super().apply(frame)

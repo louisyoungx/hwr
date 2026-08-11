@@ -40,6 +40,9 @@ def _concatenate(
         rewards=torch.cat([batch.rewards for batch in batches]),
         done=torch.cat([batch.done for batch in batches]),
         actor_weights=optional("actor_weights"),
+        augmentation_transform_indices=optional(
+            "augmentation_transform_indices"
+        ),
         proposed_action_chunks=optional("proposed_action_chunks"),
         safety_costs=optional("safety_costs"),
         bootstrap_discounts=optional("bootstrap_discounts"),
@@ -107,9 +110,9 @@ class TaskPartitionedGoalReplayBuffer:
         )
 
     @property
-    def mirror_count(self) -> int:
+    def augmentation_count(self) -> int:
         return sum(
-            partition.mirror_count for partition in self.partitions.values()
+            partition.augmentation_count for partition in self.partitions.values()
         )
 
     def task_sizes(self) -> dict[str, int]:

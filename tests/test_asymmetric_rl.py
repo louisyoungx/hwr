@@ -120,6 +120,24 @@ def test_actor_update_includes_label_free_temporal_visual_objective() -> None:
     assert np.isfinite(metrics["visual_contrastive_loss"])
 
 
+def test_actor_uses_declared_transform_consistency_only_for_eligible_rows() -> None:
+    trainer = _trainer()
+    trainer.config = replace(trainer.config, augmentation_consistency_weight=0.2)
+    eligible = replace(
+        _batch(), augmentation_transform_indices=torch.ones(4, dtype=torch.int64)
+    )
+
+    metrics = trainer.update(eligible)
+
+    assert metrics["augmentation_consistency_loss"] > 0.0
+    assert np.isfinite(metrics["augmentation_consistency_loss"])
+
+    excluded = replace(
+        _batch(), augmentation_transform_indices=torch.zeros(4, dtype=torch.int64)
+    )
+    assert trainer.update(excluded)["augmentation_consistency_loss"] == 0.0
+
+
 def test_actor_optimizes_the_pessimistic_twin_critic_value() -> None:
     class ConflictingCritic(torch.nn.Module):
         def forward(self, state, action):
@@ -422,10 +440,13 @@ def test_asymmetric_replay_compresses_visual_storage_and_restores_compute_dtype(
     state = replay.state_dict()
     sampled = replay.all()
 
-    assert state["storage_schema"] == "hwr.asymmetric-replay-storage/v2"
+    assert state["storage_schema"] == "hwr.asymmetric-replay-storage/v3"
     assert state["storage"]["actor__head_rgb"].dtype == torch.float16
     assert state["storage"]["next_actor__head_points"].dtype == torch.float16
     assert state["storage"]["actor__proprioception"].dtype == torch.float32
+    assert torch.count_nonzero(
+        state["storage"]["augmentation_transform_indices"]
+    ) == 0
     assert sampled.actor_inputs["head_rgb"].dtype == torch.float32
     assert sampled.next_actor_inputs["head_points"].dtype == torch.float32
     assert sampled.actor_inputs["head_rgb"] == pytest.approx(
@@ -438,6 +459,7 @@ def test_asymmetric_replay_migrates_legacy_float_visual_storage() -> None:
     replay.add(_batch())
     legacy = replay.state_dict()
     legacy.pop("storage_schema")
+    legacy["storage"].pop("augmentation_transform_indices")
     legacy["storage"]["actor__head_rgb"] = legacy["storage"][
         "actor__head_rgb"
     ].float()
@@ -447,6 +469,7 @@ def test_asymmetric_replay_migrates_legacy_float_visual_storage() -> None:
 
     assert restored.state_dict()["storage"]["actor__head_rgb"].dtype == torch.float16
     assert restored.all().actor_inputs["head_rgb"].dtype == torch.float32
+    assert torch.count_nonzero(restored.all().augmentation_transform_indices) == 0
 
 
 def test_rl_export_contains_actor_only_and_reloads(tmp_path) -> None:

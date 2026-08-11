@@ -34,18 +34,19 @@ from hwr.train.asymmetric_registry import (
     save_asymmetric_training_checkpoint,
 )
 from hwr.train.curriculum import AutomaticCurriculum, CurriculumConfig, CurriculumUpdate
-from hwr.train.frontier_curriculum import (
-    FrontierCurriculumConfig,
-    FrontierEntry,
-    FrontierOutcome,
-    OutcomeFrontierCurriculum,
+from hwr.train.learning_frontier import (
+    LearningFrontierCandidate,
+    LearningFrontierConfig,
+    LearningFrontierEntry,
+    LearningSignal,
+    TaskAgnosticLearningFrontier,
 )
 from hwr.train.goal_replay import (
     GoalConditionedReplayBuffer,
     GoalEpisode,
     GoalReplayAddResult,
     hindsight_relabel,
-    mirror_batch,
+    transform_batch,
 )
 from hwr.train.task_replay import TaskPartitionedGoalReplayBuffer
 from hwr.train.task_sampling import (
@@ -96,16 +97,17 @@ __all__ = [
     "AutomaticCurriculum",
     "CurriculumConfig",
     "CurriculumUpdate",
-    "FrontierCurriculumConfig",
-    "FrontierEntry",
-    "FrontierOutcome",
     "fork_bimanual_training_run",
-    "OutcomeFrontierCurriculum",
+    "LearningFrontierCandidate",
+    "LearningFrontierConfig",
+    "LearningFrontierEntry",
+    "LearningSignal",
+    "TaskAgnosticLearningFrontier",
     "GoalConditionedReplayBuffer",
     "GoalEpisode",
     "GoalReplayAddResult",
     "hindsight_relabel",
-    "mirror_batch",
+    "transform_batch",
     "BimanualRLTrainingConfig",
     "BimanualTrainingResult",
     "BimanualTrainingRunner",
