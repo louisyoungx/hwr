@@ -27,7 +27,10 @@ from hwr.train.asymmetric_rl import (
     AsymmetricRLBatch,
     AsymmetricRLConfig,
 )
-from hwr.train.bimanual_metrics import bilateral_near_statistics
+from hwr.train.bimanual_metrics import (
+    bilateral_near_statistics,
+    physical_progress_record_fields,
+)
 from hwr.train.bimanual_records import TrainingEpisodeRecord
 from hwr.train.bimanual_runtime import dual_arm_action_frame
 from hwr.train.action_exploration import (
@@ -578,9 +581,7 @@ class BimanualTrainingRunner:
                 min(max(state[24], state[25]) for state in buffers.states),
             ),
         )
-        bilateral_near_steps, maximum_bilateral_near_steps = (
-            bilateral_near_statistics(buffers.states)
-        )
+        bilateral_near_steps, maximum_bilateral_near_steps = bilateral_near_statistics(buffers.states)
         return TrainingEpisodeRecord(
             episode=episode_index,
             task_id=task_id,
@@ -645,6 +646,7 @@ class BimanualTrainingRunner:
             frontier_reset_validated=prepared.probe.validated,
             frontier_reset_reproduced=prepared.probe.reproduced,
             frontier_reset_applied=prepared.applied,
+            **physical_progress_record_fields(buffers.next_states),
         )
 
     def _select_action(

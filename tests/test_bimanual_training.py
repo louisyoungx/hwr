@@ -13,7 +13,10 @@ from hwr.train import (
     BimanualTrainingRunner,
     FrontierOutcome,
 )
-from hwr.train.bimanual_metrics import bilateral_near_statistics
+from hwr.train.bimanual_metrics import (
+    bilateral_near_statistics,
+    physical_progress_statistics,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -124,6 +127,31 @@ def test_bilateral_near_statistics_require_both_sides_in_same_state() -> None:
 
     assert total == 3
     assert longest == 2
+
+
+def test_physical_progress_statistics_report_real_task_motion() -> None:
+    def state(
+        payload_x: float,
+        articulation: float,
+        controlled_target: float,
+        controlled_articulation: float,
+    ) -> tuple[float, ...]:
+        values = [0.0] * 62
+        values[0:3] = [payload_x, 0.0, 0.0]
+        values[6] = articulation
+        values[12:15] = [1.0, 0.0, 0.0]
+        values[60] = controlled_target
+        values[61] = controlled_articulation
+        return tuple(values)
+
+    summary = physical_progress_statistics(
+        [state(0.1, 0.02, 0.0, 0.0), state(0.7, 0.31, 0.24, 0.20)]
+    )
+
+    assert abs(summary.minimum_target_distance - 0.3) < 1e-9
+    assert summary.maximum_articulation_position == 0.31
+    assert summary.maximum_controlled_target_progress == 0.24
+    assert summary.maximum_controlled_articulation_progress == 0.20
 
 
 def test_local_training_collects_all_three_tasks_without_action_labels() -> None:

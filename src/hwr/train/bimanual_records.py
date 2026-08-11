@@ -52,3 +52,7 @@ class TrainingEpisodeRecord:
     frontier_reset_validated: bool = False
     frontier_reset_reproduced: bool = False
     frontier_reset_applied: bool = False
+    minimum_target_distance: float = 0.0
+    maximum_articulation_position: float = 0.0
+    maximum_controlled_target_progress: float = 0.0
+    maximum_controlled_articulation_progress: float = 0.0
