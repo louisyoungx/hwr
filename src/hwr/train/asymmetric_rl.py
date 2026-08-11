@@ -553,11 +553,10 @@ class AsymmetricActorCriticTrainer:
         denominator = weights.sum()
         if denominator <= 0:
             return torch.zeros((), device=self.device)
-        with torch.no_grad():
-            source = bounded_vla_actions(
-                self.target_actor(batch.actor_inputs),
-                self.config.action_scaling(),
-            )
+        source = bounded_vla_actions(
+            self.actor(batch.actor_inputs),
+            self.config.action_scaling(),
+        )
         per_transition = torch.zeros_like(weights)
         for index in torch.unique(indices).tolist():
             if int(index) <= 0:

@@ -117,7 +117,12 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert "frontier_rng_state" in checkpoint
     assert "exploration_rng_state" in checkpoint
     assert "numpy_rng_state" not in checkpoint
-    assert replay["hindsight_transition_count"] == 2
+    assert replay["hindsight_enabled"] is False
+    assert replay["legacy_discarded_hindsight_transition_count"] == 0
+    assert replay["schema_version"] == "hwr.autonomous-replay/v1"
+    assert replay["augmentation_eligible_transition_count"] == 2
+    assert replay["stored_transform_copies"] is False
+    assert replay["sample_time_augmentation_probability"] == 0.5
     assert replay["environment_augmentation_consistency"]["actor_input_field"] is False
     assert replay["environment_augmentation_consistency"]["target"].endswith(
         "without-action-labels"
@@ -304,3 +309,32 @@ def test_training_fork_requires_audited_replay_discard_for_input_shapes(
     assert discarded["replay"]["carry_dining_tray/v1"]["episode_count"] == 1
     assert discarded["frontier"] == "inherited_physical_state_snapshots"
     assert runner.actor_config.point_count == 12
+
+
+def test_training_fork_can_discard_incompatible_replay_only(tmp_path) -> None:
+    parent = _small_result()
+    parent_path = save_bimanual_training_run(
+        tmp_path, "replay-parent", parent, source_commit="2" * 40
+    )
+    tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
+    config_values = parent.config.to_dict()
+    config_values.update(episodes=2, replay_capacity=64)
+    runner = BimanualTrainingRunner(
+        tasks,
+        MujocoBimanualBackendFactory(bindings),
+        BimanualRLTrainingConfig(**config_values),
+    )
+
+    provenance = fork_bimanual_training_run(
+        parent_path, runner, discard_replay=True
+    )
+
+    assert runner.replay.size == 0
+    assert provenance["discarded_actor_input_replay"] is None
+    assert provenance["discarded_task_state"] is None
+    assert provenance["discarded_replay"]["reason"] == (
+        "replay_storage_semantics_changed"
+    )
+    assert provenance["discarded_replay"]["replay"][
+        "carry_dining_tray/v1"
+    ]["episode_count"] == 1

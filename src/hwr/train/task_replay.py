@@ -7,10 +7,10 @@ from typing import Mapping, Sequence
 import torch
 
 from hwr.train.asymmetric_rl import AsymmetricRLBatch
-from hwr.train.goal_replay import (
-    GoalConditionedReplayBuffer,
-    GoalEpisode,
-    GoalReplayAddResult,
+from hwr.train.autonomous_replay import (
+    AutonomousEpisode,
+    AutonomousReplayAddResult,
+    AutonomousReplayBuffer,
 )
 
 
@@ -49,7 +49,7 @@ def _concatenate(
     )
 
 
-class TaskPartitionedGoalReplayBuffer:
+class TaskPartitionedAutonomousReplayBuffer:
     """Keep bounded per-task stores and draw equal-sized task sub-batches."""
 
     def __init__(
@@ -63,7 +63,7 @@ class TaskPartitionedGoalReplayBuffer:
         self.task_ids = identities
         per_task = max(1, capacity // len(identities))
         self.partitions = {
-            task_id: GoalConditionedReplayBuffer(
+            task_id: AutonomousReplayBuffer(
                 per_task, seed=seed ^ _stable_seed(task_id)
             )
             for task_id in identities
@@ -104,9 +104,10 @@ class TaskPartitionedGoalReplayBuffer:
         )
 
     @property
-    def hindsight_count(self) -> int:
+    def legacy_discarded_hindsight_count(self) -> int:
         return sum(
-            partition.hindsight_count for partition in self.partitions.values()
+            partition.legacy_discarded_hindsight_count
+            for partition in self.partitions.values()
         )
 
     @property
@@ -122,8 +123,8 @@ class TaskPartitionedGoalReplayBuffer:
         }
 
     def add_episode(
-        self, task_id: str, episode: GoalEpisode
-    ) -> GoalReplayAddResult:
+        self, task_id: str, episode: AutonomousEpisode
+    ) -> AutonomousReplayAddResult:
         try:
             partition = self.partitions[task_id]
         except KeyError as exc:
@@ -152,7 +153,7 @@ class TaskPartitionedGoalReplayBuffer:
                 "safety_size": partition.safety_size,
                 "episode_count": partition.episode_count,
             }
-            self.partitions[task_id] = GoalConditionedReplayBuffer(
+            self.partitions[task_id] = AutonomousReplayBuffer(
                 per_task, seed=self.seed ^ _stable_seed(task_id)
             )
         return discarded

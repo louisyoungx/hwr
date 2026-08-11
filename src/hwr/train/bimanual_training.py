@@ -52,9 +52,9 @@ from hwr.train.learning_signals import (
     failure_boundary_step,
     reward_improvement_speeds,
 )
-from hwr.train.goal_replay import GoalEpisode
+from hwr.train.autonomous_replay import AutonomousEpisode
 from hwr.train.n_step import build_n_step_targets
-from hwr.train.task_replay import TaskPartitionedGoalReplayBuffer
+from hwr.train.task_replay import TaskPartitionedAutonomousReplayBuffer
 from hwr.train.task_sampling import (
     OutcomeAdaptiveTaskSampler,
     OutcomeAdaptiveTaskSamplingConfig,
@@ -68,7 +68,7 @@ class BimanualTrainingResult:
     actor_config: VLAActorConfig
     rl_config: AsymmetricRLConfig
     trainer: AsymmetricActorCriticTrainer
-    replay: TaskPartitionedGoalReplayBuffer
+    replay: TaskPartitionedAutonomousReplayBuffer
     curriculum: AutomaticCurriculum
     frontier: TaskAgnosticLearningFrontier
     task_sampler: OutcomeAdaptiveTaskSampler
@@ -89,9 +89,6 @@ class _EpisodeBuffers:
     next_actor_inputs: list[VLAActorInput]
     states: list[tuple[float, ...]]
     next_states: list[tuple[float, ...]]
-    achieved: list[tuple[float, ...]]
-    next_achieved: list[tuple[float, ...]]
-    desired: list[tuple[float, ...]]
     actions: list[tuple[float, ...]]
     proposed_actions: list[tuple[float, ...]]
     safety_costs: list[float]
@@ -101,7 +98,7 @@ class _EpisodeBuffers:
 
     @classmethod
     def empty(cls) -> "_EpisodeBuffers":
-        return cls([], [], [], [], [], [], [], [], [], [], [], [], [])
+        return cls([], [], [], [], [], [], [], [], [], [])
 
 
 class BimanualTrainingBackend(SnapshotRuntimeBackend, Protocol):
@@ -214,7 +211,7 @@ class BimanualTrainingRunner:
             self.rl_config,
             device=config.device,
         )
-        self.replay = TaskPartitionedGoalReplayBuffer(
+        self.replay = TaskPartitionedAutonomousReplayBuffer(
             config.replay_capacity, self.task_ids, seed=config.seed
         )
         self.curriculum = AutomaticCurriculum(
@@ -424,7 +421,7 @@ class BimanualTrainingRunner:
                 environment_truncated = bool(outcome.truncated or limit and not terminal)
                 break
         audit = environment.task_audit()
-        episode = self._goal_episode(
+        episode = self._autonomous_episode(
             buffers,
             success,
             tuple(
@@ -582,9 +579,6 @@ class BimanualTrainingRunner:
         buffers.next_actor_inputs.append(next_actor_input)
         buffers.states.append(state.critic_state)
         buffers.next_states.append(next_state.critic_state)
-        buffers.achieved.append(state.achieved_goal)
-        buffers.next_achieved.append(next_state.achieved_goal)
-        buffers.desired.append(state.desired_goal)
         buffers.actions.append(applied_action.vector())
         buffers.proposed_actions.append(proposed_action.vector())
         buffers.safety_costs.append(float(safety_intervened))
@@ -630,12 +624,12 @@ class BimanualTrainingRunner:
             )
         return candidates
 
-    def _goal_episode(
+    def _autonomous_episode(
         self,
         buffers: _EpisodeBuffers,
         success: bool,
         legal_transforms: tuple[str, ...],
-    ) -> GoalEpisode:
+    ) -> AutonomousEpisode:
         targets = build_n_step_targets(
             buffers.rewards,
             buffers.done,
@@ -646,9 +640,6 @@ class BimanualTrainingRunner:
             buffers.next_actor_inputs[index] for index in targets.next_indices
         ]
         next_states = [buffers.next_states[index] for index in targets.next_indices]
-        next_achieved = [
-            buffers.next_achieved[index] for index in targets.next_indices
-        ]
         batch = AsymmetricRLBatch(
             actor_inputs=stack_actor_inputs(buffers.actor_inputs),
             next_actor_inputs=stack_actor_inputs(next_inputs),
@@ -669,14 +660,7 @@ class BimanualTrainingRunner:
                 targets.bootstrap_discounts, dtype=torch.float32
             ),
         )
-        return GoalEpisode(
-            batch,
-            torch.tensor(buffers.achieved, dtype=torch.float32),
-            torch.tensor(next_achieved, dtype=torch.float32),
-            torch.tensor(buffers.desired, dtype=torch.float32),
-            success,
-            legal_transforms,
-        )
+        return AutonomousEpisode(batch, success, legal_transforms)
 
     def _update_after_episode(self, episode_steps: int) -> dict[str, float]:
         if self.replay.size < max(self.config.learning_starts, self.config.batch_size):

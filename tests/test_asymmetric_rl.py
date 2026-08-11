@@ -138,6 +138,23 @@ def test_actor_uses_declared_transform_consistency_only_for_eligible_rows() -> N
     assert trainer.update(excluded)["augmentation_consistency_loss"] == 0.0
 
 
+def test_transform_consistency_is_same_actor_equivariance_not_a_teacher_target() -> None:
+    trainer = _trainer()
+    trainer.config = replace(trainer.config, augmentation_consistency_weight=0.2)
+    eligible = replace(
+        trainer._to_device(_batch()),
+        augmentation_transform_indices=torch.ones(4, dtype=torch.int64),
+    )
+
+    class ForbiddenTeacher(torch.nn.Module):
+        def forward(self, *args, **kwargs):
+            raise AssertionError("target Actor must not provide augmentation answers")
+
+    trainer.target_actor = ForbiddenTeacher()
+
+    assert trainer._augmentation_consistency_loss(eligible) > 0.0
+
+
 def test_actor_optimizes_the_pessimistic_twin_critic_value() -> None:
     class ConflictingCritic(torch.nn.Module):
         def forward(self, state, action):

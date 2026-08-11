@@ -162,7 +162,7 @@ def save_bimanual_training_run(
         "initial_state_curriculum": (
             "autonomous-physical-frontier-resets-without-action-labels"
         ),
-        "hindsight_actor_weight": 0.0,
+        "hindsight_goal_relabeling": False,
         "parent_training_run": (
             dict(parent_training_run) if parent_training_run else None
         ),
@@ -198,7 +198,7 @@ def save_bimanual_training_run(
     }
     _write_json(path / "model-manifest.json", model_manifest)
     replay_manifest = {
-        "schema_version": "hwr.goal-replay/v1",
+        "schema_version": "hwr.autonomous-replay/v1",
         "storage": {
             "schema_version": REPLAY_STORAGE_SCHEMA,
             "compressed_actor_fields": sorted(
@@ -213,12 +213,17 @@ def save_bimanual_training_run(
         "reward_improvement_size": result.replay.progress_size,
         "safety_event_size": result.replay.safety_size,
         "episode_count": result.replay.episode_count,
-        "hindsight_transition_count": result.replay.hindsight_count,
-        "augmented_transition_count": result.replay.augmentation_count,
+        "hindsight_enabled": False,
+        "legacy_discarded_hindsight_transition_count": (
+            result.replay.legacy_discarded_hindsight_count
+        ),
+        "augmentation_eligible_transition_count": result.replay.augmentation_count,
+        "stored_transform_copies": False,
+        "sample_time_augmentation_probability": 0.50,
         "environment_augmentation_consistency": {
             "weight": result.config.augmentation_consistency_weight,
             "eligibility": "runtime-declared-legal-transform",
-            "target": "ema-actor-transformed-action-without-action-labels",
+            "target": "same-actor-group-equivariance-without-action-labels",
             "actor_input_field": False,
             "privileged_actor_field": False,
         },
@@ -385,6 +390,7 @@ def fork_bimanual_training_run(
     *,
     reset_task_ids: Sequence[str] = (),
     discard_input_replay: bool = False,
+    discard_replay: bool = False,
 ) -> dict[str, Any]:
     """Load an audited no-demonstration run with explicit exploration changes."""
     manifest = verify_bimanual_training_run(path)
@@ -405,14 +411,16 @@ def fork_bimanual_training_run(
             + ", ".join(prohibited)
         )
     input_shape_changes = sorted(set(changes) & ACTOR_INPUT_SHAPE_FIELDS)
-    if input_shape_changes and not discard_input_replay:
+    if input_shape_changes and not (discard_input_replay or discard_replay):
         raise ValueError(
             "fork changes Actor input shapes without --discard-input-replay: "
             + ", ".join(input_shape_changes)
         )
-    if discard_input_replay and reset_task_ids:
+    if discard_input_replay and discard_replay:
+        raise ValueError("replay discard modes are mutually exclusive")
+    if (discard_input_replay or discard_replay) and reset_task_ids:
         raise ValueError(
-            "input replay discard and task-state reset require separate forks"
+            "replay discard and task-state reset require separate forks"
         )
     checkpoint_path = path / "training-checkpoint.pt"
     checkpoint = torch.load(
@@ -426,6 +434,10 @@ def fork_bimanual_training_run(
         enabled=discard_input_replay,
         changed_fields=input_shape_changes,
     )
+    discarded_replay = _discard_incompatible_replay(
+        runner,
+        enabled=discard_replay,
+    )
     discarded_task_state = _discard_task_training_state(
         runner, reset_task_ids
     )
@@ -438,6 +450,7 @@ def fork_bimanual_training_run(
         "fork_record_count": len(runner.records),
         "config_changes": changes,
         "discarded_actor_input_replay": discarded_input_replay,
+        "discarded_replay": discarded_replay,
         "discarded_task_state": discarded_task_state,
         "inherited_action_labels": False,
         "inherited_expert_policies": False,
@@ -459,6 +472,25 @@ def _discard_actor_input_replay(
         "replay": runner.replay.discard_tasks(runner.task_ids),
         "frontier": "inherited_physical_state_snapshots",
         "task_sampler": "inherited_outcome_history",
+        "curriculum": "inherited_environment_outcomes",
+        "shared_actor_critic_parameters": "inherited",
+        "parent_episode_records": "retained_as_historical_lineage",
+    }
+
+
+def _discard_incompatible_replay(
+    runner: BimanualTrainingRunner,
+    *,
+    enabled: bool,
+) -> dict[str, Any] | None:
+    if not enabled:
+        return None
+    return {
+        "schema_version": "hwr.fork-replay-discard/v1",
+        "reason": "replay_storage_semantics_changed",
+        "replay": runner.replay.discard_tasks(runner.task_ids),
+        "frontier": "inherited_but_runtime_reset_probability_controls_use",
+        "task_sampler": "inherited_task_agnostic_outcome_history",
         "curriculum": "inherited_environment_outcomes",
         "shared_actor_critic_parameters": "inherited",
         "parent_episode_records": "retained_as_historical_lineage",

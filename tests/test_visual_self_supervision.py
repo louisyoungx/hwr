@@ -45,7 +45,7 @@ def test_temporal_visual_contrast_uses_only_actor_inputs_and_updates_encoder() -
     assert torch.count_nonzero(actor.head_encoder.network[0].weight.grad) > 0
 
 
-def test_temporal_visual_contrast_excludes_critic_only_hindsight_rows() -> None:
+def test_temporal_visual_contrast_excludes_non_actor_rows() -> None:
     loss = temporal_visual_contrastive_loss(
         _actor(),
         _actor().eval(),

@@ -41,14 +41,13 @@ from hwr.train.learning_frontier import (
     LearningSignal,
     TaskAgnosticLearningFrontier,
 )
-from hwr.train.goal_replay import (
-    GoalConditionedReplayBuffer,
-    GoalEpisode,
-    GoalReplayAddResult,
-    hindsight_relabel,
+from hwr.train.autonomous_replay import (
+    AutonomousEpisode,
+    AutonomousReplayAddResult,
+    AutonomousReplayBuffer,
     transform_batch,
 )
-from hwr.train.task_replay import TaskPartitionedGoalReplayBuffer
+from hwr.train.task_replay import TaskPartitionedAutonomousReplayBuffer
 from hwr.train.task_sampling import (
     OutcomeAdaptiveTaskSampler,
     OutcomeAdaptiveTaskSamplingConfig,
@@ -103,16 +102,15 @@ __all__ = [
     "LearningFrontierEntry",
     "LearningSignal",
     "TaskAgnosticLearningFrontier",
-    "GoalConditionedReplayBuffer",
-    "GoalEpisode",
-    "GoalReplayAddResult",
-    "hindsight_relabel",
+    "AutonomousEpisode",
+    "AutonomousReplayAddResult",
+    "AutonomousReplayBuffer",
     "transform_batch",
     "BimanualRLTrainingConfig",
     "BimanualTrainingResult",
     "BimanualTrainingRunner",
     "TrainingEpisodeRecord",
-    "TaskPartitionedGoalReplayBuffer",
+    "TaskPartitionedAutonomousReplayBuffer",
     "OutcomeAdaptiveTaskSampler",
     "OutcomeAdaptiveTaskSamplingConfig",
     "TaskOutcome",

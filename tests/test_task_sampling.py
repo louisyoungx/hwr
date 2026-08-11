@@ -67,6 +67,25 @@ def test_sampler_initial_coverage_state_and_reward_improvement() -> None:
     assert sampler.audit()["actor_input_fields"] == []
 
 
+def test_sampler_retains_history_when_only_allocation_pressure_changes() -> None:
+    previous = OutcomeAdaptiveTaskSampler(("a", "b", "c"))
+    previous.record("a", _outcome(novelty=0.9))
+    previous.record("b", _outcome(novelty=0.5))
+    previous.record("c", _outcome(novelty=0.1))
+    adjusted = OutcomeAdaptiveTaskSampler(
+        ("a", "b", "c"),
+        OutcomeAdaptiveTaskSamplingConfig(
+            temperature=1.0,
+            maximum_probability=0.45,
+        ),
+    )
+
+    adjusted.load_state_dict(previous.state_dict())
+
+    assert all(len(history) == 1 for history in adjusted.history.values())
+    assert max(adjusted.probabilities().values()) <= 0.45
+
+
 def test_sampler_uses_weighted_fair_credits_not_random_luck() -> None:
     config = OutcomeAdaptiveTaskSamplingConfig(initial_cycles=1)
     sampler = OutcomeAdaptiveTaskSampler(("a", "b", "c"), config)

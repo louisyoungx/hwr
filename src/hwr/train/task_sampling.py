@@ -208,7 +208,11 @@ class OutcomeAdaptiveTaskSampler:
             self.sample_count = 0
             self.credits = {task_id: 0.0 for task_id in self.task_ids}
             return
-        if dict(value["config"]) != asdict(self.config):
+        saved_config = dict(value["config"])
+        current_config = asdict(self.config)
+        for name in ("temperature", "maximum_probability"):
+            saved_config[name] = current_config[name]
+        if saved_config != current_config:
             raise ValueError("task sampler checkpoint configuration differs")
         for task_id in self.task_ids:
             self.history[task_id].clear()

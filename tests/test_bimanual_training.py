@@ -192,7 +192,8 @@ def test_local_training_collects_all_three_tasks_without_action_labels() -> None
     assert {record.task_id for record in result.records} == set(tasks)
     assert result.replay.episode_count == 3
     assert all(size > 0 for size in result.replay.task_sizes().values())
-    assert result.replay.hindsight_count == 9
+    assert result.replay.size == 9
+    assert result.replay.legacy_discarded_hindsight_count == 0
     assert result.replay.failure_size > 0
     assert result.trainer.config.behavior_regularization == 0.0
     assert not hasattr(result, "expert")
@@ -247,7 +248,7 @@ def test_local_training_executes_actor_critic_update_from_random_experience() ->
     assert result.records[0].actor_updates == 0
     assert result.records[0].mean_critic_loss > 0.0
     assert result.records[0].mean_safety_loss > 0.0
-    assert result.replay.size == 16
+    assert result.replay.size == 4
     partition = result.replay.partitions[result.records[0].task_id]
     discounts = partition.regular.all().bootstrap_discounts
     assert discounts is not None

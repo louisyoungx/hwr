@@ -5,38 +5,28 @@ from dataclasses import replace
 import pytest
 import torch
 
-from hwr.tasks import BIMANUAL_GOAL_DIM
 from hwr.train import (
+    AutonomousEpisode,
+    AutonomousReplayBuffer,
     AutomaticCurriculum,
     CurriculumConfig,
-    GoalConditionedReplayBuffer,
-    GoalEpisode,
-    hindsight_relabel,
     transform_batch,
 )
+from hwr.train.asymmetric_replay import AsymmetricReplayBuffer
 from hwr.train.asymmetric_rl import AsymmetricRLBatch
 from hwr.train.environment_augmentation import LATERAL_REFLECTION
+from hwr.train.autonomous_replay import _sample_time_augmentation
 from tests.test_asymmetric_rl import _actor_inputs
 
 
 def _episode(
     *, success: bool = False, legal_transforms: tuple[str, ...] = (LATERAL_REFLECTION,)
-) -> GoalEpisode:
+) -> AutonomousEpisode:
     count = 4
-    achieved = torch.zeros(count, BIMANUAL_GOAL_DIM)
-    achieved[:, 0] = torch.arange(count, dtype=torch.float32) * 0.1
-    achieved[:, 1] = 0.2
-    next_achieved = achieved.clone()
-    next_achieved[:, 0] += 0.05
-    desired = torch.zeros_like(achieved)
-    desired[:, 0] = 1.0
-    desired[:, 7:10] = 1.0
     state = torch.zeros(count, 62)
     next_state = torch.zeros(count, 62)
-    state[:, :BIMANUAL_GOAL_DIM] = achieved
-    state[:, BIMANUAL_GOAL_DIM : 2 * BIMANUAL_GOAL_DIM] = desired
-    next_state[:, :BIMANUAL_GOAL_DIM] = next_achieved
-    next_state[:, BIMANUAL_GOAL_DIM : 2 * BIMANUAL_GOAL_DIM] = desired
+    state[:, 0] = torch.arange(count, dtype=torch.float32) * 0.1
+    next_state[:, 0] = state[:, 0] + 0.05
     inputs = _actor_inputs(count)
     batch = AsymmetricRLBatch(
         actor_inputs=inputs,
@@ -49,28 +39,11 @@ def _episode(
         done=torch.zeros(count),
         augmentation_transform_indices=torch.zeros(count, dtype=torch.int64),
     )
-    return GoalEpisode(
+    return AutonomousEpisode(
         batch,
-        achieved,
-        next_achieved,
-        desired,
         success=success,
         legal_transforms=legal_transforms,
     )
-
-
-def test_hindsight_relabels_only_critic_goal_and_zero_weights_actor() -> None:
-    episode = _episode()
-    relabeled = hindsight_relabel(episode, torch.Generator().manual_seed(3))
-    desired = relabeled.privileged_state[
-        :, BIMANUAL_GOAL_DIM : 2 * BIMANUAL_GOAL_DIM
-    ]
-
-    assert not torch.equal(desired, episode.desired_goals)
-    assert torch.equal(relabeled.actor_inputs["instruction_embedding"], episode.batch.actor_inputs["instruction_embedding"])
-    assert torch.count_nonzero(relabeled.actor_weights) == 0
-    assert torch.count_nonzero(relabeled.augmentation_transform_indices) == 0
-    assert torch.isfinite(relabeled.rewards).all()
 
 
 def test_mirror_swaps_arms_wrists_actions_and_continuous_goal_sides() -> None:
@@ -117,22 +90,67 @@ def test_mirror_swaps_arms_wrists_actions_and_continuous_goal_sides() -> None:
     )
 
 
-def test_failed_episode_returns_original_her_and_mirrors_to_priority_replay() -> None:
-    replay = GoalConditionedReplayBuffer(64, seed=7)
+def test_failed_episode_stores_only_autonomous_transitions() -> None:
+    replay = AutonomousReplayBuffer(64, seed=7)
 
     result = replay.add_episode(_episode(success=False))
     sampled = replay.sample(8, failure_fraction=0.5)
 
     assert result.original_count == 4
-    assert result.hindsight_count == 4
-    assert result.augmentation_count == 8
-    assert result.failure_return_count == 16
-    assert replay.size == replay.failure_size == 16
-    assert replay.discovery_size == 4
+    assert result.augmentation_count == 4
+    assert result.failure_return_count == 4
+    assert replay.size == replay.failure_size == 4
+    assert replay.discovery_size == 2
     assert sampled.rewards.shape == (8,)
     assert sampled.actor_weights is not None
     assert torch.all(sampled.augmentation_transform_indices == 1)
-    assert set(sampled.actor_weights.tolist()).issubset({0.0, 1.0})
+    assert torch.all(sampled.actor_weights == 1.0)
+
+
+def test_legal_transform_is_generated_at_sample_time_without_scene_logic() -> None:
+    episode = _episode()
+    actions = episode.batch.action_chunks.clone()
+    actions[:, :, 2:8] = torch.arange(1.0, 7.0)
+    actions[:, :, 8:14] = torch.arange(7.0, 13.0)
+    eligible = replace(
+        episode.batch,
+        action_chunks=actions,
+        augmentation_transform_indices=torch.ones(4, dtype=torch.int64),
+    )
+
+    augmented = _sample_time_augmentation(
+        eligible, torch.Generator().manual_seed(0)
+    )
+
+    changed = torch.any(augmented.action_chunks != eligible.action_chunks, dim=(1, 2))
+    assert 0 < int(changed.sum()) < 4
+    assert torch.all(augmented.augmentation_transform_indices == 1)
+
+
+def test_expanded_legacy_replay_is_split_by_actor_eligibility() -> None:
+    replay = AutonomousReplayBuffer(64, seed=23)
+    replay.add_episode(_episode())
+    state = replay.state_dict()
+    expanded = AsymmetricReplayBuffer(64, seed=24)
+    autonomous = replay.regular.all()
+    critic_only = replace(
+        autonomous,
+        actor_weights=torch.zeros_like(autonomous.actor_weights),
+    )
+    expanded.add(autonomous)
+    expanded.add(critic_only)
+    state.pop("autonomous_replay_storage_schema")
+    state["regular"] = expanded.state_dict()
+    state["failures"] = expanded.state_dict()
+    state["hindsight_count"] = 4
+    restored = AutonomousReplayBuffer(64, seed=25)
+
+    restored.load_state_dict(state)
+
+    assert restored.size == 4
+    assert torch.all(restored.regular.all().actor_weights > 0)
+    assert torch.all(restored.failures.all().actor_weights > 0)
+    assert restored.legacy_discarded_hindsight_count == 4
 
 
 def test_runtime_interventions_receive_a_dedicated_safety_replay_quota() -> None:
@@ -142,7 +160,7 @@ def test_runtime_interventions_receive_a_dedicated_safety_replay_quota() -> None
         proposed_action_chunks=episode.batch.action_chunks.clone(),
         safety_costs=torch.ones(4),
     )
-    replay = GoalConditionedReplayBuffer(64, seed=11)
+    replay = AutonomousReplayBuffer(64, seed=11)
 
     replay.add_episode(replace(episode, batch=batch))
     sampled = replay.sample(
@@ -164,7 +182,7 @@ def test_geometry_fields_do_not_control_state_novelty_replay() -> None:
     near_state[:, 24] = 0.04
     near_state[:, 25] = 0.20
     batch = replace(episode.batch, next_privileged_state=near_state)
-    replay = GoalConditionedReplayBuffer(64, seed=13)
+    replay = AutonomousReplayBuffer(64, seed=13)
 
     replay.add_episode(replace(episode, batch=batch))
     sampled = replay.sample(
@@ -179,7 +197,7 @@ def test_geometry_fields_do_not_control_state_novelty_replay() -> None:
 
     outside_state = near_state.clone()
     outside_state[:, 24] = 0.061
-    outside = GoalConditionedReplayBuffer(64, seed=14)
+    outside = AutonomousReplayBuffer(64, seed=14)
     outside.add_episode(
         replace(
             episode,
@@ -194,7 +212,7 @@ def test_joint_reach_values_do_not_create_a_training_branch() -> None:
     jointly_near = episode.batch.next_privileged_state.clone()
     jointly_near[:, 24] = 0.08
     jointly_near[:, 25] = 0.09
-    replay = GoalConditionedReplayBuffer(64, seed=15)
+    replay = AutonomousReplayBuffer(64, seed=15)
 
     replay.add_episode(
         replace(
@@ -206,7 +224,7 @@ def test_joint_reach_values_do_not_create_a_training_branch() -> None:
     assert replay.discovery_size == 2
     outside = jointly_near.clone()
     outside[:, 25] = 0.101
-    rejected = GoalConditionedReplayBuffer(64, seed=16)
+    rejected = AutonomousReplayBuffer(64, seed=16)
     rejected.add_episode(
         replace(
             episode,
@@ -223,7 +241,7 @@ def test_high_environment_rewards_receive_a_ranked_replay_quota() -> None:
     next_state[:, 60] = torch.tensor((0.0, 0.01, 0.02, 0.03))
     actions = episode.batch.action_chunks.clone()
     actions[:, :, 2] = 0.01
-    replay = GoalConditionedReplayBuffer(64, seed=17)
+    replay = AutonomousReplayBuffer(64, seed=17)
 
     replay.add_episode(
         replace(
@@ -251,11 +269,11 @@ def test_high_environment_rewards_receive_a_ranked_replay_quota() -> None:
 
     legacy = replay.state_dict()
     legacy.pop("progress_event_schema")
-    restored = GoalConditionedReplayBuffer(64, seed=18)
+    restored = AutonomousReplayBuffer(64, seed=18)
     restored.load_state_dict(legacy)
     assert restored.progress_size == 2
 
-    passive = GoalConditionedReplayBuffer(64, seed=20)
+    passive = AutonomousReplayBuffer(64, seed=20)
     passive.add_episode(
         replace(
             episode,
@@ -270,7 +288,7 @@ def test_high_environment_rewards_receive_a_ranked_replay_quota() -> None:
 
     far_next = next_state.clone()
     far_next[:, 0] = 4.0
-    far = GoalConditionedReplayBuffer(64, seed=19)
+    far = AutonomousReplayBuffer(64, seed=19)
     far.add_episode(
         replace(
             episode,
