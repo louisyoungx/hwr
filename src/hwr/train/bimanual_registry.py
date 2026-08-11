@@ -13,6 +13,10 @@ import torch
 
 from hwr.policy.vla_input import VLA_POLICY_INPUT_FIELDS
 from hwr.policy.vla_model import VLAActorConfig, VLAActorModel
+from hwr.train.asymmetric_replay import (
+    COMPRESSIBLE_ACTOR_VISUAL_FIELDS,
+    REPLAY_STORAGE_SCHEMA,
+)
 from hwr.train.bimanual_training import (
     BimanualRLTrainingConfig,
     BimanualTrainingResult,
@@ -196,6 +200,14 @@ def save_bimanual_training_run(
     _write_json(path / "model-manifest.json", model_manifest)
     replay_manifest = {
         "schema_version": "hwr.goal-replay/v1",
+        "storage": {
+            "schema_version": REPLAY_STORAGE_SCHEMA,
+            "compressed_actor_fields": sorted(
+                COMPRESSIBLE_ACTOR_VISUAL_FIELDS
+            ),
+            "storage_dtype": "float16",
+            "sample_compute_dtype": "float32",
+        },
         "size": result.replay.size,
         "failure_size": result.replay.failure_size,
         "discovery_size": result.replay.discovery_size,

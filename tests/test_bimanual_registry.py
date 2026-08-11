@@ -71,6 +71,18 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert lineage["expert_policies"] == []
     assert lineage["behavior_cloning"] is False
     assert replay["action_labels"] is False
+    assert replay["storage"] == {
+        "schema_version": "hwr.asymmetric-replay-storage/v2",
+        "compressed_actor_fields": [
+            "head_depth",
+            "head_points",
+            "head_rgb",
+            "left_wrist_rgb",
+            "right_wrist_rgb",
+        ],
+        "storage_dtype": "float16",
+        "sample_compute_dtype": "float32",
+    }
     assert replay["safety_event_size"] == 0
     assert replay["safety_cost_labels"].endswith("observed_severe_collision")
     assert replay["physical_progress_size"] == 0
