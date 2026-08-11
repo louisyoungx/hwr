@@ -150,6 +150,23 @@ class VLAActorModel(nn.Module):
         actions = self._action_chunks(summary)
         return VLAActorOutput(actions, self.stop_head(summary))
 
+    def visual_representation(
+        self, inputs: Mapping[str, torch.Tensor]
+    ) -> torch.Tensor:
+        """Encode only deployment-time visual fields for self-supervision."""
+        if frozenset(inputs) != VLA_POLICY_INPUT_FIELDS:
+            raise ValueError("visual self-supervision received non-deployment fields")
+        self._check_shapes(inputs)
+        tokens = torch.cat(
+            (
+                self._head_tokens(inputs),
+                self._wrist_tokens(inputs),
+                self._point_tokens(inputs),
+            ),
+            dim=1,
+        )
+        return nn.functional.normalize(self.output_norm(tokens.mean(dim=1)), dim=1)
+
     def _initialize_action_head(self, head: nn.Linear) -> None:
         nn.init.uniform_(
             head.weight,
