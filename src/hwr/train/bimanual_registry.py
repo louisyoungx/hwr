@@ -156,7 +156,7 @@ def save_bimanual_training_run(
         "teleoperation_sessions": [],
         "behavior_cloning": False,
         "teacher_policy": False,
-        "updates": "goal-conditioned maximum-entropy asymmetric off-policy actor-critic",
+        "updates": "maximum-entropy asymmetric off-policy actor-critic",
         "actor_distribution": "reparameterized-squashed-gaussian",
         "safety_constraint": "privileged intervention cost critic",
         "initial_state_curriculum": (

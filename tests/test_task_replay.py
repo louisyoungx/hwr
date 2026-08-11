@@ -68,4 +68,6 @@ def test_task_partitioned_replay_discards_only_requested_task() -> None:
 
     assert discarded["tray"]["size"] == 4
     assert discarded["tray"]["episode_count"] == 1
+    assert discarded["tray"]["augmentation_eligible_transition_count"] == 4
+    assert discarded["tray"]["legacy_discarded_hindsight_transition_count"] == 0
     assert replay.task_sizes() == {"basket": 4, "drawer": 0, "tray": 0}

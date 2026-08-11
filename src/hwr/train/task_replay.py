@@ -152,6 +152,12 @@ class TaskPartitionedAutonomousReplayBuffer:
                 "progress_size": partition.progress_size,
                 "safety_size": partition.safety_size,
                 "episode_count": partition.episode_count,
+                "augmentation_eligible_transition_count": (
+                    partition.augmentation_count
+                ),
+                "legacy_discarded_hindsight_transition_count": (
+                    partition.legacy_discarded_hindsight_count
+                ),
             }
             self.partitions[task_id] = AutonomousReplayBuffer(
                 per_task, seed=self.seed ^ _stable_seed(task_id)

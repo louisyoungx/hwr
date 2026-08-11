@@ -70,6 +70,9 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert lineage["action_label_sources"] == []
     assert lineage["expert_policies"] == []
     assert lineage["behavior_cloning"] is False
+    assert lineage["updates"] == (
+        "maximum-entropy asymmetric off-policy actor-critic"
+    )
     assert replay["action_labels"] is False
     assert replay["storage"] == {
         "schema_version": "hwr.asymmetric-replay-storage/v3",
