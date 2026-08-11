@@ -156,6 +156,43 @@ def test_frontier_accepts_start_support_without_claiming_target_support() -> Non
     assert frontier.qualifies(outcome)
 
 
+def test_frontier_audits_each_physical_qualification_failure() -> None:
+    frontier = OutcomeFrontierCurriculum(("tray",))
+    rejected = FrontierOutcome(
+        0.11,
+        0.12,
+        False,
+        False,
+        support_contact=False,
+        payload_linear_speed=0.06,
+        payload_angular_speed=0.16,
+        target_distance=1.20,
+        initial_target_distance=0.80,
+        task_progress_observed=True,
+    )
+    qualified = FrontierOutcome(0.08, 0.09, False, False)
+
+    assert not frontier.observe("tray", rejected)
+    assert frontier.observe("tray", qualified)
+
+    expected = {
+        "observed": 2,
+        "qualified": 1,
+        "severe_collision": 0,
+        "unsupported": 1,
+        "payload_linear_speed": 1,
+        "payload_angular_speed": 1,
+        "target_beyond_workspace": 1,
+        "target_regression": 1,
+        "not_near": 1,
+    }
+    assert frontier.audit()["qualification_counts"]["tray"] == expected
+
+    restored = OutcomeFrontierCurriculum(("tray",))
+    restored.load_state_dict(frontier.state_dict())
+    assert restored.audit()["qualification_counts"]["tray"] == expected
+
+
 def test_frontier_rejects_observed_states_that_regress_far_from_task_target() -> None:
     frontier = OutcomeFrontierCurriculum(("tray",))
 

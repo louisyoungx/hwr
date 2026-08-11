@@ -531,7 +531,7 @@ class BimanualTrainingRunner:
                         contact_stability_steps,
                     )
                 )
-                if self.frontier.qualifies(frontier_outcome):
+                if self.frontier.observe(task_id, frontier_outcome):
                     self.frontier.consider(
                         task_id,
                         environment.capture_state_snapshot(),

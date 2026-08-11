@@ -11,6 +11,19 @@ import numpy as np
 from hwr.core.state_snapshot import PhysicalStateSnapshot
 
 
+FRONTIER_QUALIFICATION_COUNTERS = (
+    "observed",
+    "qualified",
+    "severe_collision",
+    "unsupported",
+    "payload_linear_speed",
+    "payload_angular_speed",
+    "target_beyond_workspace",
+    "target_regression",
+    "not_near",
+)
+
+
 @dataclass(frozen=True)
 class FrontierCurriculumConfig:
     capacity_per_task: int = 16
@@ -116,6 +129,12 @@ class OutcomeFrontierCurriculum:
         self.reset_validation_count = 0
         self.reset_validation_success_count = 0
         self.reset_validation_failure_count = 0
+        self.qualification_counts = {
+            task_id: {
+                name: 0 for name in FRONTIER_QUALIFICATION_COUNTERS
+            }
+            for task_id in identities
+        }
 
     def outcome_from_metrics(self, metrics: Mapping[str, float]) -> FrontierOutcome:
         return FrontierOutcome(
@@ -154,16 +173,28 @@ class OutcomeFrontierCurriculum:
         return signature, 1
 
     def qualifies(self, outcome: FrontierOutcome) -> bool:
+        return not self._qualification_failures(outcome)
+
+    def observe(self, task_id: str, outcome: FrontierOutcome) -> bool:
+        """Audit one autonomous state without changing qualification semantics."""
+        if task_id not in self.qualification_counts:
+            raise ValueError(f"frontier curriculum does not know {task_id}")
+        failures = self._qualification_failures(outcome)
+        counts = self.qualification_counts[task_id]
+        counts["observed"] += 1
+        if not failures:
+            counts["qualified"] += 1
+        for failure in failures:
+            counts[failure] += 1
+        return not failures
+
+    def _qualification_failures(
+        self, outcome: FrontierOutcome
+    ) -> tuple[str, ...]:
         physically_supported = (
             outcome.support_contact
             or outcome.left_contact
             or outcome.right_contact
-        )
-        settled = (
-            outcome.payload_linear_speed
-            <= self.config.maximum_payload_linear_speed
-            and outcome.payload_angular_speed
-            <= self.config.maximum_payload_angular_speed
         )
         progress_not_degraded = (
             not outcome.task_progress_observed
@@ -175,22 +206,47 @@ class OutcomeFrontierCurriculum:
             <= outcome.initial_target_distance
             + self.config.maximum_target_regression_meters
         )
-        return (
-            not outcome.severe_collision
-            and physically_supported
-            and settled
-            and progress_not_degraded
-            and (
-                outcome.left_contact
-                or outcome.right_contact
-                or min(
-                    outcome.left_reach_distance, outcome.right_reach_distance
-                ) <= self.config.discovery_reach_meters
-                or max(
-                    outcome.left_reach_distance, outcome.right_reach_distance
-                ) <= self.config.bilateral_reach_meters
+        near = (
+            outcome.left_contact
+            or outcome.right_contact
+            or min(
+                outcome.left_reach_distance, outcome.right_reach_distance
+            ) <= self.config.discovery_reach_meters
+            or max(
+                outcome.left_reach_distance, outcome.right_reach_distance
+            ) <= self.config.bilateral_reach_meters
+        )
+        failures = []
+        failures.extend(["severe_collision"] * outcome.severe_collision)
+        failures.extend(["unsupported"] * (not physically_supported))
+        failures.extend(
+            ["payload_linear_speed"]
+            * (
+                outcome.payload_linear_speed
+                > self.config.maximum_payload_linear_speed
             )
         )
+        failures.extend(
+            ["payload_angular_speed"]
+            * (
+                outcome.payload_angular_speed
+                > self.config.maximum_payload_angular_speed
+            )
+        )
+        failures.extend(
+            ["target_beyond_workspace"]
+            * (
+                outcome.task_progress_observed
+                and outcome.target_distance
+                > self.config.maximum_candidate_target_distance_meters
+            )
+        )
+        failures.extend(
+            ["target_regression"]
+            * (outcome.task_progress_observed and not progress_not_degraded)
+        )
+        failures.extend(["not_near"] * (not near))
+        return tuple(failures)
 
     def consider(
         self,
@@ -340,6 +396,10 @@ class OutcomeFrontierCurriculum:
             "entry_counts": {
                 task_id: len(values) for task_id, values in self.entries.items()
             },
+            "qualification_counts": {
+                task_id: dict(counts)
+                for task_id, counts in self.qualification_counts.items()
+            },
             "reset_count": self.reset_count,
             "reset_validation_count": self.reset_validation_count,
             "reset_validation_success_count": self.reset_validation_success_count,
@@ -396,6 +456,7 @@ class OutcomeFrontierCurriculum:
             "reset_validation_count": self.reset_validation_count,
             "reset_validation_success_count": self.reset_validation_success_count,
             "reset_validation_failure_count": self.reset_validation_failure_count,
+            "qualification_counts": self.qualification_counts,
             "entries": {
                 task_id: [
                     {
@@ -440,6 +501,16 @@ class OutcomeFrontierCurriculum:
         self.reset_validation_failure_count = int(
             value.get("reset_validation_failure_count", 0)
         )
+        saved_qualification_counts = value.get("qualification_counts", {})
+        self.qualification_counts = {
+            task_id: {
+                name: int(
+                    saved_qualification_counts.get(task_id, {}).get(name, 0)
+                )
+                for name in FRONTIER_QUALIFICATION_COUNTERS
+            }
+            for task_id in self.task_ids
+        }
         states = value["entries"]
         for task_id in self.task_ids:
             entries = []
