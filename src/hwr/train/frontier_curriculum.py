@@ -97,6 +97,9 @@ class OutcomeFrontierCurriculum:
             task_id: [] for task_id in identities
         }
         self.reset_count = 0
+        self.reset_validation_count = 0
+        self.reset_validation_success_count = 0
+        self.reset_validation_failure_count = 0
 
     def outcome_from_metrics(self, metrics: Mapping[str, float]) -> FrontierOutcome:
         return FrontierOutcome(
@@ -185,7 +188,9 @@ class OutcomeFrontierCurriculum:
         ]
         signature_capacity = max(1, self.config.capacity_per_task // 4)
         if len(same_source) >= self.config.maximum_entries_per_source_signature:
-            worst = min(same_source, key=self._retention_rank)
+            earliest = min(same_source, key=lambda item: item.source_step)
+            replaceable = [item for item in same_source if item is not earliest]
+            worst = min(replaceable or same_source, key=self._retention_rank)
             if not self._outperforms(candidate, worst):
                 return False
             values.remove(worst)
@@ -244,6 +249,47 @@ class OutcomeFrontierCurriculum:
         candidate_count = max(1, (len(matching) + 1) // 2)
         return matching[int(rng.integers(0, candidate_count))]
 
+    def find(
+        self,
+        task_id: str,
+        source_episode: int,
+        source_step: int,
+    ) -> FrontierEntry | None:
+        return next(
+            (
+                item
+                for item in self.entries.get(task_id, ())
+                if item.source_episode == source_episode
+                and item.source_step == source_step
+            ),
+            None,
+        )
+
+    def report_reset_outcome(
+        self, entry: FrontierEntry, contact_steps: int
+    ) -> bool | None:
+        if entry.signature not in (1, 2, 3) or not entry.snapshot.runtime_state:
+            return None
+        if contact_steps < 0:
+            raise ValueError("frontier reset contact steps cannot be negative")
+        self.reset_validation_count += 1
+        reproduced = contact_steps >= self.config.minimum_contact_stability_steps
+        if reproduced:
+            self.reset_validation_success_count += 1
+            return True
+        self.reset_validation_failure_count += 1
+        values = self.entries[entry.snapshot.task_id]
+        values[:] = [
+            item
+            for item in values
+            if not (
+                item.signature == entry.signature
+                and item.source_episode == entry.source_episode
+                and item.source_step == entry.source_step
+            )
+        ]
+        return False
+
     def audit(self) -> dict[str, object]:
         return {
             "schema_version": "hwr.outcome-frontier-curriculum/v1",
@@ -252,6 +298,9 @@ class OutcomeFrontierCurriculum:
                 task_id: len(values) for task_id, values in self.entries.items()
             },
             "reset_count": self.reset_count,
+            "reset_validation_count": self.reset_validation_count,
+            "reset_validation_success_count": self.reset_validation_success_count,
+            "reset_validation_failure_count": self.reset_validation_failure_count,
             "action_outputs": False,
             "actor_input_fields": [],
             "task_stages": False,
@@ -261,6 +310,9 @@ class OutcomeFrontierCurriculum:
             ),
             "snapshot_migration": (
                 "complete_state_replaces_and_suppresses_legacy_within_signature"
+            ),
+            "reset_validation": (
+                "outcome_only_contact_reproduction_under_task_free_dwell"
             ),
             "selection": (
                 "quality_weighted_signature_and_source_with_diversity_floor"
@@ -290,6 +342,9 @@ class OutcomeFrontierCurriculum:
             "task_ids": self.task_ids,
             "config": asdict(self.config),
             "reset_count": self.reset_count,
+            "reset_validation_count": self.reset_validation_count,
+            "reset_validation_success_count": self.reset_validation_success_count,
+            "reset_validation_failure_count": self.reset_validation_failure_count,
             "entries": {
                 task_id: [
                     {
@@ -323,6 +378,13 @@ class OutcomeFrontierCurriculum:
         if saved_config != current_config:
             raise ValueError("frontier checkpoint configuration differs")
         self.reset_count = int(value["reset_count"])
+        self.reset_validation_count = int(value.get("reset_validation_count", 0))
+        self.reset_validation_success_count = int(
+            value.get("reset_validation_success_count", 0)
+        )
+        self.reset_validation_failure_count = int(
+            value.get("reset_validation_failure_count", 0)
+        )
         states = value["entries"]
         for task_id in self.task_ids:
             entries = [
@@ -366,7 +428,12 @@ class OutcomeFrontierCurriculum:
                 and item.source_episode == source_episode
             ]
             matching.sort(key=self._display_rank)
-            retained.extend(matching[:limit])
+            earliest = min(matching, key=lambda item: item.source_step)
+            selected = [earliest]
+            selected.extend(
+                item for item in matching if item is not earliest
+            )
+            retained.extend(selected[:limit])
         return retained
 
     def _eligible_entries(

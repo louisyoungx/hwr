@@ -28,6 +28,7 @@ from hwr.train.asymmetric_rl import (
     AsymmetricRLConfig,
 )
 from hwr.train.bimanual_metrics import bilateral_near_statistics
+from hwr.train.bimanual_records import TrainingEpisodeRecord
 from hwr.train.action_exploration import (
     TemporalActionExplorer,
     TemporalExplorationConfig,
@@ -37,6 +38,7 @@ from hwr.train.frontier_curriculum import (
     FrontierCurriculumConfig,
     OutcomeFrontierCurriculum,
 )
+from hwr.train.frontier_validation import validate_frontier_reset
 from hwr.train.goal_replay import GoalEpisode
 from hwr.train.n_step import build_n_step_targets
 from hwr.train.task_replay import TaskPartitionedGoalReplayBuffer
@@ -153,50 +155,6 @@ class BimanualRLTrainingConfig:
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
-
-
-@dataclass(frozen=True)
-class TrainingEpisodeRecord:
-    episode: int
-    task_id: str
-    seed: int
-    steps: int
-    reward: float
-    success: bool
-    severe_collisions: int
-    maximum_concurrent_steps: int
-    left_contact_steps: int
-    right_contact_steps: int
-    simultaneous_contact_steps: int
-    stable_steps: int
-    minimum_left_reach_distance: float
-    minimum_right_reach_distance: float
-    minimum_worst_side_reach_distance: float
-    curriculum_level: float
-    replay_size: int
-    updates: int
-    bilateral_near_steps: int = 0
-    maximum_bilateral_near_steps: int = 0
-    safety_interventions: int = 0
-    sampling_probability: float = 1.0 / 3.0
-    actor_updates: int = 0
-    mean_critic_loss: float = 0.0
-    mean_safety_loss: float = 0.0
-    mean_actor_loss: float = 0.0
-    mean_actor_reward_value: float = 0.0
-    mean_actor_safety_risk: float = 0.0
-    mean_reward_critic_disagreement: float = 0.0
-    mean_safety_critic_disagreement: float = 0.0
-    mean_actor_motion_ratio: float = 0.0
-    maximum_actor_motion_ratio: float = 0.0
-    mean_actor_entropy: float = 0.0
-    mean_actor_motion_log_standard_deviation: float = 0.0
-    mean_actor_gripper_log_standard_deviation: float = 0.0
-    actor_learning_rate: float = 0.0
-    frontier_reset: bool = False
-    frontier_source_episode: int = -1
-    frontier_source_step: int = -1
-    environment_reset_seed: int = -1
 
 
 @dataclass
@@ -435,6 +393,7 @@ class BimanualTrainingRunner:
         records = []
         for record in value["records"]:
             fields = dict(record)
+            needs_reset_validation = "frontier_reset_validated" not in fields
             fields.setdefault(
                 "minimum_worst_side_reach_distance",
                 max(
@@ -443,6 +402,24 @@ class BimanualTrainingRunner:
                 ),
             )
             fields.setdefault("environment_reset_seed", fields["seed"])
+            entry = self.frontier.find(
+                fields["task_id"],
+                int(fields.get("frontier_source_episode", -1)),
+                int(fields.get("frontier_source_step", -1)),
+            )
+            fields.setdefault(
+                "frontier_source_signature", entry.signature if entry else -1
+            )
+            fields.setdefault("frontier_reset_contact_steps", 0)
+            fields.setdefault("frontier_reset_validated", False)
+            fields.setdefault("frontier_reset_reproduced", False)
+            if needs_reset_validation and entry is not None:
+                steps, validated, reproduced = validate_frontier_reset(
+                    self.frontier, entry, fields, self.config
+                )
+                fields["frontier_reset_contact_steps"] = steps
+                fields["frontier_reset_validated"] = validated
+                fields["frontier_reset_reproduced"] = reproduced
             records.append(TrainingEpisodeRecord(**fields))
         self.records = records
         self._environment_steps = int(value["environment_steps"])
@@ -558,6 +535,11 @@ class BimanualTrainingRunner:
             if terminal or limit:
                 break
         audit = environment.task_audit()
+        reset_contact_steps, reset_validated, reset_reproduced = (
+            validate_frontier_reset(
+                self.frontier, frontier_entry, audit, self.config
+            )
+        )
         self.replay.add_episode(
             task_id,
             self._goal_episode(
@@ -643,6 +625,12 @@ class BimanualTrainingRunner:
                 frontier_entry.source_step if frontier_entry else -1
             ),
             environment_reset_seed=reset_seed,
+            frontier_source_signature=(
+                frontier_entry.signature if frontier_entry else -1
+            ),
+            frontier_reset_contact_steps=reset_contact_steps,
+            frontier_reset_validated=reset_validated,
+            frontier_reset_reproduced=reset_reproduced,
         )
 
     def _select_action(

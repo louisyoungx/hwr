@@ -54,11 +54,11 @@ from hwr.train.task_sampling import (
     TaskOutcome,
 )
 from hwr.train.n_step import NStepTargets, build_n_step_targets
+from hwr.train.bimanual_records import TrainingEpisodeRecord
 from hwr.train.bimanual_training import (
     BimanualRLTrainingConfig,
     BimanualTrainingResult,
     BimanualTrainingRunner,
-    TrainingEpisodeRecord,
 )
 from hwr.train.bimanual_registry import (
     fork_bimanual_training_run,

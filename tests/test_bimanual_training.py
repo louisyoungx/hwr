@@ -254,3 +254,56 @@ def test_training_episode_can_start_from_an_autonomous_frontier_snapshot() -> No
         config.seed + 17 * 104729
     )
     assert result.frontier.reset_count == 1
+
+
+def test_task_free_dwell_removes_contact_snapshot_that_does_not_reproduce() -> None:
+    tasks, bindings = load_default_bimanual_training_catalogs(ROOT)
+    config = BimanualRLTrainingConfig(
+        episodes=1,
+        episode_step_limit=2,
+        replay_capacity=32,
+        batch_size=4,
+        learning_starts=100,
+        initial_random_episodes=0,
+        paired_gripper_exploration_probability=1.0,
+        actuator_initial_dwell_probability=1.0,
+        actuator_dwell_closed_probability=1.0,
+        actuator_dwell_steps=1,
+        frontier_reset_probability=1.0,
+        frontier_minimum_contact_stability_steps=1,
+        raw_image_width=16,
+        raw_image_height=12,
+        image_width=8,
+        image_height=6,
+        point_count=8,
+        language_dim=16,
+        hidden_dim=32,
+    )
+    runner = BimanualTrainingRunner(
+        tasks, MujocoBimanualBackendFactory(bindings), config
+    )
+    task_id = runner.task_ids[0]
+    backend = MujocoBimanualTaskBackend(
+        tasks[task_id], bindings[task_id], camera_width=16, camera_height=12
+    )
+    try:
+        backend.reset(seed=91, task_id=task_id)
+        snapshot = backend.capture_state_snapshot()
+    finally:
+        backend.close()
+    assert runner.frontier.consider(
+        task_id,
+        snapshot,
+        FrontierOutcome(0.05, 0.12, True, False),
+        source_episode=17,
+        source_step=23,
+        contact_stability_steps=1,
+    )
+
+    result = runner.train()
+
+    assert result.records[0].frontier_source_signature == 1
+    assert result.records[0].frontier_reset_validated is True
+    assert result.records[0].frontier_reset_reproduced is False
+    assert result.frontier.entries[task_id] == []
+    assert result.frontier.audit()["reset_validation_failure_count"] == 1

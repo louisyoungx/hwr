@@ -353,7 +353,66 @@ def test_complete_snapshot_replaces_and_suppresses_stronger_legacy_state() -> No
     assert selected is not None
     assert selected.source_episode == 2
     assert selected.snapshot.runtime_state
+    assert frontier.report_reset_outcome(selected, 40) is True
     assert all(item.snapshot.runtime_state for item in frontier.entries["tray"])
     assert frontier.audit()["snapshot_migration"] == (
         "complete_state_replaces_and_suppresses_legacy_within_signature"
     )
+    assert frontier.audit()["reset_validation_success_count"] == 1
+
+
+def test_failed_complete_reset_is_removed_and_falls_back_to_legacy() -> None:
+    frontier = OutcomeFrontierCurriculum(
+        ("tray",),
+        FrontierCurriculumConfig(capacity_per_task=8, reset_probability=1.0),
+    )
+    legacy = FrontierOutcome(0.03, 0.04, True, True)
+    complete = FrontierOutcome(0.04, 0.05, True, True)
+    assert frontier.consider(
+        "tray",
+        _snapshot("tray", 1.0),
+        legacy,
+        source_episode=1,
+        source_step=10,
+        contact_stability_steps=40,
+    )
+    assert frontier.consider(
+        "tray",
+        _complete_snapshot("tray", 2.0),
+        complete,
+        source_episode=2,
+        source_step=20,
+        contact_stability_steps=40,
+    )
+    selected = frontier.select("tray", np.random.default_rng(9))
+    assert selected is not None and selected.source_episode == 2
+
+    assert frontier.report_reset_outcome(selected, 0) is False
+    fallback = frontier.select("tray", np.random.default_rng(9))
+
+    assert fallback is not None and fallback.source_episode == 1
+    assert frontier.audit()["reset_validation_failure_count"] == 1
+
+
+def test_frontier_preserves_first_stable_frame_and_best_later_frame() -> None:
+    frontier = OutcomeFrontierCurriculum(
+        ("tray",),
+        FrontierCurriculumConfig(
+            capacity_per_task=8,
+            maximum_entries_per_source_signature=2,
+            minimum_contact_stability_steps=20,
+        ),
+    )
+    for step, distance in ((20, 0.08), (21, 0.07), (22, 0.06)):
+        assert frontier.consider(
+            "tray",
+            _complete_snapshot("tray", float(step)),
+            FrontierOutcome(distance, distance, True, True),
+            source_episode=3,
+            source_step=step,
+            contact_stability_steps=step,
+        )
+
+    retained = frontier.entries["tray"]
+
+    assert {item.source_step for item in retained} == {20, 22}
