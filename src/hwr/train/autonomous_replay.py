@@ -17,9 +17,10 @@ from hwr.train.environment_augmentation import (
     transform_actor_inputs,
     transform_privileged,
 )
+from hwr.train.learning_signals import reward_improvement_speeds
 
 
-PROGRESS_REPLAY_SCHEMA = "hwr.task-agnostic-reward-improvement/v3"
+PROGRESS_REPLAY_SCHEMA = "hwr.task-agnostic-reward-improvement-speed/v4"
 AUTONOMOUS_REPLAY_STORAGE_SCHEMA = "hwr.autonomous-replay-storage/v1"
 SAMPLE_AUGMENTATION_PROBABILITY = 0.50
 
@@ -29,10 +30,16 @@ class AutonomousEpisode:
     batch: AsymmetricRLBatch
     success: bool
     legal_transforms: tuple[str, ...]
+    reward_improvements: torch.Tensor | None = None
 
     def __post_init__(self) -> None:
         if self.batch.rewards.numel() == 0:
             raise ValueError("autonomous replay episode cannot be empty")
+        if self.reward_improvements is not None:
+            if self.reward_improvements.shape != self.batch.rewards.shape:
+                raise ValueError("reward improvement scores must align with replay")
+            if not torch.isfinite(self.reward_improvements).all():
+                raise ValueError("reward improvement scores must be finite")
         for name in self.legal_transforms:
             environment_transform_index(name)
 
@@ -237,7 +244,10 @@ class AutonomousReplayBuffer:
         self._generator = torch.Generator().manual_seed(seed ^ 0x4E2)
         self.episode_count = 0
         self.legacy_discarded_hindsight_count = 0
+        self.legacy_discarded_reward_priority_count = 0
         self.augmentation_count = 0
+        self._load_migration_discarded_reward_priority_count = 0
+        self._load_migration_rebuilt_reward_priority_count = 0
 
     @property
     def size(self) -> int:
@@ -271,7 +281,7 @@ class AutonomousReplayBuffer:
         if not episode.success:
             self.failures.add(original)
         self._add_discoveries(original)
-        self._add_progress_events(original)
+        self._add_progress_events(original, episode.reward_improvements)
         self._add_safety_events(original)
         count = original.rewards.shape[0]
         self.episode_count += 1
@@ -379,7 +389,13 @@ class AutonomousReplayBuffer:
         if indices.numel():
             self.safety_events.add(_slice_batch(batch, indices))
 
-    def _add_progress_events(self, batch: AsymmetricRLBatch) -> None:
+    def _add_progress_events(
+        self,
+        batch: AsymmetricRLBatch,
+        scores: torch.Tensor | None = None,
+        *,
+        keep: int | None = None,
+    ) -> int:
         actor_eligible = (
             batch.actor_weights > 0
             if batch.actor_weights is not None
@@ -387,9 +403,37 @@ class AutonomousReplayBuffer:
         )
         if batch.safety_costs is not None:
             actor_eligible &= batch.safety_costs <= 0.0
-        indices = _top_ranked_indices(batch.rewards, actor_eligible)
+        values = scores if scores is not None else _sequence_reward_improvements(batch)
+        values = values.to(batch.rewards.device, dtype=batch.rewards.dtype)
+        actor_eligible &= values > 0.0
+        indices = _top_ranked_indices(values, actor_eligible, keep=keep)
         if indices.numel():
             self.progress_events.add(_slice_batch(batch, indices))
+        return int(indices.numel())
+
+    def _rebuild_progress_events(self) -> int:
+        if not self.regular.size:
+            return 0
+        return self._add_progress_events(
+            self.regular.chronological(),
+            keep=self.progress_events.capacity,
+        )
+
+    def priority_migration_audit(self) -> dict[str, object] | None:
+        discarded = self._load_migration_discarded_reward_priority_count
+        rebuilt = self._load_migration_rebuilt_reward_priority_count
+        if not discarded and not rebuilt:
+            return None
+        return {
+            "schema_version": "hwr.reward-priority-migration/v1",
+            "reason": "derived_priority_changed_to_local_reward_improvement_speed",
+            "discarded_legacy_priority_rows": discarded,
+            "rebuilt_priority_rows": rebuilt,
+            "primary_autonomous_rows_retained": self.regular.size,
+            "action_labels": False,
+            "task_semantic_fields": [],
+        }
+
     def state_dict(self) -> dict[str, object]:
         return {
             "autonomous_replay_storage_schema": AUTONOMOUS_REPLAY_STORAGE_SCHEMA,
@@ -404,10 +448,15 @@ class AutonomousReplayBuffer:
             "legacy_discarded_hindsight_count": (
                 self.legacy_discarded_hindsight_count
             ),
+            "legacy_discarded_reward_priority_count": (
+                self.legacy_discarded_reward_priority_count
+            ),
             "augmentation_count": self.augmentation_count,
         }
 
     def load_state_dict(self, value: Mapping[str, object]) -> None:
+        self._load_migration_discarded_reward_priority_count = 0
+        self._load_migration_rebuilt_reward_priority_count = 0
         current_schema = (
             value.get("autonomous_replay_storage_schema")
             == AUTONOMOUS_REPLAY_STORAGE_SCHEMA
@@ -435,9 +484,16 @@ class AutonomousReplayBuffer:
         ):
             self.progress_events.load_state_dict(value["progress_events"])
         elif self.regular.size:
-            self._add_progress_events(self.regular.all())
+            discarded = int(value.get("progress_events", {}).get("size", 0))
+            rebuilt = self._rebuild_progress_events()
+            self._load_migration_discarded_reward_priority_count = discarded
+            self._load_migration_rebuilt_reward_priority_count = rebuilt
         self._generator.set_state(value["generator_state"])
         self.episode_count = int(value["episode_count"])
+        self.legacy_discarded_reward_priority_count = (
+            int(value.get("legacy_discarded_reward_priority_count", 0))
+            + self._load_migration_discarded_reward_priority_count
+        )
         self.augmentation_count = int(
             value.get("augmentation_count", value.get("mirror_count", 0))
         )
@@ -527,11 +583,31 @@ def _choose_batch_rows(
 
 
 def _top_ranked_indices(
-    values: torch.Tensor, eligible: torch.Tensor
+    values: torch.Tensor,
+    eligible: torch.Tensor,
+    *,
+    keep: int | None = None,
 ) -> torch.Tensor:
     indices = torch.nonzero(eligible).flatten()
     if not indices.numel():
         return indices
-    keep = max(1, math.ceil(math.sqrt(indices.numel())))
+    count = (
+        max(1, math.ceil(math.sqrt(indices.numel())))
+        if keep is None
+        else max(0, min(int(keep), indices.numel()))
+    )
     order = torch.argsort(values[indices], descending=True, stable=True)
-    return indices[order[:keep]]
+    return indices[order[:count]]
+
+
+def _sequence_reward_improvements(batch: AsymmetricRLBatch) -> torch.Tensor:
+    rewards = batch.rewards.detach().cpu().tolist()
+    done = batch.done.detach().cpu().tolist()
+    values: list[float] = []
+    start = 0
+    for index in range(1, len(rewards)):
+        if done[index - 1] > 0.5 and done[index] <= 0.5:
+            values.extend(reward_improvement_speeds(rewards[start:index]))
+            start = index
+    values.extend(reward_improvement_speeds(rewards[start:]))
+    return torch.tensor(values, dtype=batch.rewards.dtype)

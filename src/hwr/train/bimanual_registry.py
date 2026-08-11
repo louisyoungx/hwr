@@ -217,6 +217,9 @@ def save_bimanual_training_run(
         "legacy_discarded_hindsight_transition_count": (
             result.replay.legacy_discarded_hindsight_count
         ),
+        "legacy_discarded_reward_priority_transition_count": (
+            result.replay.legacy_discarded_reward_priority_count
+        ),
         "augmentation_eligible_transition_count": result.replay.augmentation_count,
         "stored_transform_copies": False,
         "sample_time_augmentation_probability": 0.50,
@@ -231,7 +234,9 @@ def save_bimanual_training_run(
         "failure_return": True,
         "task_agnostic_priority_replay": {
             "state_novelty": "ranked-normalized-critic-state-change",
-            "reward_improvement": "ranked-environment-reward",
+            "reward_improvement": (
+                "ranked-positive-episode-local-reward-improvement-speed"
+            ),
             "distance_thresholds": False,
             "task_semantic_fields": [],
             "action_labels": False,
@@ -452,6 +457,7 @@ def fork_bimanual_training_run(
         "discarded_actor_input_replay": discarded_input_replay,
         "discarded_replay": discarded_replay,
         "discarded_task_state": discarded_task_state,
+        "replay_priority_migration": runner.replay.priority_migration_audit(),
         "inherited_action_labels": False,
         "inherited_expert_policies": False,
     }

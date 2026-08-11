@@ -111,6 +111,13 @@ class TaskPartitionedAutonomousReplayBuffer:
         )
 
     @property
+    def legacy_discarded_reward_priority_count(self) -> int:
+        return sum(
+            partition.legacy_discarded_reward_priority_count
+            for partition in self.partitions.values()
+        )
+
+    @property
     def augmentation_count(self) -> int:
         return sum(
             partition.augmentation_count for partition in self.partitions.values()
@@ -120,6 +127,31 @@ class TaskPartitionedAutonomousReplayBuffer:
         return {
             task_id: partition.size
             for task_id, partition in self.partitions.items()
+        }
+
+    def priority_migration_audit(self) -> dict[str, object] | None:
+        tasks = {
+            task_id: audit
+            for task_id, partition in self.partitions.items()
+            if (audit := partition.priority_migration_audit()) is not None
+        }
+        if not tasks:
+            return None
+        return {
+            "schema_version": "hwr.partitioned-reward-priority-migration/v1",
+            "tasks": tasks,
+            "primary_autonomous_rows_retained": sum(
+                int(item["primary_autonomous_rows_retained"])
+                for item in tasks.values()
+            ),
+            "discarded_legacy_priority_rows": sum(
+                int(item["discarded_legacy_priority_rows"])
+                for item in tasks.values()
+            ),
+            "rebuilt_priority_rows": sum(
+                int(item["rebuilt_priority_rows"])
+                for item in tasks.values()
+            ),
         }
 
     def add_episode(
@@ -157,6 +189,9 @@ class TaskPartitionedAutonomousReplayBuffer:
                 ),
                 "legacy_discarded_hindsight_transition_count": (
                     partition.legacy_discarded_hindsight_count
+                ),
+                "legacy_discarded_reward_priority_transition_count": (
+                    partition.legacy_discarded_reward_priority_count
                 ),
             }
             self.partitions[task_id] = AutonomousReplayBuffer(

@@ -36,6 +36,10 @@ def test_task_partitioned_replay_round_trips_all_partition_state() -> None:
         restored.legacy_discarded_hindsight_count
         == replay.legacy_discarded_hindsight_count
     )
+    assert (
+        restored.legacy_discarded_reward_priority_count
+        == replay.legacy_discarded_reward_priority_count
+    )
     assert restored.discovery_size == replay.discovery_size
     assert restored.progress_size == replay.progress_size
     assert restored.safety_size == replay.safety_size
@@ -70,4 +74,10 @@ def test_task_partitioned_replay_discards_only_requested_task() -> None:
     assert discarded["tray"]["episode_count"] == 1
     assert discarded["tray"]["augmentation_eligible_transition_count"] == 4
     assert discarded["tray"]["legacy_discarded_hindsight_transition_count"] == 0
+    assert (
+        discarded["tray"][
+            "legacy_discarded_reward_priority_transition_count"
+        ]
+        == 0
+    )
     assert replay.task_sizes() == {"basket": 4, "drawer": 0, "tray": 0}

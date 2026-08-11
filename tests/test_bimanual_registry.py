@@ -122,6 +122,10 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert "numpy_rng_state" not in checkpoint
     assert replay["hindsight_enabled"] is False
     assert replay["legacy_discarded_hindsight_transition_count"] == 0
+    assert replay["legacy_discarded_reward_priority_transition_count"] == 0
+    assert replay["task_agnostic_priority_replay"]["reward_improvement"] == (
+        "ranked-positive-episode-local-reward-improvement-speed"
+    )
     assert replay["schema_version"] == "hwr.autonomous-replay/v1"
     assert replay["augmentation_eligible_transition_count"] == 2
     assert replay["stored_transform_copies"] is False
@@ -234,6 +238,7 @@ def test_training_fork_records_parent_hashes_and_only_exploration_changes(
     lineage = json.loads((fork_path / "lineage.json").read_text(encoding="utf-8"))
 
     assert provenance["fork_record_count"] == 1
+    assert "replay_priority_migration" in provenance
     assert set(provenance["config_changes"]) == {
         "actuator_dwell_probability",
         "actuator_dwell_steps",

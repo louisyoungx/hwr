@@ -449,6 +449,16 @@ def test_asymmetric_replay_shrink_keeps_newest_ring_transitions() -> None:
     assert sorted(restored.all().rewards.tolist()) == [5.0, 6.0, 7.0]
 
 
+def test_asymmetric_replay_exposes_ring_rows_in_chronological_order() -> None:
+    replay = AsymmetricReplayBuffer(6, seed=7)
+    replay.add(replace(_batch(), rewards=torch.arange(4, dtype=torch.float32)))
+    replay.add(replace(_batch(), rewards=torch.arange(4, 8, dtype=torch.float32)))
+
+    ordered = replay.chronological()
+
+    assert ordered.rewards.tolist() == [2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+
+
 def test_asymmetric_replay_compresses_visual_storage_and_restores_compute_dtype() -> None:
     replay = AsymmetricReplayBuffer(8, seed=7)
     batch = _batch()

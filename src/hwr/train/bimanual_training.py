@@ -660,7 +660,15 @@ class BimanualTrainingRunner:
                 targets.bootstrap_discounts, dtype=torch.float32
             ),
         )
-        return AutonomousEpisode(batch, success, legal_transforms)
+        improvements = torch.tensor(
+            reward_improvement_speeds(buffers.rewards), dtype=torch.float32
+        )
+        return AutonomousEpisode(
+            batch,
+            success,
+            legal_transforms,
+            reward_improvements=improvements,
+        )
 
     def _update_after_episode(self, episode_steps: int) -> dict[str, float]:
         if self.replay.size < max(self.config.learning_starts, self.config.batch_size):

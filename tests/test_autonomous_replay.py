@@ -234,7 +234,7 @@ def test_joint_reach_values_do_not_create_a_training_branch() -> None:
     assert rejected.discovery_size == replay.discovery_size
 
 
-def test_high_environment_rewards_receive_a_ranked_replay_quota() -> None:
+def test_positive_local_reward_improvements_receive_a_ranked_replay_quota() -> None:
     episode = _episode(success=False, legal_transforms=())
     state = episode.batch.privileged_state.clone()
     next_state = episode.batch.next_privileged_state.clone()
@@ -251,8 +251,9 @@ def test_high_environment_rewards_receive_a_ranked_replay_quota() -> None:
                 privileged_state=state,
                 next_privileged_state=next_state,
                 action_chunks=actions,
-                rewards=torch.tensor((-0.4, -0.3, 0.2, 0.9)),
+                rewards=torch.tensor((4.0, 4.0, 4.5, 4.0)),
             ),
+            reward_improvements=torch.tensor((0.0, 0.0, 0.5, -0.05)),
         )
     )
     sampled = replay.sample(
@@ -263,15 +264,20 @@ def test_high_environment_rewards_receive_a_ranked_replay_quota() -> None:
         safety_fraction=0.0,
     )
 
-    assert replay.progress_size == 2
-    assert int((sampled.rewards > 0.0).sum()) >= 2
-    assert torch.all(sampled.actor_weights[-2:] == 1.0)
+    assert replay.progress_size == 1
+    assert int((sampled.rewards == 4.5).sum()) >= 1
+    assert torch.all(sampled.actor_weights[-1:] == 1.0)
 
     legacy = replay.state_dict()
+    old_priority_size = legacy["progress_events"]["size"]
     legacy.pop("progress_event_schema")
     restored = AutonomousReplayBuffer(64, seed=18)
     restored.load_state_dict(legacy)
-    assert restored.progress_size == 2
+    audit = restored.priority_migration_audit()
+    assert audit is not None
+    assert audit["discarded_legacy_priority_rows"] == old_priority_size
+    assert restored.legacy_discarded_reward_priority_count == old_priority_size
+    assert restored.progress_size > 0
 
     passive = AutonomousReplayBuffer(64, seed=20)
     passive.add_episode(
@@ -284,7 +290,7 @@ def test_high_environment_rewards_receive_a_ranked_replay_quota() -> None:
             ),
         )
     )
-    assert passive.progress_size == 2
+    assert passive.progress_size == 0
 
     far_next = next_state.clone()
     far_next[:, 0] = 4.0
@@ -300,7 +306,25 @@ def test_high_environment_rewards_receive_a_ranked_replay_quota() -> None:
             ),
         )
     )
-    assert far.progress_size == 2
+    assert far.progress_size == 0
+
+
+def test_reward_priority_ignores_a_high_stationary_reward_plateau() -> None:
+    episode = _episode(success=False, legal_transforms=())
+    replay = AutonomousReplayBuffer(64, seed=21)
+
+    replay.add_episode(
+        replace(
+            episode,
+            batch=replace(
+                episode.batch,
+                rewards=torch.tensor((8.0, 8.0, 8.0, 8.0)),
+            ),
+            reward_improvements=torch.zeros(4),
+        )
+    )
+
+    assert replay.progress_size == 0
 
 
 def test_automatic_curriculum_expands_only_after_safe_success_window() -> None:

@@ -73,6 +73,19 @@ class AsymmetricReplayBuffer:
         }
         return self._unflatten_batch(values)
 
+    def chronological(self) -> AsymmetricRLBatch:
+        """Return retained rows from oldest to newest across ring wraparound."""
+        if self.size == 0:
+            raise ValueError("replay buffer is empty")
+        indices = _newest_indices(
+            self.capacity, self.size, self.position, self.size
+        )
+        values = {
+            name: value[indices].clone()
+            for name, value in self._storage.items()
+        }
+        return self._unflatten_batch(values)
+
     def state_dict(self) -> dict[str, object]:
         return {
             "storage_schema": REPLAY_STORAGE_SCHEMA,
