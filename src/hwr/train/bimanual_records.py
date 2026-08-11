@@ -51,3 +51,4 @@ class TrainingEpisodeRecord:
     frontier_reset_contact_steps: int = 0
     frontier_reset_validated: bool = False
     frontier_reset_reproduced: bool = False
+    frontier_reset_applied: bool = False

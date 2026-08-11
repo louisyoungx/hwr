@@ -168,7 +168,7 @@ flowchart TB
 - 无专家的在线环境采样、经验回放、Actor-Critic 优化、自动课程、检查点和实验 manifest；
 - 只通过核心运行时协议接收环境实例，禁止导入 MuJoCo 或硬件适配器；
 - `frontier_curriculum` 只管理自主发现的初始状态候选与来源审计，不解释适配器快照、不输出动作；
-- `frontier_curriculum` 可根据任务无关停驻后的接触结果淘汰不可复现快照；该反馈不进入 Actor 输入，且只有在停驻参数确定满足门槛时启用；
+- `frontier_curriculum` 可根据 Episode 外任务无关探针的接触结果淘汰不可复现快照；探针不进入 replay 或 Actor 输入，通过后才重新 reset 并开始正式 Episode；
 - Critic 可以接收训练期特权观察，但不得输出动作、示范或 Actor 可见特征；
 - 计算设备选择封装在训练后端；
 - 不读取专家数据、遥操作动作或教师 checkpoint。

@@ -77,6 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--frontier-signature-uniform", type=float, default=0.20)
     parser.add_argument("--frontier-source-capacity", type=int, default=2)
     parser.add_argument("--frontier-contact-stability", type=int, default=40)
+    parser.add_argument("--frontier-reset-validation-steps", type=int, default=40)
     parser.add_argument("--checkpoint-interval", type=int, default=10)
     return parser
 
@@ -146,6 +147,9 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         ),
         frontier_minimum_contact_stability_steps=(
             arguments.frontier_contact_stability
+        ),
+        frontier_reset_validation_steps=(
+            arguments.frontier_reset_validation_steps
         ),
     )
     output_root = (

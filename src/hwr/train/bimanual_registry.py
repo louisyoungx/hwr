@@ -41,6 +41,7 @@ FORKABLE_TRAINING_FIELDS = frozenset(
         "frontier_signature_uniform_fraction",
         "frontier_max_entries_per_source_signature",
         "frontier_minimum_contact_stability_steps",
+        "frontier_reset_validation_steps",
     }
 )
 
@@ -311,6 +312,7 @@ def resume_bimanual_training_run(
         "frontier_signature_uniform_fraction",
         "frontier_max_entries_per_source_signature",
         "frontier_minimum_contact_stability_steps",
+        "frontier_reset_validation_steps",
     ):
         if name == "frontier_signature_uniform_fraction":
             legacy_default = 1.0
@@ -318,6 +320,8 @@ def resume_bimanual_training_run(
             legacy_default = max(1, saved["frontier_capacity_per_task"] // 4)
         elif name == "frontier_minimum_contact_stability_steps":
             legacy_default = 1
+        elif name == "frontier_reset_validation_steps":
+            legacy_default = requested[name]
         else:
             legacy_default = requested[name]
         saved.setdefault(name, legacy_default)
@@ -388,4 +392,8 @@ def _normalized_training_config(value: Mapping[str, Any]) -> dict[str, Any]:
         )
     if "frontier_minimum_contact_stability_steps" not in value:
         saved["frontier_minimum_contact_stability_steps"] = 1
+    if "frontier_reset_validation_steps" not in value:
+        saved["frontier_reset_validation_steps"] = defaults[
+            "frontier_reset_validation_steps"
+        ]
     return saved

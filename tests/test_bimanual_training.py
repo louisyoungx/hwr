@@ -48,6 +48,8 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
             "3",
             "--frontier-contact-stability",
             "50",
+            "--frontier-reset-validation-steps",
+            "60",
         ]
     )
 
@@ -63,6 +65,7 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
     assert arguments.frontier_signature_uniform == 0.25
     assert arguments.frontier_source_capacity == 3
     assert arguments.frontier_contact_stability == 50
+    assert arguments.frontier_reset_validation_steps == 60
     assert arguments.episode_steps is None
 
 
@@ -271,6 +274,7 @@ def test_task_free_dwell_removes_contact_snapshot_that_does_not_reproduce() -> N
         actuator_dwell_steps=1,
         frontier_reset_probability=1.0,
         frontier_minimum_contact_stability_steps=1,
+        frontier_reset_validation_steps=1,
         raw_image_width=16,
         raw_image_height=12,
         image_width=8,
@@ -305,5 +309,8 @@ def test_task_free_dwell_removes_contact_snapshot_that_does_not_reproduce() -> N
     assert result.records[0].frontier_source_signature == 1
     assert result.records[0].frontier_reset_validated is True
     assert result.records[0].frontier_reset_reproduced is False
+    assert result.records[0].frontier_reset_applied is False
     assert result.frontier.entries[task_id] == []
     assert result.frontier.audit()["reset_validation_failure_count"] == 1
+    assert result.records[0].steps == 2
+    assert result.environment_steps == 2

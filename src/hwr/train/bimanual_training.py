@@ -29,6 +29,7 @@ from hwr.train.asymmetric_rl import (
 )
 from hwr.train.bimanual_metrics import bilateral_near_statistics
 from hwr.train.bimanual_records import TrainingEpisodeRecord
+from hwr.train.bimanual_runtime import dual_arm_action_frame
 from hwr.train.action_exploration import (
     TemporalActionExplorer,
     TemporalExplorationConfig,
@@ -38,7 +39,10 @@ from hwr.train.frontier_curriculum import (
     FrontierCurriculumConfig,
     OutcomeFrontierCurriculum,
 )
-from hwr.train.frontier_validation import validate_frontier_reset
+from hwr.train.frontier_validation import (
+    prepare_frontier_reset,
+    validate_frontier_reset,
+)
 from hwr.train.goal_replay import GoalEpisode
 from hwr.train.n_step import build_n_step_targets
 from hwr.train.task_replay import TaskPartitionedGoalReplayBuffer
@@ -74,6 +78,7 @@ class BimanualRLTrainingConfig:
     frontier_signature_uniform_fraction: float = 0.20
     frontier_max_entries_per_source_signature: int = 2
     frontier_minimum_contact_stability_steps: int = 40
+    frontier_reset_validation_steps: int = 40
     failure_replay_fraction: float = 0.5
     discovery_replay_fraction: float = 0.35
     safety_replay_fraction: float = 0.15
@@ -107,6 +112,7 @@ class BimanualRLTrainingConfig:
             self.frontier_capacity_per_task,
             self.frontier_max_entries_per_source_signature,
             self.frontier_minimum_contact_stability_steps,
+            self.frontier_reset_validation_steps,
             self.raw_image_width,
             self.raw_image_height,
             self.image_width,
@@ -123,6 +129,11 @@ class BimanualRLTrainingConfig:
         )
         if min(positive) <= 0 or self.initial_random_episodes < 0:
             raise ValueError("bimanual training dimensions must be positive")
+        if (
+            self.frontier_reset_validation_steps
+            < self.frontier_minimum_contact_stability_steps
+        ):
+            raise ValueError("frontier reset validation cannot be shorter than stability")
         if self.episode_step_limit is not None and self.episode_step_limit <= 0:
             raise ValueError("bimanual episode step limit must be positive when set")
         fractions = (
@@ -413,6 +424,9 @@ class BimanualTrainingRunner:
             fields.setdefault("frontier_reset_contact_steps", 0)
             fields.setdefault("frontier_reset_validated", False)
             fields.setdefault("frontier_reset_reproduced", False)
+            fields.setdefault(
+                "frontier_reset_applied", bool(fields.get("frontier_reset", False))
+            )
             if needs_reset_validation and entry is not None:
                 steps, validated, reproduced = validate_frontier_reset(
                     self.frontier, entry, fields, self.config
@@ -446,24 +460,28 @@ class BimanualTrainingRunner:
         frontier_entry = None
         if episode_index >= self.config.initial_random_episodes:
             frontier_entry = self.frontier.select(task_id, self.frontier_rng)
-        reset_seed = (
+        source_seed = (
             self.config.seed + frontier_entry.source_episode * 104729
             if frontier_entry
             else seed
         )
-        observation = environment.reset(
-            seed=reset_seed,
+        prepared = prepare_frontier_reset(
+            environment,
+            self.frontier,
+            frontier_entry,
             task_id=task_id,
-            initial_state=(frontier_entry.snapshot if frontier_entry else None),
+            episode_seed=seed,
+            source_seed=source_seed,
+            config=self.config,
         )
+        observation = prepared.observation
         self.explorer.reset()
         self.pipeline.reset()
         actor_input = self.pipeline.build(observation)
         state = environment.privileged_training_state()
         buffers = _EpisodeBuffers.empty()
         previous_action: DualArmAction | None = None
-        total_reward = 0.0
-        success = False
+        total_reward, success = 0.0, False
         safety_interventions = 0
         previous_contact_signature = 0
         contact_stability_steps = 0
@@ -476,7 +494,7 @@ class BimanualTrainingRunner:
                 random_phase=random_phase,
                 refresh_random=step % self.config.random_action_hold_steps == 0,
             )
-            frame = self._action_frame(
+            frame = dual_arm_action_frame(
                 observation.timestamp_ns,
                 action,
                 source=(
@@ -535,11 +553,6 @@ class BimanualTrainingRunner:
             if terminal or limit:
                 break
         audit = environment.task_audit()
-        reset_contact_steps, reset_validated, reset_reproduced = (
-            validate_frontier_reset(
-                self.frontier, frontier_entry, audit, self.config
-            )
-        )
         self.replay.add_episode(
             task_id,
             self._goal_episode(
@@ -624,13 +637,14 @@ class BimanualTrainingRunner:
             frontier_source_step=(
                 frontier_entry.source_step if frontier_entry else -1
             ),
-            environment_reset_seed=reset_seed,
+            environment_reset_seed=prepared.reset_seed,
             frontier_source_signature=(
                 frontier_entry.signature if frontier_entry else -1
             ),
-            frontier_reset_contact_steps=reset_contact_steps,
-            frontier_reset_validated=reset_validated,
-            frontier_reset_reproduced=reset_reproduced,
+            frontier_reset_contact_steps=prepared.probe.contact_steps,
+            frontier_reset_validated=prepared.probe.validated,
+            frontier_reset_reproduced=prepared.probe.reproduced,
+            frontier_reset_applied=prepared.applied,
         )
 
     def _select_action(
@@ -655,18 +669,6 @@ class BimanualTrainingRunner:
                 ].cpu().numpy()
             vector = self.explorer.perturb(vector)
         return DualArmAction.from_vector(vector)
-
-    def _action_frame(
-        self, timestamp_ns: int, action: DualArmAction, *, source: str
-    ) -> DualArmActionFrame:
-        period_ns = round(1_000_000_000 / 20.0)
-        return DualArmActionFrame(
-            timestamp_ns,
-            timestamp_ns,
-            timestamp_ns + 2 * period_ns,
-            source,
-            action,
-        )
 
     def _append_transition(
         self,
