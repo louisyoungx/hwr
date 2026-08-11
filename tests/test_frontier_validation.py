@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from hwr.core import PhysicalStateSnapshot
 from hwr.train import FrontierCurriculumConfig, FrontierOutcome, OutcomeFrontierCurriculum
-from hwr.train.frontier_validation import probe_frontier_reset
+from hwr.train.frontier_validation import prepare_frontier_reset, probe_frontier_reset
 
 
 class _ProbeEnvironment:
@@ -12,10 +12,12 @@ class _ProbeEnvironment:
         self.reset_count = 0
         self.apply_count = 0
         self.frames = []
+        self.initial_states = []
         self.observation = SimpleNamespace(timestamp_ns=0)
 
     def reset(self, *, seed, task_id, initial_state=None):
         self.reset_count += 1
+        self.initial_states.append(initial_state)
         self.observation = SimpleNamespace(timestamp_ns=0)
         return self.observation
 
@@ -42,6 +44,11 @@ class _ProbeEnvironment:
                 "payload_linear_speed": 0.0,
                 "payload_angular_speed": 0.0,
             }
+        )
+
+    def capture_state_snapshot(self):
+        return PhysicalStateSnapshot(
+            "tray", "test/v1", (9.0,), runtime_state=(10.0,)
         )
 
 
@@ -82,3 +89,45 @@ def test_complete_contact_frontier_is_probed_outside_actor_experience() -> None:
     assert environment.apply_count == 2
     assert all(frame.source == "autonomous_frontier_validation" for frame in environment.frames)
     assert all(frame.action.vector() == (0.0,) * 14 + (1.0, 1.0) for frame in environment.frames)
+    assert result.stabilized_snapshot == environment.capture_state_snapshot()
+
+
+def test_prepared_episode_starts_from_probe_end_state_without_probe_experience() -> None:
+    frontier = OutcomeFrontierCurriculum(
+        ("tray",),
+        FrontierCurriculumConfig(
+            reset_probability=1.0,
+            minimum_contact_stability_steps=2,
+        ),
+    )
+    snapshot = PhysicalStateSnapshot(
+        "tray", "test/v1", (0.0,), runtime_state=(1.0,)
+    )
+    assert frontier.consider(
+        "tray",
+        snapshot,
+        FrontierOutcome(0.04, 0.05, True, True),
+        source_episode=3,
+        source_step=4,
+        contact_stability_steps=2,
+    )
+    environment = _ProbeEnvironment()
+    config = SimpleNamespace(
+        frontier_minimum_contact_stability_steps=2,
+        frontier_reset_validation_steps=2,
+    )
+
+    prepared = prepare_frontier_reset(
+        environment,
+        frontier,
+        frontier.entries["tray"][0],
+        task_id="tray",
+        episode_seed=12,
+        source_seed=11,
+        config=config,
+    )
+
+    assert prepared.applied is True
+    assert environment.apply_count == 2
+    assert environment.reset_count == 2
+    assert environment.initial_states == [snapshot, prepared.probe.stabilized_snapshot]

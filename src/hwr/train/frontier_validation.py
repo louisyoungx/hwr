@@ -35,12 +35,15 @@ class FrontierProbeBackend(Protocol):
 
     def privileged_training_state(self) -> PrivilegedTaskState: ...
 
+    def capture_state_snapshot(self) -> PhysicalStateSnapshot: ...
+
 
 @dataclass(frozen=True)
 class FrontierResetProbe:
     contact_steps: int = 0
     validated: bool = False
     reproduced: bool = False
+    stabilized_snapshot: PhysicalStateSnapshot | None = None
 
 
 @dataclass(frozen=True)
@@ -66,10 +69,15 @@ def prepare_frontier_reset(
     )
     active = entry if not probe.validated or probe.reproduced else None
     reset_seed = source_seed if active is not None else episode_seed
+    initial_state = (
+        probe.stabilized_snapshot
+        if active is not None and probe.stabilized_snapshot is not None
+        else active.snapshot if active else None
+    )
     observation = environment.reset(
         seed=reset_seed,
         task_id=task_id,
-        initial_state=(active.snapshot if active else None),
+        initial_state=initial_state,
     )
     return PreparedFrontierReset(
         observation,
@@ -119,10 +127,12 @@ def probe_frontier_reset(
         if outcome.terminated or outcome.truncated:
             break
     reproduced = frontier.report_reset_outcome(entry, longest)
+    stabilized = environment.capture_state_snapshot() if reproduced else None
     return FrontierResetProbe(
         longest,
         validated=reproduced is not None,
         reproduced=bool(reproduced),
+        stabilized_snapshot=stabilized,
     )
 
 
