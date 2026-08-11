@@ -195,6 +195,8 @@ class OutcomeAdaptiveTaskSampler:
             self.legacy_discarded_outcome_count += sum(
                 len(items) for items in value.get("history", {}).values()
             )
+            self.sample_count = 0
+            self.credits = {task_id: 0.0 for task_id in self.task_ids}
             return
         if dict(value["config"]) != asdict(self.config):
             raise ValueError("task sampler checkpoint configuration differs")

@@ -95,8 +95,12 @@ def test_sampler_discards_legacy_geometry_histories() -> None:
     legacy = sampler.state_dict()
     legacy.pop("schema_version")
     legacy["history"]["a"] = [{"minimum_left_reach_distance": 0.1}]
+    legacy["sample_count"] = 19
+    legacy["credits"]["a"] = 0.7
 
     sampler.load_state_dict(legacy)
 
     assert not sampler.history["a"]
     assert sampler.legacy_discarded_outcome_count == 1
+    assert sampler.sample_count == 0
+    assert sampler.credits["a"] == 0.0
