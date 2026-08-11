@@ -53,6 +53,8 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
             "50",
             "--frontier-reset-validation-steps",
             "60",
+            "--visual-contrastive-weight",
+            "0.08",
         ]
     )
 
@@ -69,6 +71,7 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
     assert arguments.frontier_source_capacity == 3
     assert arguments.frontier_contact_stability == 50
     assert arguments.frontier_reset_validation_steps == 60
+    assert arguments.visual_contrastive_weight == 0.08
     assert arguments.episode_steps is None
 
 

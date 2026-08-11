@@ -49,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--discovery-replay", type=float, default=0.25)
     parser.add_argument("--progress-replay", type=float, default=0.35)
     parser.add_argument("--safety-replay", type=float, default=0.15)
+    parser.add_argument("--visual-contrastive-weight", type=float, default=0.05)
     parser.add_argument("--actor-learning-rate", type=float, default=3.0e-5)
     parser.add_argument("--final-actor-learning-rate", type=float, default=1.0e-5)
     parser.add_argument("--actor-learning-rate-decay-updates", type=int, default=6500)
@@ -114,6 +115,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         discovery_replay_fraction=arguments.discovery_replay,
         progress_replay_fraction=arguments.progress_replay,
         safety_replay_fraction=arguments.safety_replay,
+        visual_temporal_contrastive_weight=arguments.visual_contrastive_weight,
         actor_learning_rate=arguments.actor_learning_rate,
         final_actor_learning_rate=arguments.final_actor_learning_rate,
         actor_learning_rate_decay_updates=(

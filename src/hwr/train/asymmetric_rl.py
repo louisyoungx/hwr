@@ -21,6 +21,7 @@ from hwr.train.stochastic_action import (
     SquashedGaussianAction,
     sample_squashed_gaussian_action,
 )
+from hwr.train.visual_self_supervision import temporal_visual_contrastive_loss
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,8 @@ class AsymmetricRLConfig:
     base_linear_scale: float = 0.18
     base_angular_scale: float = 0.50
     arm_velocity_scale: float = 0.35
+    visual_temporal_contrastive_weight: float = 0.0
+    visual_contrastive_temperature: float = 0.1
 
     def __post_init__(self) -> None:
         if min(
@@ -63,6 +66,7 @@ class AsymmetricRLConfig:
             self.arm_velocity_scale,
             self.safety_learning_rate,
             self.reward_scale,
+            self.visual_contrastive_temperature,
         ) <= 0:
             raise ValueError("asymmetric RL learning rates must be positive")
         if not 0.0 <= self.discount <= 1.0:
@@ -86,6 +90,7 @@ class AsymmetricRLConfig:
             self.action_slew_penalty,
             self.safety_actor_penalty,
             self.conservative_critic_weight,
+            self.visual_temporal_contrastive_weight,
         )
         if min(regularizers) < 0.0:
             raise ValueError("entropy and action penalties cannot be negative")
@@ -257,6 +262,7 @@ class AsymmetricActorCriticTrainer:
             "actor_motion_log_standard_deviation": 0.0,
             "actor_gripper_log_standard_deviation": 0.0,
             "actor_learning_rate": 0.0,
+            "visual_contrastive_loss": 0.0,
         }
         actor_updated = (
             self.update_count >= self.config.actor_warmup_updates
@@ -436,6 +442,16 @@ class AsymmetricActorCriticTrainer:
             else torch.ones_like(q1)
         ).to(q1.dtype)
         denominator = weights.sum().clamp_min(1.0)
+        visual_loss = torch.zeros((), device=self.device)
+        if self.config.visual_temporal_contrastive_weight > 0.0:
+            visual_loss = temporal_visual_contrastive_loss(
+                self.actor,
+                self.target_actor,
+                batch.actor_inputs,
+                batch.next_actor_inputs,
+                batch.actor_weights,
+                temperature=self.config.visual_contrastive_temperature,
+            )
         loss = (
             weights
             * (
@@ -447,6 +463,7 @@ class AsymmetricActorCriticTrainer:
                 + self.config.safety_actor_penalty * safety_risk
             )
         ).sum() / denominator
+        loss += self.config.visual_temporal_contrastive_weight * visual_loss
         self.actor_optimizer.zero_grad(set_to_none=True)
         loss.backward()
         nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
@@ -480,6 +497,7 @@ class AsymmetricActorCriticTrainer:
             "actor_learning_rate": float(
                 self.actor_optimizer.param_groups[0]["lr"]
             ),
+            "visual_contrastive_loss": float(visual_loss.detach().cpu()),
         }
         return loss, metrics
 

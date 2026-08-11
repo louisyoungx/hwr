@@ -86,6 +86,7 @@ class BimanualRLTrainingConfig:
     discovery_replay_fraction: float = 0.25
     progress_replay_fraction: float = 0.35
     safety_replay_fraction: float = 0.15
+    visual_temporal_contrastive_weight: float = 0.05
     n_step_horizon: int = 8
     actor_learning_rate: float = 3.0e-5
     final_actor_learning_rate: float = 1.0e-5
@@ -158,6 +159,7 @@ class BimanualRLTrainingConfig:
             self.discovery_replay_fraction,
             self.progress_replay_fraction,
             self.safety_replay_fraction,
+            self.visual_temporal_contrastive_weight,
         )
         if min(fractions) < 0 or any(value > 1 for value in fractions[1:]):
             raise ValueError("bimanual training fractions are invalid")
@@ -259,6 +261,7 @@ class BimanualTrainingRunner:
                 config.actor_learning_rate_decay_updates
             ),
             behavior_regularization=0.0,
+            visual_temporal_contrastive_weight=config.visual_temporal_contrastive_weight,
         )
         self.explorer = TemporalActionExplorer(
             TemporalExplorationConfig(

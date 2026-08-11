@@ -111,6 +111,7 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert manifest["rl_config"]["actor_learning_rate"] == (
         result.config.actor_learning_rate
     )
+    assert manifest["rl_config"]["visual_temporal_contrastive_weight"] == 0.05
     assert manifest["critic_config"]["privileged_state_dim"] == 62
 
     result.records.append(result.records[0])

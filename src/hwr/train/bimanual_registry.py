@@ -46,6 +46,7 @@ FORKABLE_TRAINING_FIELDS = frozenset(
         "discovery_replay_fraction",
         "progress_replay_fraction",
         "safety_replay_fraction",
+        "visual_temporal_contrastive_weight",
     }
 )
 

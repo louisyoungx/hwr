@@ -107,6 +107,19 @@ def test_asymmetric_update_changes_actor_using_separate_privileged_critic() -> N
     assert not any("critic" in name for name, _ in trainer.actor.named_parameters())
 
 
+def test_actor_update_includes_label_free_temporal_visual_objective() -> None:
+    trainer = _trainer()
+    trainer.config = replace(
+        trainer.config,
+        visual_temporal_contrastive_weight=0.05,
+    )
+
+    metrics = trainer.update(_batch())
+
+    assert metrics["visual_contrastive_loss"] > 0.0
+    assert np.isfinite(metrics["visual_contrastive_loss"])
+
+
 def test_actor_optimizes_the_pessimistic_twin_critic_value() -> None:
     class ConflictingCritic(torch.nn.Module):
         def forward(self, state, action):
