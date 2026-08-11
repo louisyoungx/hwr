@@ -88,6 +88,12 @@ class TaskPartitionedGoalReplayBuffer:
         )
 
     @property
+    def progress_size(self) -> int:
+        return sum(
+            partition.progress_size for partition in self.partitions.values()
+        )
+
+    @property
     def episode_count(self) -> int:
         return sum(
             partition.episode_count for partition in self.partitions.values()
@@ -126,6 +132,7 @@ class TaskPartitionedGoalReplayBuffer:
         *,
         failure_fraction: float = 0.35,
         discovery_fraction: float = 0.35,
+        progress_fraction: float = 0.0,
         safety_fraction: float = 0.15,
     ) -> AsymmetricRLBatch:
         active = [
@@ -141,6 +148,7 @@ class TaskPartitionedGoalReplayBuffer:
                 count,
                 failure_fraction=failure_fraction,
                 discovery_fraction=discovery_fraction,
+                progress_fraction=progress_fraction,
                 safety_fraction=safety_fraction,
             )
             for partition, count in zip(active, counts, strict=True)

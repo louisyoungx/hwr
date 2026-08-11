@@ -72,6 +72,8 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert lineage["behavior_cloning"] is False
     assert replay["action_labels"] is False
     assert replay["safety_event_size"] == 0
+    assert replay["physical_progress_size"] == 0
+    assert replay["physical_progress_criteria"]["action_labels"] is False
     assert set(replay["task_partition_sizes"]) == {
         "carry_dining_tray/v1",
         "carry_living_room_basket/v1",
@@ -123,6 +125,7 @@ def test_training_run_resumes_at_next_episode_with_replay_and_rng(tmp_path) -> N
     manifest_path = path / "manifest.json"
     legacy_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     legacy_manifest["training_config"].pop("discovery_replay_fraction")
+    legacy_manifest["training_config"].pop("progress_replay_fraction")
     legacy_manifest["training_config"].pop("safety_replay_fraction")
     manifest_path.write_text(json.dumps(legacy_manifest), encoding="utf-8")
     tasks, bindings = load_default_bimanual_training_catalogs(ROOT)

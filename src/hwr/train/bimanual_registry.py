@@ -42,6 +42,10 @@ FORKABLE_TRAINING_FIELDS = frozenset(
         "frontier_max_entries_per_source_signature",
         "frontier_minimum_contact_stability_steps",
         "frontier_reset_validation_steps",
+        "failure_replay_fraction",
+        "discovery_replay_fraction",
+        "progress_replay_fraction",
+        "safety_replay_fraction",
     }
 )
 
@@ -183,6 +187,7 @@ def save_bimanual_training_run(
         "size": result.replay.size,
         "failure_size": result.replay.failure_size,
         "discovery_size": result.replay.discovery_size,
+        "physical_progress_size": result.replay.progress_size,
         "safety_event_size": result.replay.safety_size,
         "episode_count": result.replay.episode_count,
         "hindsight_transition_count": result.replay.hindsight_count,
@@ -194,6 +199,12 @@ def save_bimanual_training_run(
             "one_side_reach_meters": 0.06,
             "bilateral_reach_meters": 0.10,
             "bilateral_metric": "same_transition_worst_side_distance",
+        },
+        "physical_progress_criteria": {
+            "controlled_target_progress_increase": True,
+            "controlled_articulation_progress_increase": True,
+            "minimum_delta": 1.0e-5,
+            "action_labels": False,
         },
         "proposed_actions_for_safety_cost": True,
         "safety_cost_labels": "deterministic_runtime_intervention",
@@ -297,6 +308,9 @@ def resume_bimanual_training_run(
     saved.setdefault(
         "safety_replay_fraction", requested["safety_replay_fraction"]
     )
+    saved.setdefault(
+        "progress_replay_fraction", requested["progress_replay_fraction"]
+    )
     for name in (
         "reflection_coupled_exploration_probability",
         "paired_gripper_exploration_probability",
@@ -384,6 +398,8 @@ def _normalized_training_config(value: Mapping[str, Any]) -> dict[str, Any]:
     defaults = BimanualRLTrainingConfig().to_dict()
     for name, default in defaults.items():
         saved.setdefault(name, default)
+    if "progress_replay_fraction" not in value:
+        saved["progress_replay_fraction"] = 0.0
     if "frontier_signature_uniform_fraction" not in value:
         saved["frontier_signature_uniform_fraction"] = 1.0
     if "frontier_max_entries_per_source_signature" not in value:

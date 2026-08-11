@@ -16,6 +16,7 @@ from hwr.train.asymmetric_rl import AsymmetricRLBatch
 
 DISCOVERY_REACH_DISTANCE_METERS = 0.06
 BILATERAL_DISCOVERY_REACH_DISTANCE_METERS = 0.10
+CONTROLLED_PROGRESS_EPSILON = 1.0e-5
 
 
 @dataclass(frozen=True)
@@ -317,6 +318,9 @@ class GoalConditionedReplayBuffer:
         self.discoveries = AsymmetricReplayBuffer(
             max(1, capacity // 8), seed=seed ^ 0xD15C
         )
+        self.progress_events = AsymmetricReplayBuffer(
+            max(1, capacity // 8), seed=seed ^ 0xA091
+        )
         self.safety_events = AsymmetricReplayBuffer(
             max(1, capacity // 8), seed=seed ^ 0x5AFE
         )
@@ -341,6 +345,10 @@ class GoalConditionedReplayBuffer:
     def safety_size(self) -> int:
         return self.safety_events.size
 
+    @property
+    def progress_size(self) -> int:
+        return self.progress_events.size
+
     def add_episode(self, episode: GoalEpisode) -> GoalReplayAddResult:
         original = _with_actor_weights(episode.batch, 1.0)
         hindsight = hindsight_relabel(episode, self._generator)
@@ -354,10 +362,12 @@ class GoalConditionedReplayBuffer:
             if not episode.success:
                 self.failures.add(batch)
         self._add_discoveries(original)
+        self._add_progress_events(original)
         self._add_safety_events(original)
         if episode.mirrorable:
             mirrored = mirror_batch(original)
             self._add_discoveries(mirrored)
+            self._add_progress_events(mirrored)
             self._add_safety_events(mirrored)
         count = original.rewards.shape[0]
         self.episode_count += 1
@@ -378,33 +388,63 @@ class GoalConditionedReplayBuffer:
         *,
         failure_fraction: float = 0.35,
         discovery_fraction: float = 0.35,
+        progress_fraction: float = 0.0,
         safety_fraction: float = 0.15,
     ) -> AsymmetricRLBatch:
-        fractions = (failure_fraction, discovery_fraction, safety_fraction)
+        fractions = (
+            failure_fraction,
+            discovery_fraction,
+            progress_fraction,
+            safety_fraction,
+        )
         if not all(0.0 <= value <= 1.0 for value in fractions):
             raise ValueError("replay fractions must be in [0, 1]")
         if sum(fractions) > 1.0 + 1e-9:
             raise ValueError("replay fractions cannot exceed one batch")
         safety_count = min(round(batch_size * safety_fraction), self.safety_size)
         safety_count = min(safety_count, max(0, batch_size - 1))
+        progress_count = min(
+            round(batch_size * progress_fraction), self.progress_size
+        )
+        progress_count = min(
+            progress_count, max(0, batch_size - safety_count - 1)
+        )
         discovery_count = min(
             round(batch_size * discovery_fraction), self.discovery_size
         )
         discovery_count = min(
-            discovery_count, max(0, batch_size - safety_count - 1)
+            discovery_count,
+            max(0, batch_size - safety_count - progress_count - 1),
         )
         failure_count = min(round(batch_size * failure_fraction), self.failure_size)
         failure_count = min(
             failure_count,
-            max(0, batch_size - safety_count - discovery_count - 1),
+            max(
+                0,
+                batch_size
+                - safety_count
+                - progress_count
+                - discovery_count
+                - 1,
+            ),
         )
-        regular_count = batch_size - safety_count - discovery_count - failure_count
+        regular_count = (
+            batch_size
+            - safety_count
+            - progress_count
+            - discovery_count
+            - failure_count
+        )
         regular = self.regular.sample(regular_count)
         result = regular
         if failure_count:
             result = _concat_batches(result, self.failures.sample(failure_count))
         if discovery_count:
             result = _concat_batches(result, self.discoveries.sample(discovery_count))
+        if progress_count:
+            result = _concat_batches(
+                result, self.progress_events.sample(progress_count)
+            )
         if safety_count:
             result = _concat_batches(result, self.safety_events.sample(safety_count))
         return result
@@ -446,11 +486,31 @@ class GoalConditionedReplayBuffer:
         if indices.numel():
             self.safety_events.add(_slice_batch(batch, indices))
 
+    def _add_progress_events(self, batch: AsymmetricRLBatch) -> None:
+        actor_eligible = (
+            batch.actor_weights > 0
+            if batch.actor_weights is not None
+            else torch.ones_like(batch.rewards, dtype=torch.bool)
+        )
+        target_delta = (
+            batch.next_privileged_state[:, 60] - batch.privileged_state[:, 60]
+        )
+        articulation_delta = (
+            batch.next_privileged_state[:, 61] - batch.privileged_state[:, 61]
+        )
+        progressed = (target_delta > CONTROLLED_PROGRESS_EPSILON) | (
+            articulation_delta > CONTROLLED_PROGRESS_EPSILON
+        )
+        indices = torch.nonzero(progressed & actor_eligible).flatten()
+        if indices.numel():
+            self.progress_events.add(_slice_batch(batch, indices))
+
     def state_dict(self) -> dict[str, object]:
         return {
             "regular": self.regular.state_dict(),
             "failures": self.failures.state_dict(),
             "discoveries": self.discoveries.state_dict(),
+            "progress_events": self.progress_events.state_dict(),
             "safety_events": self.safety_events.state_dict(),
             "generator_state": self._generator.get_state(),
             "episode_count": self.episode_count,
@@ -469,6 +529,10 @@ class GoalConditionedReplayBuffer:
             self.safety_events.load_state_dict(value["safety_events"])
         elif self.regular.size:
             self._add_safety_events(self.regular.all())
+        if "progress_events" in value:
+            self.progress_events.load_state_dict(value["progress_events"])
+        elif self.regular.size:
+            self._add_progress_events(self.regular.all())
         self._generator.set_state(value["generator_state"])
         self.episode_count = int(value["episode_count"])
         self.hindsight_count = int(value["hindsight_count"])

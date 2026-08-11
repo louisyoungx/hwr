@@ -207,6 +207,43 @@ def test_jointly_near_states_enter_discovery_replay_without_one_close_side() -> 
     assert rejected.discovery_size == 0
 
 
+def test_controlled_task_progress_receives_a_dedicated_replay_quota() -> None:
+    episode = _episode(success=False, mirrorable=False)
+    state = episode.batch.privileged_state.clone()
+    next_state = episode.batch.next_privileged_state.clone()
+    next_state[:, 60] = torch.tensor((0.0, 0.01, 0.02, 0.03))
+    replay = GoalConditionedReplayBuffer(64, seed=17)
+
+    replay.add_episode(
+        replace(
+            episode,
+            batch=replace(
+                episode.batch,
+                privileged_state=state,
+                next_privileged_state=next_state,
+            ),
+        )
+    )
+    sampled = replay.sample(
+        4,
+        failure_fraction=0.0,
+        discovery_fraction=0.0,
+        progress_fraction=0.75,
+        safety_fraction=0.0,
+    )
+
+    assert replay.progress_size == 3
+    deltas = sampled.next_privileged_state[:, 60] - sampled.privileged_state[:, 60]
+    assert int((deltas > 1.0e-5).sum()) >= 3
+    assert torch.all(sampled.actor_weights[-3:] == 1.0)
+
+    legacy = replay.state_dict()
+    legacy.pop("progress_events")
+    restored = GoalConditionedReplayBuffer(64, seed=18)
+    restored.load_state_dict(legacy)
+    assert restored.progress_size == 3
+
+
 def test_automatic_curriculum_expands_only_after_safe_success_window() -> None:
     curriculum = AutomaticCurriculum(
         ("basket",),

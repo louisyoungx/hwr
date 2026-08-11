@@ -45,6 +45,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--replay-capacity", type=int, default=80_000)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--learning-starts", type=int, default=512)
+    parser.add_argument("--failure-replay", type=float, default=0.25)
+    parser.add_argument("--discovery-replay", type=float, default=0.25)
+    parser.add_argument("--progress-replay", type=float, default=0.35)
+    parser.add_argument("--safety-replay", type=float, default=0.15)
     parser.add_argument("--actor-learning-rate", type=float, default=3.0e-5)
     parser.add_argument("--final-actor-learning-rate", type=float, default=1.0e-5)
     parser.add_argument("--actor-learning-rate-decay-updates", type=int, default=6500)
@@ -106,6 +110,10 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         replay_capacity=arguments.replay_capacity,
         batch_size=arguments.batch_size,
         learning_starts=arguments.learning_starts,
+        failure_replay_fraction=arguments.failure_replay,
+        discovery_replay_fraction=arguments.discovery_replay,
+        progress_replay_fraction=arguments.progress_replay,
+        safety_replay_fraction=arguments.safety_replay,
         actor_learning_rate=arguments.actor_learning_rate,
         final_actor_learning_rate=arguments.final_actor_learning_rate,
         actor_learning_rate_decay_updates=(

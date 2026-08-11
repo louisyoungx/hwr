@@ -29,4 +29,5 @@ def test_task_partitioned_replay_round_trips_all_partition_state() -> None:
     assert restored.task_sizes() == replay.task_sizes()
     assert restored.mirror_count == replay.mirror_count
     assert restored.discovery_size == replay.discovery_size
+    assert restored.progress_size == replay.progress_size
     assert restored.safety_size == replay.safety_size

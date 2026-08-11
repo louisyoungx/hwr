@@ -82,8 +82,9 @@ class BimanualRLTrainingConfig:
     frontier_max_entries_per_source_signature: int = 2
     frontier_minimum_contact_stability_steps: int = 40
     frontier_reset_validation_steps: int = 40
-    failure_replay_fraction: float = 0.5
-    discovery_replay_fraction: float = 0.35
+    failure_replay_fraction: float = 0.25
+    discovery_replay_fraction: float = 0.25
+    progress_replay_fraction: float = 0.35
     safety_replay_fraction: float = 0.15
     n_step_horizon: int = 8
     actor_learning_rate: float = 3.0e-5
@@ -155,6 +156,7 @@ class BimanualRLTrainingConfig:
             self.frontier_signature_uniform_fraction,
             self.failure_replay_fraction,
             self.discovery_replay_fraction,
+            self.progress_replay_fraction,
             self.safety_replay_fraction,
         )
         if min(fractions) < 0 or any(value > 1 for value in fractions[1:]):
@@ -162,6 +164,7 @@ class BimanualRLTrainingConfig:
         replay_fraction = (
             self.failure_replay_fraction
             + self.discovery_replay_fraction
+            + self.progress_replay_fraction
             + self.safety_replay_fraction
         )
         if replay_fraction > 1.0 + 1e-9:
@@ -750,6 +753,7 @@ class BimanualTrainingRunner:
                 self.config.batch_size,
                 failure_fraction=self.config.failure_replay_fraction,
                 discovery_fraction=self.config.discovery_replay_fraction,
+                progress_fraction=self.config.progress_replay_fraction,
                 safety_fraction=self.config.safety_replay_fraction,
             )
             metrics.append(self.trainer.update(batch))
