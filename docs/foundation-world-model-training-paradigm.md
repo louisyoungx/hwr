@@ -342,6 +342,10 @@ Checkpoint 和部署导出同样采用固定保留数，只删除格式合法的
 为任一场景增加算法分支。训练过程可以断点续训和按可恢复 checkpoint 提交，但不因中间
 指标重新切换到手写课程或专家数据。
 
+正式后台启动统一使用 `scripts/start_foundation_training_tmux.sh RUN_ID [--resume]`。该入口
+固定调用唯一 foundation 训练应用、run root、readiness、模型目录和飞书机器人完成通知，
+并拒绝重复 tmux session 或不安全的 run id；它不提供跳过门禁参数。
+
 最终必须满足：
 
 - 收纳篮、托盘和抽屉放物三个任务分别评测至少 20 个未见随机种子；“未见”必须同时

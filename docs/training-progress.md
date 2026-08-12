@@ -224,8 +224,12 @@ CPU 及实际训练设备的 Torch RNG。固定回归已验证 CPU 快照恢复�
 门禁通过后才允许执行：
 
 ```bash
-hwr-train-foundation-world-model --run-id foundation-wm-004 --device mps
+scripts/start_foundation_training_tmux.sh foundation-wm-004
 ```
+
+启动器在独立 tmux session 中运行正式训练，并通过现有通知包装器在完成或异常退出后用
+飞书机器人身份发送 run、日志、Episode 数、checkpoint 路径和 SHA-256；无需在训练期间
+保持当前 Codex 会话占用。
 
 训练完成后的固定评测命令为：
 
