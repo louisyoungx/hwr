@@ -490,5 +490,9 @@ class MujocoBimanualTaskBackend(MujocoDualArmBackend):
             "maximum_concurrent_steps": 0.0,
             "controlled_target_progress": 0.0,
             "controlled_articulation_progress": 0.0,
+            "maximum_controlled_target_progress": 0.0,
+            "maximum_controlled_articulation_progress": 0.0,
+            "controlled_target_complete": 0.0,
+            "controlled_articulation_complete": 0.0,
             "severe_collisions": float(self._severe_collision_count),
         }

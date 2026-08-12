@@ -69,10 +69,16 @@ def test_carry_success_requires_prior_bimanual_window_and_two_second_stability(
     tracker = BimanualTaskTracker(spec)
     tracker.reset(_sample(task_id))
 
-    for _ in range(spec.concurrent_steps):
-        update = tracker.update(
-            _sample(task_id, left_contact=True, right_contact=True)
-        )
+    contacted = _sample(task_id, left_contact=True, right_contact=True)
+    tracker.update(contacted)
+    transported = replace(contacted, payload_position=spec.target_position)
+    update = tracker.update(transported)
+    for _ in range(spec.concurrent_steps - 2):
+        update = tracker.update(transported)
+    assert update.metrics["controlled_target_complete"] == 1.0
+    assert update.metrics["maximum_controlled_target_progress"] >= (
+        update.metrics["required_controlled_target_progress"]
+    )
     assert update.maximum_concurrent_steps == spec.concurrent_steps
     assert tracker.left_contact_steps == spec.concurrent_steps
     assert tracker.right_contact_steps == spec.concurrent_steps
@@ -110,15 +116,16 @@ def test_drawer_requires_left_hold_open_while_right_side_places_payload() -> Non
     tracker = BimanualTaskTracker(spec)
     tracker.reset(_sample(task_id))
 
-    for _ in range(spec.concurrent_steps):
-        tracker.update(
-            _sample(
-                task_id,
-                left_contact=True,
-                right_contact=True,
-                articulation_position=0.30,
-            )
-        )
+    contacted = _sample(task_id, left_contact=True, right_contact=True)
+    tracker.update(contacted)
+    transported = replace(
+        contacted,
+        payload_position=spec.target_position,
+        articulation_position=0.30,
+    )
+    tracker.update(transported)
+    for _ in range(spec.concurrent_steps - 2):
+        tracker.update(transported)
     for _ in range(spec.hold_steps):
         update = tracker.update(
             _at_target(
@@ -283,7 +290,7 @@ def test_carry_progress_requires_sustained_bilateral_contact(task_id: str) -> No
     assert carried.reward > pushed.reward
 
 
-def test_releasing_payload_withdraws_unfinished_carry_progress() -> None:
+def test_releasing_payload_withdraws_live_reward_but_keeps_completion_evidence() -> None:
     task_id = "carry_dining_tray/v1"
     spec = SPECS[task_id]
     initial = _sample(
@@ -303,7 +310,50 @@ def test_releasing_payload_withdraws_unfinished_carry_progress() -> None:
 
     assert carried.metrics["controlled_target_progress"] > 0.0
     assert released.metrics["controlled_target_progress"] == 0.0
+    assert released.metrics["maximum_controlled_target_progress"] > 0.0
+    assert released.metrics["controlled_target_complete"] == 1.0
     assert released.reward < 0.0
+
+
+def test_prior_bimanual_contact_does_not_authorize_an_uncontrolled_push() -> None:
+    task_id = "carry_living_room_basket/v1"
+    spec = SPECS[task_id]
+    initial = _sample(task_id, payload_position=(0.7, 0.0, 0.7))
+    tracker = BimanualTaskTracker(spec)
+    tracker.reset(initial)
+
+    for _ in range(spec.concurrent_steps):
+        tracker.update(replace(initial, left_contact=True, right_contact=True))
+    for _ in range(spec.hold_steps):
+        update = tracker.update(_at_target(task_id))
+
+    assert not update.success
+    assert update.stable_steps == spec.hold_steps
+    assert update.maximum_concurrent_steps == spec.concurrent_steps
+    assert update.metrics["maximum_controlled_target_progress"] == 0.0
+    assert update.metrics["controlled_target_complete"] == 0.0
+
+
+def test_leaving_target_revokes_causal_completion_until_controlled_return() -> None:
+    task_id = "carry_dining_tray/v1"
+    spec = SPECS[task_id]
+    initial = _sample(task_id, payload_position=(0.7, 0.0, 0.7))
+    contacted = replace(initial, left_contact=True, right_contact=True)
+    tracker = BimanualTaskTracker(spec)
+    tracker.reset(initial)
+    tracker.update(contacted)
+    tracker.update(replace(contacted, payload_position=spec.target_position))
+    assert tracker.update(
+        replace(contacted, payload_position=spec.target_position)
+    ).metrics["controlled_target_complete"] == 1.0
+
+    tracker.update(initial)
+    for _ in range(spec.hold_steps):
+        update = tracker.update(_at_target(task_id))
+
+    assert not update.success
+    assert update.metrics["maximum_controlled_target_progress"] > 0.0
+    assert update.metrics["controlled_target_complete"] == 0.0
 
 
 def test_drawer_opening_progress_requires_sustained_left_contact() -> None:
@@ -326,3 +376,39 @@ def test_drawer_opening_progress_requires_sustained_left_contact() -> None:
         spec.criteria.minimum_articulation_position
     )
     assert held.reward > pushed.reward
+
+
+def test_drawer_success_rejects_opening_before_left_contact() -> None:
+    task_id = "hold_drawer_place_item/v1"
+    spec = SPECS[task_id]
+    initial = _sample(task_id, articulation_position=0.0)
+    contacted = replace(initial, left_contact=True, right_contact=True)
+    tracker = BimanualTaskTracker(spec)
+    tracker.reset(initial)
+    tracker.update(contacted)
+    transported = replace(contacted, payload_position=spec.target_position)
+    tracker.update(transported)
+    for _ in range(spec.concurrent_steps - 2):
+        tracker.update(transported)
+
+    tracker.update(
+        _at_target(
+            task_id,
+            inside_target=True,
+            articulation_position=0.30,
+        )
+    )
+    for _ in range(spec.hold_steps):
+        update = tracker.update(
+            _at_target(
+                task_id,
+                left_contact=True,
+                inside_target=True,
+                articulation_position=0.30,
+            )
+        )
+
+    assert not update.success
+    assert update.metrics["controlled_target_complete"] == 1.0
+    assert update.metrics["controlled_articulation_complete"] == 0.0
+    assert update.metrics["maximum_controlled_articulation_progress"] == 0.0

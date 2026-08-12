@@ -239,10 +239,15 @@ class BimanualTaskTracker:
         self._previous_target_distance: float | None = None
         self._initial_target_distance: float | None = None
         self._previous_articulation_position: float | None = None
+        self._initial_articulation_position: float | None = None
         self._previous_bilateral_contact = False
         self._previous_left_contact = False
         self._controlled_target_progress = 0.0
         self._controlled_articulation_progress = 0.0
+        self._maximum_controlled_target_progress = 0.0
+        self._maximum_controlled_articulation_progress = 0.0
+        self._controlled_target_complete = False
+        self._controlled_articulation_complete = False
         self.stable_steps = 0
         self.concurrent_steps = 0
         self.maximum_concurrent_steps = 0
@@ -254,10 +259,19 @@ class BimanualTaskTracker:
         self._previous_target_distance = initial.target_distance
         self._initial_target_distance = initial.target_distance
         self._previous_articulation_position = initial.articulation_position
+        self._initial_articulation_position = initial.articulation_position
         self._previous_bilateral_contact = initial.left_contact and initial.right_contact
         self._previous_left_contact = initial.left_contact
         self._controlled_target_progress = 0.0
         self._controlled_articulation_progress = 0.0
+        self._maximum_controlled_target_progress = 0.0
+        self._maximum_controlled_articulation_progress = 0.0
+        self._controlled_target_complete = (
+            self._required_controlled_target_progress() == 0.0
+        )
+        self._controlled_articulation_complete = (
+            self._required_controlled_articulation_progress() == 0.0
+        )
         self._previous_potential = self._potential(initial)
         self.stable_steps = 0
         self.concurrent_steps = 0
@@ -273,6 +287,7 @@ class BimanualTaskTracker:
         if self._previous_potential is None:
             raise RuntimeError("task tracker must be reset before update")
         self._update_controlled_progress(sample)
+        self._update_controlled_completion(sample)
         concurrent = sample.left_contact and sample.right_contact
         self.left_contact_steps += int(sample.left_contact)
         self.right_contact_steps += int(sample.right_contact)
@@ -296,7 +311,16 @@ class BimanualTaskTracker:
         self._previous_left_contact = sample.left_contact
         severe = sample.severe_collision_count > 0
         bimanual = self.maximum_concurrent_steps >= self.spec.concurrent_steps
-        success = self.stable_steps >= self.spec.hold_steps and bimanual and not severe
+        controlled = (
+            self._controlled_target_complete
+            and self._controlled_articulation_complete
+        )
+        success = (
+            self.stable_steps >= self.spec.hold_steps
+            and bimanual
+            and controlled
+            and not severe
+        )
         if severe:
             reward = min(
                 reward - self.spec.reward.severe_collision,
@@ -382,6 +406,10 @@ class BimanualTaskTracker:
             )
         elif not bilateral:
             self._controlled_target_progress = 0.0
+        self._maximum_controlled_target_progress = max(
+            self._maximum_controlled_target_progress,
+            self._controlled_target_progress,
+        )
         if self.spec.objective != "hold_drawer_place":
             return
         if sample.left_contact and self._previous_left_contact:
@@ -396,6 +424,54 @@ class BimanualTaskTracker:
             )
         elif not sample.left_contact:
             self._controlled_articulation_progress = 0.0
+        self._maximum_controlled_articulation_progress = max(
+            self._maximum_controlled_articulation_progress,
+            self._controlled_articulation_progress,
+        )
+
+    def _update_controlled_completion(self, sample: BimanualTaskSample) -> None:
+        criteria = self.spec.criteria
+        if sample.target_distance > criteria.maximum_target_distance:
+            self._controlled_target_complete = False
+        elif (
+            sample.left_contact
+            and sample.right_contact
+            and self._previous_bilateral_contact
+            and self._controlled_target_progress
+            >= self._required_controlled_target_progress() - 1e-9
+        ):
+            self._controlled_target_complete = True
+        if self.spec.objective != "hold_drawer_place":
+            return
+        if sample.articulation_position < criteria.minimum_articulation_position:
+            self._controlled_articulation_complete = False
+        elif (
+            sample.left_contact
+            and self._previous_left_contact
+            and self._controlled_articulation_progress
+            >= self._required_controlled_articulation_progress() - 1e-9
+        ):
+            self._controlled_articulation_complete = True
+
+    def _required_controlled_target_progress(self) -> float:
+        if self._initial_target_distance is None:
+            raise RuntimeError("controlled target progress requires reset")
+        return max(
+            0.0,
+            self._initial_target_distance
+            - self.spec.criteria.maximum_target_distance,
+        )
+
+    def _required_controlled_articulation_progress(self) -> float:
+        if self._initial_articulation_position is None:
+            raise RuntimeError("controlled articulation progress requires reset")
+        if self.spec.objective != "hold_drawer_place":
+            return 0.0
+        return max(
+            0.0,
+            self.spec.criteria.minimum_articulation_position
+            - self._initial_articulation_position,
+        )
 
     def _bilateral_reach_occupancy(self, sample: BimanualTaskSample) -> float:
         worst = max(sample.left_reach_distance, sample.right_reach_distance)
@@ -440,6 +516,22 @@ class BimanualTaskTracker:
             "controlled_target_progress": self._controlled_target_progress,
             "controlled_articulation_progress": (
                 self._controlled_articulation_progress
+            ),
+            "maximum_controlled_target_progress": (
+                self._maximum_controlled_target_progress
+            ),
+            "maximum_controlled_articulation_progress": (
+                self._maximum_controlled_articulation_progress
+            ),
+            "required_controlled_target_progress": (
+                self._required_controlled_target_progress()
+            ),
+            "required_controlled_articulation_progress": (
+                self._required_controlled_articulation_progress()
+            ),
+            "controlled_target_complete": float(self._controlled_target_complete),
+            "controlled_articulation_complete": float(
+                self._controlled_articulation_complete
             ),
             "support_contact": float(sample.support_contact),
             "inside_target": float(sample.inside_target),
