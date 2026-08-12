@@ -22,6 +22,57 @@ FOUNDATION_CONFIG_FILES = (
     "world-model-v1.json",
     "world-objective-v1.json",
 )
+PROTECTED_PATHS = (
+    "assets/mujoco/bimanual",
+    "configs/adapters/mujoco/bimanual_household_v1.json",
+    "configs/foundation",
+    "configs/tasks/bimanual_household_v1.json",
+    "pyproject.toml",
+    "scripts/check_architecture.py",
+    "scripts/check_python_size.py",
+    "scripts/fetch_foundation_models.py",
+    "scripts/verify_development_ready.py",
+    "scripts/verify_foundation_models.py",
+    "src/hwr/adapters/foundation",
+    "src/hwr/adapters/mujoco/bimanual_backend.py",
+    "src/hwr/adapters/mujoco/bimanual_bindings.py",
+    "src/hwr/adapters/mujoco/dual_arm_backend.py",
+    "src/hwr/apps/evaluate_foundation_world_model.py",
+    "src/hwr/apps/train_foundation_world_model.py",
+    "src/hwr/core/embodied.py",
+    "src/hwr/core/runtime.py",
+    "src/hwr/data/autonomous_trajectory.py",
+    "src/hwr/data/foundation_cache.py",
+    "src/hwr/data/foundation_features.py",
+    "src/hwr/data/foundation_loading.py",
+    "src/hwr/data/trajectory_windows.py",
+    "src/hwr/eval/bimanual.py",
+    "src/hwr/perception/foundation.py",
+    "src/hwr/perception/geometric_correspondence.py",
+    "src/hwr/perception/high_resolution.py",
+    "src/hwr/perception/language_cache.py",
+    "src/hwr/perception/student.py",
+    "src/hwr/perception/student_input.py",
+    "src/hwr/perception/student_objectives.py",
+    "src/hwr/policy/foundation_runtime.py",
+    "src/hwr/policy/latent_actions.py",
+    "src/hwr/policy/latent_actor.py",
+    "src/hwr/policy/latent_value.py",
+    "src/hwr/safety",
+    "src/hwr/tasks/bimanual.py",
+    "src/hwr/train/development_gate.py",
+    "src/hwr/train/foundation_augmentation.py",
+    "src/hwr/train/foundation_batch.py",
+    "src/hwr/train/foundation_collection.py",
+    "src/hwr/train/foundation_online.py",
+    "src/hwr/train/foundation_registry.py",
+    "src/hwr/train/foundation_setup.py",
+    "src/hwr/train/foundation_trainer.py",
+    "src/hwr/train/imagination.py",
+    "src/hwr/train/imagination_rl.py",
+    "src/hwr/train/task_sampling.py",
+    "src/hwr/world_model",
+)
 
 
 def sha256(path: Path) -> str:
@@ -47,6 +98,23 @@ def foundation_config_hashes(root: Path) -> dict[str, str]:
     return {name: sha256(config_root / name) for name in FOUNDATION_CONFIG_FILES}
 
 
+def protected_tree_hashes(root: Path) -> dict[str, str]:
+    files: set[Path] = set()
+    for relative in PROTECTED_PATHS:
+        path = root / relative
+        if path.is_file():
+            files.add(path)
+        elif path.is_dir():
+            files.update(item for item in path.rglob("*") if item.is_file())
+        else:
+            raise FileNotFoundError(f"protected development path is missing: {relative}")
+    return {
+        str(path.relative_to(root)): sha256(path)
+        for path in sorted(files)
+        if "__pycache__" not in path.parts
+    }
+
+
 def require_development_ready(root: Path, report_path: Path) -> dict[str, Any]:
     if not report_path.is_file():
         raise RuntimeError(
@@ -59,6 +127,8 @@ def require_development_ready(root: Path, report_path: Path) -> dict[str, Any]:
         raise RuntimeError("formal training is locked: source commit changed after verification")
     if report.get("foundation_config_sha256") != foundation_config_hashes(root):
         raise RuntimeError("formal training is locked: foundation configuration changed")
+    if report.get("protected_tree_sha256") != protected_tree_hashes(root):
+        raise RuntimeError("formal training is locked: verified source tree changed")
     checks = report.get("checks", {})
     if not checks or not all(value.get("passed") is True for value in checks.values()):
         raise RuntimeError("formal training is locked: development checks are incomplete")

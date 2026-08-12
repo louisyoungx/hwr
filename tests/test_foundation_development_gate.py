@@ -10,6 +10,7 @@ from hwr.train.development_gate import (
     DEVELOPMENT_READY_SCHEMA,
     current_commit,
     foundation_config_hashes,
+    protected_tree_hashes,
     require_development_ready,
 )
 
@@ -37,6 +38,7 @@ def test_development_gate_rejects_missing_or_stale_report(tmp_path) -> None:
                 "schema_version": DEVELOPMENT_READY_SCHEMA,
                 "source_commit": "stale",
                 "foundation_config_sha256": foundation_config_hashes(ROOT),
+                "protected_tree_sha256": protected_tree_hashes(ROOT),
                 "checks": {"tests": {"passed": True}},
             }
         )
@@ -51,6 +53,7 @@ def test_development_gate_accepts_matching_complete_report(tmp_path) -> None:
         "schema_version": DEVELOPMENT_READY_SCHEMA,
         "source_commit": current_commit(ROOT),
         "foundation_config_sha256": foundation_config_hashes(ROOT),
+        "protected_tree_sha256": protected_tree_hashes(ROOT),
         "checks": {
             "tests": {"passed": True},
             "architecture": {"passed": True},
