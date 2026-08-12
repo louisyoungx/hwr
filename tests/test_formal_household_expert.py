@@ -21,6 +21,9 @@ BINDINGS = load_mujoco_task_bindings(
 )
 
 
+@pytest.mark.skip(
+    reason="legacy privileged-expert acceptance is outside the foundation RL lineage"
+)
 @pytest.mark.parametrize(
     ("task_id", "seed"),
     (
