@@ -115,6 +115,12 @@ DINOv3 使用 Meta 于 2025-08-19 更新的自定义许可证，不是 Apache-2.
 账户下载。禁止从公开镜像绕过 manual gate。权重缺失、账户未获授权或许可证文件哈希
 不一致时，开发总门禁必须保持锁定。
 
+当前 Transformers 的 DINOv3 ViT 只有基于 torchvision 的 Fast 图像处理器。正式依赖锁定
+Torch `2.13.x` 与 torchvision `0.28.x` 的配套 release family，适配器必须显式
+`use_fast=True`；开发门禁在访问权重前先实例化该处理器并记录 Torch、torchvision 与
+Transformers 版本。缺少 torchvision、版本族不匹配或回退到不存在的 Slow 处理器都必须
+立即失败。
+
 具体模型通过版本化配置选择，不写入核心接口。适配器必须支持完全离线运行，记录模型
 标识、revision、文件 SHA-256、许可证、输入规范、输出维度和推理后端。任何权重缺失、
 哈希漂移或许可证未登记都必须使总门禁失败。真实推理门禁还必须拒绝恒定或退化特征：

@@ -49,7 +49,7 @@ class Dinov3ViTDenseVisionProvider:
         self.locked = locked
         self.device = select_device(device)
         self.processor = AutoImageProcessor.from_pretrained(
-            locked.local_path, local_files_only=True, use_fast=False
+            locked.local_path, local_files_only=True, use_fast=True
         )
         model = AutoModel.from_pretrained(
             locked.local_path, local_files_only=True, trust_remote_code=False

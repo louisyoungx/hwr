@@ -8,7 +8,13 @@ from pathlib import Path
 
 ALLOWED_MUJOCO_PREFIX = Path("src/hwr/adapters/mujoco")
 ALLOWED_FOUNDATION_PREFIX = Path("src/hwr/adapters/foundation")
-FOUNDATION_MODULES = ("transformers", "huggingface_hub", "timm", "mlx")
+FOUNDATION_MODULES = (
+    "transformers",
+    "torchvision",
+    "huggingface_hub",
+    "timm",
+    "mlx",
+)
 CORE_ROOT = Path("src/hwr/core")
 FORBIDDEN_CORE_PREFIXES = (
     "hwr.adapters",

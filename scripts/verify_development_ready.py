@@ -337,6 +337,38 @@ def _model_selection_audit(root: Path, model_root: Path) -> dict[str, Any]:
     return {"passed": True, "models": sorted(locks)}
 
 
+def _foundation_dependency_audit() -> dict[str, Any]:
+    """Fail before weight access when the DINOv3 processor runtime is unusable."""
+    import torch
+    import torchvision
+    import transformers
+    from transformers.models.dinov3_vit.image_processing_dinov3_vit_fast import (
+        DINOv3ViTImageProcessorFast,
+    )
+
+    torch_version = tuple(int(value) for value in torch.__version__.split("+")[0].split(".")[:2])
+    vision_version = tuple(
+        int(value) for value in torchvision.__version__.split("+")[0].split(".")[:2]
+    )
+    transformers_version = tuple(
+        int(value) for value in transformers.__version__.split("+")[0].split(".")[:2]
+    )
+    if torch_version != (2, 13) or vision_version != (0, 28):
+        raise RuntimeError("DINOv3 requires Torch 2.13.x with torchvision 0.28.x")
+    if transformers_version != (4, 57):
+        raise RuntimeError("DINOv3 requires Transformers 4.57.x")
+    processor = DINOv3ViTImageProcessorFast()
+    if processor.__class__.__name__ != "DINOv3ViTImageProcessorFast":
+        raise RuntimeError("DINOv3 fast image processor is unavailable")
+    return {
+        "passed": True,
+        "torch": torch.__version__,
+        "torchvision": torchvision.__version__,
+        "transformers": transformers.__version__,
+        "dinov3_image_processor": processor.__class__.__name__,
+    }
+
+
 def _foundation_inference_checks(
     root: Path, model_root: Path, device: str
 ) -> dict[str, Any]:
@@ -373,6 +405,7 @@ def verify(
         "algorithm_audit": _algorithm_audit(root),
         "configuration": _configuration_audit(root),
         "model_selection": _model_selection_audit(root, model_root),
+        "foundation_dependencies": _foundation_dependency_audit(),
         "weights": _weight_audit(root, model_root),
     }
     with _committed_snapshot(root) as snapshot:

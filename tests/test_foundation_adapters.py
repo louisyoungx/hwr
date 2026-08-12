@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from hwr.adapters.foundation.locks import load_foundation_model_locks
+from hwr.adapters.foundation.dinov3 import _patch_grid
 from hwr.adapters.foundation.runtime import validate_vision_input
 from hwr.perception import language_source_sha256
 
@@ -56,3 +58,58 @@ def test_language_source_identity_normalizes_whitespace_but_preserves_locale() -
 
     assert first == second
     assert first != english
+
+
+def test_dinov3_fast_image_processor_runtime_is_installed() -> None:
+    import torch
+    import torchvision
+    from transformers.models.dinov3_vit.image_processing_dinov3_vit_fast import (
+        DINOv3ViTImageProcessorFast,
+    )
+
+    processor = DINOv3ViTImageProcessorFast()
+    import transformers
+
+    images = np.linspace(0.0, 1.0, 3 * 224 * 224 * 3, dtype=np.float32).reshape(
+        3, 224, 224, 3
+    )
+    batch = processor(
+        images=list(images),
+        return_tensors="pt",
+        do_resize=False,
+        do_center_crop=False,
+        do_rescale=False,
+    )
+
+    assert processor.__class__.__name__ == "DINOv3ViTImageProcessorFast"
+    assert torch.__version__.split(".")[:2] == ["2", "13"]
+    assert torchvision.__version__.split(".")[:2] == ["0", "28"]
+    assert transformers.__version__.split(".")[:2] == ["4", "57"]
+    assert tuple(batch["pixel_values"].shape) == (3, 3, 224, 224)
+
+
+def test_dinov3_patch_grid_strips_class_and_register_tokens() -> None:
+    import torch
+
+    prefix = torch.zeros((2, 5, 3), dtype=torch.float32)
+    patches = torch.arange(2 * 196 * 3, dtype=torch.float32).reshape(2, 196, 3) + 1.0
+    output = SimpleNamespace(last_hidden_state=torch.cat((prefix, patches), dim=1))
+    pixels = torch.zeros((2, 3, 224, 224), dtype=torch.float32)
+    config = SimpleNamespace(patch_size=16, num_register_tokens=4, hidden_size=3)
+
+    grid = _patch_grid(output, pixels, config)
+
+    assert tuple(grid.shape) == (2, 14, 14, 3)
+    assert torch.allclose(grid[:, 0, 0], torch.nn.functional.normalize(patches[:, 0], dim=-1))
+    assert torch.allclose(torch.linalg.vector_norm(grid, dim=-1), torch.ones((2, 14, 14)))
+
+
+def test_dinov3_patch_grid_rejects_inconsistent_token_count() -> None:
+    import torch
+
+    output = SimpleNamespace(last_hidden_state=torch.zeros((1, 200, 3)))
+    pixels = torch.zeros((1, 3, 224, 224))
+    config = SimpleNamespace(patch_size=16, num_register_tokens=4, hidden_size=3)
+
+    with pytest.raises(ValueError, match="token count"):
+        _patch_grid(output, pixels, config)

@@ -158,6 +158,12 @@ MuJoCo 场景的固定帧 smoke test 测得镜头基线均为 `0.090 m`，对齐
 `27.43%～39.83%`，保留原始量程内有效深度的 `74.8%～80.6%`，深度范围
 `0.150～3.590 m`。
 
+DINOv3 适配器的依赖审计发现，当前 Transformers 只提供
+`DINOv3ViTImageProcessorFast`，旧代码却显式请求 `use_fast=False`，且环境没有安装它所需
+的 torchvision；即使获得官方权重也会在加载前失败。正式 foundation 依赖现锁定 Torch
+`2.13.x` / torchvision `0.28.x` 配套版本，适配器改为显式 Fast，开发门禁会在权重审计前
+实例化处理器并记录三个运行库版本。
+
 门禁通过后才允许执行：
 
 ```bash

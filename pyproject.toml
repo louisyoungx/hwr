@@ -22,7 +22,9 @@ foundation = [
   "huggingface-hub>=0.34,<1.0",
   "safetensors>=0.4,<1.0",
   "sentencepiece>=0.2,<1.0",
-  "transformers>=4.56,<5.0",
+  "torch>=2.13,<2.14",
+  "torchvision>=0.28,<0.29",
+  "transformers>=4.57,<4.58",
 ]
 
 [project.scripts]
