@@ -57,8 +57,10 @@ Git，但所有开发工作共享一个总门禁：
 解锁报告必须使用当前 `hwr.foundation-development-ready/v2` schema，精确包含受保护源码、
 算法谱系、正式配置、模型选择、运行依赖、权重、架构、Python 尺寸、全量测试和真实基础
 模型推理十项证据；缺少任一项、混入未知项、未显式声明解锁，或隔离提交证据与当前提交
-不一致都必须失败。算法谱系扫描覆盖基础模型适配器、感知、数据、Actor、世界模型、训练、
-安全、部署和评测整条新主线，不能只扫描在线 runner 的少量文件。
+不一致都必须失败。正式训练入口把通过校验的 readiness 报告原样复制进 run，并把其
+SHA-256 写入 run manifest；恢复与最终评测都重新验证该副本。算法谱系扫描覆盖基础模型
+适配器、感知、数据、Actor、世界模型、训练、安全、部署和评测整条新主线，不能只扫描
+在线 runner 的少量文件。
 
 ## 3. 不可突破的学习边界
 
@@ -321,7 +323,7 @@ Actor 只能对潜在状态求值和采样自己的动作。禁止使用 CEM、M
 自有模型、仅 `random_rl_exploration` 与 `rl_actor` 两种动作来源、空专家/示范集合、关闭
 行为克隆/教师动作/动作搜索，并且没有旧 P 系列父 checkpoint。保存、恢复和最终评测都要
 按完整结构比较，不能只检查 `source_commit`，也不能把“字段存在”当作“字段为空”。正式
-run manifest schema 为 `hwr.foundation-online-run/v2`，旧 v1 不进入新谱系。
+run manifest schema 为 `hwr.foundation-online-run/v3`，旧 v1/v2 不进入新谱系。
 
 ### 9.1 本机存储上限
 
@@ -352,6 +354,10 @@ Checkpoint 和部署导出同样采用固定保留数，只删除格式合法的
 - 同一评测进程直接录制第三人称、头部、左腕和右腕未经剪辑的视频；
 - 数据、模型、代码提交、配置、逐 Episode 结果、视频和反作弊报告可由哈希互相追溯。
 
+最终 `hwr.foundation-evaluation-run/v2` manifest 必须直接哈希 readiness、run/latest、训练
+Episode、训练 replay、因果留出库、动作因果报告、训练 checkpoint、部署 artifact、逐
+Episode 评测、验收结果和每路视频，不能只通过目录路径间接引用训练数据或模型。
+
 基础模型的语义检索、世界模型 loss 或想象回报都不是家务成功证据；最终证据仍是隔离种子
 中由 RL Actor 实际执行的双臂物理结果。
 
@@ -368,7 +374,7 @@ Checkpoint 和部署导出同样采用固定保留数，只删除格式合法的
 | 动作条件世界模型 | `hwr.world_model` |
 | 想象 RL | `hwr.train.imagination`、`imagination_rl` |
 | 环境声明的通用增强 | `hwr.train.foundation_augmentation` |
-| 单一在线闭环 | `hwr.train.foundation_online`、`foundation_trainer` |
+| 单一在线闭环 | `hwr.train.foundation_online`、`foundation_trainer`、`foundation_run_manifest` |
 | 训练/部署 checkpoint | `hwr.train.foundation_registry` |
 | 剥离部署运行时 | `hwr.world_model.deploy`、`hwr.policy.foundation_runtime` |
 | 总门禁 | `scripts/verify_development_ready.py`、`hwr.train.development_gate` |

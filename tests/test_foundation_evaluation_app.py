@@ -5,6 +5,7 @@ import pytest
 
 from hwr.apps.evaluate_foundation_world_model import (
     ABLATIONS,
+    _artifact_manifest,
     _require_action_causality,
     _unseen_seeds,
     _video_acceptance,
@@ -17,6 +18,11 @@ from hwr.world_model import (
     assess_action_causality,
 )
 from hwr.train.foundation_registry import foundation_lineage
+from hwr.train.development_gate import (
+    COMMITTED_SNAPSHOT_CHECKS,
+    DEVELOPMENT_READY_SCHEMA,
+    REQUIRED_DEVELOPMENT_CHECKS,
+)
 
 
 def test_foundation_evaluation_defaults_match_fixed_acceptance_protocol() -> None:
@@ -89,6 +95,21 @@ def _digest(path) -> str:
 
 def _causality_run(tmp_path):
     run = tmp_path / "run"
+    (run / "episodes.jsonl").parent.mkdir(parents=True, exist_ok=True)
+    (run / "episodes.jsonl").write_text("")
+    checks = {name: {"passed": True} for name in REQUIRED_DEVELOPMENT_CHECKS}
+    for name in COMMITTED_SNAPSHOT_CHECKS:
+        checks[name]["source_commit"] = "abc123"
+    readiness = run / "development-ready.json"
+    _write_json(
+        readiness,
+        {
+            "schema_version": DEVELOPMENT_READY_SCHEMA,
+            "source_commit": "abc123",
+            "training_unlocked": True,
+            "checks": checks,
+        },
+    )
     training_manifest = run / "replay/autonomous/manifest.json"
     audit_manifest = run / "causality-holdout/autonomous/manifest.json"
     _write_json(training_manifest, {"dataset_id": "training"})
@@ -96,8 +117,13 @@ def _causality_run(tmp_path):
     _write_json(
         run / "run-manifest.json",
         {
-            "schema_version": "hwr.foundation-online-run/v2",
+            "schema_version": "hwr.foundation-online-run/v3",
             "source_commit": "abc123",
+            "development_ready": {
+                "schema_version": DEVELOPMENT_READY_SCHEMA,
+                "sha256": _digest(readiness),
+                "path": "development-ready.json",
+            },
             "lineage": foundation_lineage("abc123"),
             "training_config": {
                 "causality_audit_windows_per_task": 1,
@@ -190,6 +216,8 @@ def _causality_run(tmp_path):
         run / "deployments/update-000000001/manifest.json",
         {
             "schema_version": "hwr.foundation-deployment/v1",
+            "artifact_file": "deployable-state.pt",
+            "artifact_sha256": _digest(deployment_artifact),
             "training_checkpoint_sha256": _digest(checkpoint_artifact),
             "source_commit": "abc123",
             "training_diagnostics": diagnostics,
@@ -252,6 +280,46 @@ def test_evaluation_rejects_tampered_no_expert_run_lineage(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="no-expert lineage differs"):
         _require_action_causality(run)
+
+
+def test_evaluation_rejects_development_readiness_hash_drift(tmp_path) -> None:
+    run, _ = _causality_run(tmp_path)
+    readiness = run / "development-ready.json"
+    value = json.loads(readiness.read_text())
+    value["training_unlocked"] = False
+    _write_json(readiness, value)
+
+    with pytest.raises(ValueError, match="readiness artifact differs"):
+        _require_action_causality(run)
+
+
+def test_evaluation_manifest_hashes_training_data_model_and_gate_artifacts(
+    tmp_path,
+) -> None:
+    run, _ = _causality_run(tmp_path)
+    output = tmp_path / "evaluation"
+    output.mkdir()
+    _write_json(output / "report.json", {"episodes": []})
+    _write_json(output / "acceptance.json", {"passed": True})
+
+    manifest = _artifact_manifest(output, run, (31,), ())
+
+    assert manifest["schema_version"] == "hwr.foundation-evaluation-run/v2"
+    assert {
+        "training/development-ready.json",
+        "training/episodes.jsonl",
+        "training/replay-manifest.json",
+        "training/causality-holdout-manifest.json",
+        "training/action-causality.json",
+        "training/checkpoint-manifest.json",
+        "training/checkpoint-artifact",
+        "training/deployment-manifest.json",
+        "training/deployment-artifact",
+    } <= set(manifest["artifacts"])
+    assert all(
+        len(identity["sha256"]) == 64 and identity["bytes"] >= 0
+        for identity in manifest["artifacts"].values()
+    )
 
 
 def test_evaluation_rejects_missing_task_partition(tmp_path) -> None:

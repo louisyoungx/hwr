@@ -43,6 +43,11 @@ from hwr.train.foundation_registry import (
     load_foundation_deployment,
     require_foundation_lineage,
 )
+from hwr.train.development_gate import (
+    COMMITTED_SNAPSHOT_CHECKS,
+    DEVELOPMENT_READY_SCHEMA,
+    REQUIRED_DEVELOPMENT_CHECKS,
+)
 from hwr.world_model import (
     ACTION_CAUSALITY_COMPONENTS,
     ActionCausalityCriteria,
@@ -203,6 +208,17 @@ def _run_member(run_path: Path, relative: object) -> Path:
     return result
 
 
+def _directory_member(directory: Path, relative: object) -> Path:
+    value = Path(str(relative))
+    if value.is_absolute():
+        raise ValueError("artifact member path must be relative")
+    root = directory.resolve()
+    result = (root / value).resolve()
+    if result == root or root not in result.parents:
+        raise ValueError("artifact member escaped its directory")
+    return result
+
+
 def _unseen_seeds(
     run_path: Path, count: int, requested_start: int | None
 ) -> tuple[int, ...]:
@@ -293,8 +309,9 @@ def _require_action_causality(run_path: Path) -> Path:
     if latest.get("schema_version") != "hwr.foundation-online-latest/v1":
         raise ValueError("training latest schema differs")
     run_manifest = _read_json(run_path / "run-manifest.json")
-    if run_manifest.get("schema_version") != "hwr.foundation-online-run/v2":
+    if run_manifest.get("schema_version") != "hwr.foundation-online-run/v3":
         raise ValueError("training run schema differs")
+    _require_development_readiness(run_path, run_manifest)
     path = _run_member(run_path, latest["action_causality_report"])
     if _sha256(path) != latest.get("action_causality_sha256"):
         raise ValueError("training action causality report hash differs")
@@ -328,6 +345,45 @@ def _require_action_causality(run_path: Path) -> Path:
         raise ValueError("deployment and action causality provenance differ")
     if diagnostics.get("action_causality_passed") is not True:
         raise ValueError("deployment was exported before causality passed")
+    return path
+
+
+def _require_development_readiness(
+    run_path: Path, run_manifest: Mapping[str, Any]
+) -> Path:
+    identity = run_manifest.get("development_ready")
+    if not isinstance(identity, Mapping) or set(identity) != {
+        "schema_version",
+        "sha256",
+        "path",
+    }:
+        raise ValueError("training development readiness identity is incomplete")
+    path = _run_member(run_path, identity["path"])
+    if (
+        path != (run_path / "development-ready.json").resolve()
+        or identity.get("schema_version") != DEVELOPMENT_READY_SCHEMA
+        or not path.is_file()
+        or _sha256(path) != identity.get("sha256")
+    ):
+        raise ValueError("training development readiness artifact differs")
+    report = _read_json(path)
+    checks = report.get("checks")
+    if (
+        report.get("schema_version") != DEVELOPMENT_READY_SCHEMA
+        or report.get("source_commit") != run_manifest.get("source_commit")
+        or report.get("training_unlocked") is not True
+        or not isinstance(checks, Mapping)
+        or set(checks) != REQUIRED_DEVELOPMENT_CHECKS
+        or any(
+            not isinstance(value, Mapping) or value.get("passed") is not True
+            for value in checks.values()
+        )
+        or any(
+            checks[name].get("source_commit") != report.get("source_commit")
+            for name in COMMITTED_SNAPSHOT_CHECKS
+        )
+    ):
+        raise ValueError("training development readiness evidence is incomplete")
     return path
 
 
@@ -477,10 +533,40 @@ def _artifact_manifest(
     videos: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
     causality = _require_action_causality(run_path)
+    run_manifest = _read_json(run_path / "run-manifest.json")
+    readiness = _require_development_readiness(run_path, run_manifest)
+    latest_path = run_path / "latest.json"
+    latest = _read_json(latest_path)
+    checkpoint_root = _run_member(run_path, latest["training_checkpoint"])
+    deployment_root = _run_member(run_path, latest["deployment"])
+    checkpoint_manifest = checkpoint_root / "manifest.json"
+    deployment_manifest = deployment_root / "manifest.json"
+    checkpoint_identity = _read_json(checkpoint_manifest)
+    deployment_identity = _read_json(deployment_manifest)
+    checkpoint_artifact = _directory_member(
+        checkpoint_root, checkpoint_identity["artifact_file"]
+    )
+    deployment_artifact = _directory_member(
+        deployment_root, deployment_identity["artifact_file"]
+    )
     files = {
-        "report.json": output_path / "report.json",
-        "acceptance.json": output_path / "acceptance.json",
+        "evaluation/report.json": output_path / "report.json",
+        "evaluation/acceptance.json": output_path / "acceptance.json",
+        "training/run-manifest.json": run_path / "run-manifest.json",
+        "training/latest.json": latest_path,
+        "training/development-ready.json": readiness,
+        "training/episodes.jsonl": run_path / "episodes.jsonl",
+        "training/replay-manifest.json": (
+            run_path / "replay/autonomous/manifest.json"
+        ),
+        "training/causality-holdout-manifest.json": (
+            run_path / "causality-holdout/autonomous/manifest.json"
+        ),
         "training/action-causality.json": causality,
+        "training/checkpoint-manifest.json": checkpoint_manifest,
+        "training/checkpoint-artifact": checkpoint_artifact,
+        "training/deployment-manifest.json": deployment_manifest,
+        "training/deployment-artifact": deployment_artifact,
     }
     files.update(
         {
@@ -489,12 +575,12 @@ def _artifact_manifest(
             for path in video["views"].values()
         }
     )
-    latest = _read_json(run_path / "latest.json")
-    deployment_manifest = _run_member(run_path, latest["deployment"]) / "manifest.json"
     return {
-        "schema_version": "hwr.foundation-evaluation-run/v1",
+        "schema_version": "hwr.foundation-evaluation-run/v2",
         "training_run": str(run_path),
+        "source_commit": run_manifest["source_commit"],
         "training_run_manifest_sha256": _sha256(run_path / "run-manifest.json"),
+        "development_ready_sha256": _sha256(readiness),
         "deployment_manifest_sha256": _sha256(deployment_manifest),
         "action_causality_report": str(causality),
         "action_causality_report_sha256": _sha256(causality),

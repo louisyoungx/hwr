@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 import gc
 import json
-import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Protocol
@@ -63,12 +62,12 @@ from hwr.train.foundation_registry import (
     ACTION_CAUSALITY_SCHEMA,
     export_foundation_deployment,
     file_sha256 as registry_file_sha256,
-    foundation_lineage,
     load_foundation_training_checkpoint,
     prune_versioned_artifacts,
     require_foundation_lineage,
     save_foundation_training_checkpoint,
 )
+from hwr.train.foundation_run_manifest import write_or_verify_foundation_run_manifest
 from hwr.train.foundation_recovery import (
     capture_torch_rng_state,
     clear_replay_archive,
@@ -147,11 +146,20 @@ class FoundationOnlineTrainingRunner:
         run_path: Path,
         *,
         source_commit: str,
+        development_ready_sha256: str,
     ) -> None:
         if len(tasks) != 3 or set(tasks) != {item.task_id for item in tasks.values()}:
             raise ValueError("foundation training requires exactly three task interfaces")
         if not source_commit:
             raise ValueError("foundation training source commit is required")
+        if (
+            len(development_ready_sha256) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in development_ready_sha256
+            )
+        ):
+            raise ValueError("foundation development readiness hash is invalid")
         self.tasks = dict(tasks)
         self.task_ids = tuple(sorted(tasks))
         self.environment_factory = environment_factory
@@ -161,6 +169,7 @@ class FoundationOnlineTrainingRunner:
         self.config = config
         self.run_path = run_path
         self.source_commit = source_commit
+        self.development_ready_sha256 = development_ready_sha256
         self.run_path.mkdir(parents=True, exist_ok=True)
         self.store = AppendableAutonomousTrajectoryStore(
             self.run_path / "replay", "autonomous"
@@ -177,7 +186,17 @@ class FoundationOnlineTrainingRunner:
         self.latest_action_causality: dict[str, object] | None = None
         self.latest_action_causality_report: Path | None = None
         self.completed_cycles = 0
-        self._write_or_verify_run_manifest()
+        write_or_verify_foundation_run_manifest(
+            self.run_path,
+            source_commit=self.source_commit,
+            development_ready_sha256=self.development_ready_sha256,
+            training_config=self.config.to_dict(),
+            tasks=[asdict(self.tasks[name]) for name in self.task_ids],
+            preprocessing={
+                "fingerprint": self.preprocessor.fingerprint,
+                "config": asdict(self.preprocessor.config),
+            },
+        )
 
     def train(self) -> FoundationOnlineTrainingResult:
         environments = {
@@ -761,27 +780,3 @@ class FoundationOnlineTrainingRunner:
         clear_replay_archive(
             self.run_path / "recovery/replay-prune-archive"
         )
-
-    def _write_or_verify_run_manifest(self) -> None:
-        manifest = {
-            "schema_version": "hwr.foundation-online-run/v2",
-            "source_commit": self.source_commit,
-            "training_config": self.config.to_dict(),
-            "tasks": [asdict(self.tasks[name]) for name in self.task_ids],
-            "preprocessing": {
-                "fingerprint": self.preprocessor.fingerprint,
-                "config": asdict(self.preprocessor.config),
-            },
-            "lineage": foundation_lineage(self.source_commit),
-        }
-        path = self.run_path / "run-manifest.json"
-        if path.is_file():
-            if json.loads(path.read_text(encoding="utf-8")) != manifest:
-                raise ValueError("foundation run manifest differs on resume")
-            return
-        temporary = path.with_suffix(".json.tmp")
-        temporary.write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(temporary, path)

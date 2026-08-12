@@ -284,6 +284,7 @@ def _runner(tmp_path, config: FoundationOnlineTrainingConfig):
         config,
         tmp_path / "run",
         source_commit="abc123",
+        development_ready_sha256="d" * 64,
     )
 
 
@@ -350,7 +351,12 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert latest["action_causality_sha256"] == checkpoint[
         "training_diagnostics"
     ]["action_causality_report_sha256"]
-    assert run_manifest["schema_version"] == "hwr.foundation-online-run/v2"
+    assert run_manifest["schema_version"] == "hwr.foundation-online-run/v3"
+    assert run_manifest["development_ready"] == {
+        "schema_version": "hwr.foundation-development-ready/v2",
+        "sha256": "d" * 64,
+        "path": "development-ready.json",
+    }
     assert run_manifest["lineage"]["expert_policies"] == []
     assert run_manifest["lineage"]["teacher_actions"] is False
     assert run_manifest["lineage"]["action_search"] is False

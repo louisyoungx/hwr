@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 from pathlib import Path
 from typing import Sequence
 
@@ -33,6 +35,7 @@ from hwr.train.foundation_online import (
 )
 from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
 from hwr.train.foundation_setup import build_foundation_learning_stack
+from hwr.train.foundation_registry import file_sha256
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -63,11 +66,30 @@ def _config(path: Path) -> dict[str, object]:
     return value
 
 
+def _bind_development_readiness(
+    run_path: Path, source: Path, *, resume: bool
+) -> str:
+    digest = file_sha256(source)
+    target = run_path / "development-ready.json"
+    if resume:
+        if not target.is_file() or file_sha256(target) != digest:
+            raise ValueError("formal run development readiness differs")
+        return digest
+    run_path.mkdir(parents=True, exist_ok=False)
+    temporary = target.with_suffix(".json.tmp")
+    try:
+        shutil.copyfile(source, temporary)
+        os.replace(temporary, target)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+    return digest
+
+
 def run(arguments: argparse.Namespace) -> dict[str, object]:
     root = Path(__file__).resolve().parents[3]
-    readiness = require_development_ready(
-        root, arguments.development_ready.resolve()
-    )
+    readiness_path = arguments.development_ready.resolve()
+    readiness = require_development_ready(root, readiness_path)
     tasks, bindings = load_default_bimanual_training_catalogs(root)
     config = FoundationOnlineTrainingConfig(
         **_config(root / "configs/foundation/online-training-v1.json")
@@ -110,6 +132,9 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         raise FileExistsError(f"formal training run already exists: {run_path}")
     if arguments.resume and not run_path.exists():
         raise FileNotFoundError(run_path)
+    readiness_sha256 = _bind_development_readiness(
+        run_path, readiness_path, resume=arguments.resume
+    )
 
     def environment_factory(task_id: str, width: int, height: int):
         return MujocoBimanualTaskBackend(
@@ -129,6 +154,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         config,
         run_path,
         source_commit=readiness["source_commit"],
+        development_ready_sha256=readiness_sha256,
     )
     if arguments.resume:
         runner.resume_latest()

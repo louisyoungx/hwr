@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from hwr.apps.train_foundation_world_model import build_parser
+from hwr.apps.train_foundation_world_model import (
+    _bind_development_readiness,
+    build_parser,
+)
 from hwr.train.development_gate import (
     COMMITTED_SNAPSHOT_CHECKS,
     DEVELOPMENT_READY_SCHEMA,
@@ -125,3 +128,17 @@ def test_development_gate_rejects_snapshot_evidence_from_another_commit(
 
     with pytest.raises(RuntimeError, match="snapshot evidence differs"):
         require_development_ready(ROOT, path)
+
+
+def test_training_run_copies_and_rechecks_development_readiness(tmp_path) -> None:
+    source = tmp_path / "ready.json"
+    source.write_text('{"training_unlocked": true}')
+    run = tmp_path / "run"
+
+    digest = _bind_development_readiness(run, source, resume=False)
+
+    assert (run / "development-ready.json").read_bytes() == source.read_bytes()
+    assert _bind_development_readiness(run, source, resume=True) == digest
+    source.write_text('{"training_unlocked": false}')
+    with pytest.raises(ValueError, match="readiness differs"):
+        _bind_development_readiness(run, source, resume=True)

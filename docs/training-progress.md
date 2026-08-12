@@ -55,7 +55,7 @@ P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为�
 解锁训练。同时，旧 AST 审计只覆盖部分 runner 文件，未覆盖视觉学生、轨迹数据、Actor、
 世界模型、基础模型适配器和部署评测。当前 readiness schema 升为 v2，要求检查集合与十项
 强制证据精确相等，并将隔离快照的提交号绑定到架构、尺寸和全量测试三项。算法审计改为按
-整条 foundation 模块模式自动发现文件，当前覆盖 52 个 Python 文件；正式配置还必须精确
+整条 foundation 模块模式自动发现文件，当前覆盖 53 个 Python 文件；正式配置还必须精确
 装配三个目标任务且不存在专家、示范、动作标签、航点、技能阶段、对象 token、目标 token
 或旧 checkpoint 等谱系键。旧 v1 报告无法再用于启动训练。
 
@@ -64,6 +64,24 @@ P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为�
 后三项。现在保存、恢复、checkpoint 加载和最终评测共用同一个精确 no-expert lineage，任何
 字段缺失、多余、变为非空或来源提交不一致都会失败。run manifest schema 升为
 `hwr.foundation-online-run/v2`，旧 v1 运行不能静默进入当前正式验收。
+
+开发门禁与训练产物之间的追溯审计又发现，训练入口虽然读取 readiness 报告，却只把其中的
+`source_commit` 传给 runner；报告本身没有复制进 run，也没有任何哈希进入 run manifest。
+最终评测因此无法证明模型是在通过哪次 DINOv3 权重、真实推理和全量测试门禁后启动的。
+当前训练入口会原子复制 `development-ready.json` 到新 run，manifest 记录其 schema、固定
+路径和 SHA-256；恢复要求外部报告与 run 内副本完全相同，最终评测重验副本的完整十项证据
+和隔离提交绑定，并把它纳入最终 artifact manifest。run manifest 因此继续升为
+`hwr.foundation-online-run/v3`，旧 v1/v2 均不能进入当前正式验收。
+
+readiness 追溯接入后，在线 runner 一度增至 803 行，超过项目的 800 行硬限制。run manifest
+的创建、原子发布与恢复一致性校验现已拆入 `hwr.train.foundation_run_manifest`，runner 回落
+到 782 行；这是按职责拆分，不是合并语句规避尺寸检查。
+
+最终证据 manifest 同期升为 `hwr.foundation-evaluation-run/v2`。它不再只哈希评测 JSON、
+动作因果报告和视频，而是直接绑定 readiness、run/latest、全部训练 Episode 记录、训练
+replay manifest、因果留出 manifest、训练 checkpoint manifest/权重、部署 manifest/权重、
+逐 Episode 评测、验收结果及每路未剪辑视频，确保数据、模型、代码、配置和结果能沿同一
+哈希链复核。
 
 旧的特权专家完成率测试不再属于正式验收：当前提交中的该专家在 11 个固定回归种子上
 全部失败，这也再次验证了废弃专家路线的决定。它不进入采集、replay、Actor 或世界模型；
