@@ -252,13 +252,63 @@ def _weight_audit(root: Path, model_root: Path) -> dict[str, Any]:
     }
 
 
+def _model_selection_audit(root: Path, model_root: Path) -> dict[str, Any]:
+    """Require requested providers, committed locks, and runtime names to agree."""
+    locks = load_foundation_model_locks(
+        root / "configs/foundation/model-locks.json", model_root
+    )
+    sources = json.loads(
+        (root / "configs/foundation/model-sources.json").read_text(encoding="utf-8")
+    )["models"]
+    runtime = json.loads(
+        (root / "configs/foundation/runtime-v1.json").read_text(encoding="utf-8")
+    )
+    requested = {str(value["local_name"]): value for value in sources}
+    configured = {
+        str(runtime["dense_vision_model"]),
+        str(runtime["vision_language_model"]),
+        str(runtime["language_model"]),
+    }
+    if set(requested) != set(locks) or configured != set(locks):
+        raise RuntimeError("foundation source, lock, and runtime model sets differ")
+    fields = (
+        "adapter",
+        "model_id",
+        "revision",
+        "role",
+        "license_id",
+        "output_dimension",
+        "representation_id",
+    )
+    for name, source in requested.items():
+        locked = locks[name]
+        actual = {
+            "adapter": locked.adapter,
+            **{
+                field: getattr(locked.model_lock, field)
+                for field in fields
+                if field != "adapter"
+            },
+        }
+        expected = {field: source[field] for field in fields}
+        artifacts = {
+            value.relative_path for value in locked.model_lock.artifacts
+        }
+        expected_artifacts = {
+            str(Path(name) / str(value)) for value in source["required_files"]
+        }
+        if actual != expected or artifacts != expected_artifacts:
+            raise RuntimeError(f"foundation source and lock differ for {name}")
+    return {"passed": True, "models": sorted(locks)}
+
+
 def _foundation_inference_checks(
     root: Path, model_root: Path, device: str
 ) -> dict[str, Any]:
     reports = {}
     output_root = root / "artifacts/foundation/development-gate"
     for name in (
-        "dinov2-small",
+        "dinov3-vits16-pretrain-lvd1689m",
         "siglip2-base-patch16-224",
         "qwen3-embedding-0.6b",
     ):
@@ -287,6 +337,7 @@ def verify(
         "protected_tree": _protected_tree_clean(root),
         "algorithm_audit": _algorithm_audit(root),
         "configuration": _configuration_audit(root),
+        "model_selection": _model_selection_audit(root, model_root),
         "weights": _weight_audit(root, model_root),
     }
     with _committed_snapshot(root) as snapshot:

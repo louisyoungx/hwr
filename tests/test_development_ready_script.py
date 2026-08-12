@@ -4,6 +4,7 @@ from scripts.verify_development_ready import (
     FOUNDATION_ALGORITHM_PATHS,
     _algorithm_audit,
     _committed_snapshot,
+    _model_selection_audit,
     parse_args,
 )
 from hwr.train.development_gate import current_commit
@@ -32,3 +33,10 @@ def test_development_checks_use_an_isolated_committed_snapshot() -> None:
         assert snapshot.resolve() != ROOT.resolve()
         assert current_commit(snapshot) == current_commit(ROOT)
         assert (snapshot / "scripts/check_python_size.py").is_file()
+
+
+def test_foundation_model_selection_is_bound_across_source_lock_and_runtime() -> None:
+    report = _model_selection_audit(ROOT, ROOT / "models/foundation")
+
+    assert report["passed"] is True
+    assert "dinov3-vits16-pretrain-lvd1689m" in report["models"]

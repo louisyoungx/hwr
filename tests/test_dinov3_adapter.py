@@ -7,16 +7,16 @@ import pytest
 import torch
 
 from hwr.adapters.foundation.dinov3 import (
-    DINOV3_CONVNEXT_REPRESENTATION,
-    Dinov3ConvNextDenseVisionProvider,
+    DINOV3_VIT_REPRESENTATION,
+    Dinov3ViTDenseVisionProvider,
 )
 from hwr.adapters.foundation.locks import LockedFoundationModel
 from hwr.perception.foundation import FoundationModelLock, WeightArtifact
 
 
-def _model_lock(representation: str = DINOV3_CONVNEXT_REPRESENTATION):
+def _model_lock(representation: str = DINOV3_VIT_REPRESENTATION):
     return FoundationModelLock(
-        "facebook/dinov3-convnext-tiny-pretrain-lvd1689m",
+        "facebook/dinov3-vits16-pretrain-lvd1689m",
         "1" * 40,
         "dense_vision",
         "DINOv3-License",
@@ -37,27 +37,25 @@ class _Processor:
 
 
 class _Model:
-    def __call__(self, *, pixel_values, output_hidden_states, return_dict):
-        assert output_hidden_states and return_dict
+    config = SimpleNamespace(
+        model_type="dinov3_vit",
+        patch_size=16,
+        hidden_size=384,
+        num_register_tokens=4,
+    )
+
+    def __call__(self, *, pixel_values, return_dict):
+        assert return_dict
         batch = pixel_values.shape[0]
-        stage_three = torch.arange(1, 385, dtype=torch.float32).reshape(
-            1, 384, 1, 1
-        ).expand(batch, 384, 14, 14)
-        return SimpleNamespace(
-            hidden_states=(
-                pixel_values,
-                torch.zeros(batch, 96, 56, 56),
-                torch.zeros(batch, 192, 28, 28),
-                stage_three,
-                torch.zeros(batch, 768, 7, 7),
-            )
-        )
+        prefix = torch.zeros(batch, 5, 384)
+        patches = torch.arange(1, 385, dtype=torch.float32).reshape(
+            1, 1, 384
+        ).expand(batch, 196, 384)
+        return SimpleNamespace(last_hidden_state=torch.cat((prefix, patches), dim=1))
 
 
 def test_dinov3_adapter_returns_normalized_stride_16_dense_grid() -> None:
-    provider = Dinov3ConvNextDenseVisionProvider.__new__(
-        Dinov3ConvNextDenseVisionProvider
-    )
+    provider = Dinov3ViTDenseVisionProvider.__new__(Dinov3ViTDenseVisionProvider)
     provider.locked = SimpleNamespace(model_lock=_model_lock())
     provider.device = torch.device("cpu")
     provider.processor = _Processor()
@@ -76,8 +74,8 @@ def test_dinov3_adapter_returns_normalized_stride_16_dense_grid() -> None:
 
 def test_dinov3_adapter_rejects_unlocked_feature_selector(tmp_path) -> None:
     locked = LockedFoundationModel(
-        "dinov3_convnext", "fixture", tmp_path, _model_lock("final-grid-l2/v1")
+        "dinov3_vit", "fixture", tmp_path, _model_lock("pooled-token/v1")
     )
 
     with pytest.raises(ValueError, match="representation identity"):
-        Dinov3ConvNextDenseVisionProvider(locked, device="cpu")
+        Dinov3ViTDenseVisionProvider(locked, device="cpu")

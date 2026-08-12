@@ -4,14 +4,14 @@
 
 ## 2026-08-12 基础模型—世界模型主线重建
 
-当前没有 P081，也没有新的正式训练 checkpoint。已完成的是训练前软件栈开发和 fixture
-闭环验证，不能解释为模型已经获得家务能力。
+P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为无效开发运行；它们
+不能解释为模型已经获得家务能力，也不能作为下一条正式谱系的父模型。
 
 已经接通的单一路径为：
 
 ```text
 四相机原始 RGB-D + 动态内外参
-  -> SigLIP2 / DINOv2 / Qwen3-Embedding 离线连续特征缓存
+  -> SigLIP2 / DINOv3 ViT-S/16 / Qwen3-Embedding 离线连续特征缓存
   -> 24.4M 参数高分辨率视觉学生
   -> 13.0M 参数动作条件 categorical RSSM
   -> 想象空间 Actor-Critic
@@ -22,7 +22,9 @@
 
 关键实现事实：
 
-- 基础模型 revision、许可证与本地文件 SHA-256 已锁定；正式控制回路不加载教师；
+- 基础模型 revision、连续表示规范、许可证与预期文件 SHA-256 已锁定；正式控制回路
+  不加载教师。DINOv3 官方权重仍需由已接受 Meta 条款的 Hugging Face 账户下载，缺失时
+  开发门禁保持锁定；
 - 自主轨迹只接受 `random_rl_exploration` 和 `rl_actor` 两种动作来源，同时记录 Actor
   提案与安全层实际执行动作；
 - RSSM transition 和想象 rollout 使用与真实回放相同的物理动作单位；
@@ -86,19 +88,32 @@ slow target，使设备、dtype 和网络结构完全一致；同时用 `try/fin
 batch 2、16 transition 完整执行四个优化器。一次 update 用时约 4.98 秒，视觉总损失
 约 2.894、世界模型总损失约 12.273、Actor 损失约 2.020、Value 损失约 5.727；PyTorch
 报告 MPS tensor 占用约 1.88 GB、driver 总分配约 30.46 GB，证明 48 GB 机器有可用余量。
-完整门禁重新通过后，下一条正式 run 使用 `foundation-wm-003`，不恢复任何未落盘参数。
+完整门禁重新通过后曾启动 `foundation-wm-003`，不恢复任何未落盘参数。
+
+`foundation-wm-003` 在提交 `4ae381f` 上采集了 6 个 Episode、8,000 条 transition，并
+发布 `update-000000200` 训练 checkpoint。该更新的动作打乱误差比为 `0.9973`，低于
+`1.05`，且只有 `50%` horizon 恶化，因果门正确拒绝了 deployment。随后静态方案审查
+发现正式实现仍使用 DINOv2-Small，和已经批准的 DINOv3 感知方案不一致，因此在第二轮
+更新完成前主动停止。该 run 的 replay、checkpoint 和失败因果报告保留审计，但其特征
+缓存、参数与优化器一律不得进入 DINOv3 新谱系。
+
+新的密集教师固定为官方 `facebook/dinov3-vits16-pretrain-lvd1689m` revision
+`114c1379950215c8b35dfcd4e90a5c251dde0d32`。核心训练模块同时从模型品牌名改为
+`vision_language` / `dense_vision` 角色名，模型锁新增连续表示规范，使具体输出层变化
+必然改变缓存键。下一条 run 只能在官方权重、真实 CPU/MPS 推理和全量开发门禁重新
+通过后创建。
 
 门禁通过后才允许执行：
 
 ```bash
-hwr-train-foundation-world-model --run-id foundation-wm-003 --device mps
+hwr-train-foundation-world-model --run-id foundation-wm-004 --device mps
 ```
 
 训练完成后的固定评测命令为：
 
 ```bash
 hwr-evaluate-foundation-world-model \
-  runs/foundation-world-model/foundation-wm-003 \
+  runs/foundation-world-model/foundation-wm-004 \
   --seed-count 20 --video-seed-count 1
 ```
 

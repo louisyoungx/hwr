@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 from hwr.adapters.foundation import (
-    Dinov2DenseVisionProvider,
+    Dinov3ViTDenseVisionProvider,
     Qwen3LanguageProvider,
     Siglip2VisionLanguageProvider,
     load_foundation_model_locks,
@@ -92,8 +92,9 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         lambda: Siglip2VisionLanguageProvider(
             locks["siglip2-base-patch16-224"], device=arguments.foundation_device
         ),
-        lambda: Dinov2DenseVisionProvider(
-            locks["dinov2-small"], device=arguments.foundation_device
+        lambda: Dinov3ViTDenseVisionProvider(
+            locks["dinov3-vits16-pretrain-lvd1689m"],
+            device=arguments.foundation_device,
         ),
         lambda: Qwen3LanguageProvider(
             locks["qwen3-embedding-0.6b"], device=arguments.foundation_device

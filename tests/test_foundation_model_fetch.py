@@ -8,7 +8,7 @@ import pytest
 from scripts.fetch_foundation_models import LOCK_SCHEMA, _load_sources, _lock_model
 
 
-def test_committed_foundation_sources_are_pinned_and_publicly_licensed() -> None:
+def test_committed_foundation_sources_are_pinned_and_license_identified() -> None:
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
@@ -16,11 +16,20 @@ def test_committed_foundation_sources_are_pinned_and_publicly_licensed() -> None
 
     assert {model["adapter"] for model in models} == {
         "siglip2",
-        "dinov2",
+        "dinov3_vit",
         "qwen3_embedding",
     }
     assert all(len(model["revision"]) == 40 for model in models)
-    assert all(model["license_id"] == "Apache-2.0" for model in models)
+    assert all(model["license_id"] for model in models)
+    dense = next(model for model in models if model["role"] == "dense_vision")
+    assert dense["model_id"] == "facebook/dinov3-vits16-pretrain-lvd1689m"
+    assert dense["license_id"] == "DINOv3-License-2025-08-19"
+    assert dense["gated"] is True
+    assert dense["access_url"].startswith("https://huggingface.co/facebook/")
+    assert dense["license_url"].startswith(
+        "https://github.com/facebookresearch/dinov3/"
+    )
+    assert "LICENSE.md" in dense["required_files"]
     assert all(model["representation_id"].endswith("/v1") for model in models)
     assert all("model.safetensors" in model["required_files"] for model in models)
 

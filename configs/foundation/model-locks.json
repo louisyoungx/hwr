@@ -48,30 +48,35 @@
       "role": "vision_language"
     },
     {
-      "adapter": "dinov2",
+      "adapter": "dinov3_vit",
       "artifacts": [
         {
-          "relative_path": "dinov2-small/config.json",
-          "sha256": "1809f83e3bdb1609a501a610ad4a742f4fd8ae44d72ca4aa0df52d1f2ac8628d",
-          "size_bytes": 547
+          "relative_path": "dinov3-vits16-pretrain-lvd1689m/LICENSE.md",
+          "sha256": "25d122eb8f5b880fd23c736fb6ea8018ee45c12237e00b8a86d14c653904999e",
+          "size_bytes": 7503
         },
         {
-          "relative_path": "dinov2-small/model.safetensors",
-          "sha256": "ae1e99fcefd534ed978cdeb8326f08030c96e28b7a81ffcbc98a857c84d14be1",
-          "size_bytes": 88249960
+          "relative_path": "dinov3-vits16-pretrain-lvd1689m/config.json",
+          "sha256": "9481247be9f95a134a5599402b4bfc838eecdf9a7fffbf4debd1c70ec213898b",
+          "size_bytes": 743
         },
         {
-          "relative_path": "dinov2-small/preprocessor_config.json",
-          "sha256": "14e780d86fa1861f8751f868d7f45425b5feb55c38ca26f152ca5097ab30f828",
-          "size_bytes": 436
+          "relative_path": "dinov3-vits16-pretrain-lvd1689m/model.safetensors",
+          "sha256": "4610ad75edef83e75afdebf162d148dc628045ea6cbb83d67d4708c709c4f91d",
+          "size_bytes": 86406384
+        },
+        {
+          "relative_path": "dinov3-vits16-pretrain-lvd1689m/preprocessor_config.json",
+          "sha256": "960c41d1f3a7778b936365769a2d90550b318a6c0a53a0296957adacfe5e0dd7",
+          "size_bytes": 585
         }
       ],
-      "license_id": "Apache-2.0",
-      "local_name": "dinov2-small",
-      "model_id": "facebook/dinov2-small",
+      "license_id": "DINOv3-License-2025-08-19",
+      "local_name": "dinov3-vits16-pretrain-lvd1689m",
+      "model_id": "facebook/dinov3-vits16-pretrain-lvd1689m",
       "output_dimension": 384,
-      "representation_id": "patch-grid-l2/v1",
-      "revision": "ed25f3a31f01632728cabb09d1542f84ab7b0056",
+      "representation_id": "vit-patch-grid-l2/v1",
+      "revision": "114c1379950215c8b35dfcd4e90a5c251dde0d32",
       "role": "dense_vision"
     },
     {

@@ -39,16 +39,24 @@ def _load_sources(path: Path) -> list[dict[str, Any]]:
 def _download(model: Mapping[str, Any], root: Path) -> Path:
     try:
         from huggingface_hub import snapshot_download
+        from huggingface_hub.errors import GatedRepoError
     except ImportError as error:
         raise RuntimeError("install the foundation optional dependencies first") from error
     local = root / str(model["local_name"])
     local.mkdir(parents=True, exist_ok=True)
-    snapshot_download(
-        repo_id=str(model["model_id"]),
-        revision=str(model["revision"]),
-        local_dir=local,
-        allow_patterns=[str(value) for value in model["required_files"]],
-    )
+    try:
+        snapshot_download(
+            repo_id=str(model["model_id"]),
+            revision=str(model["revision"]),
+            local_dir=local,
+            allow_patterns=[str(value) for value in model["required_files"]],
+        )
+    except GatedRepoError as error:
+        access_url = str(model.get("access_url", model["model_id"]))
+        raise RuntimeError(
+            "official gated model access is required; accept its license and "
+            f"authenticate huggingface-cli before retrying: {access_url}"
+        ) from error
     return local
 
 

@@ -12,8 +12,7 @@ from typing import Any, Mapping
 import numpy as np
 
 from hwr.adapters.foundation import (
-    Dinov2DenseVisionProvider,
-    Dinov3ConvNextDenseVisionProvider,
+    Dinov3ViTDenseVisionProvider,
     Qwen3LanguageProvider,
     Siglip2VisionLanguageProvider,
     load_foundation_model_locks,
@@ -64,11 +63,8 @@ def _verify(name: str, lock: Any, device: str) -> dict[str, Any]:
         "lock_sha256": lock.model_lock.lock_sha256,
         "device": device,
     }
-    if lock.adapter == "dinov2":
-        provider = Dinov2DenseVisionProvider(lock, device=device)
-        return {**common, "vision": _vision_report(provider)}
-    if lock.adapter == "dinov3_convnext":
-        provider = Dinov3ConvNextDenseVisionProvider(lock, device=device)
+    if lock.adapter == "dinov3_vit":
+        provider = Dinov3ViTDenseVisionProvider(lock, device=device)
         return {**common, "vision": _vision_report(provider)}
     if lock.adapter == "siglip2":
         provider = Siglip2VisionLanguageProvider(lock, device=device)
