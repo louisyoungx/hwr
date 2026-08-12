@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+import torch
+import pytest
+
+from hwr.world_model import (
+    ActionConditionedWorldModel,
+    WorldModelConfig,
+    WorldModelLoss,
+    WorldModelLossConfig,
+    WorldModelTargets,
+    evaluate_action_causality,
+)
+from hwr.world_model.distributions import reward_expectation, two_hot_symlog
+
+
+def _config() -> WorldModelConfig:
+    return WorldModelConfig(
+        visual_dimension=8,
+        language_dimension=6,
+        proprioception_dimension=5,
+        action_dimension=3,
+        observation_embedding_dimension=16,
+        deterministic_dimension=16,
+        stochastic_variables=4,
+        stochastic_classes=4,
+        hidden_dimension=32,
+        prior_ensemble=3,
+        reward_bins=21,
+        formal=False,
+    )
+
+
+def _inputs(config: WorldModelConfig, batch: int = 2, transitions: int = 4):
+    return (
+        torch.randn(batch, transitions + 1, config.visual_dimension),
+        torch.randn(batch, config.language_dimension),
+        torch.randn(batch, transitions + 1, config.proprioception_dimension),
+        torch.randn(batch, transitions, config.action_dimension),
+    )
+
+
+def test_action_conditioned_world_model_observe_and_prior_shapes() -> None:
+    config = _config()
+    model = ActionConditionedWorldModel(config)
+    visual, language, proprioception, actions = _inputs(config)
+
+    output = model.observe(visual, language, proprioception, actions)
+    initial = model.rssm.posterior_state(output.sequence, 0)
+    rollout = model.rollout_prior(initial, actions, sample=False)
+
+    assert output.features.shape == (2, 5, config.feature_dimension)
+    assert output.reward_logits.shape == (2, 5, 21)
+    assert output.sequence.ensemble_prior_logits.shape == (2, 5, 3, 4, 4)
+    assert rollout.visual_prediction.shape == (2, 4, 8)
+    assert rollout.uncertainty.shape == (2, 4)
+    assert torch.isfinite(rollout.features).all()
+
+
+def test_world_model_losses_train_dynamics_and_outcome_heads() -> None:
+    config = _config()
+    model = ActionConditionedWorldModel(config)
+    visual, language, proprioception, actions = _inputs(config)
+    output = model.observe(visual, language, proprioception, actions)
+    targets = WorldModelTargets(
+        visual=visual,
+        proprioception=proprioception,
+        reward=torch.randn(2, 4),
+        continues=torch.ones(2, 4),
+        safety=torch.zeros(2, 4),
+    )
+    objective = WorldModelLoss(config, WorldModelLossConfig())
+
+    losses = objective(output, targets)
+    losses["total"].backward()
+
+    assert set(losses) == {
+        "visual", "proprioception", "reward", "continue", "safety",
+        "dynamics", "representation", "ensemble", "total",
+    }
+    assert all(torch.isfinite(value) for value in losses.values())
+    assert model.rssm.recurrent.weight_hh.grad is not None
+    assert model.reward_head[-1].weight.grad is not None
+
+
+def test_action_shuffle_counterfactual_reports_open_loop_errors() -> None:
+    config = _config()
+    model = ActionConditionedWorldModel(config)
+    visual, language, proprioception, actions = _inputs(config)
+
+    report = evaluate_action_causality(
+        model, visual, language, proprioception, actions
+    )
+
+    assert report.true_action_error >= 0.0
+    assert report.shuffled_action_error >= 0.0
+    assert len(report.true_horizon_errors) == 4
+    assert len(report.uncertainty_by_horizon) == 4
+    assert model.training
+
+
+def test_distributional_reward_round_trip_is_finite() -> None:
+    values = torch.tensor([-10.0, -1.0, 0.0, 2.0, 30.0])
+    targets = two_hot_symlog(values, bins=21, limit=5.0)
+    logits = torch.log(targets + 1.0e-6)
+    reconstructed = reward_expectation(logits, limit=5.0)
+
+    assert torch.allclose(targets.sum(dim=-1), torch.ones(5))
+    assert torch.isfinite(reconstructed).all()
+    assert reconstructed[0] < reconstructed[2] < reconstructed[-1]
+
+
+def test_formal_world_model_rejects_noncanonical_action_dimension() -> None:
+    with pytest.raises(ValueError, match="canonical 16-D"):
+        WorldModelConfig(action_dimension=8)

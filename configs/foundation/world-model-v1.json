@@ -1,0 +1,17 @@
+{
+  "action_dimension": 16,
+  "categorical_unimix": 0.01,
+  "deterministic_dimension": 512,
+  "formal": true,
+  "hidden_dimension": 512,
+  "language_dimension": 1024,
+  "observation_embedding_dimension": 512,
+  "prior_ensemble": 5,
+  "proprioception_dimension": 37,
+  "reward_bins": 255,
+  "reward_symlog_limit": 20.0,
+  "schema_version": "hwr.world-model-config/v1",
+  "stochastic_classes": 32,
+  "stochastic_variables": 32,
+  "visual_dimension": 256
+}
