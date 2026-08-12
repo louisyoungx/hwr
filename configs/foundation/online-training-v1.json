@@ -10,6 +10,7 @@
   "collection_episodes_per_cycle": 3,
   "episodes": 120,
   "initial_random_episodes": 6,
+  "learning_signal_windows_per_episode": 4,
   "minimum_action_causality_horizon_fraction": 0.6,
   "minimum_action_causality_ratio": 1.05,
   "published_checkpoint_retention": 3,

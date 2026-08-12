@@ -144,6 +144,14 @@ _EXPORTS = {
         "hwr.train.foundation_online_config",
         "FoundationOnlineTrainingConfig",
     ),
+    "EpisodeLearningSignals": (
+        "hwr.train.foundation_learning_signals",
+        "EpisodeLearningSignals",
+    ),
+    "evaluate_episode_learning_signals": (
+        "hwr.train.foundation_learning_signals",
+        "evaluate_episode_learning_signals",
+    ),
     "FoundationOnlineTrainingRunner": (
         "hwr.train.foundation_online",
         "FoundationOnlineTrainingRunner",

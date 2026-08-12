@@ -323,6 +323,9 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert [record.action_source for record in result.records[3:]] == [
         "rl_actor"
     ] * 3
+    assert all(record.state_novelty >= 0.0 for record in result.records)
+    assert all(record.td_error >= 0.0 for record in result.records)
+    assert len({record.td_error for record in result.records[:3]}) > 1
     assert result.latest_checkpoint.is_dir()
     assert result.latest_deployment.is_dir()
     assert result.latest_action_causality_report.is_file()

@@ -10,7 +10,7 @@ from typing import Mapping, Sequence
 import numpy as np
 
 
-TASK_SAMPLING_SCHEMA = "hwr.task-agnostic-learning-sampling/v3"
+TASK_SAMPLING_SCHEMA = "hwr.task-agnostic-learning-sampling/v4"
 
 
 @dataclass(frozen=True)

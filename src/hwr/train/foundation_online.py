@@ -50,6 +50,10 @@ from hwr.train.foundation_holdout import (
     collect_causality_holdout,
     select_causality_windows,
 )
+from hwr.train.foundation_learning_signals import (
+    EpisodeLearningSignals,
+    evaluate_episode_learning_signals,
+)
 from hwr.train.foundation_exploration import (
     RandomRLActionSource,
     RandomRLExplorationConfig,
@@ -108,6 +112,10 @@ class FoundationEpisodeRecord:
     safety_cost_rate: float
     environment_steps: int
     update_count: int
+    state_novelty: float = 0.0
+    td_error: float = 0.0
+    reward_improvement: float = 0.0
+    failure_boundary: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -181,8 +189,9 @@ class FoundationOnlineTrainingRunner:
                 self._bound_replay_storage()
                 prepared, causality_prepared = self._materialize_features()
                 metrics = self._update_cycle(prepared)
+                signals = self._episode_learning_signals(prepared, collected)
                 self._evaluate_action_causality(causality_prepared, metrics)
-                self._record_learning_outcomes(collected, metrics)
+                self._record_learning_outcomes(collected, signals)
                 cycle += 1
                 self.completed_cycles = cycle
                 if cycle % self.config.checkpoint_interval_cycles == 0:
@@ -569,13 +578,35 @@ class FoundationOnlineTrainingRunner:
             return None
         return str(self.rng.choice(legal))
 
+    def _episode_learning_signals(
+        self,
+        prepared: FoundationPreparedFeatures,
+        episodes: list[object],
+    ) -> dict[str, EpisodeLearningSignals]:
+        loader = FoundationSequenceBatchLoader(
+            self.store.path,
+            self.cache,
+            self.preprocessor,
+            self.stack.trainer.visual_student.config,
+            prepared,
+            transitions=self.config.sequence_transitions,
+            device=str(next(self.stack.trainer.actor.parameters()).device),
+        )
+        return evaluate_episode_learning_signals(
+            self.stack.trainer,
+            loader,
+            [episode.episode_id for episode in episodes],
+            maximum_windows=self.config.learning_signal_windows_per_episode,
+        )
+
     def _record_learning_outcomes(
-        self, episodes: list[object], metrics: Mapping[str, float]
+        self,
+        episodes: list[object],
+        learning_signals: Mapping[str, EpisodeLearningSignals],
     ) -> None:
-        novelty = max(0.0, metrics["imagination/imagined_uncertainty"])
-        td_error = max(0.0, metrics["imagination/td_error"])
         for episode in episodes:
             arrays = episode.arrays
+            signal = learning_signals[episode.episode_id]
             episode_return = float(arrays["reward"].sum())
             safety_rate = float(arrays["safety_cost"].mean())
             success = bool(episode.metadata["success"])
@@ -595,8 +626,8 @@ class FoundationOnlineTrainingRunner:
                 episode.task_id,
                 TaskOutcome(
                     episode_return,
-                    novelty,
-                    td_error,
+                    signal.state_novelty,
+                    signal.td_error,
                     improvement,
                     boundary_signal,
                     success,
@@ -614,6 +645,10 @@ class FoundationOnlineTrainingRunner:
                     safety_rate,
                     len(arrays["executed_action"]),
                     self.stack.trainer.update_count,
+                    signal.state_novelty,
+                    signal.td_error,
+                    improvement,
+                    boundary_signal,
                 )
             )
 

@@ -50,7 +50,11 @@ FOUNDATION_ALGORITHM_PATHS = (
     "src/hwr/train/foundation_batch.py",
     "src/hwr/train/foundation_collection.py",
     "src/hwr/train/foundation_diagnostics.py",
+    "src/hwr/train/foundation_exploration.py",
+    "src/hwr/train/foundation_holdout.py",
+    "src/hwr/train/foundation_learning_signals.py",
     "src/hwr/train/foundation_online.py",
+    "src/hwr/train/foundation_online_config.py",
     "src/hwr/train/foundation_recovery.py",
     "src/hwr/train/foundation_setup.py",
     "src/hwr/train/foundation_trainer.py",
@@ -210,6 +214,9 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
         raise RuntimeError("formal random RL motion lacks temporal persistence")
     if not 0.0 < gripper_flip_probability <= 0.10:
         raise RuntimeError("formal random RL gripper dwell is invalid")
+    learning_signal_windows = int(online["learning_signal_windows_per_episode"])
+    if learning_signal_windows < 2:
+        raise RuntimeError("formal Episode learning signals have too few windows")
     trainer = stack.trainer
     if trainer.world_model.config.action_dimension != 16:
         raise RuntimeError("formal world model action dimension is not canonical")
@@ -251,6 +258,7 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
         "random_exploration_gripper_flip_probability": (
             gripper_flip_probability
         ),
+        "learning_signal_windows_per_episode": learning_signal_windows,
     }
 
 
