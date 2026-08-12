@@ -43,6 +43,7 @@
       "local_name": "siglip2-base-patch16-224",
       "model_id": "google/siglip2-base-patch16-224",
       "output_dimension": 768,
+      "representation_id": "patch-grid-and-text-pool-l2/v1",
       "revision": "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2",
       "role": "vision_language"
     },
@@ -69,6 +70,7 @@
       "local_name": "dinov2-small",
       "model_id": "facebook/dinov2-small",
       "output_dimension": 384,
+      "representation_id": "patch-grid-l2/v1",
       "revision": "ed25f3a31f01632728cabb09d1542f84ab7b0056",
       "role": "dense_vision"
     },
@@ -115,6 +117,7 @@
       "local_name": "qwen3-embedding-0.6b",
       "model_id": "Qwen/Qwen3-Embedding-0.6B",
       "output_dimension": 1024,
+      "representation_id": "last-token-pool-l2/v1",
       "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
       "role": "language"
     }

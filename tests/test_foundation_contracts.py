@@ -26,6 +26,7 @@ def test_foundation_lock_is_immutable_and_verifies_local_file(tmp_path) -> None:
         role="dense_vision",
         license_id="Apache-2.0",
         output_dimension=8,
+        representation_id="fixture-grid/v1",
         artifacts=(WeightArtifact("weights.safetensors", digest, weight.stat().st_size),),
     )
 
@@ -38,7 +39,10 @@ def test_foundation_lock_is_immutable_and_verifies_local_file(tmp_path) -> None:
 def test_foundation_lock_rejects_moving_revision_and_escaping_path() -> None:
     artifact = WeightArtifact("weights.safetensors", DIGEST, 12)
     with pytest.raises(ValueError, match="immutable"):
-        FoundationModelLock("fixture/model", "main", "language", "MIT", 4, (artifact,))
+        FoundationModelLock(
+            "fixture/model", "main", "language", "MIT", 4,
+            "fixture-language/v1", (artifact,)
+        )
     with pytest.raises(ValueError, match="contained"):
         WeightArtifact("../weights", DIGEST, 12)
 

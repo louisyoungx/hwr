@@ -55,6 +55,7 @@ def load_foundation_model_locks(
             role=str(value["role"]),
             license_id=str(value["license_id"]),
             output_dimension=int(value["output_dimension"]),
+            representation_id=str(value["representation_id"]),
             artifacts=tuple(WeightArtifact(**artifact) for artifact in value["artifacts"]),
         )
         models[name] = LockedFoundationModel(

@@ -21,6 +21,7 @@ def test_committed_foundation_sources_are_pinned_and_publicly_licensed() -> None
     }
     assert all(len(model["revision"]) == 40 for model in models)
     assert all(model["license_id"] == "Apache-2.0" for model in models)
+    assert all(model["representation_id"].endswith("/v1") for model in models)
     assert all("model.safetensors" in model["required_files"] for model in models)
 
 
@@ -38,6 +39,7 @@ def test_lock_model_hashes_every_required_file(tmp_path) -> None:
         "role": "dense_vision",
         "license_id": "Apache-2.0",
         "output_dimension": 4,
+        "representation_id": "fixture-grid/v1",
         "required_files": ["config.json", "model.safetensors"],
     }
 
@@ -45,6 +47,7 @@ def test_lock_model_hashes_every_required_file(tmp_path) -> None:
 
     assert lock["artifacts"][1]["sha256"] == hashlib.sha256(b"fixture-weight").hexdigest()
     assert lock["artifacts"][0]["relative_path"] == "fixture/config.json"
+    assert lock["representation_id"] == "fixture-grid/v1"
 
 
 def test_source_loader_rejects_moving_or_duplicate_model_definition(tmp_path) -> None:

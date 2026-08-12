@@ -79,12 +79,15 @@ class FoundationModelLock:
     role: FoundationRole
     license_id: str
     output_dimension: int
+    representation_id: str
     artifacts: tuple[WeightArtifact, ...]
     schema_version: str = FOUNDATION_MODEL_SCHEMA
 
     def __post_init__(self) -> None:
-        if not self.model_id or not self.license_id:
+        if not self.model_id or not self.license_id or not self.representation_id:
             raise ValueError("foundation model identity and license are required")
+        if any(character.isspace() for character in self.representation_id):
+            raise ValueError("foundation representation identity cannot contain whitespace")
         if not self.revision or self.revision in {"main", "master", "latest"}:
             raise ValueError("foundation model revision must be immutable")
         if self.role not in {"dense_vision", "vision_language", "language"}:

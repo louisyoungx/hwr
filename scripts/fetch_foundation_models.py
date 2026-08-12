@@ -73,6 +73,7 @@ def _lock_model(model: Mapping[str, Any], local: Path, root: Path) -> dict[str, 
         "role": model["role"],
         "license_id": model["license_id"],
         "output_dimension": int(model["output_dimension"]),
+        "representation_id": model["representation_id"],
         "artifacts": artifacts,
     }
 

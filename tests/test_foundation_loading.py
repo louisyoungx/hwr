@@ -42,6 +42,7 @@ class _VisionProvider:
             role,
             "Apache-2.0",
             dimension,
+            "fixture-grid/v1",
             (WeightArtifact(f"{marker}.bin", marker * 64, 1),),
         )
 
@@ -65,6 +66,7 @@ class _LanguageProvider:
             "language",
             "Apache-2.0",
             6,
+            "fixture-language/v1",
             (WeightArtifact("c.bin", "c" * 64, 1),),
         )
 

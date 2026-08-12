@@ -64,6 +64,7 @@ class _VisionProvider:
     def __init__(self, role: str, dimension: int, marker: str) -> None:
         self._lock = FoundationModelLock(
             f"fixture/{marker}", marker * 40, role, "Apache-2.0", dimension,
+            "fixture-grid/v1",
             (WeightArtifact(f"{marker}.bin", marker * 64, 1),),
         )
 
@@ -83,6 +84,7 @@ class _LanguageProvider:
     def __init__(self) -> None:
         self._lock = FoundationModelLock(
             "fixture/language", "c" * 40, "language", "Apache-2.0", 6,
+            "fixture-language/v1",
             (WeightArtifact("c.bin", "c" * 64, 1),),
         )
 
