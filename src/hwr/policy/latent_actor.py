@@ -72,6 +72,14 @@ class LatentActor(nn.Module):
         )
         nn.init.uniform_(self.mean_head.weight, -1.0e-3, 1.0e-3)
         nn.init.zeros_(self.mean_head.bias)
+        nn.init.zeros_(self.log_standard_deviation_head.weight)
+        with torch.no_grad():
+            self.log_standard_deviation_head.bias[:14].fill_(
+                _raw_log_standard_deviation(0.75)
+            )
+            self.log_standard_deviation_head.bias[14:].fill_(
+                _raw_log_standard_deviation(11.0 / 12.0)
+            )
 
     def distribution_parameters(
         self, latent: torch.Tensor
@@ -98,13 +106,14 @@ class LatentActor(nn.Module):
         raw = mean if deterministic else normal.rsample()
         action = self._transform(raw)
         mean_action = self._transform(mean)
-        log_probability = normal.log_prob(raw) - self._log_abs_jacobian(raw)
-        entropy = normal.entropy()
+        component_log_probability = normal.log_prob(raw) - self._log_abs_jacobian(raw)
+        motion_log_probability = component_log_probability[..., :14].sum(dim=-1)
+        gripper_log_probability = component_log_probability[..., 14:].sum(dim=-1)
         return LatentActorSample(
             action=action,
-            log_probability=log_probability.sum(dim=-1),
-            motion_entropy=entropy[..., :14].sum(dim=-1),
-            gripper_entropy=entropy[..., 14:].sum(dim=-1),
+            log_probability=motion_log_probability + gripper_log_probability,
+            motion_entropy=-motion_log_probability,
+            gripper_entropy=-gripper_log_probability,
             mean_action=mean_action,
         )
 
@@ -122,3 +131,10 @@ class LatentActor(nn.Module):
         grippers = -nn.functional.softplus(-raw[..., 14:])
         grippers -= nn.functional.softplus(raw[..., 14:])
         return torch.cat((motion, grippers), dim=-1)
+
+
+def _raw_log_standard_deviation(fraction: float) -> float:
+    """Invert the configured tanh interpolation at a bound-relative fraction."""
+    if not 0.0 < fraction < 1.0:
+        raise ValueError("initial Actor deviation fraction must be internal")
+    return math.atanh(2.0 * fraction - 1.0)

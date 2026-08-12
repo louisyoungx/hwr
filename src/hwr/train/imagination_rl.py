@@ -95,14 +95,17 @@ class ImaginationActorCritic(nn.Module):
         rewards = trajectory.rewards
         rewards = rewards + self.config.uncertainty_weight * trajectory.uncertainties
         rewards = rewards - self.config.safety_weight * trajectory.safety_probabilities
+        rewards = rewards + (
+            self.config.motion_entropy_weight * trajectory.motion_entropies
+        )
+        rewards = rewards + (
+            self.config.gripper_entropy_weight * trajectory.gripper_entropies
+        )
         discounts = self.config.discount * trajectory.continues
         returns = lambda_returns(
             rewards, discounts, slow_values, lambda_=self.config.lambda_return
         )
-        actor_objective = returns
-        actor_objective += self.config.motion_entropy_weight * trajectory.motion_entropies
-        actor_objective += self.config.gripper_entropy_weight * trajectory.gripper_entropies
-        actor_loss = -actor_objective.mean()
+        actor_loss = -returns.mean()
         value_logits = self.value(trajectory.features.detach())
         value_predictions = reward_expectation(
             value_logits, limit=self.config.value_symlog_limit

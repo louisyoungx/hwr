@@ -59,7 +59,23 @@ def test_latent_actor_outputs_canonical_ranges_without_scene_inputs() -> None:
     assert torch.all(sample.action[:, :14].abs() <= 1.0)
     assert torch.all((sample.action[:, 14:] >= 0.0) & (sample.action[:, 14:] <= 1.0))
     assert sample.log_probability.shape == (4,)
+    torch.testing.assert_close(
+        sample.motion_entropy + sample.gripper_entropy,
+        -sample.log_probability,
+    )
     assert actor.deterministic(torch.randn(4, 12)).shape == (4, 16)
+
+
+def test_initial_rl_actor_explores_both_gripper_extremes() -> None:
+    torch.manual_seed(7)
+    actor = LatentActor(
+        LatentActorConfig(12, hidden_dimension=16, hidden_layers=1)
+    )
+
+    grippers = actor.sample(torch.zeros(4096, 12)).action[:, 14:]
+
+    assert float((grippers < 0.10).float().mean()) > 0.05
+    assert float((grippers > 0.90).float().mean()) > 0.05
 
 
 def test_imagination_uses_actor_actions_and_world_model_outcomes() -> None:
