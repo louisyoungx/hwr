@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 import torch
 from torch import nn
@@ -43,6 +43,9 @@ class ImaginationRLConfig:
             self.maximum_gradient_norm,
         ) < 0.0:
             raise ValueError("imagination RL weights cannot be negative")
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
 
 
 class ImaginationActorCritic(nn.Module):

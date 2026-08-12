@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 import torch
 from torch import nn
@@ -36,6 +36,9 @@ class VisualObjectiveConfig:
         )
         if min(dimensions) <= 0 or min(weights) < 0.0:
             raise ValueError("visual objective dimensions or weights are invalid")
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)

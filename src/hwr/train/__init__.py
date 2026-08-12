@@ -92,6 +92,22 @@ _EXPORTS = {
         "hwr.train.foundation_trainer",
         "FoundationWorldModelTrainer",
     ),
+    "export_foundation_deployment": (
+        "hwr.train.foundation_registry",
+        "export_foundation_deployment",
+    ),
+    "load_foundation_deployment": (
+        "hwr.train.foundation_registry",
+        "load_foundation_deployment",
+    ),
+    "load_foundation_training_checkpoint": (
+        "hwr.train.foundation_registry",
+        "load_foundation_training_checkpoint",
+    ),
+    "save_foundation_training_checkpoint": (
+        "hwr.train.foundation_registry",
+        "save_foundation_training_checkpoint",
+    ),
 }
 
 __all__ = sorted(_EXPORTS)
