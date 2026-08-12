@@ -7,6 +7,8 @@
   "collection_episodes_per_cycle": 3,
   "episodes": 120,
   "initial_random_episodes": 6,
+  "published_checkpoint_retention": 3,
+  "replay_transition_capacity": 18000,
   "schema_version": "hwr.foundation-online-training/v1",
   "seed": 20260812,
   "sequence_transitions": 16,

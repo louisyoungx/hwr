@@ -114,3 +114,26 @@ def test_appendable_trajectory_store_publishes_each_episode_atomically(tmp_path)
     assert reopened.manifest["episode_count"] == 2
     assert reopened.manifest["transition_count"] == 8
     assert verify_autonomous_trajectory_dataset(reopened.path)["episode_count"] == 2
+
+
+def test_appendable_store_prunes_oldest_complete_shards_per_task(tmp_path) -> None:
+    store = AppendableAutonomousTrajectoryStore(tmp_path, "bounded-v1")
+    episodes = (
+        _episode(episode_id="a-old", task_id="a/v1", seed=1),
+        _episode(episode_id="b-old", task_id="b/v1", seed=2),
+        _episode(episode_id="a-new", task_id="a/v1", seed=3),
+        _episode(episode_id="b-new", task_id="b/v1", seed=4),
+    )
+    paths = [store.append(episode) for episode in episodes]
+
+    evicted_sources = store.prune_to_task_capacities({"a/v1": 4, "b/v1": 4})
+
+    assert len(evicted_sources) == 10
+    assert [value["episode_id"] for value in store.manifest["shards"]] == [
+        "a-new",
+        "b-new",
+    ]
+    assert store.manifest["transition_count"] == 8
+    assert not paths[0].exists() and not paths[1].exists()
+    assert paths[2].exists() and paths[3].exists()
+    assert verify_autonomous_trajectory_dataset(store.path)["episode_count"] == 2

@@ -321,6 +321,61 @@ class AppendableAutonomousTrajectoryStore:
         _write_json_atomic(self.path / "manifest.json", self.manifest)
         return path
 
+    def prune_to_task_capacities(
+        self, capacities: Mapping[str, int]
+    ) -> tuple[str, ...]:
+        """Evict oldest complete shards while retaining recent data per task ID."""
+        normalized = {str(task_id): int(value) for task_id, value in capacities.items()}
+        shard_tasks = {str(shard["task_id"]) for shard in self.manifest["shards"]}
+        if not shard_tasks <= set(normalized) or any(value <= 0 for value in normalized.values()):
+            raise ValueError("replay capacities must cover every task with positive limits")
+        retained_ids: set[str] = set()
+        for task_id, capacity in normalized.items():
+            used = 0
+            candidates = [
+                shard
+                for shard in reversed(self.manifest["shards"])
+                if str(shard["task_id"]) == task_id
+            ]
+            for shard in candidates:
+                transitions = int(shard["transition_count"])
+                if used and used + transitions > capacity:
+                    continue
+                retained_ids.add(str(shard["episode_id"]))
+                used += transitions
+        evicted = [
+            shard
+            for shard in self.manifest["shards"]
+            if str(shard["episode_id"]) not in retained_ids
+        ]
+        if not evicted:
+            return ()
+        sources: list[str] = []
+        for shard in evicted:
+            shard_path = self.path / str(shard["path"])
+            with np.load(shard_path, allow_pickle=False) as arrays:
+                sources.extend(
+                    str(value) for value in arrays["observation_source_sha256"]
+                )
+        retained = [
+            shard
+            for shard in self.manifest["shards"]
+            if str(shard["episode_id"]) in retained_ids
+        ]
+        self.manifest["shards"] = retained
+        self.manifest["episode_count"] = len(retained)
+        self.manifest["transition_count"] = sum(
+            int(shard["transition_count"]) for shard in retained
+        )
+        _write_json_atomic(self.path / "manifest.json", self.manifest)
+        root = self.path.resolve()
+        for shard in evicted:
+            shard_path = (self.path / str(shard["path"])).resolve()
+            if shard_path.parent != root:
+                raise ValueError("replay shard path escaped its dataset directory")
+            shard_path.unlink(missing_ok=True)
+        return tuple(sources)
+
 
 def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")

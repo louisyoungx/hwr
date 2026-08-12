@@ -19,6 +19,7 @@ from hwr.data.foundation_cache import FoundationCacheKey, FoundationFeatureCache
 from hwr.data.foundation_features import (
     LANGUAGE_PREPROCESS_SHA256,
     file_sha256,
+    load_feature_index,
     materialize_language_features,
     materialize_visual_features,
 )
@@ -45,6 +46,7 @@ from hwr.train.foundation_registry import (
     export_foundation_deployment,
     file_sha256 as registry_file_sha256,
     load_foundation_training_checkpoint,
+    prune_versioned_artifacts,
     save_foundation_training_checkpoint,
 )
 from hwr.train.foundation_setup import FoundationLearningStack
@@ -75,6 +77,8 @@ class FoundationOnlineTrainingConfig:
     camera_height: int = 192
     augmentation_probability: float = 0.5
     checkpoint_interval_cycles: int = 1
+    replay_transition_capacity: int = 18000
+    published_checkpoint_retention: int = 3
     seed: int = 20260812
 
     def __post_init__(self) -> None:
@@ -88,6 +92,8 @@ class FoundationOnlineTrainingConfig:
             self.camera_width,
             self.camera_height,
             self.checkpoint_interval_cycles,
+            self.replay_transition_capacity,
+            self.published_checkpoint_retention,
         )
         if min(positive) <= 0 or self.seed < 0:
             raise ValueError("foundation online training dimensions are invalid")
@@ -97,6 +103,8 @@ class FoundationOnlineTrainingConfig:
             raise ValueError("foundation augmentation probability is invalid")
         if min(self.camera_width, self.camera_height) < 160:
             raise ValueError("foundation online training requires high-resolution cameras")
+        if self.replay_transition_capacity < self.sequence_transitions * 3:
+            raise ValueError("foundation replay capacity cannot retain one window per task")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -188,6 +196,7 @@ class FoundationOnlineTrainingRunner:
         try:
             while len(self.records) < self.config.episodes:
                 collected = self._collect_cycle(environments)
+                self._bound_replay_storage()
                 prepared = self._materialize_features()
                 metrics = self._update_cycle(prepared)
                 self._record_learning_outcomes(collected, metrics)
@@ -333,6 +342,32 @@ class FoundationOnlineTrainingRunner:
         gc.collect()
         return FoundationPreparedFeatures(siglip, dinov2, language)
 
+    def _bound_replay_storage(self) -> None:
+        base, remainder = divmod(
+            self.config.replay_transition_capacity, len(self.task_ids)
+        )
+        capacities = {
+            task_id: base + int(index < remainder)
+            for index, task_id in enumerate(self.task_ids)
+        }
+        evicted_sources = self.store.prune_to_task_capacities(capacities)
+        if not evicted_sources:
+            return
+        for filename in ("siglip.json", "dinov2.json"):
+            path = self.run_path / "features" / filename
+            if not path.is_file():
+                continue
+            index = load_feature_index(path)
+            for source in evicted_sources:
+                self.cache.discard(
+                    FoundationCacheKey(
+                        "visual",
+                        source,
+                        index.encoder_lock_sha256,
+                        self.preprocessor.fingerprint,
+                    )
+                )
+
     def _update_cycle(
         self, prepared: FoundationPreparedFeatures
     ) -> dict[str, float]:
@@ -452,6 +487,14 @@ class FoundationOnlineTrainingRunner:
         self.latest_checkpoint = checkpoint
         self.latest_deployment = deployment
         self._save_runner_state(cycle)
+        prune_versioned_artifacts(
+            self.run_path / "checkpoints",
+            self.config.published_checkpoint_retention,
+        )
+        prune_versioned_artifacts(
+            self.run_path / "deployments",
+            self.config.published_checkpoint_retention,
+        )
 
     def _save_runner_state(self, cycle: int) -> None:
         temporary = self.run_path / "runner-state.pt.tmp"

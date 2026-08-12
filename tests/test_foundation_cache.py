@@ -31,6 +31,9 @@ def test_visual_foundation_cache_round_trip_is_content_addressed(tmp_path) -> No
     assert np.array_equal(loaded.valid, features.valid)
     assert not loaded.values.flags.writeable
     assert cache.store_visual(key, features) == path
+    assert cache.discard(key) is True
+    assert cache.discard(key) is False
+    assert not cache.contains(key)
 
 
 def test_language_foundation_cache_round_trip_and_identity_checks(tmp_path) -> None:

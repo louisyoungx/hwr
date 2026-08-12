@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -49,6 +50,30 @@ def file_sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def prune_versioned_artifacts(root: Path, retain: int) -> tuple[Path, ...]:
+    """Retain the newest immutable update directories under one artifact root."""
+    if retain <= 0:
+        raise ValueError("foundation artifact retention must be positive")
+    if not root.exists():
+        return ()
+    candidates = sorted(
+        path
+        for path in root.iterdir()
+        if path.is_dir()
+        and not path.is_symlink()
+        and path.name.startswith("update-")
+        and path.name.removeprefix("update-").isdigit()
+    )
+    removed = candidates[:-retain]
+    resolved_root = root.resolve()
+    for path in removed:
+        resolved = path.resolve()
+        if resolved.parent != resolved_root:
+            raise ValueError("foundation artifact path escaped its version root")
+        shutil.rmtree(resolved)
+    return tuple(removed)
 
 
 def _atomic_torch_save(path: Path, value: object) -> None:

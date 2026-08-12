@@ -58,6 +58,14 @@ class FoundationFeatureCache:
     def contains(self, key: FoundationCacheKey) -> bool:
         return self.path_for(key).is_file()
 
+    def discard(self, key: FoundationCacheKey) -> bool:
+        """Remove one rebuildable cache entry and report whether it existed."""
+        path = self.path_for(key)
+        if not path.is_file():
+            return False
+        path.unlink()
+        return True
+
     def store_visual(
         self, key: FoundationCacheKey, features: DenseVisualFeatures
     ) -> Path:

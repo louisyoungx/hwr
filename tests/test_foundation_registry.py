@@ -18,6 +18,7 @@ from hwr.train.foundation_registry import (
     file_sha256,
     load_foundation_deployment,
     load_foundation_training_checkpoint,
+    prune_versioned_artifacts,
     save_foundation_training_checkpoint,
 )
 from hwr.train.foundation_trainer import (
@@ -180,3 +181,22 @@ def test_manifest_hash_matches_deployment_artifact(tmp_path) -> None:
     assert manifest["artifact_sha256"] == file_sha256(
         path / manifest["artifact_file"]
     )
+
+
+def test_versioned_artifact_retention_removes_only_old_update_directories(tmp_path) -> None:
+    root = tmp_path / "checkpoints"
+    for update in (1, 2, 10, 20):
+        path = root / f"update-{update:09d}"
+        path.mkdir(parents=True)
+        (path / "state").write_text(str(update))
+    unrelated = root / "manual-note"
+    unrelated.mkdir()
+
+    removed = prune_versioned_artifacts(root, retain=2)
+
+    assert [path.name for path in removed] == ["update-000000001", "update-000000002"]
+    assert sorted(path.name for path in root.iterdir()) == [
+        "manual-note",
+        "update-000000010",
+        "update-000000020",
+    ]

@@ -260,6 +260,8 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(tmp_path
             sequence_transitions=2,
             camera_width=160,
             camera_height=160,
+            replay_transition_capacity=6,
+            published_checkpoint_retention=1,
             seed=7,
         ),
         tmp_path / "run",
@@ -278,4 +280,7 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(tmp_path
     ] * 3
     assert result.latest_checkpoint.is_dir()
     assert result.latest_deployment.is_dir()
+    assert runner.store.manifest["transition_count"] <= 6
+    assert len(list((tmp_path / "run/checkpoints").glob("update-*"))) == 1
+    assert len(list((tmp_path / "run/deployments").glob("update-*"))) == 1
     assert runner.task_sampler.audit()["distance_thresholds"] is False
