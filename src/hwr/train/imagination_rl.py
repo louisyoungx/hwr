@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import asdict, dataclass
 
 import torch
@@ -69,13 +70,7 @@ class ImaginationActorCritic(nn.Module):
         self.world_model = world_model
         self.actor = actor
         self.value = value
-        self.slow_value = LatentValueModel(
-            world_model.config.feature_dimension,
-            bins=value.bins,
-            hidden_dimension=actor.config.hidden_dimension,
-            hidden_layers=actor.config.hidden_layers,
-        )
-        self.slow_value.load_state_dict(value.state_dict())
+        self.slow_value = copy.deepcopy(value)
         self.slow_value.requires_grad_(False)
         self.config = config
         self.action_scaling = LatentActionScaling(
@@ -167,23 +162,31 @@ def optimize_imagination_step(
     actor_optimizer: torch.optim.Optimizer,
     value_optimizer: torch.optim.Optimizer,
 ) -> dict[str, float]:
-    for parameter in algorithm.world_model.parameters():
-        parameter.requires_grad_(False)
-    actor_optimizer.zero_grad(set_to_none=True)
-    value_optimizer.zero_grad(set_to_none=True)
-    losses, _ = algorithm.losses(initial)
-    losses["actor"].backward(retain_graph=True)
-    nn.utils.clip_grad_norm_(
-        algorithm.actor.parameters(), algorithm.config.maximum_gradient_norm
+    world_parameters = tuple(algorithm.world_model.parameters())
+    original_grad_states = tuple(
+        parameter.requires_grad for parameter in world_parameters
     )
-    actor_optimizer.step()
-    value_optimizer.zero_grad(set_to_none=True)
-    losses["value"].backward()
-    nn.utils.clip_grad_norm_(
-        algorithm.value.parameters(), algorithm.config.maximum_gradient_norm
-    )
-    value_optimizer.step()
-    algorithm.update_slow_value()
-    for parameter in algorithm.world_model.parameters():
-        parameter.requires_grad_(True)
+    try:
+        for parameter in world_parameters:
+            parameter.requires_grad_(False)
+        actor_optimizer.zero_grad(set_to_none=True)
+        value_optimizer.zero_grad(set_to_none=True)
+        losses, _ = algorithm.losses(initial)
+        losses["actor"].backward(retain_graph=True)
+        nn.utils.clip_grad_norm_(
+            algorithm.actor.parameters(), algorithm.config.maximum_gradient_norm
+        )
+        actor_optimizer.step()
+        value_optimizer.zero_grad(set_to_none=True)
+        losses["value"].backward()
+        nn.utils.clip_grad_norm_(
+            algorithm.value.parameters(), algorithm.config.maximum_gradient_norm
+        )
+        value_optimizer.step()
+        algorithm.update_slow_value()
+    finally:
+        for parameter, requires_grad in zip(
+            world_parameters, original_grad_states, strict=True
+        ):
+            parameter.requires_grad_(requires_grad)
     return {name: float(value.detach().cpu()) for name, value in losses.items()}

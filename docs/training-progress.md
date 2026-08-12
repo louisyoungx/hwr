@@ -68,17 +68,37 @@ horizon 恶化。每次更新的报告绑定源码、数据 manifest 与 checkpo
 和报告三者的哈希一致性。正式 batch 由 4 调整为 2，以适配 48 GB MPS 的视觉反向传播峰值，
 模型、总更新次数、三任务范围和最终 180 Episode 验收均不减少。
 
+`foundation-wm-002` 在提交 `e6edf67` 上完成三任务各一个随机探索 Episode，共 4,000 条
+transition，并完成 SigLIP2、DINOv2 与三条语言指令的全部特征物化。为了避免重复计算，
+其中 5,894 个以原始观测、模型 lock 和预处理 SHA-256 寻址的教师特征从 `foundation-wm-001`
+以硬链接复用；复用前新 run 已生成的 1,469 个键全部存在于旧缓存，抽样 12 个文件的字节
+哈希零差异。没有复用 replay、Episode、动作、模型或优化器，操作记录保存在 run 内的
+`cache-reuse.json`。
+
+该 run 在第一次联合更新中依次完成视觉学生和世界模型更新，进入想象 Actor-Critic 时异常
+退出：主 Value 已在 MPS，而初始化后才创建的 slow target Value 仍在 CPU。因为进程没有
+完成一次 `train_step`，`update_count` 仍为 0，且没有 `latest.json`、checkpoint、部署模型或
+动作因果报告，因此 `foundation-wm-002` 也不能作为训练结果。修复改为从主 Value 深拷贝
+slow target，使设备、dtype 和网络结构完全一致；同时用 `try/finally` 保证想象更新异常时
+恢复世界模型原有梯度状态。
+
+修复后的正式规模本机 smoke test 直接读取该 run 的真实四相机序列和教师特征，以 MPS、
+batch 2、16 transition 完整执行四个优化器。一次 update 用时约 4.98 秒，视觉总损失
+约 2.894、世界模型总损失约 12.273、Actor 损失约 2.020、Value 损失约 5.727；PyTorch
+报告 MPS tensor 占用约 1.88 GB、driver 总分配约 30.46 GB，证明 48 GB 机器有可用余量。
+完整门禁重新通过后，下一条正式 run 使用 `foundation-wm-003`，不恢复任何未落盘参数。
+
 门禁通过后才允许执行：
 
 ```bash
-hwr-train-foundation-world-model --run-id foundation-wm-002 --device mps
+hwr-train-foundation-world-model --run-id foundation-wm-003 --device mps
 ```
 
 训练完成后的固定评测命令为：
 
 ```bash
 hwr-evaluate-foundation-world-model \
-  runs/foundation-world-model/foundation-wm-002 \
+  runs/foundation-world-model/foundation-wm-003 \
   --seed-count 20 --video-seed-count 1
 ```
 

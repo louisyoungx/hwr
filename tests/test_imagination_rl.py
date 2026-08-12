@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import torch
+import pytest
 
 from hwr.policy.latent_actor import LatentActor, LatentActorConfig
 from hwr.policy.latent_value import LatentValueModel
@@ -78,6 +79,19 @@ def test_imagination_uses_actor_actions_and_world_model_outcomes() -> None:
     assert all(torch.isfinite(value) for value in losses.values())
 
 
+def test_slow_value_inherits_exact_value_device_and_dtype() -> None:
+    world, actor, value, config = _models()
+    value.to(dtype=torch.float64)
+
+    algorithm = ImaginationActorCritic(world, actor, value, config)
+
+    current = tuple(value.parameters())
+    slow = tuple(algorithm.slow_value.parameters())
+    assert len(current) == len(slow)
+    assert all(left.device == right.device for left, right in zip(current, slow))
+    assert all(left.dtype == right.dtype for left, right in zip(current, slow))
+
+
 def test_imagination_optimization_updates_actor_and_value_not_world_model() -> None:
     world, actor, value, config = _models()
     algorithm = ImaginationActorCritic(world, actor, value, config)
@@ -98,6 +112,26 @@ def test_imagination_optimization_updates_actor_and_value_not_world_model() -> N
     assert all(torch.equal(before, after) for before, after in zip(world_before, world.parameters()))
     assert all(parameter.requires_grad for parameter in world.parameters())
     assert metrics["imagined_return"] == metrics["imagined_return"]
+
+
+def test_imagination_failure_restores_world_model_gradient_state(monkeypatch) -> None:
+    world, actor, value, config = _models()
+    algorithm = ImaginationActorCritic(world, actor, value, config)
+    initial = world.rssm.initial(3, torch.device("cpu"))
+
+    def fail(_initial):
+        raise RuntimeError("fixture failure")
+
+    monkeypatch.setattr(algorithm, "losses", fail)
+    with pytest.raises(RuntimeError, match="fixture failure"):
+        optimize_imagination_step(
+            algorithm,
+            initial,
+            torch.optim.Adam(actor.parameters(), lr=1.0e-3),
+            torch.optim.Adam(value.parameters(), lr=1.0e-3),
+        )
+
+    assert all(parameter.requires_grad for parameter in world.parameters())
 
 
 def test_lambda_returns_match_one_step_extremes() -> None:
