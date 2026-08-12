@@ -7,6 +7,7 @@ import sys
 def test_data_package_does_not_eagerly_import_training_or_pyarrow() -> None:
     command = (
         "import sys; import hwr.data; "
+        "import hwr.data.foundation_cache; "
         "print(int('torch' in sys.modules), int('pyarrow' in sys.modules), "
         "int('hwr.train' in sys.modules))"
     )

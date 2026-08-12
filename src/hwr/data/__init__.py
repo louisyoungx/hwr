@@ -41,6 +41,19 @@ _EXPORTS = {
         "hwr.data.foundation_cache",
         "FoundationFeatureCache",
     ),
+    "AutonomousEpisode": ("hwr.data.autonomous_trajectory", "AutonomousEpisode"),
+    "AutonomousTrajectoryDatasetBuilder": (
+        "hwr.data.autonomous_trajectory",
+        "AutonomousTrajectoryDatasetBuilder",
+    ),
+    "verify_autonomous_trajectory_dataset": (
+        "hwr.data.autonomous_trajectory",
+        "verify_autonomous_trajectory_dataset",
+    ),
+    "AutonomousTrajectoryWindows": (
+        "hwr.data.trajectory_windows",
+        "AutonomousTrajectoryWindows",
+    ),
 }
 
 __all__ = sorted(_EXPORTS)
