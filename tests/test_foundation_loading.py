@@ -116,7 +116,7 @@ def _dataset(tmp_path, fingerprint: str):
         "reward": np.asarray([0.0, 1.0], np.float32),
         "terminated": np.asarray([False, True]),
         "truncated": np.zeros(transitions, np.bool_),
-        "safety_cost": np.asarray([0.0, 1.0], np.float32),
+        "safety_intervention": np.asarray([0.0, 1.0], np.float32),
         "action_source": np.asarray(["rl_actor"] * transitions),
         "intrinsics": np.ones((observations, 4, 4), np.float32),
         "robot_from_camera": np.repeat(
@@ -191,5 +191,7 @@ def test_materialized_foundation_features_build_continuous_training_batch(tmp_pa
     assert batch.visual_targets.dense_vision.shape == (3, 2, 3, 2, 2, 5)
     assert batch.language_features.shape == (1, 6)
     assert batch.executed_actions.shape == (1, 2, 16)
+    assert batch.actor_proposals.shape == (1, 2, 16)
+    assert batch.safety_interventions.tolist() == [[0.0, 1.0]]
     assert batch.continues.tolist() == [[1.0, 0.0]]
     assert batch.visual_targets.correspondences.shape[1] == 10

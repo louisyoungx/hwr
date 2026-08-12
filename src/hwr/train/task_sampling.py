@@ -10,7 +10,7 @@ from typing import Mapping, Sequence
 import numpy as np
 
 
-TASK_SAMPLING_SCHEMA = "hwr.task-agnostic-learning-sampling/v4"
+TASK_SAMPLING_SCHEMA = "hwr.task-agnostic-learning-sampling/v5"
 
 
 @dataclass(frozen=True)
@@ -40,7 +40,7 @@ class TaskOutcome:
     reward_improvement: float
     failure_boundary: float
     success: bool
-    safety_cost_rate: float
+    safety_intervention_rate: float
 
     def __post_init__(self) -> None:
         values = (
@@ -49,7 +49,7 @@ class TaskOutcome:
             self.td_error,
             self.reward_improvement,
             self.failure_boundary,
-            self.safety_cost_rate,
+            self.safety_intervention_rate,
         )
         if not all(math.isfinite(value) for value in values):
             raise ValueError("task sampling outcome values must be finite")
@@ -57,7 +57,7 @@ class TaskOutcome:
             self.state_novelty,
             self.td_error,
             self.failure_boundary,
-            self.safety_cost_rate,
+            self.safety_intervention_rate,
         ) < 0.0:
             raise ValueError("task sampling magnitudes cannot be negative")
 

@@ -15,7 +15,7 @@ import numpy as np
 from hwr.core.embodied import DUAL_ARM_ACTION_DIM
 
 
-AUTONOMOUS_TRAJECTORY_SCHEMA = "hwr.autonomous-trajectory/v2"
+AUTONOMOUS_TRAJECTORY_SCHEMA = "hwr.autonomous-trajectory/v3"
 ALLOWED_ACTION_SOURCES = frozenset({"random_rl_exploration", "rl_actor"})
 OBSERVATION_ARRAY_FIELDS = frozenset(
     {
@@ -37,7 +37,7 @@ TRANSITION_ARRAY_FIELDS = frozenset(
         "reward",
         "terminated",
         "truncated",
-        "safety_cost",
+        "safety_intervention",
         "action_source",
     }
 )
@@ -151,7 +151,7 @@ def _validate_arrays(arrays: Mapping[str, np.ndarray]) -> None:
         "reward": (transitions,),
         "terminated": (transitions,),
         "truncated": (transitions,),
-        "safety_cost": (transitions,),
+        "safety_intervention": (transitions,),
         "action_source": (transitions,),
         "intrinsics": (observations, 4, 4),
         "robot_from_camera": (observations, 4, 4, 4),
@@ -168,7 +168,7 @@ def _validate_arrays(arrays: Mapping[str, np.ndarray]) -> None:
         "actor_proposal",
         "executed_action",
         "reward",
-        "safety_cost",
+        "safety_intervention",
         "intrinsics",
         "robot_from_camera",
     )
@@ -186,8 +186,8 @@ def _validate_arrays(arrays: Mapping[str, np.ndarray]) -> None:
     terminal = arrays["terminated"].astype(bool) | arrays["truncated"].astype(bool)
     if bool(terminal[:-1].any()):
         raise ValueError("trajectory cannot continue after a terminal transition")
-    if np.any(arrays["safety_cost"] < 0.0):
-        raise ValueError("trajectory safety cost cannot be negative")
+    if np.any(arrays["safety_intervention"] < 0.0):
+        raise ValueError("trajectory safety intervention cannot be negative")
 
 
 class AutonomousTrajectoryDatasetBuilder:

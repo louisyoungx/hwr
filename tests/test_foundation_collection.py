@@ -150,7 +150,7 @@ def test_collector_records_raw_observations_and_actual_safety_actions() -> None:
     assert not np.array_equal(
         episode.arrays["actor_proposal"][0], episode.arrays["executed_action"][0]
     )
-    assert episode.arrays["safety_cost"].tolist() == [1.0, 0.0]
+    assert episode.arrays["safety_intervention"].tolist() == [1.0, 0.0]
     assert episode.arrays["action_source"].tolist() == [
         "random_rl_exploration", "random_rl_exploration"
     ]

@@ -19,10 +19,11 @@ class FoundationTrainingBatch:
     observation_count: int
     language_features: torch.Tensor
     proprioception: torch.Tensor
+    actor_proposals: torch.Tensor
     executed_actions: torch.Tensor
     rewards: torch.Tensor
     continues: torch.Tensor
-    safety: torch.Tensor
+    safety_interventions: torch.Tensor
 
     def __post_init__(self) -> None:
         if frozenset(self.student_inputs) != VISUAL_STUDENT_INPUT_FIELDS:
@@ -35,21 +36,29 @@ class FoundationTrainingBatch:
         expected_prefixes = {
             "language_features": (self.sequence_batch_size,),
             "proprioception": (self.sequence_batch_size, self.observation_count),
+            "actor_proposals": (
+                self.sequence_batch_size,
+                self.observation_count - 1,
+            ),
             "executed_actions": (
                 self.sequence_batch_size,
                 self.observation_count - 1,
             ),
             "rewards": (self.sequence_batch_size, self.observation_count - 1),
             "continues": (self.sequence_batch_size, self.observation_count - 1),
-            "safety": (self.sequence_batch_size, self.observation_count - 1),
+            "safety_interventions": (
+                self.sequence_batch_size,
+                self.observation_count - 1,
+            ),
         }
         values = {
             "language_features": self.language_features,
             "proprioception": self.proprioception,
+            "actor_proposals": self.actor_proposals,
             "executed_actions": self.executed_actions,
             "rewards": self.rewards,
             "continues": self.continues,
-            "safety": self.safety,
+            "safety_interventions": self.safety_interventions,
         }
         mismatches = {
             name: (tuple(values[name].shape), prefix)
@@ -62,9 +71,10 @@ class FoundationTrainingBatch:
             *self.student_inputs.values(),
             self.language_features,
             self.proprioception,
+            self.actor_proposals,
             self.executed_actions,
             self.rewards,
-            self.safety,
+            self.safety_interventions,
         )
         if not all(torch.isfinite(value).all() for value in floating):
             raise ValueError("foundation batch contains non-finite values")

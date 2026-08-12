@@ -55,11 +55,12 @@ def imagine_trajectory(
             if action_scaling is not None and sample.action.shape[-1] == 16
             else sample.action
         )
+        safety_logits = world_model.predict_safety_intervention(feature, action)
         state, _, ensemble = world_model.rssm.step_prior(
             state, action, sample=True
         )
         next_feature = world_model.rssm.features(state)
-        _, _, reward_logits, continue_logits, safety_logits = world_model.decode_features(
+        _, _, reward_logits, continue_logits = world_model.decode_features(
             next_feature
         )
         ensemble_probability = ensemble.softmax(dim=-1)

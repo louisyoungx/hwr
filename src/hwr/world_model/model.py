@@ -65,17 +65,20 @@ class ActionConditionedWorldModel(nn.Module):
         )
         self.reward_head = _head(feature, config.hidden_dimension, config.reward_bins)
         self.continue_head = _head(feature, config.hidden_dimension, 1)
-        self.safety_head = _head(feature, config.hidden_dimension, 1)
+        self.safety_head = _head(
+            feature + config.action_dimension, config.hidden_dimension, 1
+        )
 
     def observe(
         self,
         visual: torch.Tensor,
         language: torch.Tensor,
         proprioception: torch.Tensor,
+        actor_proposals: torch.Tensor,
         executed_actions: torch.Tensor,
     ) -> WorldModelOutput:
         self._check_observation_shapes(
-            visual, language, proprioception, executed_actions
+            visual, language, proprioception, actor_proposals, executed_actions
         )
         embedding = self.encode_observations(visual, language, proprioception)
         sequence = self.rssm.observe(embedding, executed_actions)
@@ -83,7 +86,10 @@ class ActionConditionedWorldModel(nn.Module):
             (sequence.deterministic, sequence.stochastic), dim=-1
         )
         decoded = self._decode(features)
-        return WorldModelOutput(sequence, features, *decoded)
+        safety_logits = self.predict_safety_intervention(
+            features[:, :-1], actor_proposals
+        )
+        return WorldModelOutput(sequence, features, *decoded, safety_logits)
 
     def encode_observations(
         self,
@@ -113,7 +119,11 @@ class ActionConditionedWorldModel(nn.Module):
             visual.shape[0], 0, self.config.action_dimension
         )
         output = self.observe(
-            visual[:, None], language, proprioception[:, None], empty_actions
+            visual[:, None],
+            language,
+            proprioception[:, None],
+            empty_actions,
+            empty_actions,
         )
         return self.rssm.posterior_state(output.sequence)
 
@@ -140,18 +150,29 @@ class ActionConditionedWorldModel(nn.Module):
         )
 
     def rollout_prior(
-        self, initial: RSSMState, actions: torch.Tensor, *, sample: bool = False
+        self,
+        initial: RSSMState,
+        executed_actions: torch.Tensor,
+        actor_proposals: torch.Tensor,
+        *,
+        sample: bool = False,
     ) -> WorldModelPriorRollout:
-        if actions.ndim != 3 or actions.shape[-1] != self.config.action_dimension:
+        if (
+            executed_actions.ndim != 3
+            or executed_actions.shape[-1] != self.config.action_dimension
+            or actor_proposals.shape != executed_actions.shape
+        ):
             raise ValueError("world model rollout actions have an invalid shape")
         state = initial
+        current_features: list[torch.Tensor] = []
         deterministic: list[torch.Tensor] = []
         stochastic: list[torch.Tensor] = []
         priors: list[torch.Tensor] = []
         ensembles: list[torch.Tensor] = []
-        for index in range(actions.shape[1]):
+        for index in range(executed_actions.shape[1]):
+            current_features.append(self.rssm.features(state))
             state, prior, ensemble = self.rssm.step_prior(
-                state, actions[:, index], sample=sample
+                state, executed_actions[:, index], sample=sample
             )
             deterministic.append(state.deterministic)
             stochastic.append(state.stochastic)
@@ -173,34 +194,53 @@ class ActionConditionedWorldModel(nn.Module):
         )
         features = torch.cat((deterministic_tensor, stochastic_tensor), dim=-1)
         decoded = self._decode(features)
+        safety_logits = self.predict_safety_intervention(
+            torch.stack(current_features, dim=1), actor_proposals
+        )
         probabilities = ensemble_tensor.softmax(dim=-1)
         uncertainty = probabilities.var(dim=2, unbiased=False).mean(dim=(-1, -2))
-        return WorldModelPriorRollout(sequence, features, *decoded, uncertainty)
+        return WorldModelPriorRollout(
+            sequence, features, *decoded, safety_logits, uncertainty
+        )
 
     def _decode(
         self, features: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         return (
             self.visual_head(features),
             self.proprioception_head(features),
             self.reward_head(features),
             self.continue_head(features).squeeze(-1),
-            self.safety_head(features).squeeze(-1),
         )
 
     def decode_features(
         self, features: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Decode latent features without exposing any action answer."""
         if features.shape[-1] != self.config.feature_dimension:
             raise ValueError("world model decoded feature dimension is invalid")
         return self._decode(features)
+
+    def predict_safety_intervention(
+        self, features: torch.Tensor, actor_proposals: torch.Tensor
+    ) -> torch.Tensor:
+        """Predict whether the independent safety layer alters a proposal."""
+        if (
+            features.shape[:-1] != actor_proposals.shape[:-1]
+            or features.shape[-1] != self.config.feature_dimension
+            or actor_proposals.shape[-1] != self.config.action_dimension
+        ):
+            raise ValueError("safety intervention prediction shapes are invalid")
+        return self.safety_head(
+            torch.cat((features, actor_proposals), dim=-1)
+        ).squeeze(-1)
 
     def _check_observation_shapes(
         self,
         visual: torch.Tensor,
         language: torch.Tensor,
         proprioception: torch.Tensor,
+        actor_proposals: torch.Tensor,
         actions: torch.Tensor,
     ) -> None:
         if visual.ndim != 3:
@@ -214,6 +254,11 @@ class ActionConditionedWorldModel(nn.Module):
                 observations,
                 self.config.proprioception_dimension,
             ),
+            "actor_proposals": (
+                batch,
+                observations - 1,
+                self.config.action_dimension,
+            ),
             "executed_actions": (
                 batch,
                 observations - 1,
@@ -224,6 +269,7 @@ class ActionConditionedWorldModel(nn.Module):
             "visual": tuple(visual.shape),
             "language": tuple(language.shape),
             "proprioception": tuple(proprioception.shape),
+            "actor_proposals": tuple(actor_proposals.shape),
             "executed_actions": tuple(actions.shape),
         }
         mismatches = {

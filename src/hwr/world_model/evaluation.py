@@ -269,6 +269,7 @@ def evaluate_action_causality(
     visual: torch.Tensor,
     language: torch.Tensor,
     proprioception: torch.Tensor,
+    actor_proposals: torch.Tensor,
     executed_actions: torch.Tensor,
     rewards: torch.Tensor | None = None,
     continues: torch.Tensor | None = None,
@@ -276,7 +277,7 @@ def evaluate_action_causality(
     *,
     shuffle_seed: int = 0,
 ) -> CounterfactualCausalityReport:
-    if executed_actions.shape[1] < 2:
+    if executed_actions.shape[1] < 2 or actor_proposals.shape != executed_actions.shape:
         raise ValueError("action causality evaluation requires at least two transitions")
     was_training = model.training
     outcomes = (rewards, continues, safety)
@@ -290,11 +291,19 @@ def evaluate_action_causality(
             initial = model.initial_posterior(
                 visual[:, 0], language, proprioception[:, 0]
             )
-            true_rollout = model.rollout_prior(initial, executed_actions, sample=False)
-            shuffled = deterministic_action_derangement(
-                executed_actions, seed=shuffle_seed
+            true_rollout = model.rollout_prior(
+                initial, executed_actions, actor_proposals, sample=False
             )
-            shuffled_rollout = model.rollout_prior(initial, shuffled, sample=False)
+            paired = torch.cat((actor_proposals, executed_actions), dim=-1)
+            shuffled_pair = deterministic_action_derangement(
+                paired, seed=shuffle_seed
+            )
+            proposal_dimension = actor_proposals.shape[-1]
+            shuffled_proposals = shuffled_pair[..., :proposal_dimension]
+            shuffled_executed = shuffled_pair[..., proposal_dimension:]
+            shuffled_rollout = model.rollout_prior(
+                initial, shuffled_executed, shuffled_proposals, sample=False
+            )
             targets = (rewards, continues, safety)
             true_components = _horizon_component_errors(
                 model, true_rollout, visual[:, 1:], proprioception[:, 1:], targets

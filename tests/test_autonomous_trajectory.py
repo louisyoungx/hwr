@@ -27,7 +27,7 @@ def _arrays(observations: int = 5) -> dict[str, np.ndarray]:
         "reward": np.arange(transitions, dtype=np.float32),
         "terminated": np.asarray([False] * (transitions - 1) + [True]),
         "truncated": np.zeros(transitions, dtype=np.bool_),
-        "safety_cost": np.zeros(transitions, dtype=np.float32),
+        "safety_intervention": np.zeros(transitions, dtype=np.float32),
         "action_source": np.asarray(["rl_actor"] * transitions),
         "intrinsics": np.ones((observations, 4, 4), dtype=np.float32),
         "robot_from_camera": np.repeat(

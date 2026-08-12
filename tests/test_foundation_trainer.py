@@ -99,6 +99,7 @@ def _batch(visual: VisualStudentConfig) -> FoundationTrainingBatch:
         torch.randn(sequences, 6),
         torch.randn(sequences, observations, 5),
         torch.randn(sequences, observations - 1, 3),
+        torch.randn(sequences, observations - 1, 3),
         torch.randn(sequences, observations - 1),
         torch.ones(sequences, observations - 1),
         torch.zeros(sequences, observations - 1),
@@ -179,6 +180,8 @@ def test_foundation_diagnostic_uses_all_actual_outcome_targets() -> None:
     )
 
     assert diagnostic["action_source"] == "actual_executed_action"
+    assert diagnostic["safety_action_source"] == "actor_proposal"
+    assert diagnostic["counterfactual_pairing"] == "proposal-executed-pair/v1"
     assert diagnostic["report"]["error_components"] == (
         "visual_latent",
         "proprioception",

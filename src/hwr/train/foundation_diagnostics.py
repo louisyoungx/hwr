@@ -35,6 +35,8 @@ def evaluate_foundation_action_causality(
     return {
         "schema_version": ACTION_CAUSALITY_SCHEMA,
         "action_source": "actual_executed_action",
+        "safety_action_source": "actor_proposal",
+        "counterfactual_pairing": "proposal-executed-pair/v1",
         "counterfactual_transform": "deterministic-global-derangement/v1",
         "window_count": report.sample_count,
         "report": report.to_dict(),
@@ -65,10 +67,11 @@ def _evaluate_batch_report(
         visual,
         batch.language_features,
         batch.proprioception,
+        batch.actor_proposals,
         batch.executed_actions,
         batch.rewards,
         batch.continues,
-        batch.safety,
+        batch.safety_interventions,
         shuffle_seed=shuffle_seed,
     )
     return report
@@ -129,6 +132,8 @@ def evaluate_foundation_action_causality_audit(
     return {
         "schema_version": ACTION_CAUSALITY_SCHEMA,
         "action_source": "actual_executed_action",
+        "safety_action_source": "actor_proposal",
+        "counterfactual_pairing": "proposal-executed-pair/v1",
         "counterfactual_transform": "deterministic-global-derangement/v1",
         "partition_key": "task_id",
         "window_count": aggregate.sample_count,

@@ -253,8 +253,10 @@ def _stack() -> FoundationLearningStack:
 def _diagnostic(passed: bool) -> dict[str, object]:
     ratio = 1.2 if passed else 1.0
     return {
-        "schema_version": "hwr.foundation-action-causality/v3",
+        "schema_version": "hwr.foundation-action-causality/v4",
         "action_source": "actual_executed_action",
+        "safety_action_source": "actor_proposal",
+        "counterfactual_pairing": "proposal-executed-pair/v1",
         "report": {"shuffled_to_true_ratio": ratio},
         "assessment": {
             "passed": passed,
@@ -331,6 +333,13 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert result.latest_deployment.is_dir()
     assert result.latest_action_causality_report.is_file()
     latest = json.loads((tmp_path / "run/latest.json").read_text())
+    recovery = json.loads(
+        (result.latest_checkpoint / "recovery/manifest.json").read_text()
+    )
+    records = [
+        json.loads(line)
+        for line in (tmp_path / "run/episodes.jsonl").read_text().splitlines()
+    ]
     checkpoint = json.loads(
         (result.latest_checkpoint / "manifest.json").read_text()
     )
@@ -340,6 +349,9 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert latest["action_causality_sha256"] == checkpoint[
         "training_diagnostics"
     ]["action_causality_report_sha256"]
+    assert recovery["schema_version"] == "hwr.foundation-runner-recovery/v3"
+    assert all("safety_intervention_rate" in record for record in records)
+    assert all("safety_cost_rate" not in record for record in records)
     assert deployment["training_diagnostics"] == checkpoint[
         "training_diagnostics"
     ]

@@ -131,6 +131,7 @@ def _evaluate_indices(
         visual,
         batch.language_features,
         batch.proprioception,
+        batch.actor_proposals,
         batch.executed_actions,
     )
     novelty = posterior_state_change_novelty(world.features)

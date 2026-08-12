@@ -120,6 +120,7 @@ class FoundationWorldModelTrainer:
             visual_sequence,
             batch.language_features,
             batch.proprioception,
+            batch.actor_proposals,
             batch.executed_actions,
         )
         world_targets = WorldModelTargets(
@@ -127,7 +128,7 @@ class FoundationWorldModelTrainer:
             batch.proprioception,
             batch.rewards,
             batch.continues,
-            batch.safety,
+            batch.safety_interventions,
         )
         world_losses = self.world_objective(world_output, world_targets)
         self.world_optimizer.zero_grad(set_to_none=True)
@@ -168,6 +169,8 @@ class FoundationWorldModelTrainer:
             "proprioception": batch.proprioception.shape[-1],
             "action": batch.executed_actions.shape[-1],
         }
+        if batch.actor_proposals.shape != batch.executed_actions.shape:
+            raise ValueError("foundation proposal and executed action shapes differ")
         if expected != actual:
             raise ValueError(
                 f"foundation trainer batch dimensions differ: {actual} != {expected}"

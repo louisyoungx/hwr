@@ -11,8 +11,10 @@ def test_action_causality_report_is_published_as_one_immutable_directory(
     tmp_path,
 ) -> None:
     diagnostic = {
-        "schema_version": "hwr.foundation-action-causality/v3",
+        "schema_version": "hwr.foundation-action-causality/v4",
         "action_source": "actual_executed_action",
+        "safety_action_source": "actor_proposal",
+        "counterfactual_pairing": "proposal-executed-pair/v1",
         "report": {"shuffled_to_true_ratio": 1.2},
         "assessment": {"passed": True},
     }

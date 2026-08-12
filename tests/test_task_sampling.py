@@ -24,7 +24,7 @@ def _outcome(
         improvement,
         failure,
         success=not bool(failure),
-        safety_cost_rate=0.0,
+        safety_intervention_rate=0.0,
     )
 
 

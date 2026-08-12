@@ -112,7 +112,7 @@ class FoundationEpisodeRecord:
     action_source: str
     episode_return: float
     success: bool
-    safety_cost_rate: float
+    safety_intervention_rate: float
     environment_steps: int
     update_count: int
     state_novelty: float = 0.0
@@ -614,14 +614,15 @@ class FoundationOnlineTrainingRunner:
             arrays = episode.arrays
             signal = learning_signals[episode.episode_id]
             episode_return = float(arrays["reward"].sum())
-            safety_rate = float(arrays["safety_cost"].mean())
+            safety_rate = float(arrays["safety_intervention"].mean())
             success = bool(episode.metadata["success"])
             terminated_failure = bool(arrays["terminated"][-1]) and not success
             boundary = failure_boundary_step(
-                arrays["safety_cost"], terminated_failure=terminated_failure
+                arrays["safety_intervention"],
+                terminated_failure=terminated_failure,
             )
             boundary_signal = (
-                float(boundary + 1) / len(arrays["safety_cost"])
+                float(boundary + 1) / len(arrays["safety_intervention"])
                 if boundary >= 0
                 else 0.0
             )

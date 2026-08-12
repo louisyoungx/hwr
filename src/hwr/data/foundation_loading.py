@@ -131,6 +131,9 @@ class FoundationSequenceBatchLoader:
             torch.from_numpy(np.stack([value["proprioception"] for value in sequences])).to(
                 self.device
             ),
+            torch.from_numpy(np.stack([value["actor_proposals"] for value in sequences])).to(
+                self.device
+            ),
             torch.from_numpy(np.stack([value["executed_action"] for value in sequences])).to(
                 self.device
             ),
@@ -140,7 +143,9 @@ class FoundationSequenceBatchLoader:
             torch.from_numpy(np.stack([value["continue"] for value in sequences])).to(
                 self.device
             ),
-            torch.from_numpy(np.stack([value["safety"] for value in sequences])).to(
+            torch.from_numpy(
+                np.stack([value["safety_interventions"] for value in sequences])
+            ).to(
                 self.device
             ),
         )
@@ -194,10 +199,11 @@ class FoundationSequenceBatchLoader:
             "correspondences": correspondences,
             "language": self.cache.load_language(language_key).values.copy(),
             "proprioception": arrays["proprioception"].astype(np.float32),
+            "actor_proposals": arrays["actor_proposal"].astype(np.float32),
             "executed_action": arrays["executed_action"].astype(np.float32),
             "reward": arrays["reward"].astype(np.float32),
             "continue": (~terminal).astype(np.float32),
-            "safety": arrays["safety_cost"].astype(np.float32),
+            "safety_interventions": arrays["safety_intervention"].astype(np.float32),
         }
 
     def _teacher_arrays(

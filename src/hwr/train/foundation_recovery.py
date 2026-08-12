@@ -22,7 +22,7 @@ from hwr.data.autonomous_trajectory import (
 )
 
 
-RECOVERY_SCHEMA = "hwr.foundation-runner-recovery/v2"
+RECOVERY_SCHEMA = "hwr.foundation-runner-recovery/v3"
 
 
 @dataclass(frozen=True)

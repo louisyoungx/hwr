@@ -126,8 +126,10 @@ def _causality_run(tmp_path):
     _write_json(
         report,
         {
-            "schema_version": "hwr.foundation-action-causality/v3",
+            "schema_version": "hwr.foundation-action-causality/v4",
             "action_source": "actual_executed_action",
+            "safety_action_source": "actor_proposal",
+            "counterfactual_pairing": "proposal-executed-pair/v1",
             "counterfactual_transform": "deterministic-global-derangement/v1",
             "partition_key": "task_id",
             "partitions": {

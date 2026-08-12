@@ -101,7 +101,7 @@ class AutonomousEpisodeCollector:
         rewards: list[float] = []
         terminated: list[bool] = []
         truncated: list[bool] = []
-        safety: list[float] = []
+        safety_interventions: list[float] = []
         for step in range(self.config.maximum_steps):
             proposal = action_source.propose(observation)
             frame = dual_arm_action_frame(
@@ -116,7 +116,9 @@ class AutonomousEpisodeCollector:
             rewards.append(float(outcome.reward))
             terminated.append(bool(outcome.terminated))
             truncated.append(bool(outcome.truncated or limit and not outcome.terminated))
-            safety.append(_safety_cost(frame, outcome.info, outcome.events))
+            safety_interventions.append(
+                _safety_intervention(frame, outcome.info, outcome.events)
+            )
             observation = outcome.observation
             observations.append(observation)
             if outcome.terminated or outcome.truncated or limit:
@@ -128,7 +130,7 @@ class AutonomousEpisodeCollector:
             rewards,
             terminated,
             truncated,
-            safety,
+            safety_interventions,
             action_source.action_source,
         )
         transforms = ()
@@ -166,7 +168,7 @@ class AutonomousEpisodeCollector:
         rewards: list[float],
         terminated: list[bool],
         truncated: list[bool],
-        safety: list[float],
+        safety_interventions: list[float],
         action_source: str,
     ) -> tuple[dict[str, np.ndarray], str]:
         observation_values = [self._observation_arrays(value) for value in observations]
@@ -190,7 +192,7 @@ class AutonomousEpisodeCollector:
             "reward": np.asarray(rewards, np.float32),
             "terminated": np.asarray(terminated, np.bool_),
             "truncated": np.asarray(truncated, np.bool_),
-            "safety_cost": np.asarray(safety, np.float32),
+            "safety_intervention": np.asarray(safety_interventions, np.float32),
             "action_source": np.asarray([action_source] * len(executed)),
             "intrinsics": np.stack([value["intrinsics"] for value in observation_values]),
             "robot_from_camera": np.stack(
@@ -270,10 +272,10 @@ def _applied_action(info) -> DualArmAction:
     return frame.action
 
 
-def _safety_cost(frame: DualArmActionFrame, info, events) -> float:
+def _safety_intervention(frame: DualArmActionFrame, info, events) -> float:
+    """Label whether the independent safety layer altered an Actor proposal."""
     applied = info.get("applied_action")
     changed = isinstance(applied, DualArmActionFrame) and applied.action != frame.action
     intervention = bool(info.get("safety_intervened", False))
     rejected = any(event.event_type == "action_rejected" for event in events)
-    severe = float(info.get("severe_collision", 0.0)) > 0.0
-    return float(changed or intervention or rejected or severe)
+    return float(changed or intervention or rejected)

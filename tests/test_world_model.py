@@ -43,21 +43,23 @@ def _inputs(config: WorldModelConfig, batch: int = 2, transitions: int = 4):
         torch.randn(batch, config.language_dimension),
         torch.randn(batch, transitions + 1, config.proprioception_dimension),
         torch.randn(batch, transitions, config.action_dimension),
+        torch.randn(batch, transitions, config.action_dimension),
     )
 
 
 def test_action_conditioned_world_model_observe_and_prior_shapes() -> None:
     config = _config()
     model = ActionConditionedWorldModel(config)
-    visual, language, proprioception, actions = _inputs(config)
+    visual, language, proprioception, proposals, actions = _inputs(config)
 
-    output = model.observe(visual, language, proprioception, actions)
+    output = model.observe(visual, language, proprioception, proposals, actions)
     initial = model.rssm.posterior_state(output.sequence, 0)
-    rollout = model.rollout_prior(initial, actions, sample=False)
+    rollout = model.rollout_prior(initial, actions, proposals, sample=False)
 
     assert output.features.shape == (2, 5, config.feature_dimension)
     assert output.reward_logits.shape == (2, 5, 21)
     assert output.sequence.ensemble_prior_logits.shape == (2, 5, 3, 4, 4)
+    assert output.safety_logits.shape == (2, 4)
     assert rollout.visual_prediction.shape == (2, 4, 8)
     assert rollout.uncertainty.shape == (2, 4)
     assert torch.isfinite(rollout.features).all()
@@ -66,14 +68,14 @@ def test_action_conditioned_world_model_observe_and_prior_shapes() -> None:
 def test_world_model_losses_train_dynamics_and_outcome_heads() -> None:
     config = _config()
     model = ActionConditionedWorldModel(config)
-    visual, language, proprioception, actions = _inputs(config)
-    output = model.observe(visual, language, proprioception, actions)
+    visual, language, proprioception, proposals, actions = _inputs(config)
+    output = model.observe(visual, language, proprioception, proposals, actions)
     targets = WorldModelTargets(
         visual=visual,
         proprioception=proprioception,
         reward=torch.randn(2, 4),
         continues=torch.ones(2, 4),
-        safety=torch.zeros(2, 4),
+        safety_interventions=torch.zeros(2, 4),
     )
     objective = WorldModelLoss(config, WorldModelLossConfig())
 
@@ -87,18 +89,44 @@ def test_world_model_losses_train_dynamics_and_outcome_heads() -> None:
     assert all(torch.isfinite(value) for value in losses.values())
     assert model.rssm.recurrent.weight_hh.grad is not None
     assert model.reward_head[-1].weight.grad is not None
+    assert model.safety_head[-1].weight.grad is not None
+
+
+def test_actor_proposals_affect_safety_head_but_not_executed_dynamics() -> None:
+    config = _config()
+    model = ActionConditionedWorldModel(config).eval()
+    model.safety_head = torch.nn.Linear(
+        config.feature_dimension + config.action_dimension, 1, bias=False
+    )
+    with torch.no_grad():
+        model.safety_head.weight.zero_()
+        model.safety_head.weight[:, -config.action_dimension :] = 1.0
+    visual, language, proprioception, _, actions = _inputs(config)
+    first_proposals = torch.zeros_like(actions)
+    second_proposals = torch.ones_like(actions)
+
+    first = model.observe(
+        visual, language, proprioception, first_proposals, actions
+    )
+    second = model.observe(
+        visual, language, proprioception, second_proposals, actions
+    )
+
+    torch.testing.assert_close(first.features, second.features)
+    assert torch.all(second.safety_logits > first.safety_logits)
 
 
 def test_action_shuffle_counterfactual_reports_open_loop_errors() -> None:
     config = _config()
     model = ActionConditionedWorldModel(config)
-    visual, language, proprioception, actions = _inputs(config)
+    visual, language, proprioception, proposals, actions = _inputs(config)
 
     report = evaluate_action_causality(
         model,
         visual,
         language,
         proprioception,
+        proposals,
         actions,
         torch.randn(2, 4),
         torch.ones(2, 4),

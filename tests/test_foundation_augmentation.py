@@ -48,6 +48,8 @@ def _batch() -> FoundationTrainingBatch:
     action[:, :, 2] = 0.4
     action[:, :, 14] = 0.2
     action[:, :, 15] = 0.8
+    proposal = action.clone()
+    proposal[:, :, 0] = 0.1
     return FoundationTrainingBatch(
         inputs,
         targets,
@@ -55,6 +57,7 @@ def _batch() -> FoundationTrainingBatch:
         observations,
         torch.ones(batch, 6),
         proprioception,
+        proposal,
         action,
         torch.zeros(batch, observations - 1),
         torch.ones(batch, observations - 1),
@@ -79,6 +82,8 @@ def test_foundation_augmentation_applies_only_declared_sequence_transform() -> N
     assert transformed.executed_actions[0, 0, 1] == -0.3
     assert transformed.executed_actions[0, 0, 14] == 0.8
     assert transformed.executed_actions[0, 0, 15] == 0.2
+    assert transformed.actor_proposals[0, 0, 0] == 0.1
+    assert transformed.actor_proposals[0, 0, 14] == 0.8
     assert transformed.visual_targets.correspondences[0, 4] == 1
     assert transformed.visual_targets.correspondences[0, 7] == 2
 
@@ -95,6 +100,9 @@ def test_foundation_augmentation_is_an_involution() -> None:
     )
     torch.testing.assert_close(
         transformed.executed_actions, original.executed_actions
+    )
+    torch.testing.assert_close(
+        transformed.actor_proposals, original.actor_proposals
     )
     torch.testing.assert_close(
         transformed.proprioception, original.proprioception

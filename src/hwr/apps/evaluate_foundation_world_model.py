@@ -357,6 +357,9 @@ def _require_causality_structure(
     if (
         report.get("schema_version") != ACTION_CAUSALITY_SCHEMA
         or report.get("action_source") != "actual_executed_action"
+        or report.get("safety_action_source") != "actor_proposal"
+        or report.get("counterfactual_pairing")
+        != "proposal-executed-pair/v1"
         or report.get("counterfactual_transform")
         != "deterministic-global-derangement/v1"
         or report.get("partition_key") != "task_id"

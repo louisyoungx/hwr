@@ -44,6 +44,10 @@ def transform_foundation_batch(
     ).reshape_as(proprioception[selected])
     actions = batch.executed_actions.clone()
     actions[selected] = transform_action(actions[selected], LATERAL_REFLECTION)
+    proposals = batch.actor_proposals.clone()
+    proposals[selected] = transform_action(
+        proposals[selected], LATERAL_REFLECTION
+    )
     targets = _transform_targets(batch.visual_targets, flat_selected, inputs["rgb"])
     return FoundationTrainingBatch(
         inputs,
@@ -52,10 +56,11 @@ def transform_foundation_batch(
         batch.observation_count,
         batch.language_features.clone(),
         proprioception,
+        proposals,
         actions,
         batch.rewards.clone(),
         batch.continues.clone(),
-        batch.safety.clone(),
+        batch.safety_interventions.clone(),
     )
 
 

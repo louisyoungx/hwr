@@ -39,7 +39,7 @@ class WorldModelTargets:
     proprioception: torch.Tensor
     reward: torch.Tensor
     continues: torch.Tensor
-    safety: torch.Tensor
+    safety_interventions: torch.Tensor
 
 
 class WorldModelLoss(nn.Module):
@@ -76,7 +76,7 @@ class WorldModelLoss(nn.Module):
             output.continue_logits[:, 1:], targets.continues.float()
         )
         safety = nn.functional.binary_cross_entropy_with_logits(
-            output.safety_logits[:, 1:], targets.safety.float()
+            output.safety_logits, targets.safety_interventions.float()
         )
         dynamics, representation = self._balanced_kl(output)
         ensemble = self._ensemble_kl(output)
@@ -126,7 +126,7 @@ class WorldModelLoss(nn.Module):
             "proprioception": tuple(output.proprioception_prediction.shape),
             "reward": (batch, observations - 1),
             "continues": (batch, observations - 1),
-            "safety": (batch, observations - 1),
+            "safety_interventions": (batch, observations - 1),
         }
         actual = {name: tuple(getattr(targets, name).shape) for name in expected}
         mismatches = {

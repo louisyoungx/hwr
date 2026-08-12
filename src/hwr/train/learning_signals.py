@@ -23,10 +23,14 @@ def reward_improvement_speeds(
 
 
 def failure_boundary_step(
-    safety_costs: Sequence[float], *, terminated_failure: bool
+    safety_interventions: Sequence[float], *, terminated_failure: bool
 ) -> int:
     """Return the last safe state before an environment-declared failure only."""
-    if not terminated_failure:
+    if not terminated_failure or len(safety_interventions) < 2:
         return -1
-    safe = [index for index, cost in enumerate(safety_costs) if cost <= 0.0]
+    safe = [
+        index
+        for index, intervention in enumerate(safety_interventions[:-1])
+        if intervention <= 0.0
+    ]
     return safe[-1] if safe else -1
