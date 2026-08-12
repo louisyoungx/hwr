@@ -9,7 +9,22 @@ from pathlib import Path
 from typing import Any
 
 
-DEVELOPMENT_READY_SCHEMA = "hwr.foundation-development-ready/v1"
+DEVELOPMENT_READY_SCHEMA = "hwr.foundation-development-ready/v2"
+REQUIRED_DEVELOPMENT_CHECKS = frozenset(
+    {
+        "protected_tree",
+        "algorithm_audit",
+        "configuration",
+        "model_selection",
+        "foundation_dependencies",
+        "weights",
+        "architecture",
+        "python_size",
+        "tests",
+        "foundation_inference",
+    }
+)
+COMMITTED_SNAPSHOT_CHECKS = frozenset({"architecture", "python_size", "tests"})
 FOUNDATION_CONFIG_FILES = (
     "imagination-rl-v1.json",
     "latent-actor-v1.json",
@@ -136,6 +151,21 @@ def require_development_ready(root: Path, report_path: Path) -> dict[str, Any]:
     if report.get("protected_tree_sha256") != protected_tree_hashes(root):
         raise RuntimeError("formal training is locked: verified source tree changed")
     checks = report.get("checks", {})
-    if not checks or not all(value.get("passed") is True for value in checks.values()):
+    if (
+        report.get("training_unlocked") is not True
+        or not isinstance(checks, dict)
+        or set(checks) != REQUIRED_DEVELOPMENT_CHECKS
+        or not all(
+            isinstance(value, dict) and value.get("passed") is True
+            for value in checks.values()
+        )
+    ):
         raise RuntimeError("formal training is locked: development checks are incomplete")
+    if any(
+        checks[name].get("source_commit") != report["source_commit"]
+        for name in COMMITTED_SNAPSHOT_CHECKS
+    ):
+        raise RuntimeError(
+            "formal training is locked: committed-snapshot evidence differs"
+        )
     return report

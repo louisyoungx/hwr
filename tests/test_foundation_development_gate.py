@@ -7,7 +7,9 @@ import pytest
 
 from hwr.apps.train_foundation_world_model import build_parser
 from hwr.train.development_gate import (
+    COMMITTED_SNAPSHOT_CHECKS,
     DEVELOPMENT_READY_SCHEMA,
+    REQUIRED_DEVELOPMENT_CHECKS,
     current_commit,
     foundation_config_hashes,
     protected_tree_hashes,
@@ -26,6 +28,21 @@ def test_formal_training_cli_has_no_gate_bypass_option() -> None:
     assert "skip_gate" not in destinations
     assert "expert" not in destinations
     assert "demonstration" not in destinations
+
+
+def test_development_gate_requires_the_full_named_evidence_set() -> None:
+    assert REQUIRED_DEVELOPMENT_CHECKS == {
+        "protected_tree",
+        "algorithm_audit",
+        "configuration",
+        "model_selection",
+        "foundation_dependencies",
+        "weights",
+        "architecture",
+        "python_size",
+        "tests",
+        "foundation_inference",
+    }
 
 
 def test_development_gate_rejects_missing_or_stale_report(tmp_path) -> None:
@@ -47,13 +64,14 @@ def test_development_gate_rejects_missing_or_stale_report(tmp_path) -> None:
         require_development_ready(ROOT, path)
 
 
-def test_development_gate_accepts_matching_complete_report(tmp_path) -> None:
+def test_development_gate_rejects_matching_but_incomplete_report(tmp_path) -> None:
     path = tmp_path / "ready.json"
     report = {
         "schema_version": DEVELOPMENT_READY_SCHEMA,
         "source_commit": current_commit(ROOT),
         "foundation_config_sha256": foundation_config_hashes(ROOT),
         "protected_tree_sha256": protected_tree_hashes(ROOT),
+        "training_unlocked": True,
         "checks": {
             "tests": {"passed": True},
             "architecture": {"passed": True},
@@ -61,4 +79,49 @@ def test_development_gate_accepts_matching_complete_report(tmp_path) -> None:
     }
     path.write_text(json.dumps(report))
 
+    with pytest.raises(RuntimeError, match="checks are incomplete"):
+        require_development_ready(ROOT, path)
+
+
+def test_development_gate_accepts_exact_complete_snapshot_bound_report(
+    tmp_path,
+) -> None:
+    path = tmp_path / "ready.json"
+    commit = current_commit(ROOT)
+    checks = {name: {"passed": True} for name in REQUIRED_DEVELOPMENT_CHECKS}
+    for name in COMMITTED_SNAPSHOT_CHECKS:
+        checks[name]["source_commit"] = commit
+    report = {
+        "schema_version": DEVELOPMENT_READY_SCHEMA,
+        "source_commit": commit,
+        "foundation_config_sha256": foundation_config_hashes(ROOT),
+        "protected_tree_sha256": protected_tree_hashes(ROOT),
+        "training_unlocked": True,
+        "checks": checks,
+    }
+    path.write_text(json.dumps(report))
+
     assert require_development_ready(ROOT, path) == report
+
+
+def test_development_gate_rejects_snapshot_evidence_from_another_commit(
+    tmp_path,
+) -> None:
+    path = tmp_path / "ready.json"
+    commit = current_commit(ROOT)
+    checks = {name: {"passed": True} for name in REQUIRED_DEVELOPMENT_CHECKS}
+    for name in COMMITTED_SNAPSHOT_CHECKS:
+        checks[name]["source_commit"] = commit
+    checks["tests"]["source_commit"] = "stale"
+    report = {
+        "schema_version": DEVELOPMENT_READY_SCHEMA,
+        "source_commit": commit,
+        "foundation_config_sha256": foundation_config_hashes(ROOT),
+        "protected_tree_sha256": protected_tree_hashes(ROOT),
+        "training_unlocked": True,
+        "checks": checks,
+    }
+    path.write_text(json.dumps(report))
+
+    with pytest.raises(RuntimeError, match="snapshot evidence differs"):
+        require_development_ready(ROOT, path)

@@ -18,8 +18,10 @@ from typing import Any, Mapping, Sequence
 from hwr.adapters.foundation import load_foundation_model_locks
 from hwr.tasks import load_bimanual_task_specs
 from hwr.train.development_gate import (
+    COMMITTED_SNAPSHOT_CHECKS,
     DEVELOPMENT_READY_SCHEMA,
     PROTECTED_PATHS,
+    REQUIRED_DEVELOPMENT_CHECKS,
     current_commit,
     foundation_config_hashes,
     protected_tree_hashes,
@@ -45,22 +47,61 @@ FORBIDDEN_TASK_LITERALS = (
     "托盘",
     "抽屉",
 )
-FOUNDATION_ALGORITHM_PATHS = (
-    "src/hwr/train/foundation_augmentation.py",
-    "src/hwr/train/foundation_batch.py",
-    "src/hwr/train/foundation_collection.py",
-    "src/hwr/train/foundation_diagnostics.py",
-    "src/hwr/train/foundation_exploration.py",
-    "src/hwr/train/foundation_holdout.py",
-    "src/hwr/train/foundation_learning_signals.py",
-    "src/hwr/train/foundation_online.py",
-    "src/hwr/train/foundation_online_config.py",
-    "src/hwr/train/foundation_recovery.py",
-    "src/hwr/train/foundation_setup.py",
-    "src/hwr/train/foundation_trainer.py",
-    "src/hwr/train/imagination.py",
-    "src/hwr/train/imagination_rl.py",
+FOUNDATION_ALGORITHM_PATTERNS = (
+    "src/hwr/adapters/foundation/*.py",
+    "src/hwr/apps/*foundation*.py",
+    "src/hwr/data/autonomous_trajectory.py",
+    "src/hwr/data/foundation_*.py",
+    "src/hwr/data/trajectory_windows.py",
+    "src/hwr/perception/foundation.py",
+    "src/hwr/perception/geometric_correspondence.py",
+    "src/hwr/perception/high_resolution.py",
+    "src/hwr/perception/language_cache.py",
+    "src/hwr/perception/student*.py",
     "src/hwr/policy/foundation_runtime.py",
+    "src/hwr/policy/latent_*.py",
+    "src/hwr/safety/*.py",
+    "src/hwr/train/foundation_*.py",
+    "src/hwr/train/imagination*.py",
+    "src/hwr/train/learning_signals.py",
+    "src/hwr/train/task_sampling.py",
+    "src/hwr/world_model/*.py",
+)
+EXPECTED_TASK_IDS = frozenset(
+    {
+        "carry_living_room_basket/v1",
+        "carry_dining_tray/v1",
+        "hold_drawer_place_item/v1",
+    }
+)
+FORBIDDEN_CONFIG_KEYS = frozenset(
+    {
+        "expert",
+        "demonstration",
+        "behavior_clone",
+        "teacher_action",
+        "action_label",
+        "waypoint",
+        "skill",
+        "task_stage",
+        "object_token",
+        "target_token",
+        "action_search",
+        "legacy_checkpoint",
+    }
+)
+FORBIDDEN_DEPLOYMENT_NAMES = frozenset(
+    {
+        "reward",
+        "continue",
+        "safety",
+        "critic",
+        "value",
+        "teacher",
+        "objective",
+        "optimizer",
+        "augmentation",
+    }
 )
 
 
@@ -143,7 +184,8 @@ def _protected_tree_clean(root: Path) -> dict[str, Any]:
 
 def _algorithm_audit(root: Path) -> dict[str, Any]:
     violations: list[str] = []
-    for relative in FOUNDATION_ALGORITHM_PATHS:
+    paths = _foundation_algorithm_paths(root)
+    for relative in paths:
         path = root / relative
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative)
         for node in ast.walk(tree):
@@ -154,10 +196,7 @@ def _algorithm_audit(root: Path) -> dict[str, Any]:
             else:
                 modules = []
             for module in modules:
-                if any(
-                    module == forbidden or module.startswith(forbidden + ".")
-                    for forbidden in FORBIDDEN_FOUNDATION_IMPORTS
-                ):
+                if _forbidden_foundation_import(module):
                     violations.append(f"{relative}:{node.lineno}:import:{module}")
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 normalized = node.value.lower()
@@ -170,19 +209,78 @@ def _algorithm_audit(root: Path) -> dict[str, Any]:
         raise RuntimeError("foundation algorithm audit failed: " + "; ".join(violations))
     return {
         "passed": True,
-        "files": list(FOUNDATION_ALGORITHM_PATHS),
+        "files": list(paths),
+        "file_count": len(paths),
         "task_literals": False,
         "expert_imports": False,
         "scene_training_branches": False,
     }
 
 
+def _foundation_algorithm_paths(root: Path) -> tuple[str, ...]:
+    paths: set[Path] = set()
+    for pattern in FOUNDATION_ALGORITHM_PATTERNS:
+        matches = tuple(path for path in root.glob(pattern) if path.is_file())
+        if not matches:
+            raise RuntimeError(f"foundation algorithm pattern is empty: {pattern}")
+        paths.update(matches)
+    return tuple(str(path.relative_to(root)) for path in sorted(paths))
+
+
+def _forbidden_foundation_import(module: str) -> bool:
+    if any(
+        module == forbidden or module.startswith(forbidden + ".")
+        for forbidden in FORBIDDEN_FOUNDATION_IMPORTS
+    ):
+        return True
+    return any(
+        part == "expert"
+        or part.startswith("expert_")
+        or part.endswith("_expert")
+        or "_expert_" in part
+        for part in module.lower().split(".")
+    )
+
+
+def _forbidden_configuration_keys(root: Path) -> tuple[str, ...]:
+    violations: list[str] = []
+    for path in sorted((root / "configs/foundation").glob("*.json")):
+        value = json.loads(path.read_text(encoding="utf-8"))
+        _scan_configuration_keys(value, path.name, violations)
+    return tuple(violations)
+
+
+def _scan_configuration_keys(
+    value: object, location: str, violations: list[str]
+) -> None:
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            normalized = str(key).lower().replace("-", "_")
+            if any(
+                normalized == forbidden
+                or normalized.startswith(forbidden + "_")
+                or normalized.endswith("_" + forbidden)
+                for forbidden in FORBIDDEN_CONFIG_KEYS
+            ):
+                violations.append(f"{location}:{key}")
+            _scan_configuration_keys(item, f"{location}.{key}", violations)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _scan_configuration_keys(item, f"{location}[{index}]", violations)
+
+
 def _configuration_audit(root: Path) -> dict[str, Any]:
     tasks = load_bimanual_task_specs(
         root / "configs/tasks/bimanual_household_v1.json"
     )
-    if len(tasks) != 3:
-        raise RuntimeError("formal configuration must expose exactly three tasks")
+    if set(tasks) != EXPECTED_TASK_IDS:
+        raise RuntimeError("formal configuration does not expose the three required tasks")
+    lineage_violations = _forbidden_configuration_keys(root)
+    if lineage_violations:
+        raise RuntimeError(
+            "foundation configuration contains forbidden lineage keys: "
+            + ", ".join(lineage_violations)
+        )
     stack = build_foundation_learning_stack(
         root / "configs/foundation", seed=0
     )
@@ -234,7 +332,11 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
             trainer.world_model
         ).named_modules()
     }
-    if any("reward" in name or "critic" in name for name in deployment_names):
+    if any(
+        forbidden in name.lower()
+        for name in deployment_names
+        for forbidden in FORBIDDEN_DEPLOYMENT_NAMES
+    ):
         raise RuntimeError("deployment state filter contains training prediction heads")
     return {
         "passed": True,
@@ -248,6 +350,7 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
         "actor_parameters": sum(parameter.numel() for parameter in trainer.actor.parameters()),
         "action_dimension": trainer.world_model.config.action_dimension,
         "deployment_training_heads": False,
+        "forbidden_lineage_keys": False,
         "action_causality_ratio": online["minimum_action_causality_ratio"],
         "action_causality_horizon_fraction": online[
             "minimum_action_causality_horizon_fraction"
@@ -430,11 +533,13 @@ def verify(
                 "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
             },
         )
-        for name in ("architecture", "python_size", "tests"):
+        for name in COMMITTED_SNAPSHOT_CHECKS:
             checks[name]["source_commit"] = current_commit(snapshot)
     checks["foundation_inference"] = _foundation_inference_checks(
         root, model_root, foundation_device
     )
+    if set(checks) != REQUIRED_DEVELOPMENT_CHECKS:
+        raise RuntimeError("development verifier omitted a mandatory check")
     return {
         "schema_version": DEVELOPMENT_READY_SCHEMA,
         "generated_at": datetime.now(timezone.utc).isoformat(),
