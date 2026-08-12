@@ -55,17 +55,30 @@
 和固定容量执行，不读取场景语义、距离阈值或动作内容。容量修复后必须重新运行总门禁，
 此前生成的报告不再用于解锁训练。
 
+第一次启动的 `foundation-wm-001` 已作废并停止。它只采集了三个随机探索 Episode，分别
+来自三个任务，共 4,000 条 transition；进程停止在基础视觉特征物化期间，尚未发生第一次
+梯度更新，也没有 `latest.json`、训练 checkpoint 或部署模型。目录保留用于审计，不会恢复
+或并入正式 run。停止原因不是训练失败，而是启动后审计发现动作打乱诊断虽有计算函数，
+却没有作为发布强制条件持久化，也没有验证打乱动作误差必须高于真实动作误差。
+
+修正后的强制条件为：反事实误差同时覆盖未来视觉潜变量、本体、奖励、终止和安全结果；
+动作只能来自 replay 中的安全层实际执行动作；打乱动作误差比至少 `1.05`，至少 `60%` 的
+horizon 恶化。每次更新的报告绑定源码、数据 manifest 与 checkpoint 哈希。失败更新只保留
+训练 checkpoint，不能导出部署模型；固定种子评测会再次校验训练 checkpoint、部署 manifest
+和报告三者的哈希一致性。正式 batch 由 4 调整为 2，以适配 48 GB MPS 的视觉反向传播峰值，
+模型、总更新次数、三任务范围和最终 180 Episode 验收均不减少。
+
 门禁通过后才允许执行：
 
 ```bash
-hwr-train-foundation-world-model --run-id foundation-wm-001 --device cpu
+hwr-train-foundation-world-model --run-id foundation-wm-002 --device mps
 ```
 
 训练完成后的固定评测命令为：
 
 ```bash
 hwr-evaluate-foundation-world-model \
-  runs/foundation-world-model/foundation-wm-001 \
+  runs/foundation-world-model/foundation-wm-002 \
   --seed-count 20 --video-seed-count 1
 ```
 

@@ -4,11 +4,14 @@ import torch
 import pytest
 
 from hwr.world_model import (
+    ActionCausalityCriteria,
     ActionConditionedWorldModel,
+    CounterfactualCausalityReport,
     WorldModelConfig,
     WorldModelLoss,
     WorldModelLossConfig,
     WorldModelTargets,
+    assess_action_causality,
     evaluate_action_causality,
 )
 from hwr.world_model.distributions import reward_expectation, two_hot_symlog
@@ -89,14 +92,52 @@ def test_action_shuffle_counterfactual_reports_open_loop_errors() -> None:
     visual, language, proprioception, actions = _inputs(config)
 
     report = evaluate_action_causality(
-        model, visual, language, proprioception, actions
+        model,
+        visual,
+        language,
+        proprioception,
+        actions,
+        torch.randn(2, 4),
+        torch.ones(2, 4),
+        torch.zeros(2, 4),
     )
 
     assert report.true_action_error >= 0.0
     assert report.shuffled_action_error >= 0.0
     assert len(report.true_horizon_errors) == 4
     assert len(report.uncertainty_by_horizon) == 4
+    assert report.error_components == (
+        "visual_latent",
+        "proprioception",
+        "reward",
+        "continue",
+        "safety",
+    )
     assert model.training
+
+
+def test_action_causality_gate_requires_ratio_and_most_horizons_to_degrade() -> None:
+    report = CounterfactualCausalityReport(
+        true_action_error=1.0,
+        shuffled_action_error=1.2,
+        shuffled_to_true_ratio=1.2,
+        true_horizon_errors=(1.0, 1.0, 1.0, 1.0),
+        shuffled_horizon_errors=(1.1, 1.2, 0.9, 1.3),
+        uncertainty_by_horizon=(0.1, 0.2, 0.3, 0.4),
+    )
+
+    assessment = assess_action_causality(
+        report,
+        ActionCausalityCriteria(1.05, 0.60),
+    )
+
+    assert assessment["passed"] is True
+    assert assessment["worse_horizon_fraction"] == 0.75
+    failed = assess_action_causality(
+        report,
+        ActionCausalityCriteria(1.25, 0.60),
+    )
+    assert failed["passed"] is False
 
 
 def test_distributional_reward_round_trip_is_finite() -> None:

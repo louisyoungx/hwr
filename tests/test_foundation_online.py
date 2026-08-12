@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 
 import numpy as np
+import pytest
 
 from hwr.core.embodied import (
     DualArmObservation,
@@ -238,21 +240,44 @@ def _stack() -> FoundationLearningStack:
     return FoundationLearningStack(trainer, LatentActionScaling())
 
 
-def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(tmp_path) -> None:
+def _diagnostic(passed: bool) -> dict[str, object]:
+    ratio = 1.2 if passed else 1.0
+    return {
+        "schema_version": "hwr.foundation-action-causality/v1",
+        "action_source": "actual_executed_action",
+        "report": {"shuffled_to_true_ratio": ratio},
+        "assessment": {
+            "passed": passed,
+            "shuffled_to_true_ratio": ratio,
+            "horizon_count": 2,
+            "worse_horizon_count": 2 if passed else 0,
+            "worse_horizon_fraction": 1.0 if passed else 0.0,
+        },
+    }
+
+
+def _runner(tmp_path, config: FoundationOnlineTrainingConfig):
     tasks = {name: FoundationTaskInterface(name, 2) for name in TASK_IDS}
     providers = FoundationProviderFactories(
         lambda: _VisionProvider("vision_language", 7, "a"),
         lambda: _VisionProvider("dense_vision", 5, "b"),
         _LanguageProvider,
     )
-    runner = FoundationOnlineTrainingRunner(
+    return FoundationOnlineTrainingRunner(
         tasks,
         lambda task_id, width, height: _Backend(task_id),
         _preprocessor(),
         providers,
         _stack(),
-        FoundationOnlineTrainingConfig(
-            episodes=6,
+        config,
+        tmp_path / "run",
+        source_commit="abc123",
+    )
+
+
+def _config(*, episodes: int = 6) -> FoundationOnlineTrainingConfig:
+    return FoundationOnlineTrainingConfig(
+            episodes=episodes,
             initial_random_episodes=3,
             collection_episodes_per_cycle=3,
             updates_per_cycle=1,
@@ -263,10 +288,18 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(tmp_path
             replay_transition_capacity=6,
             published_checkpoint_retention=1,
             seed=7,
-        ),
-        tmp_path / "run",
-        source_commit="abc123",
+        )
+
+
+def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "hwr.train.foundation_online.evaluate_foundation_action_causality",
+        lambda trainer, batch, criteria: _diagnostic(True),
     )
+    config = _config()
+    runner = _runner(tmp_path, config)
 
     result = runner.train()
 
@@ -280,7 +313,56 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(tmp_path
     ] * 3
     assert result.latest_checkpoint.is_dir()
     assert result.latest_deployment.is_dir()
+    assert result.latest_action_causality_report.is_file()
+    latest = json.loads((tmp_path / "run/latest.json").read_text())
+    checkpoint = json.loads(
+        (result.latest_checkpoint / "manifest.json").read_text()
+    )
+    deployment = json.loads(
+        (result.latest_deployment / "manifest.json").read_text()
+    )
+    assert latest["action_causality_sha256"] == checkpoint[
+        "training_diagnostics"
+    ]["action_causality_report_sha256"]
+    assert deployment["training_diagnostics"] == checkpoint[
+        "training_diagnostics"
+    ]
     assert runner.store.manifest["transition_count"] <= 6
     assert len(list((tmp_path / "run/checkpoints").glob("update-*"))) == 1
     assert len(list((tmp_path / "run/deployments").glob("update-*"))) == 1
     assert runner.task_sampler.audit()["distance_thresholds"] is False
+
+    resumed = _runner(tmp_path, config)
+    resumed.resume_latest()
+    assert resumed.result().latest_deployment == result.latest_deployment
+
+    checkpoint_manifest = result.latest_checkpoint / "manifest.json"
+    drifted = json.loads(checkpoint_manifest.read_text())
+    drifted["training_diagnostics"]["action_causality_report_sha256"] = "0" * 64
+    checkpoint_manifest.write_text(json.dumps(drifted), encoding="utf-8")
+    with pytest.raises(ValueError, match="checkpoint diagnostic provenance"):
+        _runner(tmp_path, config).resume_latest()
+
+
+def test_online_runner_never_exports_a_failed_causality_deployment(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "hwr.train.foundation_online.evaluate_foundation_action_causality",
+        lambda trainer, batch, criteria: _diagnostic(False),
+    )
+    runner = _runner(tmp_path, _config(episodes=3))
+
+    with pytest.raises(RuntimeError, match="no causality-qualified deployment"):
+        runner.train()
+
+    latest = json.loads((tmp_path / "run/latest.json").read_text())
+    checkpoint = tmp_path / "run" / latest["training_checkpoint"]
+    manifest = json.loads((checkpoint / "manifest.json").read_text())
+    assert "deployment" not in latest
+    assert manifest["training_diagnostics"]["action_causality_passed"] is False
+    assert not (tmp_path / "run/deployments").exists()
+    resumed = _runner(tmp_path, _config(episodes=3))
+    resumed.resume_latest()
+    with pytest.raises(RuntimeError, match="no causality-qualified deployment"):
+        resumed.result()

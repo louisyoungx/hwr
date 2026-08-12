@@ -128,10 +128,12 @@ def save_foundation_training_checkpoint(
     *,
     source_commit: str,
     data_manifest_sha256: str,
+    training_diagnostics: Mapping[str, object],
 ) -> Path:
     """Save all trainable state; this artifact is never loadable by deployment."""
     if len(data_manifest_sha256) != 64:
         raise ValueError("foundation data manifest requires a SHA-256 identity")
+    _validate_training_diagnostics(training_diagnostics)
     path.mkdir(parents=True, exist_ok=False)
     artifact_path = path / "training-state.pt"
     state = {
@@ -148,6 +150,7 @@ def save_foundation_training_checkpoint(
         "artifact_file": artifact_path.name,
         "artifact_sha256": file_sha256(artifact_path),
         "data_manifest_sha256": data_manifest_sha256,
+        "training_diagnostics": dict(training_diagnostics),
         "update_count": trainer.update_count,
         "configs": {
             "visual_student": trainer.visual_student.config.to_dict(),
@@ -223,6 +226,7 @@ def export_foundation_deployment(
     *,
     source_commit: str,
     training_checkpoint_sha256: str,
+    training_diagnostics: Mapping[str, object],
     preprocessing: Mapping[str, Any],
     language_cache: Mapping[str, Any],
 ) -> Path:
@@ -230,6 +234,7 @@ def export_foundation_deployment(
         raise ValueError("deployment source commit is required")
     if len(training_checkpoint_sha256) != 64:
         raise ValueError("deployment requires its training checkpoint SHA-256")
+    _validate_training_diagnostics(training_diagnostics, require_passed=True)
     if not preprocessing or not language_cache:
         raise ValueError("deployment preprocessing and language cache are required")
     path.mkdir(parents=True, exist_ok=False)
@@ -241,6 +246,7 @@ def export_foundation_deployment(
         "artifact_file": artifact_path.name,
         "artifact_sha256": file_sha256(artifact_path),
         "training_checkpoint_sha256": training_checkpoint_sha256,
+        "training_diagnostics": dict(training_diagnostics),
         "source_commit": source_commit,
         "visual_student_config": visual_student.config.to_dict(),
         "world_model_config": world_model.config.to_dict(),
@@ -254,6 +260,21 @@ def export_foundation_deployment(
     }
     _atomic_json(path / "manifest.json", manifest)
     return path
+
+
+def _validate_training_diagnostics(
+    value: Mapping[str, object], *, require_passed: bool = False
+) -> None:
+    expected = {"action_causality_report_sha256", "action_causality_passed"}
+    if set(value) != expected:
+        raise ValueError("foundation training diagnostic fields differ")
+    digest = str(value["action_causality_report_sha256"])
+    if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+        raise ValueError("action causality report requires a SHA-256 identity")
+    if not isinstance(value["action_causality_passed"], bool):
+        raise ValueError("action causality pass state must be boolean")
+    if require_passed and value["action_causality_passed"] is not True:
+        raise ValueError("deployment requires passed action causality evidence")
 
 
 def load_foundation_deployment(

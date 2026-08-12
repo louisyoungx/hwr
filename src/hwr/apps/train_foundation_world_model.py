@@ -130,6 +130,13 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     if arguments.resume:
         runner.resume_latest()
     result = runner.train()
+    causality = json.loads(
+        result.latest_action_causality_report.read_text(encoding="utf-8")
+    )
+    if causality.get("assessment", {}).get("passed") is not True:
+        raise RuntimeError(
+            "formal training finished without passing action-shuffle causality"
+        )
     return {
         "run_path": str(run_path),
         "episodes": len(result.records),
@@ -137,6 +144,8 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         "successes": sum(item.success for item in result.records),
         "latest_checkpoint": str(result.latest_checkpoint),
         "latest_deployment": str(result.latest_deployment),
+        "action_causality_report": str(result.latest_action_causality_report),
+        "action_causality_passed": True,
     }
 
 

@@ -34,6 +34,12 @@ from hwr.world_model import (
 )
 
 
+DIAGNOSTICS = {
+    "action_causality_report_sha256": "c" * 64,
+    "action_causality_passed": True,
+}
+
+
 def _trainer() -> FoundationWorldModelTrainer:
     visual_config = VisualStudentConfig(
         image_size=32,
@@ -100,6 +106,7 @@ def test_training_checkpoint_restores_models_and_optimizer_metadata(tmp_path) ->
         trainer,
         source_commit="abc123",
         data_manifest_sha256="d" * 64,
+        training_diagnostics=DIAGNOSTICS,
     )
     with torch.no_grad():
         trainer.actor.mean_head.bias.zero_()
@@ -125,6 +132,7 @@ def test_deployment_export_is_stripped_and_reloads_identically(tmp_path) -> None
         LatentActionScaling(),
         source_commit="abc123",
         training_checkpoint_sha256="e" * 64,
+        training_diagnostics=DIAGNOSTICS,
         preprocessing={"fingerprint": "f" * 64},
         language_cache={"encoder_lock_sha256": "a" * 64, "dimension": 6},
     )
@@ -135,6 +143,7 @@ def test_deployment_export_is_stripped_and_reloads_identically(tmp_path) -> None
     assert loaded.manifest["contains"] == [
         "visual_student", "state_filter", "actor"
     ]
+    assert loaded.manifest["training_diagnostics"] == DIAGNOSTICS
     expected = trainer.actor.state_dict()
     actual = loaded.actor.state_dict()
     for name in expected:
@@ -153,6 +162,7 @@ def test_deployment_loader_rejects_artifact_hash_drift(tmp_path) -> None:
         LatentActionScaling(),
         source_commit="abc123",
         training_checkpoint_sha256="e" * 64,
+        training_diagnostics=DIAGNOSTICS,
         preprocessing={"fingerprint": "f" * 64},
         language_cache={"encoder_lock_sha256": "a" * 64},
     )
@@ -161,6 +171,25 @@ def test_deployment_loader_rejects_artifact_hash_drift(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="hash verification"):
         load_foundation_deployment(path)
+
+
+def test_deployment_export_rejects_failed_causality(tmp_path) -> None:
+    trainer = _trainer()
+    diagnostics = {**DIAGNOSTICS, "action_causality_passed": False}
+
+    with pytest.raises(ValueError, match="requires passed action causality"):
+        export_foundation_deployment(
+            tmp_path / "deployment",
+            trainer.visual_student,
+            trainer.world_model,
+            trainer.actor,
+            LatentActionScaling(),
+            source_commit="abc123",
+            training_checkpoint_sha256="e" * 64,
+            training_diagnostics=diagnostics,
+            preprocessing={"fingerprint": "f" * 64},
+            language_cache={"encoder_lock_sha256": "a" * 64},
+        )
 
 
 def test_manifest_hash_matches_deployment_artifact(tmp_path) -> None:
@@ -173,6 +202,7 @@ def test_manifest_hash_matches_deployment_artifact(tmp_path) -> None:
         LatentActionScaling(),
         source_commit="abc123",
         training_checkpoint_sha256="e" * 64,
+        training_diagnostics=DIAGNOSTICS,
         preprocessing={"fingerprint": "f" * 64},
         language_cache={"encoder_lock_sha256": "a" * 64},
     )

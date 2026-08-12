@@ -236,15 +236,49 @@ def _policy(run_path: Path, *, device: str) -> FoundationWorldModelPolicy:
     )
 
 
+def _require_action_causality(run_path: Path) -> Path:
+    latest = _read_json(run_path / "latest.json")
+    path = run_path / str(latest["action_causality_report"])
+    if _sha256(path) != latest.get("action_causality_sha256"):
+        raise ValueError("training action causality report hash differs")
+    report = _read_json(path)
+    if report.get("assessment", {}).get("passed") is not True:
+        raise RuntimeError("evaluation requires passed action-shuffle causality")
+    checkpoint = _read_json(
+        run_path / latest["training_checkpoint"] / "manifest.json"
+    )
+    checkpoint_diagnostics = checkpoint.get("training_diagnostics", {})
+    if checkpoint_diagnostics.get("action_causality_report_sha256") != _sha256(path):
+        raise ValueError("checkpoint and action causality provenance differ")
+    if checkpoint_diagnostics.get("action_causality_passed") is not True:
+        raise ValueError("checkpoint did not pass action causality")
+    deployment = _read_json(run_path / latest["deployment"] / "manifest.json")
+    diagnostics = deployment.get("training_diagnostics", {})
+    if diagnostics.get("action_causality_report_sha256") != _sha256(path):
+        raise ValueError("deployment and action causality provenance differ")
+    if diagnostics.get("action_causality_passed") is not True:
+        raise ValueError("deployment was exported before causality passed")
+    return path
+
+
 def _artifact_manifest(
     output_path: Path,
     run_path: Path,
     seeds: tuple[int, ...],
     videos: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    files = [output_path / "report.json", output_path / "acceptance.json"]
-    files.extend(
-        Path(path) for video in videos for path in video["views"].values()
+    causality = _require_action_causality(run_path)
+    files = {
+        "report.json": output_path / "report.json",
+        "acceptance.json": output_path / "acceptance.json",
+        "training/action-causality.json": causality,
+    }
+    files.update(
+        {
+            f"videos/{Path(path).name}": Path(path)
+            for video in videos
+            for path in video["views"].values()
+        }
     )
     latest = _read_json(run_path / "latest.json")
     deployment_manifest = run_path / latest["deployment"] / "manifest.json"
@@ -253,12 +287,14 @@ def _artifact_manifest(
         "training_run": str(run_path),
         "training_run_manifest_sha256": _sha256(run_path / "run-manifest.json"),
         "deployment_manifest_sha256": _sha256(deployment_manifest),
+        "action_causality_report": str(causality),
+        "action_causality_report_sha256": _sha256(causality),
         "unseen_seeds": list(seeds),
         "ablations": list(ABLATIONS),
         "videos": list(videos),
         "artifacts": {
-            path.name: {"sha256": _sha256(path), "bytes": path.stat().st_size}
-            for path in files
+            name: {"sha256": _sha256(path), "bytes": path.stat().st_size}
+            for name, path in files.items()
         },
     }
 
@@ -268,6 +304,7 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
         raise ValueError("video seed count cannot be negative")
     root = Path(__file__).resolve().parents[3]
     run_path = arguments.run_path.resolve()
+    _require_action_causality(run_path)
     run_manifest = _read_json(run_path / "run-manifest.json")
     seeds = _unseen_seeds(run_path, arguments.seed_count, arguments.seed_start)
     output_root = (

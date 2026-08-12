@@ -42,6 +42,10 @@ from hwr.train.foundation_collection import (
     CurrentRLActorActionSource,
     RandomRLActionSource,
 )
+from hwr.train.foundation_diagnostics import (
+    evaluate_foundation_action_causality,
+    publish_action_causality_report,
+)
 from hwr.train.foundation_registry import (
     export_foundation_deployment,
     file_sha256 as registry_file_sha256,
@@ -53,6 +57,7 @@ from hwr.train.foundation_setup import FoundationLearningStack
 from hwr.train.learning_signals import failure_boundary_step
 from hwr.train.task_sampling import OutcomeAdaptiveTaskSampler, TaskOutcome
 from hwr.world_model.deploy import DeployableWorldModelStateFilter
+from hwr.world_model.evaluation import ActionCausalityCriteria
 
 
 @dataclass(frozen=True)
@@ -71,7 +76,7 @@ class FoundationOnlineTrainingConfig:
     initial_random_episodes: int = 6
     collection_episodes_per_cycle: int = 3
     updates_per_cycle: int = 200
-    batch_size: int = 4
+    batch_size: int = 2
     sequence_transitions: int = 16
     camera_width: int = 256
     camera_height: int = 192
@@ -79,6 +84,8 @@ class FoundationOnlineTrainingConfig:
     checkpoint_interval_cycles: int = 1
     replay_transition_capacity: int = 18000
     published_checkpoint_retention: int = 3
+    minimum_action_causality_ratio: float = 1.05
+    minimum_action_causality_horizon_fraction: float = 0.60
     seed: int = 20260812
 
     def __post_init__(self) -> None:
@@ -105,6 +112,10 @@ class FoundationOnlineTrainingConfig:
             raise ValueError("foundation online training requires high-resolution cameras")
         if self.replay_transition_capacity < self.sequence_transitions * 3:
             raise ValueError("foundation replay capacity cannot retain one window per task")
+        ActionCausalityCriteria(
+            self.minimum_action_causality_ratio,
+            self.minimum_action_causality_horizon_fraction,
+        )
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -143,6 +154,7 @@ class FoundationOnlineTrainingResult:
     replay_path: Path
     latest_checkpoint: Path
     latest_deployment: Path
+    latest_action_causality_report: Path
 
 
 class FoundationOnlineTrainingRunner:
@@ -183,6 +195,8 @@ class FoundationOnlineTrainingRunner:
         self.records: list[FoundationEpisodeRecord] = []
         self.latest_checkpoint: Path | None = None
         self.latest_deployment: Path | None = None
+        self.latest_action_causality: dict[str, object] | None = None
+        self.latest_action_causality_report: Path | None = None
         self._write_or_verify_run_manifest()
 
     def train(self) -> FoundationOnlineTrainingResult:
@@ -212,14 +226,26 @@ class FoundationOnlineTrainingRunner:
         return self.result()
 
     def result(self) -> FoundationOnlineTrainingResult:
-        if self.latest_checkpoint is None or self.latest_deployment is None:
+        if (
+            self.latest_checkpoint is None
+            or self.latest_action_causality_report is None
+        ):
             raise RuntimeError("foundation training has no published checkpoint")
+        if (
+            self.latest_deployment is None
+            or self.latest_action_causality is None
+            or self.latest_action_causality["assessment"]["passed"] is not True
+        ):
+            raise RuntimeError(
+                "foundation training has no causality-qualified deployment"
+            )
         return FoundationOnlineTrainingResult(
             tuple(self.records),
             self.stack.trainer.update_count,
             self.store.path,
             self.latest_checkpoint,
             self.latest_deployment,
+            self.latest_action_causality_report,
         )
 
     def resume_latest(self) -> None:
@@ -228,6 +254,33 @@ class FoundationOnlineTrainingRunner:
             raise FileNotFoundError(latest_path)
         latest = json.loads(latest_path.read_text(encoding="utf-8"))
         checkpoint = self.run_path / latest["training_checkpoint"]
+        report = self.run_path / latest["action_causality_report"]
+        if registry_file_sha256(report) != latest["action_causality_sha256"]:
+            raise ValueError("resumed action causality report hash differs")
+        diagnostic = json.loads(report.read_text(encoding="utf-8"))
+        expected = {
+            "action_causality_report_sha256": latest["action_causality_sha256"],
+            "action_causality_passed": diagnostic["assessment"]["passed"],
+        }
+        checkpoint_manifest = json.loads(
+            (checkpoint / "manifest.json").read_text(encoding="utf-8")
+        )
+        if checkpoint_manifest.get("training_diagnostics") != expected:
+            raise ValueError("resumed checkpoint diagnostic provenance differs")
+        deployment = latest.get("deployment")
+        deployment_path = (
+            self.run_path / str(deployment) if deployment is not None else None
+        )
+        if deployment_path is not None:
+            deployment_manifest = json.loads(
+                (deployment_path / "manifest.json").read_text(encoding="utf-8")
+            )
+            if expected["action_causality_passed"] is not True:
+                raise ValueError("failed causality checkpoint exposed a deployment")
+            if deployment_manifest.get("training_diagnostics") != expected:
+                raise ValueError("resumed deployment diagnostic provenance differs")
+        elif expected["action_causality_passed"] is True:
+            raise ValueError("passed causality checkpoint is missing its deployment")
         load_foundation_training_checkpoint(checkpoint, self.stack.trainer)
         state = torch.load(
             self.run_path / "runner-state.pt", map_location="cpu", weights_only=True
@@ -236,7 +289,9 @@ class FoundationOnlineTrainingRunner:
         self.rng.bit_generator.state = state["rng_state"]
         self.records = [FoundationEpisodeRecord(**item) for item in state["records"]]
         self.latest_checkpoint = checkpoint
-        self.latest_deployment = self.run_path / latest["deployment"]
+        self.latest_deployment = deployment_path
+        self.latest_action_causality_report = report
+        self.latest_action_causality = diagnostic
 
     def _collect_cycle(
         self, environments: Mapping[str, RuntimeBackend]
@@ -381,17 +436,34 @@ class FoundationOnlineTrainingRunner:
             device=str(next(self.stack.trainer.actor.parameters()).device),
         )
         metrics: list[dict[str, float]] = []
+        last_batch = None
         for _ in range(self.config.updates_per_cycle):
             indices = self.rng.integers(0, len(loader), size=self.config.batch_size)
             batch = loader.build([int(value) for value in indices])
             transforms = [self._sample_transform(loader, int(value)) for value in indices]
             batch = transform_foundation_batch(batch, transforms)
             metrics.append(self.stack.trainer.train_step(batch))
+            last_batch = batch
+        assert last_batch is not None
+        self.latest_action_causality = evaluate_foundation_action_causality(
+            self.stack.trainer,
+            last_batch,
+            ActionCausalityCriteria(
+                self.config.minimum_action_causality_ratio,
+                self.config.minimum_action_causality_horizon_fraction,
+            ),
+        )
         names = metrics[0]
-        return {
+        result = {
             name: float(sum(item[name] for item in metrics) / len(metrics))
             for name in names
         }
+        assessment = self.latest_action_causality["assessment"]
+        result["world/action_causality_ratio"] = float(
+            assessment["shuffled_to_true_ratio"]
+        )
+        result["world/action_causality_passed"] = float(assessment["passed"])
+        return result
 
     def _sample_transform(
         self, loader: FoundationSequenceBatchLoader, index: int
@@ -452,40 +524,60 @@ class FoundationOnlineTrainingRunner:
     def _checkpoint(
         self, cycle: int, prepared: FoundationPreparedFeatures
     ) -> None:
+        if self.latest_action_causality is None:
+            raise RuntimeError("checkpoint requires action causality evidence")
         dataset_sha = file_sha256(self.store.path / "manifest.json")
+        version = f"update-{self.stack.trainer.update_count:09d}"
+        causality = publish_action_causality_report(
+            self.run_path / "diagnostics/action-causality" / version,
+            self.latest_action_causality,
+            source_commit=self.source_commit,
+            update_count=self.stack.trainer.update_count,
+            data_manifest_sha256=dataset_sha,
+        )
+        causality_sha = registry_file_sha256(causality)
+        training_diagnostics = {
+            "action_causality_report_sha256": causality_sha,
+            "action_causality_passed": bool(
+                self.latest_action_causality["assessment"]["passed"]
+            ),
+        }
         checkpoint = self.run_path / "checkpoints" / (
-            f"update-{self.stack.trainer.update_count:09d}"
+            version
         )
         save_foundation_training_checkpoint(
             checkpoint,
             self.stack.trainer,
             source_commit=self.source_commit,
             data_manifest_sha256=dataset_sha,
+            training_diagnostics=training_diagnostics,
         )
         checkpoint_sha = registry_file_sha256(checkpoint / "training-state.pt")
-        deployment = self.run_path / "deployments" / (
-            f"update-{self.stack.trainer.update_count:09d}"
-        )
-        export_foundation_deployment(
-            deployment,
-            self.stack.trainer.visual_student,
-            self.stack.trainer.world_model,
-            self.stack.trainer.actor,
-            self.stack.action_scaling,
-            source_commit=self.source_commit,
-            training_checkpoint_sha256=checkpoint_sha,
-            preprocessing={
-                "fingerprint": self.preprocessor.fingerprint,
-                "config": asdict(self.preprocessor.config),
-            },
-            language_cache={
-                "encoder_lock_sha256": prepared.language.encoder_lock_sha256,
-                "preprocess_sha256": LANGUAGE_PREPROCESS_SHA256,
-                "dimension": prepared.language.output_dimension,
-            },
-        )
         self.latest_checkpoint = checkpoint
-        self.latest_deployment = deployment
+        self.latest_action_causality_report = causality
+        self.latest_deployment = None
+        if training_diagnostics["action_causality_passed"] is True:
+            deployment = self.run_path / "deployments" / version
+            export_foundation_deployment(
+                deployment,
+                self.stack.trainer.visual_student,
+                self.stack.trainer.world_model,
+                self.stack.trainer.actor,
+                self.stack.action_scaling,
+                source_commit=self.source_commit,
+                training_checkpoint_sha256=checkpoint_sha,
+                training_diagnostics=training_diagnostics,
+                preprocessing={
+                    "fingerprint": self.preprocessor.fingerprint,
+                    "config": asdict(self.preprocessor.config),
+                },
+                language_cache={
+                    "encoder_lock_sha256": prepared.language.encoder_lock_sha256,
+                    "preprocess_sha256": LANGUAGE_PREPROCESS_SHA256,
+                    "dimension": prepared.language.output_dimension,
+                },
+            )
+            self.latest_deployment = deployment
         self._save_runner_state(cycle)
         prune_versioned_artifacts(
             self.run_path / "checkpoints",
@@ -493,6 +585,10 @@ class FoundationOnlineTrainingRunner:
         )
         prune_versioned_artifacts(
             self.run_path / "deployments",
+            self.config.published_checkpoint_retention,
+        )
+        prune_versioned_artifacts(
+            self.run_path / "diagnostics/action-causality",
             self.config.published_checkpoint_retention,
         )
 
@@ -521,10 +617,19 @@ class FoundationOnlineTrainingRunner:
         latest = {
             "schema_version": "hwr.foundation-online-latest/v1",
             "training_checkpoint": str(self.latest_checkpoint.relative_to(self.run_path)),
-            "deployment": str(self.latest_deployment.relative_to(self.run_path)),
+            "action_causality_report": str(
+                self.latest_action_causality_report.relative_to(self.run_path)
+            ),
+            "action_causality_sha256": registry_file_sha256(
+                self.latest_action_causality_report
+            ),
             "episode_count": len(self.records),
             "update_count": self.stack.trainer.update_count,
         }
+        if self.latest_deployment is not None:
+            latest["deployment"] = str(
+                self.latest_deployment.relative_to(self.run_path)
+            )
         temporary_json = self.run_path / "latest.json.tmp"
         temporary_json.write_text(
             json.dumps(latest, indent=2, sort_keys=True) + "\n", encoding="utf-8"

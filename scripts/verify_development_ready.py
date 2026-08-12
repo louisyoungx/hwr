@@ -49,6 +49,7 @@ FOUNDATION_ALGORITHM_PATHS = (
     "src/hwr/train/foundation_augmentation.py",
     "src/hwr/train/foundation_batch.py",
     "src/hwr/train/foundation_collection.py",
+    "src/hwr/train/foundation_diagnostics.py",
     "src/hwr/train/foundation_online.py",
     "src/hwr/train/foundation_setup.py",
     "src/hwr/train/foundation_trainer.py",
@@ -178,6 +179,17 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
     if len(tasks) != 3:
         raise RuntimeError("formal configuration must expose exactly three tasks")
     stack = build_foundation_learning_stack(root / "configs/foundation")
+    online = json.loads(
+        (root / "configs/foundation/online-training-v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    if float(online["minimum_action_causality_ratio"]) <= 1.0:
+        raise RuntimeError("formal action causality ratio is not a degradation gate")
+    if float(online["minimum_action_causality_horizon_fraction"]) < 0.5:
+        raise RuntimeError("formal action causality horizon gate is too weak")
+    if int(online["batch_size"]) > 2:
+        raise RuntimeError("formal visual batch exceeds the verified 48 GB envelope")
     trainer = stack.trainer
     if trainer.world_model.config.action_dimension != 16:
         raise RuntimeError("formal world model action dimension is not canonical")
@@ -207,6 +219,11 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
         "actor_parameters": sum(parameter.numel() for parameter in trainer.actor.parameters()),
         "action_dimension": trainer.world_model.config.action_dimension,
         "deployment_training_heads": False,
+        "action_causality_ratio": online["minimum_action_causality_ratio"],
+        "action_causality_horizon_fraction": online[
+            "minimum_action_causality_horizon_fraction"
+        ],
+        "formal_batch_size": online["batch_size"],
     }
 
 

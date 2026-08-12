@@ -3,7 +3,9 @@
 from hwr.world_model.config import WorldModelConfig
 from hwr.world_model.deploy import DeployableWorldModelStateFilter
 from hwr.world_model.evaluation import (
+    ActionCausalityCriteria,
     CounterfactualCausalityReport,
+    assess_action_causality,
     evaluate_action_causality,
 )
 from hwr.world_model.model import (
@@ -20,6 +22,7 @@ from hwr.world_model.rssm import RSSMState
 
 __all__ = [
     "ActionConditionedWorldModel",
+    "ActionCausalityCriteria",
     "CounterfactualCausalityReport",
     "DeployableWorldModelStateFilter",
     "RSSMState",
@@ -29,5 +32,6 @@ __all__ = [
     "WorldModelOutput",
     "WorldModelPriorRollout",
     "WorldModelTargets",
+    "assess_action_causality",
     "evaluate_action_causality",
 ]

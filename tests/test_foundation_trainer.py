@@ -11,12 +11,14 @@ from hwr.perception.student_objectives import (
 from hwr.policy.latent_actor import LatentActor, LatentActorConfig
 from hwr.policy.latent_value import LatentValueModel
 from hwr.train.foundation_batch import FoundationTrainingBatch
+from hwr.train.foundation_diagnostics import evaluate_foundation_action_causality
 from hwr.train.foundation_trainer import (
     FoundationTrainerConfig,
     FoundationWorldModelTrainer,
 )
 from hwr.train.imagination_rl import ImaginationRLConfig
 from hwr.world_model import (
+    ActionCausalityCriteria,
     ActionConditionedWorldModel,
     WorldModelConfig,
     WorldModelLoss,
@@ -155,3 +157,22 @@ def test_unified_trainer_optimizer_state_round_trip() -> None:
 
     assert second.update_count == 1
     assert second.optimizer_state_dict()["update_count"] == 1
+
+
+def test_foundation_diagnostic_uses_all_actual_outcome_targets() -> None:
+    trainer = _trainer()
+    batch = _batch(_visual_config())
+
+    diagnostic = evaluate_foundation_action_causality(
+        trainer, batch, ActionCausalityCriteria(1.05, 0.60)
+    )
+
+    assert diagnostic["action_source"] == "actual_executed_action"
+    assert diagnostic["report"]["error_components"] == (
+        "visual_latent",
+        "proprioception",
+        "reward",
+        "continue",
+        "safety",
+    )
+    assert diagnostic["assessment"]["horizon_count"] == 2
