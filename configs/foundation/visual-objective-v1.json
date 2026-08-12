@@ -1,0 +1,11 @@
+{
+  "correspondence_weight": 0.5,
+  "depth_weight": 0.25,
+  "dinov2_dimension": 384,
+  "dinov2_weight": 1.0,
+  "reconstruction_weight": 0.25,
+  "schema_version": "hwr.visual-objective-config/v1",
+  "siglip_dimension": 768,
+  "siglip_weight": 1.0,
+  "student_dimension": 256
+}

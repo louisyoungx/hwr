@@ -7,6 +7,7 @@ from typing import NamedTuple
 import torch
 
 from hwr.policy.latent_actor import LatentActor
+from hwr.policy.latent_actions import LatentActionScaling, scale_latent_action
 from hwr.world_model.distributions import reward_expectation
 from hwr.world_model.model import ActionConditionedWorldModel
 from hwr.world_model.rssm import RSSMState
@@ -31,6 +32,7 @@ def imagine_trajectory(
     initial_state: RSSMState,
     *,
     horizon: int,
+    action_scaling: LatentActionScaling | None = None,
 ) -> ImaginedTrajectory:
     if horizon <= 0:
         raise ValueError("imagination horizon must be positive")
@@ -48,8 +50,13 @@ def imagine_trajectory(
     for _ in range(horizon):
         feature = world_model.rssm.features(state)
         sample = actor.sample(feature)
+        action = (
+            scale_latent_action(sample.action, action_scaling)
+            if action_scaling is not None and sample.action.shape[-1] == 16
+            else sample.action
+        )
         state, _, ensemble = world_model.rssm.step_prior(
-            state, sample.action, sample=True
+            state, action, sample=True
         )
         next_feature = world_model.rssm.features(state)
         _, _, reward_logits, continue_logits, safety_logits = world_model.decode_features(
@@ -58,7 +65,7 @@ def imagine_trajectory(
         ensemble_probability = ensemble.softmax(dim=-1)
         features.append(feature)
         next_features.append(next_feature)
-        actions.append(sample.action)
+        actions.append(action)
         log_probabilities.append(sample.log_probability)
         motion_entropies.append(sample.motion_entropy)
         gripper_entropies.append(sample.gripper_entropy)

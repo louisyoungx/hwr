@@ -1,0 +1,10 @@
+{
+  "action_dimension": 16,
+  "formal": true,
+  "hidden_dimension": 512,
+  "hidden_layers": 3,
+  "latent_dimension": 1536,
+  "maximum_log_standard_deviation": 1.0,
+  "minimum_log_standard_deviation": -5.0,
+  "schema_version": "hwr.latent-actor-config/v1"
+}

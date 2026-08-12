@@ -10,5 +10,8 @@
   "slow_value_rate": 0.01,
   "uncertainty_weight": 0.1,
   "value_bins": 255,
-  "value_symlog_limit": 20.0
+  "value_symlog_limit": 20.0,
+  "base_linear_scale": 0.18,
+  "base_angular_scale": 0.5,
+  "arm_velocity_scale": 0.35
 }

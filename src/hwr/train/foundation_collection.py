@@ -160,6 +160,13 @@ class AutonomousEpisodeCollector:
             transforms = tuple(
                 item.transform_id for item in backend.legal_environment_transforms()
             )
+        result = backend.result()
+        metadata = {
+            "collector": "foundation-autonomous/v1",
+            "success": bool(result and result.success),
+            "result_reason": result.reason if result else "step_limit",
+            "result_metrics": dict(result.metrics) if result else {},
+        }
         return AutonomousEpisode(
             episode_id=f"episode-{uuid.uuid4().hex}",
             task_id=task_id,
@@ -171,7 +178,7 @@ class AutonomousEpisodeCollector:
             preprocess_fingerprint=preprocess_fingerprint,
             legal_transform_ids=transforms,
             arrays=arrays,
-            metadata={"collector": "foundation-autonomous/v1"},
+            metadata=metadata,
         )
 
     def _episode_arrays(

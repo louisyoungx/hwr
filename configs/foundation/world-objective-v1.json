@@ -1,0 +1,12 @@
+{
+  "continue_weight": 1.0,
+  "dynamics_weight": 0.5,
+  "ensemble_weight": 0.5,
+  "free_nats": 1.0,
+  "proprioception_weight": 1.0,
+  "representation_weight": 0.1,
+  "reward_weight": 1.0,
+  "safety_weight": 1.0,
+  "schema_version": "hwr.world-objective-config/v1",
+  "visual_weight": 1.0
+}

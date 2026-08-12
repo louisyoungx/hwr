@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 import torch
 from torch import nn
@@ -28,6 +28,9 @@ class WorldModelLossConfig:
         values = tuple(self.__dict__.values())
         if min(values) < 0.0:
             raise ValueError("world model loss weights cannot be negative")
+
+    def to_dict(self) -> dict[str, float]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)

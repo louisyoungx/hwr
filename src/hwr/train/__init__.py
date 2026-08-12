@@ -128,6 +128,30 @@ _EXPORTS = {
         "hwr.train.foundation_augmentation",
         "transform_foundation_batch",
     ),
+    "build_foundation_learning_stack": (
+        "hwr.train.foundation_setup",
+        "build_foundation_learning_stack",
+    ),
+    "FoundationEnvironmentFactory": (
+        "hwr.train.foundation_online",
+        "FoundationEnvironmentFactory",
+    ),
+    "FoundationOnlineTrainingConfig": (
+        "hwr.train.foundation_online",
+        "FoundationOnlineTrainingConfig",
+    ),
+    "FoundationOnlineTrainingRunner": (
+        "hwr.train.foundation_online",
+        "FoundationOnlineTrainingRunner",
+    ),
+    "FoundationProviderFactories": (
+        "hwr.train.foundation_online",
+        "FoundationProviderFactories",
+    ),
+    "FoundationTaskInterface": (
+        "hwr.train.foundation_online",
+        "FoundationTaskInterface",
+    ),
 }
 
 __all__ = sorted(_EXPORTS)

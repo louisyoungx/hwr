@@ -8,6 +8,7 @@ import torch
 from torch import nn
 
 from hwr.policy.latent_actor import LatentActor
+from hwr.policy.latent_actions import LatentActionScaling
 from hwr.policy.latent_value import LatentValueModel
 from hwr.train.imagination import ImaginedTrajectory, imagine_trajectory
 from hwr.world_model.distributions import reward_expectation, two_hot_symlog
@@ -28,6 +29,9 @@ class ImaginationRLConfig:
     value_symlog_limit: float = 20.0
     slow_value_rate: float = 0.01
     maximum_gradient_norm: float = 100.0
+    base_linear_scale: float = 0.18
+    base_angular_scale: float = 0.50
+    arm_velocity_scale: float = 0.35
 
     def __post_init__(self) -> None:
         if self.horizon <= 1 or not 0.0 < self.discount <= 1.0:
@@ -41,6 +45,9 @@ class ImaginationRLConfig:
             self.safety_weight,
             self.slow_value_rate,
             self.maximum_gradient_norm,
+            self.base_linear_scale,
+            self.base_angular_scale,
+            self.arm_velocity_scale,
         ) < 0.0:
             raise ValueError("imagination RL weights cannot be negative")
 
@@ -71,10 +78,19 @@ class ImaginationActorCritic(nn.Module):
         self.slow_value.load_state_dict(value.state_dict())
         self.slow_value.requires_grad_(False)
         self.config = config
+        self.action_scaling = LatentActionScaling(
+            config.base_linear_scale,
+            config.base_angular_scale,
+            config.arm_velocity_scale,
+        )
 
     def losses(self, initial: RSSMState) -> tuple[dict[str, torch.Tensor], ImaginedTrajectory]:
         trajectory = imagine_trajectory(
-            self.world_model, self.actor, initial, horizon=self.config.horizon
+            self.world_model,
+            self.actor,
+            initial,
+            horizon=self.config.horizon,
+            action_scaling=self.action_scaling,
         )
         with torch.no_grad():
             slow_logits = self.slow_value(trajectory.next_features)

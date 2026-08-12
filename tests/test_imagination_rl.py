@@ -110,3 +110,43 @@ def test_lambda_returns_match_one_step_extremes() -> None:
 
     assert torch.allclose(one_step, torch.tensor([[11.0, 17.0, 18.0]]))
     assert torch.allclose(monte_carlo, torch.tensor([[6.5, 11.0, 18.0]]))
+
+
+def test_formal_imagination_uses_same_physical_action_units_as_replay() -> None:
+    world_config = WorldModelConfig(
+        visual_dimension=8,
+        language_dimension=6,
+        proprioception_dimension=5,
+        action_dimension=16,
+        observation_embedding_dimension=16,
+        deterministic_dimension=16,
+        stochastic_variables=4,
+        stochastic_classes=4,
+        hidden_dimension=32,
+        prior_ensemble=3,
+        reward_bins=21,
+        formal=False,
+    )
+    world = ActionConditionedWorldModel(world_config)
+    actor = LatentActor(
+        LatentActorConfig(
+            world_config.feature_dimension,
+            hidden_dimension=32,
+            hidden_layers=2,
+            formal=False,
+        )
+    )
+    value = LatentValueModel(
+        world_config.feature_dimension, bins=21, hidden_dimension=32, hidden_layers=2
+    )
+    algorithm = ImaginationActorCritic(
+        world, actor, value, ImaginationRLConfig(horizon=2, value_bins=21)
+    )
+
+    _, trajectory = algorithm.losses(world.rssm.initial(2, torch.device("cpu")))
+
+    assert torch.all(trajectory.actions[..., 0].abs() <= 0.18)
+    assert torch.all(trajectory.actions[..., 1].abs() <= 0.50)
+    assert torch.all(trajectory.actions[..., 2:14].abs() <= 0.35)
+    assert torch.all((trajectory.actions[..., 14:] >= 0.0))
+    assert torch.all((trajectory.actions[..., 14:] <= 1.0))
