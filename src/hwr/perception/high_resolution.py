@@ -172,6 +172,9 @@ class HighResolutionVisionPreprocessor:
             dtype=np.int64,
         )
         source_digest = self._source_digest(observation, frames)
+        frame_calibrations = {
+            value.camera_id: value for value in observation.camera_calibrations
+        }
         return HighResolutionVision(
             teacher_rgb=_readonly(teacher),
             student_rgb=_readonly(student),
@@ -179,8 +182,10 @@ class HighResolutionVisionPreprocessor:
             student_head_depth_valid=_readonly(depth_valid),
             camera_validity=_readonly(validity),
             frame_timestamps_ns=_readonly(timestamps),
-            student_intrinsics=_readonly(self._scaled_intrinsics()),
-            robot_from_camera=_readonly(self._extrinsics()),
+            student_intrinsics=_readonly(
+                self._scaled_intrinsics(frame_calibrations)
+            ),
+            robot_from_camera=_readonly(self._extrinsics(frame_calibrations)),
             preprocess_fingerprint=self.fingerprint,
             source_sha256=source_digest,
         )
@@ -246,19 +251,30 @@ class HighResolutionVisionPreprocessor:
         )
         return np.where(valid, raw, 0.0).astype(np.float32), valid, True
 
-    def _scaled_intrinsics(self) -> np.ndarray:
+    def _scaled_intrinsics(self, frame_calibrations) -> np.ndarray:
         rows: list[tuple[float, ...]] = []
         for camera_id in DUAL_ARM_CAMERA_IDS:
             value = self.calibrations[camera_id].intrinsics
             scale_x = self.config.student_image_size / value.width
             scale_y = self.config.student_image_size / value.height
-            rows.append((value.fx * scale_x, value.fy * scale_y, value.cx * scale_x, value.cy * scale_y))
+            raw = (
+                frame_calibrations[camera_id].intrinsics
+                if camera_id in frame_calibrations
+                else (value.fx, value.fy, value.cx, value.cy)
+            )
+            rows.append(
+                (raw[0] * scale_x, raw[1] * scale_y, raw[2] * scale_x, raw[3] * scale_y)
+            )
         return np.asarray(rows, dtype=np.float32)
 
-    def _extrinsics(self) -> np.ndarray:
+    def _extrinsics(self, frame_calibrations) -> np.ndarray:
         return np.asarray(
             [
-                np.asarray(self.calibrations[name].robot_from_camera).reshape(4, 4)
+                np.asarray(
+                    frame_calibrations[name].robot_from_camera
+                    if name in frame_calibrations
+                    else self.calibrations[name].robot_from_camera
+                ).reshape(4, 4)
                 for name in DUAL_ARM_CAMERA_IDS
             ],
             dtype=np.float32,

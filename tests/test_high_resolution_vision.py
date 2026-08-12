@@ -6,6 +6,7 @@ import pytest
 from hwr.core.embodied import (
     DualArmObservation,
     DualArmProprioception,
+    FrameCameraCalibration,
     NaturalLanguageInstruction,
 )
 from hwr.core.types import CameraFrame
@@ -104,3 +105,26 @@ def test_source_resolution_minimum_is_enforced() -> None:
     preprocessor = _preprocessor(source_size=3)
     with pytest.raises(ValueError, match="formal minimum"):
         preprocessor.preprocess(_observation(size=3))
+
+
+def test_high_resolution_preprocessor_uses_per_frame_wrist_geometry() -> None:
+    observation = _observation(size=160)
+    dynamic = []
+    for index, name in enumerate(CAMERAS):
+        transform = np.eye(4, dtype=np.float64)
+        transform[1, 3] = float(index)
+        dynamic.append(
+            FrameCameraCalibration(
+                name,
+                (120.0, 121.0, 70.0, 71.0),
+                tuple(transform.reshape(-1)),
+            )
+        )
+    observation = DualArmObservation(
+        **{**observation.__dict__, "camera_calibrations": tuple(dynamic)}
+    )
+
+    result = _preprocessor(source_size=160).preprocess(observation)
+
+    assert result.student_intrinsics[2].tolist() == [120.0, 121.0, 70.0, 71.0]
+    assert result.robot_from_camera[2, 1, 3] == 2.0

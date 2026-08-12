@@ -8,6 +8,7 @@ from hwr.core.embodied import (
     DualArmActionFrame,
     DualArmObservation,
     DualArmProprioception,
+    FrameCameraCalibration,
     FrozenLanguageEmbedding,
     NaturalLanguageInstruction,
 )
@@ -21,6 +22,7 @@ __all__ = [
     "DualArmActionFrame",
     "DualArmObservation",
     "DualArmProprioception",
+    "FrameCameraCalibration",
     "FrozenLanguageEmbedding",
     "NaturalLanguageInstruction",
     "PhysicalStateSnapshot",

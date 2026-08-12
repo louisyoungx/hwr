@@ -58,6 +58,29 @@ class FrozenLanguageEmbedding:
 
 
 @dataclass(frozen=True)
+class FrameCameraCalibration:
+    """Deployable per-frame camera geometry, including moving wrist cameras."""
+
+    camera_id: str
+    intrinsics: tuple[float, float, float, float]
+    robot_from_camera: tuple[float, ...]
+
+    def __post_init__(self) -> None:
+        if not self.camera_id:
+            raise ValueError("frame camera calibration identity is required")
+        intrinsics = _finite(self.intrinsics, "frame camera intrinsics")
+        transform = _finite(
+            self.robot_from_camera, "frame robot-from-camera transform"
+        )
+        if len(intrinsics) != 4 or min(intrinsics[:2]) <= 0.0:
+            raise ValueError("frame camera intrinsics are invalid")
+        if len(transform) != 16 or transform[12:] != (0.0, 0.0, 0.0, 1.0):
+            raise ValueError("frame camera transform must be homogeneous 4x4")
+        object.__setattr__(self, "intrinsics", intrinsics)
+        object.__setattr__(self, "robot_from_camera", transform)
+
+
+@dataclass(frozen=True)
 class DualArmAction:
     """Base twist, two normalized base-frame tool twists, and pincer targets."""
 
@@ -195,6 +218,7 @@ class DualArmObservation:
     instruction: NaturalLanguageInstruction
     proprioception: DualArmProprioception
     cameras: tuple[CameraFrame, ...]
+    camera_calibrations: tuple[FrameCameraCalibration, ...] = ()
     safety_state: SafetyState = SafetyState.OK
     quality: Mapping[str, float] = field(default_factory=dict)
     schema_version: str = DUAL_ARM_OBSERVATION_SCHEMA
@@ -208,10 +232,17 @@ class DualArmObservation:
         camera_ids = tuple(camera.camera_id for camera in cameras)
         if len(set(camera_ids)) != len(camera_ids):
             raise ValueError("camera ids must be unique")
+        calibrations = tuple(self.camera_calibrations)
+        calibration_ids = tuple(value.camera_id for value in calibrations)
+        if calibrations and set(calibration_ids) != set(camera_ids):
+            raise ValueError("per-frame calibrations must cover the observed cameras")
+        if len(set(calibration_ids)) != len(calibration_ids):
+            raise ValueError("per-frame calibration ids must be unique")
         quality = {str(name): float(value) for name, value in self.quality.items()}
         if not all(math.isfinite(value) for value in quality.values()):
             raise ValueError("quality values must be finite")
         object.__setattr__(self, "cameras", cameras)
+        object.__setattr__(self, "camera_calibrations", calibrations)
         object.__setattr__(self, "quality", quality)
 
     def camera(self, camera_id: str) -> CameraFrame:

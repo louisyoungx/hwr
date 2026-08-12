@@ -15,7 +15,7 @@ import numpy as np
 from hwr.core.embodied import DUAL_ARM_ACTION_DIM
 
 
-AUTONOMOUS_TRAJECTORY_SCHEMA = "hwr.autonomous-trajectory/v1"
+AUTONOMOUS_TRAJECTORY_SCHEMA = "hwr.autonomous-trajectory/v2"
 ALLOWED_ACTION_SOURCES = frozenset({"random_rl_exploration", "rl_actor"})
 OBSERVATION_ARRAY_FIELDS = frozenset(
     {
@@ -26,6 +26,8 @@ OBSERVATION_ARRAY_FIELDS = frozenset(
         "frame_timestamps_ns",
         "proprioception",
         "observation_source_sha256",
+        "intrinsics",
+        "robot_from_camera",
     }
 )
 TRANSITION_ARRAY_FIELDS = frozenset(
@@ -39,7 +41,7 @@ TRANSITION_ARRAY_FIELDS = frozenset(
         "action_source",
     }
 )
-STATIC_ARRAY_FIELDS = frozenset({"intrinsics", "robot_from_camera"})
+STATIC_ARRAY_FIELDS = frozenset()
 TRAJECTORY_ARRAY_FIELDS = (
     OBSERVATION_ARRAY_FIELDS | TRANSITION_ARRAY_FIELDS | STATIC_ARRAY_FIELDS
 )
@@ -151,8 +153,8 @@ def _validate_arrays(arrays: Mapping[str, np.ndarray]) -> None:
         "truncated": (transitions,),
         "safety_cost": (transitions,),
         "action_source": (transitions,),
-        "intrinsics": (4, 4),
-        "robot_from_camera": (4, 4, 4),
+        "intrinsics": (observations, 4, 4),
+        "robot_from_camera": (observations, 4, 4, 4),
     }
     mismatches = {
         name: (arrays[name].shape, shape)

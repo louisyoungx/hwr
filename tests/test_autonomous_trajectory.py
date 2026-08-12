@@ -28,8 +28,10 @@ def _arrays(observations: int = 5) -> dict[str, np.ndarray]:
         "truncated": np.zeros(transitions, dtype=np.bool_),
         "safety_cost": np.zeros(transitions, dtype=np.float32),
         "action_source": np.asarray(["rl_actor"] * transitions),
-        "intrinsics": np.ones((4, 4), dtype=np.float32),
-        "robot_from_camera": np.repeat(np.eye(4, dtype=np.float32)[None], 4, axis=0),
+        "intrinsics": np.ones((observations, 4, 4), dtype=np.float32),
+        "robot_from_camera": np.repeat(
+            np.eye(4, dtype=np.float32)[None, None], observations * 4, axis=0
+        ).reshape(observations, 4, 4, 4),
     }
 
 

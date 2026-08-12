@@ -14,6 +14,7 @@ import numpy as np
 from hwr.core.embodied import (
     DualArmObservation,
     DualArmProprioception,
+    FrameCameraCalibration,
     NaturalLanguageInstruction,
 )
 from hwr.core.types import CameraFrame
@@ -123,6 +124,17 @@ def trajectory_vision_frame(
         ),
         proprioception,
         cameras,
+        tuple(
+            FrameCameraCalibration(
+                name,
+                tuple(float(value) for value in arrays["intrinsics"][observation_index, index]),
+                tuple(
+                    float(value)
+                    for value in arrays["robot_from_camera"][observation_index, index].reshape(-1)
+                ),
+            )
+            for index, name in enumerate(DUAL_ARM_CAMERA_IDS)
+        ),
     )
     result = preprocessor.preprocess(observation)
     expected_fingerprint = str(metadata["preprocess_fingerprint"])

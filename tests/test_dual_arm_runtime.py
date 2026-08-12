@@ -68,6 +68,17 @@ def test_observation_exposes_both_arms_and_four_deployable_cameras() -> None:
         "left_wrist_rgb",
         "right_wrist_rgb",
     )
+    assert tuple(value.camera_id for value in observation.camera_calibrations) == (
+        "head_rgb",
+        "head_depth",
+        "left_wrist_rgb",
+        "right_wrist_rgb",
+    )
+    assert all(value.intrinsics[0] > 0.0 for value in observation.camera_calibrations)
+    assert not np.allclose(
+        observation.camera_calibrations[2].robot_from_camera,
+        observation.camera_calibrations[3].robot_from_camera,
+    )
     assert observation.instruction.text == "同时控制左右机械臂完成任务"
     assert not hasattr(observation, "features")
     assert not hasattr(observation, "task_stage")

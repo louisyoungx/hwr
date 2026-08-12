@@ -24,6 +24,7 @@ from hwr.core.embodied import (
     DualArmActionFrame,
     DualArmObservation,
     DualArmProprioception,
+    FrameCameraCalibration,
     NaturalLanguageInstruction,
 )
 from hwr.core.runtime import RuntimeStepOutcome
@@ -551,6 +552,7 @@ class MujocoDualArmBackend:
             instruction=self._instruction,
             proprioception=proprioception,
             cameras=cameras,
+            camera_calibrations=self._camera_calibrations(cameras),
             safety_state=SafetyState.OK,
             quality={
                 "simulation": 1.0,
@@ -560,6 +562,47 @@ class MujocoDualArmBackend:
                 "right_wrist_rgb": 1.0,
             },
         )
+
+    def _camera_calibrations(
+        self, cameras
+    ) -> tuple[FrameCameraCalibration, ...]:
+        base_rotation = self.data.xmat[self.bundle.ids.base_body].reshape(3, 3)
+        base_position = self.data.xpos[self.bundle.ids.base_body]
+        world_from_robot = np.eye(4, dtype=np.float64)
+        world_from_robot[:3, :3] = base_rotation
+        world_from_robot[:3, 3] = base_position
+        robot_from_world = np.linalg.inv(world_from_robot)
+        values = []
+        camera_names = {
+            "head_rgb": "head_rgb",
+            "head_depth": "head_depth",
+            "left_wrist_rgb": "left_wrist_rgb",
+            "right_wrist_rgb": "wrist_rgb",
+        }
+        for frame in cameras:
+            camera_id = int(
+                mujoco.mj_name2id(
+                    self.model, mujoco.mjtObj.mjOBJ_CAMERA, camera_names[frame.camera_id]
+                )
+            )
+            rotation = self.data.cam_xmat[camera_id].reshape(3, 3)
+            world_from_camera = np.eye(4, dtype=np.float64)
+            world_from_camera[:3, :3] = np.column_stack(
+                (rotation[:, 0], -rotation[:, 1], -rotation[:, 2])
+            )
+            world_from_camera[:3, 3] = self.data.cam_xpos[camera_id]
+            robot_from_camera = robot_from_world @ world_from_camera
+            focal = frame.height / (
+                2.0 * math.tan(math.radians(float(self.model.cam_fovy[camera_id])) / 2.0)
+            )
+            values.append(
+                FrameCameraCalibration(
+                    frame.camera_id,
+                    (focal, focal, (frame.width - 1) / 2, (frame.height - 1) / 2),
+                    tuple(float(item) for item in robot_from_camera.reshape(-1)),
+                )
+            )
+        return tuple(values)
 
     def _joint_values(
         self, joint_ids: tuple[int, ...], *, velocity: bool

@@ -208,8 +208,10 @@ class AutonomousEpisodeCollector:
             "truncated": np.asarray(truncated, np.bool_),
             "safety_cost": np.asarray(safety, np.float32),
             "action_source": np.asarray([action_source] * len(executed)),
-            "intrinsics": self._intrinsics(),
-            "robot_from_camera": self._extrinsics(),
+            "intrinsics": np.stack([value["intrinsics"] for value in observation_values]),
+            "robot_from_camera": np.stack(
+                [value["robot_from_camera"] for value in observation_values]
+            ),
         }, fingerprints.pop()
 
     def _observation_arrays(self, observation: DualArmObservation) -> dict[str, object]:
@@ -234,12 +236,17 @@ class AutonomousEpisodeCollector:
             "frame_timestamps_ns": frame.frame_timestamps_ns,
             "source_sha256": frame.source_sha256,
             "preprocess_fingerprint": frame.preprocess_fingerprint,
+            "intrinsics": self._raw_intrinsics(observation),
+            "robot_from_camera": self._raw_extrinsics(observation),
         }
 
-    def _intrinsics(self) -> np.ndarray:
+    def _raw_intrinsics(self, observation: DualArmObservation) -> np.ndarray:
+        dynamic = {value.camera_id: value for value in observation.camera_calibrations}
         return np.asarray(
             [
-                (
+                dynamic[name].intrinsics
+                if name in dynamic
+                else (
                     self.preprocessor.calibrations[name].intrinsics.fx,
                     self.preprocessor.calibrations[name].intrinsics.fy,
                     self.preprocessor.calibrations[name].intrinsics.cx,
@@ -250,10 +257,13 @@ class AutonomousEpisodeCollector:
             np.float32,
         )
 
-    def _extrinsics(self) -> np.ndarray:
+    def _raw_extrinsics(self, observation: DualArmObservation) -> np.ndarray:
+        dynamic = {value.camera_id: value for value in observation.camera_calibrations}
         return np.asarray(
             [
-                self.preprocessor.calibrations[name].robot_from_camera
+                dynamic[name].robot_from_camera
+                if name in dynamic
+                else self.preprocessor.calibrations[name].robot_from_camera
                 for name in DUAL_ARM_CAMERA_IDS
             ],
             np.float32,

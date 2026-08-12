@@ -116,8 +116,10 @@ def _dataset(tmp_path, fingerprint: str):
         "truncated": np.zeros(transitions, np.bool_),
         "safety_cost": np.asarray([0.0, 1.0], np.float32),
         "action_source": np.asarray(["rl_actor"] * transitions),
-        "intrinsics": np.ones((4, 4), np.float32),
-        "robot_from_camera": np.repeat(np.eye(4, dtype=np.float32)[None], 4, 0),
+        "intrinsics": np.ones((observations, 4, 4), np.float32),
+        "robot_from_camera": np.repeat(
+            np.eye(4, dtype=np.float32)[None, None], observations * 4, 0
+        ).reshape(observations, 4, 4, 4),
     }
     episode = AutonomousEpisode(
         "episode-1",
