@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Callable, Mapping, Protocol
 
 import numpy as np
-import torch
 
 from hwr.core.runtime import RuntimeBackend
 from hwr.data.autonomous_trajectory import AppendableAutonomousTrajectoryStore
@@ -58,6 +57,11 @@ from hwr.train.foundation_registry import (
     load_foundation_training_checkpoint,
     prune_versioned_artifacts,
     save_foundation_training_checkpoint,
+)
+from hwr.train.foundation_recovery import (
+    clear_replay_archive,
+    publish_runner_progress,
+    restore_runner_progress,
 )
 from hwr.train.foundation_setup import FoundationLearningStack
 from hwr.train.learning_signals import failure_boundary_step
@@ -214,6 +218,7 @@ class FoundationOnlineTrainingRunner:
         self.latest_deployment: Path | None = None
         self.latest_action_causality: dict[str, object] | None = None
         self.latest_action_causality_report: Path | None = None
+        self.completed_cycles = 0
         self._write_or_verify_run_manifest()
 
     def train(self) -> FoundationOnlineTrainingResult:
@@ -223,7 +228,7 @@ class FoundationOnlineTrainingRunner:
             )
             for task_id in self.task_ids
         }
-        cycle = 0
+        cycle = self.completed_cycles
         try:
             self._prepare_causality_holdout(environments)
             while len(self.records) < self.config.episodes:
@@ -234,6 +239,7 @@ class FoundationOnlineTrainingRunner:
                 self._evaluate_action_causality(causality_prepared, metrics)
                 self._record_learning_outcomes(collected, metrics)
                 cycle += 1
+                self.completed_cycles = cycle
                 if cycle % self.config.checkpoint_interval_cycles == 0:
                     self._checkpoint(cycle, prepared)
         finally:
@@ -273,11 +279,21 @@ class FoundationOnlineTrainingRunner:
         if not latest_path.is_file():
             raise FileNotFoundError(latest_path)
         latest = json.loads(latest_path.read_text(encoding="utf-8"))
+        if latest.get("schema_version") != "hwr.foundation-online-latest/v1":
+            raise ValueError("resumed latest schema differs")
         checkpoint = self.run_path / latest["training_checkpoint"]
         report = self.run_path / latest["action_causality_report"]
         if registry_file_sha256(report) != latest["action_causality_sha256"]:
             raise ValueError("resumed action causality report hash differs")
         diagnostic = json.loads(report.read_text(encoding="utf-8"))
+        if (
+            diagnostic.get("schema_version")
+            != "hwr.foundation-action-causality/v2"
+            or diagnostic.get("source_commit") != self.source_commit
+            or int(diagnostic.get("update_count", -1))
+            != int(latest.get("update_count", -2))
+        ):
+            raise ValueError("resumed action causality lineage differs")
         expected = {
             "action_causality_report_sha256": latest["action_causality_sha256"],
             "action_causality_passed": diagnostic["assessment"]["passed"],
@@ -299,15 +315,39 @@ class FoundationOnlineTrainingRunner:
                 raise ValueError("failed causality checkpoint exposed a deployment")
             if deployment_manifest.get("training_diagnostics") != expected:
                 raise ValueError("resumed deployment diagnostic provenance differs")
+            artifact = checkpoint / str(checkpoint_manifest["artifact_file"])
+            if deployment_manifest.get(
+                "training_checkpoint_sha256"
+            ) != registry_file_sha256(artifact):
+                raise ValueError("resumed deployment checkpoint hash differs")
         elif expected["action_causality_passed"] is True:
             raise ValueError("passed causality checkpoint is missing its deployment")
         load_foundation_training_checkpoint(checkpoint, self.stack.trainer)
-        state = torch.load(
-            self.run_path / "runner-state.pt", map_location="cpu", weights_only=True
+        restored = restore_runner_progress(
+            self.run_path,
+            checkpoint,
+            latest,
+            self.store,
+            self.causality_store,
+            replay_archive=self.run_path / "recovery/replay-prune-archive",
         )
-        self.task_sampler.load_state_dict(state["task_sampler"])
-        self.rng.bit_generator.state = state["rng_state"]
-        self.records = [FoundationEpisodeRecord(**item) for item in state["records"]]
+        replay_sha = registry_file_sha256(self.store.path / "manifest.json")
+        audit_sha = registry_file_sha256(
+            self.causality_store.path / "manifest.json"
+        )
+        if (
+            checkpoint_manifest.get("data_manifest_sha256") != replay_sha
+            or diagnostic.get("training_data_manifest_sha256") != replay_sha
+            or diagnostic.get("audit_data_manifest_sha256") != audit_sha
+        ):
+            raise ValueError("resumed checkpoint data provenance differs")
+        self.task_sampler.load_state_dict(restored.task_sampler)
+        self.rng.bit_generator.state = restored.rng_state
+        self.records = [FoundationEpisodeRecord(**item) for item in restored.records]
+        self.completed_cycles = restored.cycle
+        self._discard_cached_visual_sources(
+            restored.discarded_observation_sources
+        )
         self.latest_checkpoint = checkpoint
         self.latest_deployment = deployment_path
         self.latest_action_causality_report = report
@@ -470,7 +510,14 @@ class FoundationOnlineTrainingRunner:
             task_id: base + int(index < remainder)
             for index, task_id in enumerate(self.task_ids)
         }
-        evicted_sources = self.store.prune_to_task_capacities(capacities)
+        evicted_sources = self.store.prune_to_task_capacities(
+            capacities,
+            recovery_archive=self.run_path / "recovery/replay-prune-archive",
+        )
+        self._discard_cached_visual_sources(evicted_sources)
+
+    def _discard_cached_visual_sources(self, sources: tuple[str, ...]) -> None:
+        evicted_sources = tuple(sources)
         if not evicted_sources:
             return
         for filename in ("vision-language.json", "dense-vision.json"):
@@ -688,48 +735,24 @@ class FoundationOnlineTrainingRunner:
         )
 
     def _save_runner_state(self, cycle: int) -> None:
-        temporary = self.run_path / "runner-state.pt.tmp"
-        torch.save(
-            {
-                "cycle": cycle,
-                "rng_state": self.rng.bit_generator.state,
-                "task_sampler": self.task_sampler.state_dict(),
-                "records": [asdict(item) for item in self.records],
-            },
-            temporary,
+        if self.latest_checkpoint is None or self.latest_action_causality_report is None:
+            raise RuntimeError("runner progress requires checkpoint artifacts")
+        publish_runner_progress(
+            self.run_path,
+            self.latest_checkpoint,
+            self.latest_deployment,
+            self.latest_action_causality_report,
+            cycle=cycle,
+            update_count=self.stack.trainer.update_count,
+            rng_state=self.rng.bit_generator.state,
+            task_sampler=self.task_sampler.state_dict(),
+            records=[asdict(item) for item in self.records],
+            replay_manifest=self.store.manifest,
+            causality_manifest=self.causality_store.manifest,
         )
-        os.replace(temporary, self.run_path / "runner-state.pt")
-        records_path = self.run_path / "episodes.jsonl"
-        records_temporary = records_path.with_suffix(".jsonl.tmp")
-        records_temporary.write_text(
-            "".join(
-                json.dumps(asdict(item), ensure_ascii=False, sort_keys=True) + "\n"
-                for item in self.records
-            ),
-            encoding="utf-8",
+        clear_replay_archive(
+            self.run_path / "recovery/replay-prune-archive"
         )
-        os.replace(records_temporary, records_path)
-        latest = {
-            "schema_version": "hwr.foundation-online-latest/v1",
-            "training_checkpoint": str(self.latest_checkpoint.relative_to(self.run_path)),
-            "action_causality_report": str(
-                self.latest_action_causality_report.relative_to(self.run_path)
-            ),
-            "action_causality_sha256": registry_file_sha256(
-                self.latest_action_causality_report
-            ),
-            "episode_count": len(self.records),
-            "update_count": self.stack.trainer.update_count,
-        }
-        if self.latest_deployment is not None:
-            latest["deployment"] = str(
-                self.latest_deployment.relative_to(self.run_path)
-            )
-        temporary_json = self.run_path / "latest.json.tmp"
-        temporary_json.write_text(
-            json.dumps(latest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        os.replace(temporary_json, self.run_path / "latest.json")
 
     def _write_or_verify_run_manifest(self) -> None:
         manifest = {

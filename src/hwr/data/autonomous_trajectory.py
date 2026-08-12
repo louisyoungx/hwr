@@ -322,9 +322,12 @@ class AppendableAutonomousTrajectoryStore:
         return path
 
     def prune_to_task_capacities(
-        self, capacities: Mapping[str, int]
+        self,
+        capacities: Mapping[str, int],
+        *,
+        recovery_archive: Path | None = None,
     ) -> tuple[str, ...]:
-        """Evict oldest complete shards while retaining recent data per task ID."""
+        """Evict oldest shards, optionally staging them until a checkpoint commits."""
         normalized = {str(task_id): int(value) for task_id, value in capacities.items()}
         shard_tasks = {str(shard["task_id"]) for shard in self.manifest["shards"]}
         if not shard_tasks <= set(normalized) or any(value <= 0 for value in normalized.values()):
@@ -351,12 +354,20 @@ class AppendableAutonomousTrajectoryStore:
         if not evicted:
             return ()
         sources: list[str] = []
+        destinations: dict[str, Path] = {}
+        if recovery_archive is not None:
+            recovery_archive.mkdir(parents=True, exist_ok=True)
         for shard in evicted:
             shard_path = self.path / str(shard["path"])
             with np.load(shard_path, allow_pickle=False) as arrays:
                 sources.extend(
                     str(value) for value in arrays["observation_source_sha256"]
                 )
+            if recovery_archive is not None:
+                destination = recovery_archive / shard_path.name
+                if destination.exists():
+                    raise FileExistsError(destination)
+                destinations[str(shard["episode_id"])] = destination
         retained = [
             shard
             for shard in self.manifest["shards"]
@@ -373,7 +384,11 @@ class AppendableAutonomousTrajectoryStore:
             shard_path = (self.path / str(shard["path"])).resolve()
             if shard_path.parent != root:
                 raise ValueError("replay shard path escaped its dataset directory")
-            shard_path.unlink(missing_ok=True)
+            destination = destinations.get(str(shard["episode_id"]))
+            if destination is None:
+                shard_path.unlink(missing_ok=True)
+            else:
+                os.replace(shard_path, destination)
         return tuple(sources)
 
 

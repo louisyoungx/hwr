@@ -137,3 +137,18 @@ def test_appendable_store_prunes_oldest_complete_shards_per_task(tmp_path) -> No
     assert not paths[0].exists() and not paths[1].exists()
     assert paths[2].exists() and paths[3].exists()
     assert verify_autonomous_trajectory_dataset(store.path)["episode_count"] == 2
+
+
+def test_appendable_store_can_stage_pruned_shards_for_crash_recovery(tmp_path) -> None:
+    store = AppendableAutonomousTrajectoryStore(tmp_path, "bounded-v1")
+    old = store.append(_episode(episode_id="old", seed=1))
+    store.append(_episode(episode_id="new", seed=2))
+    archive = tmp_path / "recovery-archive"
+
+    store.prune_to_task_capacities(
+        {"fixture/v1": 4}, recovery_archive=archive
+    )
+
+    assert not old.exists()
+    assert (archive / old.name).is_file()
+    assert [value["episode_id"] for value in store.manifest["shards"]] == ["new"]

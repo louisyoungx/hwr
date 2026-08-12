@@ -196,6 +196,13 @@ SHA-256 同时写入训练 checkpoint。未通过的更新允许保存训练状�
 checkpoint 和部署 artifact 的哈希，并核对源码提交、更新号、任务分区和窗口互不重叠；
 不能只相信报告内的 `passed` 字段。任何缺失、失败或篡改都使训练/评测返回失败。
 
+每个可恢复 checkpoint 还必须原子保存 runner RNG、任务无关采样器、逐 Episode 记录、
+训练 replay manifest 和因果留出 manifest。滚动 replay 在新 `latest.json` 发布前只能把
+待淘汰分片移动到 run 内的恢复暂存区，不能直接删除；异常恢复先回滚到 `latest.json`
+绑定的 manifest，恢复仍被旧 checkpoint 引用的分片，移除未完成周期追加的分片并记录
+恢复事件，然后才能继续采集。这样不会重复使用同一 Episode 序号和训练种子，也不会让
+checkpoint 指向已经被容量裁剪删除的数据。
+
 ## 7. 想象空间强化学习
 
 Actor/Critic 在世界模型产生的潜在轨迹中优化：

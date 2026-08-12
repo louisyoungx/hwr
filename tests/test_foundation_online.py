@@ -43,6 +43,11 @@ from hwr.train.foundation_online import (
     FoundationProviderFactories,
     FoundationTaskInterface,
 )
+from hwr.train.foundation_collection import (
+    AutonomousCollectionConfig,
+    AutonomousEpisodeCollector,
+    RandomRLActionSource,
+)
 from hwr.train.foundation_setup import FoundationLearningStack
 from hwr.train.foundation_trainer import (
     FoundationTrainerConfig,
@@ -375,3 +380,47 @@ def test_online_runner_never_exports_a_failed_causality_deployment(
     resumed.resume_latest()
     with pytest.raises(RuntimeError, match="no causality-qualified deployment"):
         resumed.result()
+
+
+def test_resume_rolls_replay_back_to_last_atomic_checkpoint(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "hwr.train.foundation_online.evaluate_foundation_action_causality_audit",
+        lambda trainer, batches, criteria, shuffle_seed: _diagnostic(True),
+    )
+    config = _config()
+    runner = _runner(tmp_path, config)
+    result = runner.train()
+    snapshot = json.loads(
+        (result.latest_checkpoint / "recovery/replay-manifest.json").read_text()
+    )
+    collector = AutonomousEpisodeCollector(
+        runner.preprocessor,
+        AutonomousCollectionConfig("fixture-env/v1", "abc123", maximum_steps=2),
+    )
+    extra = collector.collect(
+        _Backend(TASK_IDS[0]),
+        RandomRLActionSource(runner.stack.action_scaling),
+        task_id=TASK_IDS[0],
+        seed=999,
+    )
+    extra_path = runner.store.append(extra)
+    archive = tmp_path / "run/recovery/replay-prune-archive"
+    runner.store.prune_to_task_capacities(
+        {task_id: 2 for task_id in TASK_IDS}, recovery_archive=archive
+    )
+
+    resumed = _runner(tmp_path, config)
+    resumed.resume_latest()
+
+    assert resumed.store.manifest == snapshot
+    assert not extra_path.exists()
+    assert not archive.exists()
+    assert len(resumed.records) == len(result.records)
+    assert resumed.completed_cycles == 2
+    recovery = json.loads(
+        (tmp_path / "run/recovery/last-resume.json").read_text()
+    )
+    assert recovery["restored_archived_shards"] == 1
+    assert len(recovery["discarded_uncheckpointed_shards"]) == 1

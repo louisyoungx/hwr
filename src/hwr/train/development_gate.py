@@ -66,6 +66,7 @@ PROTECTED_PATHS = (
     "src/hwr/train/foundation_collection.py",
     "src/hwr/train/foundation_diagnostics.py",
     "src/hwr/train/foundation_online.py",
+    "src/hwr/train/foundation_recovery.py",
     "src/hwr/train/foundation_registry.py",
     "src/hwr/train/foundation_setup.py",
     "src/hwr/train/foundation_trainer.py",
