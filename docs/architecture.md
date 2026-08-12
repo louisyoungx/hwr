@@ -5,7 +5,7 @@
 
 三维拟真实施的冻结决策与验收门槛见：
 
-- [无专家的端到端视觉—语言—双臂训练范式](end-to-end-training-paradigm.md)
+- [基础模型感知、世界模型与想象强化学习范式](foundation-world-model-training-paradigm.md)
 - [ADR-0001：三维物理后端采用 MuJoCo 适配器](adr/0001-mujoco-3d-backend.md)
 - [三维拟真训练平台 V1 实施与验收合同](three-dimensional-v1-acceptance.md)
 
@@ -26,24 +26,30 @@
 
 ```mermaid
 flowchart TB
-    A[apps / CLI] --> B[eval]
+    A[apps / CLI] --> B[evaluation]
     A --> C[train]
     A --> D[scenarios]
     A --> L[render]
     B --> E[policy]
+    B --> M[world_model]
     B --> F[sim]
     B --> G[data]
     C --> E
+    C --> M
+    C --> P[perception]
     C --> G
     C --> H
     D --> F
     F --> H[runtime contracts]
     F --> I[safety]
     E --> H
+    M --> J
+    P --> J
     G --> J[core schemas]
     I --> J
     H --> J
     K[hardware adapters] --> H
+    N[foundation adapters] --> P
     K --> I
     L --> F
     L --> E
@@ -55,10 +61,11 @@ flowchart TB
 2. `runtime`、`data`、`safety` 只依赖 `core`；
 3. `sim` 实现 `runtime`，并使用 `safety`，但不依赖训练代码；
 4. `policy` 只依赖核心 schema 和张量计算接口；
-5. `train` 依赖 `data`、`policy` 和运行时协议，通过注入的环境工厂闭环采样，不导入具体仿真后端；
-6. `eval` 负责组合 `sim`、`policy` 和 `data`；
-7. `scenarios` 只包含场景/任务分布、成功判据和奖励声明，不包含策略、专家或训练循环；
-8. `apps` 和 CLI 是最上层装配入口。
+5. `perception` 和 `world_model` 只依赖核心 schema 与张量接口，第三方基础模型只能从适配器实现其协议；
+6. `train` 依赖 `data`、`perception`、`world_model`、`policy` 和运行时协议，通过注入的环境工厂闭环采样，不导入具体仿真后端；
+7. `evaluation` 负责组合运行时、感知、世界模型、策略和数据；
+8. `scenarios` 只包含场景/任务分布、成功判据和奖励声明，不包含策略、专家或训练循环；
+9. `apps` 和 CLI 是最上层装配入口。
 
 禁止跨层捷径，例如训练器直接读取某个机械臂 SDK，或仿真场景直接调用某个策略类。
 
@@ -82,12 +89,14 @@ flowchart TB
 │   ├── data/                   # Episode、Dataset、校验与迁移
 │   ├── safety/                 # 动作过滤、限位和安全事件
 │   ├── sim/                    # SimBackend 与参考拟真后端
+│   ├── perception/             # 高分辨率预处理、视觉学生和多相机融合
+│   ├── world_model/            # 动作条件 RSSM、预测头和想象 rollout
 │   ├── policy/                 # Policy 协议和模型插件
-│   ├── train/                  # 训练循环和实验产物
-│   ├── eval/                   # 离线与闭环评测
+│   ├── train/                  # 表征、动力学、想象 RL 和在线训练编排
+│   ├── evaluation/             # 表征、世界模型、闭环与反作弊评测
 │   ├── render/                 # 回放采集、二维渲染和视频编码
 │   ├── scenarios/              # 家务场景、任务分布、目标与奖励
-│   ├── adapters/               # 物理引擎、硬件、数据格式适配器
+│   ├── adapters/               # 基础模型、物理引擎、硬件和数据格式适配器
 │   └── apps/                   # CLI 和端到端装配
 ├── configs/
 │   ├── robots/
@@ -165,6 +174,20 @@ flowchart TB
 - 模型序列化和推理；
 - 不负责数据集切分和闭环评测。
 
+### `hwr.perception`
+
+- 定义冻结基础模型连续特征协议、高分辨率视觉预处理、视觉学生和多相机时序融合；
+- 不依赖 Transformers、模型下载服务或具体权重格式；
+- 不输出对象/目标 token、技能、计划或动作；
+- 第三方模型实现只能位于 `hwr.adapters.foundation`。
+
+### `hwr.world_model`
+
+- 实现动作条件 recurrent state-space model、结果预测头和想象 rollout；
+- 只依赖项目核心 schema 与张量接口，不导入 MuJoCo、硬件 SDK 或场景类；
+- 以安全层实际执行动作学习物理因果，不生成专家动作或部署时动作搜索；
+- 提供动作打乱反事实和多步 open-loop 评测接口。
+
 ### `hwr.train`
 
 - 无专家的在线环境采样、经验回放、Actor-Critic 优化、自动课程、检查点和实验 manifest；
@@ -175,7 +198,7 @@ flowchart TB
 - 计算设备选择封装在训练后端；
 - 不读取专家数据、遥操作动作或教师 checkpoint。
 
-### `hwr.eval`
+### `hwr.evaluation`
 
 - 离线误差、闭环成功率和鲁棒性评测；
 - 模型准入门槛与评测报告；
@@ -240,13 +263,8 @@ flowchart LR
 
 ## 7. 当前实施顺序
 
-1. 核心 schema、时钟、运行时协议；
-2. Episode 录制、校验和回放；
-3. 安全动作过滤；
-4. 确定性二维拟真后端；
-5. 三维四轮双臂运行时和 16 维联合动作；
-6. 场景分布、自动成功判据、奖励、终止和合法环境变换；
-7. 无专家的非对称 Actor-Critic、自主经验回放与自动课程；
-8. 双臂必需任务、单臂消融和闭环评测；
-9. 三个家务场景训练；
-10. 真实硬件适配器。
+当前实施受一个统一开发门禁约束。基础模型适配、高分辨率感知、视觉学生、序列数据、
+动作条件世界模型、想象 RL、部署导出、反作弊和闭环评测可以按依赖顺序开发并独立提交，
+但不得在任一模块尚未完成时启动训练。全部实现和测试通过并生成
+`development-ready.json` 后，才进入同时覆盖三个任务的统一正式训练。详细完成定义见
+[当前训练范式](foundation-world-model-training-paradigm.md#9-开发完成定义)。

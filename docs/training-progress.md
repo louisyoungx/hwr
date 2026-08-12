@@ -1,6 +1,6 @@
 # 本机训练进度
 
-本文只记录可复查的训练事实和阶段调整，不替代[训练范式](./end-to-end-training-paradigm.md)与最终验收门槛。
+本文只记录可复查的训练事实和历史调整，不替代[当前训练范式](./foundation-world-model-training-paradigm.md)与最终验收门槛。P076～P080 已冻结为失败基线；统一开发门禁完成前不再启动策略训练。
 
 ## `pilot-074` 检查结论
 

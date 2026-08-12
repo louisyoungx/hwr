@@ -2,7 +2,9 @@
 
 > 状态：已废弃的 V1/V2 行为克隆基线；不得用于当前正式训练
 >
-> 当前方案：[无专家的端到端视觉—语言—双臂训练范式](./end-to-end-training-paradigm.md)
+> 当前方案：[基础模型感知、世界模型与想象强化学习范式](./foundation-world-model-training-paradigm.md)
+>
+> 本文中的旧视觉训练命令只用于复查历史运行。统一开发门禁完成前不得据此启动新训练。
 >
 > 配置：[formal_visual_v1.json](../configs/training/formal_visual_v1.json)
 > 训练结果：[formal_visual_v1_results.json](../configs/training/formal_visual_v1_results.json)

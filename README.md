@@ -21,7 +21,7 @@
 - 三个正式三维家庭场景的 12 个 CC0 纹理网格、许可/哈希锁和可重复转换工具；
 - 客厅、餐厅、厨房 MJCF 装配，含独立视觉/碰撞几何与无执行器物理抽屉。
 
-历史行为克隆、数据聚合和规则专家实现不再属于正式训练路线。当前主线是无专家、无示范的双臂非对称强化学习；MuJoCo 在线训练和评测闭环已经打通，策略仍在训练中，尚未通过三个场景的成功率、稳定时间和单臂消融验收门槛。
+历史行为克隆、数据聚合和规则专家实现不再属于正式训练路线。P076～P080 的小型视觉前端、字符哈希语言输入和直接无模型 Actor-Critic 已确认为失败基线。当前主线重建为“基础模型连续表征、动作条件世界模型和想象空间强化学习”；所有开发与总门禁完成前不启动正式训练。
 
 ## 快速开始
 
@@ -63,7 +63,8 @@ hwr-render-benchmarks --output-path artifacts/benchmark-rollouts.mp4
 ## 文档
 
 - [平台架构与模块边界](docs/architecture.md)
-- [无专家的端到端视觉—语言—双臂训练范式](docs/end-to-end-training-paradigm.md)
+- [基础模型感知、世界模型与想象强化学习范式](docs/foundation-world-model-training-paradigm.md)
+- [历史端到端训练范式](docs/end-to-end-training-paradigm.md)
 - [本机训练进度与阶段诊断](docs/training-progress.md)
 - [训练与拟真环境方案](docs/training-and-simulation-plan.md)
 - [万元内平台方案](docs/low-cost-platform-proposal.md)
