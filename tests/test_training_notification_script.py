@@ -23,19 +23,36 @@ def _fake_lark_cli(tmp_path: Path) -> tuple[Path, Path]:
     return binary_dir, arguments_path
 
 
-def _run_wrapper(tmp_path: Path, training_exit: int) -> subprocess.CompletedProcess[str]:
+def _run_wrapper(
+    tmp_path: Path,
+    training_exit: int,
+    *,
+    run_root: str = "runs/bimanual-rl",
+    versioned_checkpoint: bool = False,
+) -> subprocess.CompletedProcess[str]:
     binary_dir, arguments_path = _fake_lark_cli(tmp_path)
     run_id = "pilot-test"
-    command = (
-        "mkdir -p runs/bimanual-rl/pilot-test; "
-        "printf '{}\\n' > runs/bimanual-rl/pilot-test/episodes.jsonl; "
-        "printf checkpoint > runs/bimanual-rl/pilot-test/training-checkpoint.pt; "
-        f"exit {training_exit}"
-    )
+    run_path = f"{run_root}/{run_id}"
+    if versioned_checkpoint:
+        command = (
+            f"mkdir -p {run_path}/checkpoints/update-000000200; "
+            f"printf '{{}}\\n' > {run_path}/episodes.jsonl; "
+            f"printf checkpoint > {run_path}/checkpoints/update-000000200/training-state.pt; "
+            f"printf '{{\"training_checkpoint\":\"checkpoints/update-000000200\"}}\\n' "
+            f"> {run_path}/latest.json; exit {training_exit}"
+        )
+    else:
+        command = (
+            f"mkdir -p {run_path}; "
+            f"printf '{{}}\\n' > {run_path}/episodes.jsonl; "
+            f"printf checkpoint > {run_path}/training-checkpoint.pt; "
+            f"exit {training_exit}"
+        )
     environment = os.environ.copy()
     environment.update(
         PATH=f"{binary_dir}:{environment['PATH']}",
         LARK_ARGUMENTS=str(arguments_path),
+        HWR_TRAINING_RUN_ROOT=run_root,
     )
     result = subprocess.run(
         (
@@ -128,3 +145,18 @@ def test_training_wrapper_preserves_training_failure_status(tmp_path: Path) -> N
     arguments = result.lark_arguments  # type: ignore[attr-defined]
     assert "训练异常退出" in arguments
     assert "状态码: 7" in arguments
+
+
+def test_training_wrapper_resolves_versioned_foundation_checkpoint(tmp_path: Path) -> None:
+    result = _run_wrapper(
+        tmp_path,
+        training_exit=0,
+        run_root="runs/foundation-world-model",
+        versioned_checkpoint=True,
+    )
+
+    assert result.returncode == 0
+    arguments = result.lark_arguments  # type: ignore[attr-defined]
+    assert "runs/foundation-world-model/pilot-test" in arguments
+    assert "checkpoints/update-000000200/training-state.pt" in arguments
+    assert "Checkpoint SHA-256: missing" not in arguments

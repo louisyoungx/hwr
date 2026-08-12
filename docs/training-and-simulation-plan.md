@@ -587,6 +587,8 @@ scripts/run_training_with_lark_notify.sh RUN_ID LOG_PATH COMMAND [ARG ...]
 ```
 
 包装器会保留训练退出码，汇总 Episode 数、checkpoint 哈希、源码提交和产物路径，再调用统一消息脚本通知。
+默认运行根目录为 `runs/bimanual-rl`；其他训练谱系通过 `HWR_TRAINING_RUN_ROOT` 指定。包装器
+会优先读取 run 的 `latest.json`，解析版本化 checkpoint 并计算实际 `training-state.pt` 哈希。
 
 ## 13. 实施阶段
 

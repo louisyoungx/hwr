@@ -16,6 +16,7 @@ notification_script="$script_dir/send_lark_agent_message.sh"
 mkdir -p "$(dirname "$log_path")"
 started_at="$(date '+%Y-%m-%d %H:%M:%S %Z')"
 source_commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+run_root="${HWR_TRAINING_RUN_ROOT:-runs/bimanual-rl}"
 
 printf 'training run: %s\nstarted: %s\nsource commit: %s\ncommand:' \
   "$run_id" "$started_at" "$source_commit" | tee -a "$log_path"
@@ -26,9 +27,19 @@ printf '\n' | tee -a "$log_path"
 training_status="${PIPESTATUS[0]}"
 
 ended_at="$(date '+%Y-%m-%d %H:%M:%S %Z')"
-run_path="runs/bimanual-rl/$run_id"
+run_path="$run_root/$run_id"
 episode_path="$run_path/episodes.jsonl"
 checkpoint_path="$run_path/training-checkpoint.pt"
+latest_path="$run_path/latest.json"
+if [[ -f "$latest_path" ]]; then
+  checkpoint_relative="$(python3 -c \
+    'import json, sys; print(json.load(open(sys.argv[1]))["training_checkpoint"])' \
+    "$latest_path" 2>/dev/null || true)"
+  candidate="$run_path/$checkpoint_relative/training-state.pt"
+  if [[ -n "$checkpoint_relative" && -f "$candidate" ]]; then
+    checkpoint_path="$candidate"
+  fi
+fi
 episode_count=0
 checkpoint_sha256="missing"
 if [[ -f "$episode_path" ]]; then
@@ -43,9 +54,9 @@ if [[ "$training_status" -eq 0 ]]; then
 else
   outcome="训练异常退出"
 fi
-message="$(printf '%s\nRun: %s\n状态码: %s\nEpisode 记录数: %s\nCheckpoint SHA-256: %s\n源码提交: %s\n结束时间: %s\n日志: %s\n运行目录: %s\n请重启 Codex 任务，我会从该结果继续。' \
+message="$(printf '%s\nRun: %s\n状态码: %s\nEpisode 记录数: %s\nCheckpoint: %s\nCheckpoint SHA-256: %s\n源码提交: %s\n结束时间: %s\n日志: %s\n运行目录: %s\n请重启 Codex 任务，我会从该结果继续。' \
   "$outcome" "$run_id" "$training_status" "$episode_count" \
-  "$checkpoint_sha256" "$source_commit" "$ended_at" "$log_path" "$run_path")"
+  "$checkpoint_path" "$checkpoint_sha256" "$source_commit" "$ended_at" "$log_path" "$run_path")"
 idempotency_key="$(printf '%s:%s' "$run_id" "$ended_at" | shasum -a 256 | cut -c1-32)"
 "$notification_script" \
   --idempotency-key "$idempotency_key" \
