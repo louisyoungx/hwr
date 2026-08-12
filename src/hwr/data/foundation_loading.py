@@ -84,6 +84,9 @@ class FoundationSequenceBatchLoader:
     def legal_transform_ids(self, index: int) -> tuple[str, ...]:
         return tuple(self.windows.shard_metadata(index)["legal_transform_ids"])
 
+    def window_metadata(self, index: int) -> dict[str, object]:
+        return self.windows.window_metadata(index)
+
     def build(self, indices: Sequence[int]) -> FoundationTrainingBatch:
         if not indices:
             raise ValueError("foundation batch requires at least one sequence window")

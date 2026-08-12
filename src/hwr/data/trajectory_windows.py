@@ -65,6 +65,14 @@ class AutonomousTrajectoryWindows:
         location = self.indices[index]
         return dict(self.manifest["shards"][location.shard_index])
 
+    def window_metadata(self, index: int) -> dict[str, object]:
+        location = self.indices[index]
+        return {
+            **self.shard_metadata(index),
+            "transition_start": location.transition_start,
+            "transition_stop": location.transition_start + self.transitions,
+        }
+
     def _load_shard(self, index: int) -> dict[str, np.ndarray]:
         if self._cached_shard != index:
             shard = self.manifest["shards"][index]

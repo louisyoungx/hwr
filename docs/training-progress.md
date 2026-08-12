@@ -29,6 +29,8 @@ P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为�
   提案与安全层实际执行动作；
 - RSSM transition 和想象 rollout 使用与真实回放相同的物理动作单位；
 - 三个任务共享一个采集器、缓存、batch loader、Trainer、Actor 和 checkpoint 谱系；
+- 动作因果门禁使用每任务两个固定随机 RL Episode 的独立留出库，训练优化器永远不可见；
+  每任务八个互不重叠窗口以及全局汇总必须分别通过，报告同时绑定训练与留出 manifest；
 - 横向反射只能由环境声明，通用增强器变换视觉、动态标定、本体、动作和连续教师特征；
 - 部署导出只含视觉学生、RSSM posterior state filter 和 Actor，不含基础教师、Critic、
   reward/continue/safety 预测头或训练优化器；
@@ -67,7 +69,9 @@ P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为�
 动作只能来自 replay 中的安全层实际执行动作；打乱动作误差比至少 `1.05`，至少 `60%` 的
 horizon 恶化。每次更新的报告绑定源码、数据 manifest 与 checkpoint 哈希。失败更新只保留
 训练 checkpoint，不能导出部署模型；固定种子评测会再次校验训练 checkpoint、部署 manifest
-和报告三者的哈希一致性。正式 batch 由 4 调整为 2，以适配 48 GB MPS 的视觉反向传播峰值，
+和报告三者的哈希一致性。因果审计后来进一步从“最后一个训练 batch”迁移到按任务均衡、
+与优化器物理分离的固定留出库，消除了样本泄漏、两序列小样本和强任务掩盖弱任务的问题。
+正式 batch 由 4 调整为 2，以适配 48 GB MPS 的视觉反向传播峰值，
 模型、总更新次数、三任务范围和最终 180 Episode 验收均不减少。
 
 `foundation-wm-002` 在提交 `e6edf67` 上完成三任务各一个随机探索 Episode，共 4,000 条

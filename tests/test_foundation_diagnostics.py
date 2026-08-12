@@ -11,7 +11,7 @@ def test_action_causality_report_is_published_as_one_immutable_directory(
     tmp_path,
 ) -> None:
     diagnostic = {
-        "schema_version": "hwr.foundation-action-causality/v1",
+        "schema_version": "hwr.foundation-action-causality/v2",
         "action_source": "actual_executed_action",
         "report": {"shuffled_to_true_ratio": 1.2},
         "assessment": {"passed": True},
@@ -23,13 +23,15 @@ def test_action_causality_report_is_published_as_one_immutable_directory(
         diagnostic,
         source_commit="abc123",
         update_count=1,
-        data_manifest_sha256="d" * 64,
+        training_data_manifest_sha256="d" * 64,
+        audit_data_manifest_sha256="e" * 64,
     )
 
     value = json.loads(output.read_text())
     assert output == target / "report.json"
     assert value["source_commit"] == "abc123"
-    assert value["data_manifest_sha256"] == "d" * 64
+    assert value["training_data_manifest_sha256"] == "d" * 64
+    assert value["audit_data_manifest_sha256"] == "e" * 64
     assert not list(tmp_path.glob(".update-000000001-*"))
     with pytest.raises(FileExistsError):
         publish_action_causality_report(
@@ -37,5 +39,6 @@ def test_action_causality_report_is_published_as_one_immutable_directory(
             diagnostic,
             source_commit="abc123",
             update_count=1,
-            data_manifest_sha256="d" * 64,
+            training_data_manifest_sha256="d" * 64,
+            audit_data_manifest_sha256="e" * 64,
         )

@@ -247,7 +247,7 @@ def _stack() -> FoundationLearningStack:
 def _diagnostic(passed: bool) -> dict[str, object]:
     ratio = 1.2 if passed else 1.0
     return {
-        "schema_version": "hwr.foundation-action-causality/v1",
+        "schema_version": "hwr.foundation-action-causality/v2",
         "action_source": "actual_executed_action",
         "report": {"shuffled_to_true_ratio": ratio},
         "assessment": {
@@ -291,6 +291,9 @@ def _config(*, episodes: int = 6) -> FoundationOnlineTrainingConfig:
             camera_height=160,
             replay_transition_capacity=6,
             published_checkpoint_retention=1,
+            causality_holdout_episodes_per_task=1,
+            causality_audit_windows_per_task=1,
+            causality_audit_batch_size=1,
             seed=7,
         )
 
@@ -299,8 +302,8 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.setattr(
-        "hwr.train.foundation_online.evaluate_foundation_action_causality",
-        lambda trainer, batch, criteria: _diagnostic(True),
+        "hwr.train.foundation_online.evaluate_foundation_action_causality_audit",
+        lambda trainer, batches, criteria, shuffle_seed: _diagnostic(True),
     )
     config = _config()
     runner = _runner(tmp_path, config)
@@ -332,6 +335,8 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
         "training_diagnostics"
     ]
     assert runner.store.manifest["transition_count"] <= 6
+    assert runner.causality_store.manifest["episode_count"] == 3
+    assert runner.causality_store.manifest["transition_count"] == 6
     assert len(list((tmp_path / "run/checkpoints").glob("update-*"))) == 1
     assert len(list((tmp_path / "run/deployments").glob("update-*"))) == 1
     assert runner.task_sampler.audit()["distance_thresholds"] is False
@@ -352,8 +357,8 @@ def test_online_runner_never_exports_a_failed_causality_deployment(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.setattr(
-        "hwr.train.foundation_online.evaluate_foundation_action_causality",
-        lambda trainer, batch, criteria: _diagnostic(False),
+        "hwr.train.foundation_online.evaluate_foundation_action_causality_audit",
+        lambda trainer, batches, criteria, shuffle_seed: _diagnostic(False),
     )
     runner = _runner(tmp_path, _config(episodes=3))
 

@@ -11,7 +11,10 @@ from hwr.perception.student_objectives import (
 from hwr.policy.latent_actor import LatentActor, LatentActorConfig
 from hwr.policy.latent_value import LatentValueModel
 from hwr.train.foundation_batch import FoundationTrainingBatch
-from hwr.train.foundation_diagnostics import evaluate_foundation_action_causality
+from hwr.train.foundation_diagnostics import (
+    evaluate_foundation_action_causality,
+    evaluate_foundation_action_causality_audit,
+)
 from hwr.train.foundation_trainer import (
     FoundationTrainerConfig,
     FoundationWorldModelTrainer,
@@ -20,6 +23,7 @@ from hwr.train.imagination_rl import ImaginationRLConfig
 from hwr.world_model import (
     ActionCausalityCriteria,
     ActionConditionedWorldModel,
+    CounterfactualCausalityReport,
     WorldModelConfig,
     WorldModelLoss,
     WorldModelLossConfig,
@@ -182,3 +186,35 @@ def test_foundation_diagnostic_uses_all_actual_outcome_targets() -> None:
         "safety",
     )
     assert diagnostic["assessment"]["horizon_count"] == 2
+    assert diagnostic["counterfactual_transform"] == (
+        "deterministic-global-derangement/v1"
+    )
+
+
+def test_foundation_causality_audit_requires_every_task_partition(
+    monkeypatch,
+) -> None:
+    passing = CounterfactualCausalityReport(
+        1.0, 1.2, 1.2, (1.0, 1.0), (1.2, 1.2), (0.1, 0.1)
+    )
+    failing = CounterfactualCausalityReport(
+        1.0, 0.9, 0.9, (1.0, 1.0), (0.9, 0.9), (0.1, 0.1)
+    )
+    monkeypatch.setattr(
+        "hwr.train.foundation_diagnostics._evaluate_batch_report",
+        lambda trainer, batch, shuffle_seed: passing if shuffle_seed < 19 else failing,
+    )
+    batch = _batch(_visual_config())
+
+    diagnostic = evaluate_foundation_action_causality_audit(
+        _trainer(),
+        {"task-a/v1": (batch, batch), "task-b/v1": (batch,)},
+        ActionCausalityCriteria(1.05, 0.60),
+        shuffle_seed=17,
+    )
+
+    assert diagnostic["window_count"] == 3
+    assert diagnostic["batch_count"] == 3
+    assert diagnostic["assessment"]["aggregate_passed"] is True
+    assert diagnostic["assessment"]["all_partitions_passed"] is False
+    assert diagnostic["assessment"]["passed"] is False

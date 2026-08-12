@@ -4,6 +4,7 @@ from scripts.verify_development_ready import (
     FOUNDATION_ALGORITHM_PATHS,
     _algorithm_audit,
     _committed_snapshot,
+    _configuration_audit,
     _model_selection_audit,
     parse_args,
 )
@@ -40,3 +41,15 @@ def test_foundation_model_selection_is_bound_across_source_lock_and_runtime() ->
 
     assert report["passed"] is True
     assert "dinov3-vits16-pretrain-lvd1689m" in report["models"]
+
+
+def test_formal_causality_audit_uses_task_balanced_optimizer_disjoint_data() -> None:
+    report = _configuration_audit(ROOT)
+
+    assert report["causality_holdout_episodes_per_task"] >= 2
+    assert report["causality_audit_windows_per_task"] >= 8
+    assert (
+        report["causality_audit_windows_per_task"]
+        % report["causality_audit_batch_size"]
+        == 0
+    )

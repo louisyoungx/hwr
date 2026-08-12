@@ -43,8 +43,14 @@ from hwr.train.foundation_collection import (
     RandomRLActionSource,
 )
 from hwr.train.foundation_diagnostics import (
-    evaluate_foundation_action_causality,
+    evaluate_foundation_action_causality_audit,
     publish_action_causality_report,
+)
+from hwr.train.foundation_holdout import (
+    causality_batches_by_task,
+    causality_window_manifest,
+    collect_causality_holdout,
+    select_causality_windows,
 )
 from hwr.train.foundation_registry import (
     export_foundation_deployment,
@@ -86,6 +92,9 @@ class FoundationOnlineTrainingConfig:
     published_checkpoint_retention: int = 3
     minimum_action_causality_ratio: float = 1.05
     minimum_action_causality_horizon_fraction: float = 0.60
+    causality_holdout_episodes_per_task: int = 2
+    causality_audit_windows_per_task: int = 8
+    causality_audit_batch_size: int = 2
     seed: int = 20260812
 
     def __post_init__(self) -> None:
@@ -101,6 +110,9 @@ class FoundationOnlineTrainingConfig:
             self.checkpoint_interval_cycles,
             self.replay_transition_capacity,
             self.published_checkpoint_retention,
+            self.causality_holdout_episodes_per_task,
+            self.causality_audit_windows_per_task,
+            self.causality_audit_batch_size,
         )
         if min(positive) <= 0 or self.seed < 0:
             raise ValueError("foundation online training dimensions are invalid")
@@ -112,6 +124,8 @@ class FoundationOnlineTrainingConfig:
             raise ValueError("foundation online training requires high-resolution cameras")
         if self.replay_transition_capacity < self.sequence_transitions * 3:
             raise ValueError("foundation replay capacity cannot retain one window per task")
+        if self.causality_audit_windows_per_task % self.causality_audit_batch_size:
+            raise ValueError("causality audit batch size must divide task window count")
         ActionCausalityCriteria(
             self.minimum_action_causality_ratio,
             self.minimum_action_causality_horizon_fraction,
@@ -189,6 +203,9 @@ class FoundationOnlineTrainingRunner:
         self.store = AppendableAutonomousTrajectoryStore(
             self.run_path / "replay", "autonomous"
         )
+        self.causality_store = AppendableAutonomousTrajectoryStore(
+            self.run_path / "causality-holdout", "autonomous"
+        )
         self.cache = FoundationFeatureCache(self.run_path / "feature-cache")
         self.task_sampler = OutcomeAdaptiveTaskSampler(self.task_ids)
         self.rng = np.random.default_rng(config.seed)
@@ -208,11 +225,13 @@ class FoundationOnlineTrainingRunner:
         }
         cycle = 0
         try:
+            self._prepare_causality_holdout(environments)
             while len(self.records) < self.config.episodes:
                 collected = self._collect_cycle(environments)
                 self._bound_replay_storage()
-                prepared = self._materialize_features()
+                prepared, causality_prepared = self._materialize_features()
                 metrics = self._update_cycle(prepared)
+                self._evaluate_action_causality(causality_prepared, metrics)
                 self._record_learning_outcomes(collected, metrics)
                 cycle += 1
                 if cycle % self.config.checkpoint_interval_cycles == 0:
@@ -221,7 +240,8 @@ class FoundationOnlineTrainingRunner:
             for environment in environments.values():
                 environment.close()
         if self.latest_checkpoint is None:
-            prepared = self._materialize_features()
+            prepared, causality_prepared = self._materialize_features()
+            self._evaluate_action_causality(causality_prepared, {})
             self._checkpoint(cycle, prepared)
         return self.result()
 
@@ -342,6 +362,20 @@ class FoundationOnlineTrainingRunner:
             device=device,
         )
 
+    def _prepare_causality_holdout(
+        self, environments: Mapping[str, RuntimeBackend]
+    ) -> None:
+        collect_causality_holdout(
+            self.causality_store,
+            environments,
+            {task_id: task.maximum_steps for task_id, task in self.tasks.items()},
+            self.preprocessor,
+            self.stack.action_scaling,
+            episodes_per_task=self.config.causality_holdout_episodes_per_task,
+            base_seed=self.config.seed,
+            source_commit=self.source_commit,
+        )
+
     def _language_resolver(self) -> StaticLanguageFeatureResolver:
         features = {}
         language_index_path = self.run_path / "features/language.json"
@@ -363,9 +397,13 @@ class FoundationOnlineTrainingRunner:
             output_dimension=index.output_dimension,
         )
 
-    def _materialize_features(self) -> FoundationPreparedFeatures:
+    def _materialize_features(
+        self,
+    ) -> tuple[FoundationPreparedFeatures, FoundationPreparedFeatures]:
         output = self.run_path / "features"
+        causality_output = self.run_path / "causality-holdout/features"
         output.mkdir(parents=True, exist_ok=True)
+        causality_output.mkdir(parents=True, exist_ok=True)
         vision_language_provider = self.providers.vision_language()
         vision_language = materialize_visual_features(
             self.store.path,
@@ -373,6 +411,13 @@ class FoundationOnlineTrainingRunner:
             self.preprocessor,
             vision_language_provider,
             output / "vision-language.json",
+        )
+        causality_vision_language = materialize_visual_features(
+            self.causality_store.path,
+            self.cache,
+            self.preprocessor,
+            vision_language_provider,
+            causality_output / "vision-language.json",
         )
         del vision_language_provider
         gc.collect()
@@ -384,6 +429,13 @@ class FoundationOnlineTrainingRunner:
             dense,
             output / "dense-vision.json",
         )
+        causality_dense_vision = materialize_visual_features(
+            self.causality_store.path,
+            self.cache,
+            self.preprocessor,
+            dense,
+            causality_output / "dense-vision.json",
+        )
         del dense
         gc.collect()
         language_provider = self.providers.language()
@@ -393,9 +445,22 @@ class FoundationOnlineTrainingRunner:
             language_provider,
             output / "language.json",
         )
+        causality_language = materialize_language_features(
+            self.causality_store.path,
+            self.cache,
+            language_provider,
+            causality_output / "language.json",
+        )
         del language_provider
         gc.collect()
-        return FoundationPreparedFeatures(vision_language, dense_vision, language)
+        return (
+            FoundationPreparedFeatures(vision_language, dense_vision, language),
+            FoundationPreparedFeatures(
+                causality_vision_language,
+                causality_dense_vision,
+                causality_language,
+            ),
+        )
 
     def _bound_replay_storage(self) -> None:
         base, remainder = divmod(
@@ -436,34 +501,60 @@ class FoundationOnlineTrainingRunner:
             device=str(next(self.stack.trainer.actor.parameters()).device),
         )
         metrics: list[dict[str, float]] = []
-        last_batch = None
         for _ in range(self.config.updates_per_cycle):
             indices = self.rng.integers(0, len(loader), size=self.config.batch_size)
             batch = loader.build([int(value) for value in indices])
             transforms = [self._sample_transform(loader, int(value)) for value in indices]
             batch = transform_foundation_batch(batch, transforms)
             metrics.append(self.stack.trainer.train_step(batch))
-            last_batch = batch
-        assert last_batch is not None
-        self.latest_action_causality = evaluate_foundation_action_causality(
-            self.stack.trainer,
-            last_batch,
-            ActionCausalityCriteria(
-                self.config.minimum_action_causality_ratio,
-                self.config.minimum_action_causality_horizon_fraction,
-            ),
-        )
         names = metrics[0]
         result = {
             name: float(sum(item[name] for item in metrics) / len(metrics))
             for name in names
         }
-        assessment = self.latest_action_causality["assessment"]
-        result["world/action_causality_ratio"] = float(
+        return result
+
+    def _evaluate_action_causality(
+        self,
+        prepared: FoundationPreparedFeatures,
+        metrics: dict[str, float],
+    ) -> None:
+        loader = FoundationSequenceBatchLoader(
+            self.causality_store.path,
+            self.cache,
+            self.preprocessor,
+            self.stack.trainer.visual_student.config,
+            prepared,
+            transitions=self.config.sequence_transitions,
+            device=str(next(self.stack.trainer.actor.parameters()).device),
+        )
+        selected = select_causality_windows(
+            loader,
+            self.task_ids,
+            windows_per_task=self.config.causality_audit_windows_per_task,
+            selection_seed=self.config.seed,
+        )
+        diagnostic = evaluate_foundation_action_causality_audit(
+            self.stack.trainer,
+            causality_batches_by_task(
+                loader,
+                selected,
+                batch_size=self.config.causality_audit_batch_size,
+            ),
+            ActionCausalityCriteria(
+                self.config.minimum_action_causality_ratio,
+                self.config.minimum_action_causality_horizon_fraction,
+            ),
+            shuffle_seed=self.config.seed,
+        )
+        diagnostic["window_selection"] = causality_window_manifest(loader, selected)
+        diagnostic["holdout_collector"] = "foundation-causality-holdout/v1"
+        self.latest_action_causality = diagnostic
+        assessment = diagnostic["assessment"]
+        metrics["world/action_causality_ratio"] = float(
             assessment["shuffled_to_true_ratio"]
         )
-        result["world/action_causality_passed"] = float(assessment["passed"])
-        return result
+        metrics["world/action_causality_passed"] = float(assessment["passed"])
 
     def _sample_transform(
         self, loader: FoundationSequenceBatchLoader, index: int
@@ -527,13 +618,17 @@ class FoundationOnlineTrainingRunner:
         if self.latest_action_causality is None:
             raise RuntimeError("checkpoint requires action causality evidence")
         dataset_sha = file_sha256(self.store.path / "manifest.json")
+        audit_dataset_sha = file_sha256(
+            self.causality_store.path / "manifest.json"
+        )
         version = f"update-{self.stack.trainer.update_count:09d}"
         causality = publish_action_causality_report(
             self.run_path / "diagnostics/action-causality" / version,
             self.latest_action_causality,
             source_commit=self.source_commit,
             update_count=self.stack.trainer.update_count,
-            data_manifest_sha256=dataset_sha,
+            training_data_manifest_sha256=dataset_sha,
+            audit_data_manifest_sha256=audit_dataset_sha,
         )
         causality_sha = registry_file_sha256(causality)
         training_diagnostics = {

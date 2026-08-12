@@ -188,6 +188,15 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
         raise RuntimeError("formal action causality ratio is not a degradation gate")
     if float(online["minimum_action_causality_horizon_fraction"]) < 0.5:
         raise RuntimeError("formal action causality horizon gate is too weak")
+    holdout_episodes = int(online["causality_holdout_episodes_per_task"])
+    audit_windows = int(online["causality_audit_windows_per_task"])
+    audit_batch = int(online["causality_audit_batch_size"])
+    if holdout_episodes < 2:
+        raise RuntimeError("formal causality audit needs two holdout Episodes per task")
+    if audit_windows < 8:
+        raise RuntimeError("formal causality audit has too few windows per task")
+    if audit_batch <= 0 or audit_windows % audit_batch:
+        raise RuntimeError("formal causality audit batch does not partition task windows")
     if int(online["batch_size"]) > 2:
         raise RuntimeError("formal visual batch exceeds the verified 48 GB envelope")
     trainer = stack.trainer
@@ -223,6 +232,9 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
         "action_causality_horizon_fraction": online[
             "minimum_action_causality_horizon_fraction"
         ],
+        "causality_holdout_episodes_per_task": holdout_episodes,
+        "causality_audit_windows_per_task": audit_windows,
+        "causality_audit_batch_size": audit_batch,
         "formal_batch_size": online["batch_size"],
     }
 
