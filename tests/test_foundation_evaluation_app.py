@@ -6,6 +6,7 @@ import pytest
 from hwr.apps.evaluate_foundation_world_model import (
     ABLATIONS,
     _require_action_causality,
+    _unseen_seeds,
     _video_acceptance,
     build_parser,
 )
@@ -25,6 +26,25 @@ def test_foundation_evaluation_has_no_exploration_or_training_switch() -> None:
     assert "exploration" not in destinations
     assert "train" not in destinations
     assert "expert" not in destinations
+
+
+def test_unseen_seeds_exclude_training_and_causality_holdout(tmp_path) -> None:
+    run = tmp_path / "run"
+    _write_json(
+        run / "run-manifest.json",
+        {"training_config": {"seed": 100}},
+    )
+    (run / "episodes.jsonl").write_text(
+        json.dumps({"seed": 500}) + "\n", encoding="utf-8"
+    )
+    _write_json(
+        run / "causality-holdout/autonomous/manifest.json",
+        {"shards": [{"seed": 105229}]},
+    )
+
+    seeds = _unseen_seeds(run, 3, 500)
+
+    assert seeds == (209958, 314687, 419416)
 
 
 def test_video_evidence_requires_successful_uncut_four_view_episode_per_task() -> None:

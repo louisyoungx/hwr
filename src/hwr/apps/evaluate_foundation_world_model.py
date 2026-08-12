@@ -211,9 +211,13 @@ def _unseen_seeds(
         for line in (run_path / "episodes.jsonl").read_text().splitlines()
         if line
     }
+    holdout = _read_json(
+        run_path / "causality-holdout/autonomous/manifest.json"
+    )
+    seen = training | {int(shard["seed"]) for shard in holdout["shards"]}
     seeds: list[int] = []
     while len(seeds) < count:
-        if start not in training:
+        if start not in seen:
             seeds.append(start)
         start += 104729
     return tuple(seeds)
@@ -437,6 +441,7 @@ def _artifact_manifest(
         "action_causality_report": str(causality),
         "action_causality_report_sha256": _sha256(causality),
         "unseen_seeds": list(seeds),
+        "seed_exclusions": ["training_episodes", "causality_holdout"],
         "ablations": list(ABLATIONS),
         "videos": list(videos),
         "artifacts": {
