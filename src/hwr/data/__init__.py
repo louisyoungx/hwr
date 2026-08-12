@@ -54,6 +54,26 @@ _EXPORTS = {
         "hwr.data.trajectory_windows",
         "AutonomousTrajectoryWindows",
     ),
+    "FoundationFeatureIndex": (
+        "hwr.data.foundation_features",
+        "FoundationFeatureIndex",
+    ),
+    "materialize_language_features": (
+        "hwr.data.foundation_features",
+        "materialize_language_features",
+    ),
+    "materialize_visual_features": (
+        "hwr.data.foundation_features",
+        "materialize_visual_features",
+    ),
+    "FoundationPreparedFeatures": (
+        "hwr.data.foundation_loading",
+        "FoundationPreparedFeatures",
+    ),
+    "FoundationSequenceBatchLoader": (
+        "hwr.data.foundation_loading",
+        "FoundationSequenceBatchLoader",
+    ),
 }
 
 __all__ = sorted(_EXPORTS)
