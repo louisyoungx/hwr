@@ -98,12 +98,27 @@ class LatentActor(nn.Module):
         return mean, log_standard_deviation
 
     def sample(
-        self, latent: torch.Tensor, *, deterministic: bool = False
+        self,
+        latent: torch.Tensor,
+        *,
+        deterministic: bool = False,
+        generator: torch.Generator | None = None,
     ) -> LatentActorSample:
         mean, log_standard_deviation = self.distribution_parameters(latent)
         standard_deviation = log_standard_deviation.exp()
         normal = torch.distributions.Normal(mean, standard_deviation)
-        raw = mean if deterministic else normal.rsample()
+        if deterministic:
+            raw = mean
+        elif generator is None:
+            raw = normal.rsample()
+        else:
+            noise = torch.randn(
+                mean.shape,
+                dtype=mean.dtype,
+                device=mean.device,
+                generator=generator,
+            )
+            raw = mean + standard_deviation * noise
         action = self._transform(raw)
         mean_action = self._transform(mean)
         component_log_probability = normal.log_prob(raw) - self._log_abs_jacobian(raw)

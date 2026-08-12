@@ -183,7 +183,9 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
     )
     if len(tasks) != 3:
         raise RuntimeError("formal configuration must expose exactly three tasks")
-    stack = build_foundation_learning_stack(root / "configs/foundation")
+    stack = build_foundation_learning_stack(
+        root / "configs/foundation", seed=0
+    )
     online = json.loads(
         (root / "configs/foundation/online-training-v1.json").read_text(
             encoding="utf-8"

@@ -164,6 +164,13 @@ DINOv3 适配器的依赖审计发现，当前 Transformers 只提供
 `2.13.x` / torchvision `0.28.x` 配套版本，适配器改为显式 Fast，开发门禁会在权重审计前
 实例化处理器并记录三个运行库版本。
 
+恢复链路的随机性审计又发现，新 runner 的旧快照只保存 NumPy 状态，RSSM categorical
+采样和 imagined rollout 使用的 Torch 随机流没有进入 checkpoint；同时自主采集 Actor
+忽略了 Episode seed。现在正式模型栈在构造参数前由训练配置 seed 初始化，随机 Actor 使用
+Episode 私有设备生成器，恢复 schema 升为 `hwr.foundation-runner-recovery/v2` 并原子保存
+CPU 及实际训练设备的 Torch RNG。固定回归已验证 CPU 快照恢复后的下一段随机数完全一致，
+真实 MPS smoke test 也验证了 `cpu+mps` 双状态可以逐位恢复。
+
 门禁通过后才允许执行：
 
 ```bash

@@ -6,6 +6,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+import torch
+
 from hwr.perception.student import VisualStudentConfig, VisualStudentModel
 from hwr.perception.student_objectives import (
     VisualFoundationObjectives,
@@ -38,8 +40,11 @@ def _config(path: Path) -> dict[str, object]:
 
 
 def build_foundation_learning_stack(
-    config_root: Path, *, device: str = "cpu"
+    config_root: Path, *, device: str = "cpu", seed: int
 ) -> FoundationLearningStack:
+    if seed < 0:
+        raise ValueError("foundation initialization seed cannot be negative")
+    torch.manual_seed(seed)
     visual_values = _config(config_root / "visual-student-v1.json")
     visual_values["backbone_dimensions"] = tuple(visual_values["backbone_dimensions"])
     visual_values["backbone_depths"] = tuple(visual_values["backbone_depths"])

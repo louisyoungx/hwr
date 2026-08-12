@@ -22,13 +22,14 @@ from hwr.data.autonomous_trajectory import (
 )
 
 
-RECOVERY_SCHEMA = "hwr.foundation-runner-recovery/v1"
+RECOVERY_SCHEMA = "hwr.foundation-runner-recovery/v2"
 
 
 @dataclass(frozen=True)
 class RestoredRunnerState:
     cycle: int
     rng_state: Mapping[str, Any]
+    torch_rng_state: Mapping[str, Any]
     task_sampler: Mapping[str, Any]
     records: tuple[dict[str, Any], ...]
     discarded_observation_sources: tuple[str, ...]
@@ -43,6 +44,7 @@ def publish_runner_progress(
     cycle: int,
     update_count: int,
     rng_state: Mapping[str, Any],
+    torch_rng_state: Mapping[str, Any],
     task_sampler: Mapping[str, Any],
     records: Sequence[Mapping[str, Any]],
     replay_manifest: Mapping[str, Any],
@@ -54,6 +56,7 @@ def publish_runner_progress(
     state = {
         "cycle": cycle,
         "rng_state": dict(rng_state),
+        "torch_rng_state": dict(torch_rng_state),
         "task_sampler": dict(task_sampler),
         "records": [dict(value) for value in records],
     }
@@ -176,6 +179,7 @@ def restore_runner_progress(
     return RestoredRunnerState(
         int(state["cycle"]),
         state["rng_state"],
+        state["torch_rng_state"],
         state["task_sampler"],
         records,
         tuple(
@@ -184,6 +188,41 @@ def restore_runner_progress(
             for source in shard["observation_source_sha256"]
         ),
     )
+
+
+def capture_torch_rng_state(device: str | torch.device) -> dict[str, Any]:
+    """Capture every global Torch generator used by one training device."""
+    kind = torch.device(device).type
+    state: dict[str, Any] = {"cpu": torch.get_rng_state()}
+    if kind == "mps":
+        if not torch.backends.mps.is_available():
+            raise RuntimeError("cannot capture unavailable MPS random state")
+        state["mps"] = torch.mps.get_rng_state()
+    elif kind == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("cannot capture unavailable CUDA random state")
+        state["cuda"] = torch.cuda.get_rng_state_all()
+    elif kind != "cpu":
+        raise ValueError(f"unsupported foundation training device: {kind}")
+    return state
+
+
+def restore_torch_rng_state(
+    state: Mapping[str, Any], device: str | torch.device
+) -> None:
+    """Restore exactly the Torch generators required by one training device."""
+    kind = torch.device(device).type
+    expected = {"cpu", kind} if kind != "cpu" else {"cpu"}
+    if set(state) != expected:
+        raise ValueError("foundation Torch RNG state device set differs")
+    cpu = state["cpu"]
+    if not isinstance(cpu, torch.Tensor):
+        raise ValueError("foundation CPU RNG state is invalid")
+    torch.set_rng_state(cpu)
+    if kind == "mps":
+        torch.mps.set_rng_state(state["mps"])
+    elif kind == "cuda":
+        torch.cuda.set_rng_state_all(state["cuda"])
 
 
 def clear_replay_archive(path: Path) -> None:

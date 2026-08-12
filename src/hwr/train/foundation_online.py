@@ -67,8 +67,10 @@ from hwr.train.foundation_registry import (
     save_foundation_training_checkpoint,
 )
 from hwr.train.foundation_recovery import (
+    capture_torch_rng_state,
     clear_replay_archive,
     publish_runner_progress,
+    restore_torch_rng_state,
     restore_runner_progress,
 )
 from hwr.train.foundation_setup import FoundationLearningStack
@@ -297,6 +299,10 @@ class FoundationOnlineTrainingRunner:
             raise ValueError("resumed checkpoint data provenance differs")
         self.task_sampler.load_state_dict(restored.task_sampler)
         self.rng.bit_generator.state = restored.rng_state
+        restore_torch_rng_state(
+            restored.torch_rng_state,
+            next(self.stack.trainer.actor.parameters()).device,
+        )
         self.records = [FoundationEpisodeRecord(**item) for item in restored.records]
         self.completed_cycles = restored.cycle
         self._discard_cached_visual_sources(
@@ -738,6 +744,9 @@ class FoundationOnlineTrainingRunner:
             cycle=cycle,
             update_count=self.stack.trainer.update_count,
             rng_state=self.rng.bit_generator.state,
+            torch_rng_state=capture_torch_rng_state(
+                next(self.stack.trainer.actor.parameters()).device
+            ),
             task_sampler=self.task_sampler.state_dict(),
             records=[asdict(item) for item in self.records],
             replay_manifest=self.store.manifest,

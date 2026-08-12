@@ -65,6 +65,7 @@ class FoundationWorldModelPolicy:
         self._state: RSSMState | None = None
         self._pending_action: torch.Tensor | None = None
         self._awaiting_feedback = False
+        self._action_generator = torch.Generator(device=self.device)
 
     def spec(self) -> PolicySpec:
         return PolicySpec(
@@ -77,9 +78,11 @@ class FoundationWorldModelPolicy:
         )
 
     def reset(self, *, task_id: str, seed: int) -> None:
-        del seed
         if not task_id:
             raise ValueError("foundation deployment task identity is required")
+        if seed < 0:
+            raise ValueError("foundation deployment seed cannot be negative")
+        self._action_generator.manual_seed(seed)
         self.input_assembler.reset()
         self._task_id = task_id
         self._state = None
@@ -134,7 +137,9 @@ class FoundationWorldModelPolicy:
             normalized = (
                 self.actor.deterministic(latent)
                 if deterministic
-                else self.actor.sample(latent).action
+                else self.actor.sample(
+                    latent, generator=self._action_generator
+                ).action
             )
             vector = scale_latent_action(normalized, self.action_scaling)[0].cpu()
         self._pending_action = None

@@ -149,3 +149,16 @@ def test_foundation_runtime_can_sample_only_current_actor_for_collection() -> No
 
     assert len(action.vector()) == 16
     policy.record_applied_action(action)
+
+
+def test_foundation_runtime_stochastic_actions_are_episode_seeded() -> None:
+    policy = _policy()
+    policy.reset(task_id="fixture/v1", seed=31)
+    first = policy.infer_stochastic((_observation(),)).actions[0].vector()
+    policy.reset(task_id="fixture/v1", seed=31)
+    repeated = policy.infer_stochastic((_observation(),)).actions[0].vector()
+    policy.reset(task_id="fixture/v1", seed=32)
+    different = policy.infer_stochastic((_observation(),)).actions[0].vector()
+
+    assert repeated == pytest.approx(first)
+    assert different != pytest.approx(first)

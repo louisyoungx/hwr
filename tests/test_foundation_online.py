@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+import torch
 
 from hwr.core.embodied import (
     DualArmObservation,
@@ -427,3 +428,21 @@ def test_resume_rolls_replay_back_to_last_atomic_checkpoint(
     )
     assert recovery["restored_archived_shards"] == 1
     assert len(recovery["discarded_uncheckpointed_shards"]) == 1
+
+
+def test_resume_restores_next_torch_random_values(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "hwr.train.foundation_online.evaluate_foundation_action_causality_audit",
+        lambda trainer, batches, criteria, shuffle_seed: _diagnostic(True),
+    )
+    torch.manual_seed(101)
+    config = _config(episodes=3)
+    runner = _runner(tmp_path, config)
+    runner.train()
+    expected = torch.rand(16)
+
+    torch.manual_seed(999)
+    resumed = _runner(tmp_path, config)
+    resumed.resume_latest()
+
+    torch.testing.assert_close(torch.rand(16), expected)

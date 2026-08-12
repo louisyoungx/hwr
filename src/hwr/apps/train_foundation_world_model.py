@@ -122,7 +122,9 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         preprocessor,
         providers,
         build_foundation_learning_stack(
-            root / "configs/foundation", device=arguments.device
+            root / "configs/foundation",
+            device=arguments.device,
+            seed=config.seed,
         ),
         config,
         run_path,
