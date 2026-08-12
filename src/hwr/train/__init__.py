@@ -124,6 +124,10 @@ _EXPORTS = {
         "hwr.train.foundation_collection",
         "RandomRLActionSource",
     ),
+    "transform_foundation_batch": (
+        "hwr.train.foundation_augmentation",
+        "transform_foundation_batch",
+    ),
 }
 
 __all__ = sorted(_EXPORTS)
