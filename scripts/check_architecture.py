@@ -7,6 +7,8 @@ from pathlib import Path
 
 
 ALLOWED_MUJOCO_PREFIX = Path("src/hwr/adapters/mujoco")
+ALLOWED_FOUNDATION_PREFIX = Path("src/hwr/adapters/foundation")
+FOUNDATION_MODULES = ("transformers", "huggingface_hub", "timm", "mlx")
 CORE_ROOT = Path("src/hwr/core")
 FORBIDDEN_CORE_PREFIXES = (
     "hwr.adapters",
@@ -47,6 +49,20 @@ def find_mujoco_import_violations(root: Path) -> tuple[Path, ...]:
     return tuple(violations)
 
 
+def find_foundation_import_violations(root: Path) -> tuple[tuple[Path, str], ...]:
+    """Keep third-party model runtimes behind foundation adapters."""
+    source_root = root / "src" / "hwr"
+    violations: list[tuple[Path, str]] = []
+    for path in sorted(source_root.rglob("*.py")):
+        relative = path.relative_to(root)
+        if relative.is_relative_to(ALLOWED_FOUNDATION_PREFIX):
+            continue
+        for module in _imported_modules(path):
+            if any(module == name or module.startswith(name + ".") for name in FOUNDATION_MODULES):
+                violations.append((relative, module))
+    return tuple(violations)
+
+
 def _imported_modules(path: Path) -> tuple[str, ...]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     modules: list[str] = []
@@ -84,7 +100,13 @@ def main() -> int:
         for path, module in core_violations:
             print(f"- {path}: {module}")
         return 1
-    print("Architecture check passed: engine and core dependency boundaries are intact")
+    foundation_violations = find_foundation_import_violations(root)
+    if foundation_violations:
+        print("Foundation runtime imports escaped the adapter boundary:")
+        for path, module in foundation_violations:
+            print(f"- {path}: {module}")
+        return 1
+    print("Architecture check passed: engine, foundation, and core boundaries are intact")
     return 0
 
 

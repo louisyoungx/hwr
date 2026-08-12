@@ -4,6 +4,7 @@ from pathlib import Path
 
 from scripts.check_architecture import (
     find_core_dependency_violations,
+    find_foundation_import_violations,
     find_mujoco_import_violations,
 )
 from scripts.verify_physics_integrity import find_engine_state_write_violations
@@ -19,6 +20,22 @@ def test_core_schemas_do_not_depend_on_outward_layers() -> None:
     root = Path(__file__).resolve().parents[1]
 
     assert find_core_dependency_violations(root) == ()
+
+
+def test_foundation_runtimes_are_confined_to_adapters() -> None:
+    root = Path(__file__).resolve().parents[1]
+
+    assert find_foundation_import_violations(root) == ()
+
+
+def test_foundation_scanner_detects_runtime_leak(tmp_path) -> None:
+    policy = tmp_path / "src/hwr/policy"
+    policy.mkdir(parents=True)
+    (policy / "leaky.py").write_text("from transformers import AutoModel\n")
+
+    assert find_foundation_import_violations(tmp_path) == (
+        (Path("src/hwr/policy/leaky.py"), "transformers"),
+    )
 
 
 def test_core_dependency_scanner_detects_outward_import(tmp_path) -> None:

@@ -15,6 +15,19 @@ from hwr.perception.language import (
     FrozenNgramLanguageConfig,
     FrozenNgramLanguageEncoder,
 )
+from hwr.perception.foundation import (
+    DenseVisualFeatures,
+    FoundationModelLock,
+    FrozenLanguageFeatureProvider,
+    FrozenVisionFeatureProvider,
+    SemanticLanguageFeatures,
+    WeightArtifact,
+)
+from hwr.perception.high_resolution import (
+    HighResolutionVision,
+    HighResolutionVisionConfig,
+    HighResolutionVisionPreprocessor,
+)
 
 __all__ = [
     "CameraCalibration",
@@ -26,4 +39,13 @@ __all__ = [
     "VisionPreprocessConfig",
     "FrozenNgramLanguageConfig",
     "FrozenNgramLanguageEncoder",
+    "DenseVisualFeatures",
+    "FoundationModelLock",
+    "FrozenLanguageFeatureProvider",
+    "FrozenVisionFeatureProvider",
+    "HighResolutionVision",
+    "HighResolutionVisionConfig",
+    "HighResolutionVisionPreprocessor",
+    "SemanticLanguageFeatures",
+    "WeightArtifact",
 ]
