@@ -17,7 +17,7 @@ from hwr.perception.contracts import (
 )
 
 
-HIGH_RESOLUTION_VISION_SCHEMA = "hwr.high-resolution-vision/v1"
+HIGH_RESOLUTION_VISION_SCHEMA = "hwr.high-resolution-vision/v2"
 RGB_CAMERA_IDS = ("head_rgb", "left_wrist_rgb", "right_wrist_rgb")
 EXPECTED_ENCODINGS = {
     "head_rgb": "rgb8",
@@ -65,6 +65,63 @@ def _decode(frame: CameraFrame) -> np.ndarray:
         else (np.float32, (frame.height, frame.width))
     )
     return np.frombuffer(frame.payload, dtype=dtype).reshape(shape)
+
+
+def align_depth_to_rgb(
+    depth_m: np.ndarray,
+    depth_valid: np.ndarray,
+    depth_intrinsics: np.ndarray,
+    rgb_intrinsics: np.ndarray,
+    robot_from_depth: np.ndarray,
+    robot_from_rgb: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Project metric depth into an RGB image with a nearest-depth z-buffer."""
+    if depth_m.ndim != 2 or depth_valid.shape != depth_m.shape:
+        raise ValueError("depth alignment requires matching image and validity shapes")
+    if depth_intrinsics.shape != (4,) or rgb_intrinsics.shape != (4,):
+        raise ValueError("depth alignment intrinsics must be fx-fy-cx-cy")
+    if robot_from_depth.shape != (4, 4) or robot_from_rgb.shape != (4, 4):
+        raise ValueError("depth alignment extrinsics must be homogeneous transforms")
+    rows, columns = np.nonzero(depth_valid)
+    if not len(rows):
+        return np.zeros_like(depth_m), np.zeros_like(depth_valid)
+    depth = depth_m[rows, columns]
+    fx, fy, cx, cy = depth_intrinsics
+    camera_points = np.stack(
+        (
+            (columns - cx) * depth / fx,
+            (rows - cy) * depth / fy,
+            depth,
+            np.ones_like(depth),
+        ),
+        axis=1,
+    )
+    robot_points = camera_points @ robot_from_depth.T
+    rgb_points = robot_points @ np.linalg.inv(robot_from_rgb).T
+    positive = rgb_points[:, 2] > 1.0e-5
+    rgb_fx, rgb_fy, rgb_cx, rgb_cy = rgb_intrinsics
+    projected_columns = rgb_fx * rgb_points[:, 0] / np.maximum(
+        rgb_points[:, 2], 1.0e-5
+    ) + rgb_cx
+    projected_rows = rgb_fy * rgb_points[:, 1] / np.maximum(
+        rgb_points[:, 2], 1.0e-5
+    ) + rgb_cy
+    projected_columns = np.rint(projected_columns).astype(np.int64)
+    projected_rows = np.rint(projected_rows).astype(np.int64)
+    height, width = depth_m.shape
+    inside = (
+        positive
+        & (projected_rows >= 0)
+        & (projected_rows < height)
+        & (projected_columns >= 0)
+        & (projected_columns < width)
+    )
+    flat = np.full(height * width, np.inf, dtype=np.float32)
+    indices = projected_rows[inside] * width + projected_columns[inside]
+    np.minimum.at(flat, indices, rgb_points[inside, 2].astype(np.float32))
+    aligned = flat.reshape(height, width)
+    valid = np.isfinite(aligned)
+    return np.where(valid, aligned, 0.0).astype(np.float32), valid
 
 
 @dataclass(frozen=True)
@@ -163,6 +220,20 @@ class HighResolutionVisionPreprocessor:
         frames = self._validated_frames(observation)
         teacher, student, rgb_validity = self._rgb_views(frames, observation.timestamp_ns)
         depth, depth_valid, depth_current = self._depth(frames, observation.timestamp_ns)
+        frame_calibrations = {
+            value.camera_id: value for value in observation.camera_calibrations
+        }
+        intrinsics = self._scaled_intrinsics(frame_calibrations)
+        extrinsics = self._extrinsics(frame_calibrations)
+        if depth_current:
+            depth, depth_valid = align_depth_to_rgb(
+                depth,
+                depth_valid,
+                intrinsics[1],
+                intrinsics[0],
+                extrinsics[1],
+                extrinsics[0],
+            )
         validity = np.asarray(
             (rgb_validity[0], depth_current, rgb_validity[1], rgb_validity[2]),
             dtype=np.bool_,
@@ -172,9 +243,6 @@ class HighResolutionVisionPreprocessor:
             dtype=np.int64,
         )
         source_digest = self._source_digest(observation, frames)
-        frame_calibrations = {
-            value.camera_id: value for value in observation.camera_calibrations
-        }
         return HighResolutionVision(
             teacher_rgb=_readonly(teacher),
             student_rgb=_readonly(student),
@@ -182,10 +250,8 @@ class HighResolutionVisionPreprocessor:
             student_head_depth_valid=_readonly(depth_valid),
             camera_validity=_readonly(validity),
             frame_timestamps_ns=_readonly(timestamps),
-            student_intrinsics=_readonly(
-                self._scaled_intrinsics(frame_calibrations)
-            ),
-            robot_from_camera=_readonly(self._extrinsics(frame_calibrations)),
+            student_intrinsics=_readonly(intrinsics),
+            robot_from_camera=_readonly(extrinsics),
             preprocess_fingerprint=self.fingerprint,
             source_sha256=source_digest,
         )

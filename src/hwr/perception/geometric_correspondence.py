@@ -25,7 +25,7 @@ def build_cross_camera_patch_correspondences(
     selected = np.linspace(0, len(rows) - 1, min(per_camera, len(rows))).round().astype(int)
     rows, columns = rows[selected], columns[selected]
     depth = frame.student_head_depth_m[rows, columns]
-    intrinsics = frame.student_intrinsics[1]
+    intrinsics = frame.student_intrinsics[0]
     camera_points = np.stack(
         (
             (columns - intrinsics[2]) * depth / intrinsics[0],
@@ -35,7 +35,7 @@ def build_cross_camera_patch_correspondences(
         ),
         axis=1,
     )
-    robot_points = camera_points @ frame.robot_from_camera[1].T
+    robot_points = camera_points @ frame.robot_from_camera[0].T
     pairs: list[np.ndarray] = []
     for spatial_camera, calibration_index in ((1, 2), (2, 3)):
         if not frame.camera_validity[calibration_index]:

@@ -52,3 +52,18 @@ def test_cross_camera_correspondence_respects_missing_depth_camera() -> None:
     pairs = build_cross_camera_patch_correspondences(frame, feature_grid_size=10)
 
     assert pairs.shape == (0, 6)
+
+
+def test_correspondence_backprojects_aligned_depth_from_head_rgb_geometry() -> None:
+    frame = _frame()
+    transforms = frame.robot_from_camera.copy()
+    transforms[1, 0, 3] = 4.0
+    frame = HighResolutionVision(
+        **{**frame.__dict__, "robot_from_camera": transforms}
+    )
+
+    pairs = build_cross_camera_patch_correspondences(
+        frame, feature_grid_size=10, maximum_pairs=20
+    )
+
+    assert pairs.shape == (20, 6)

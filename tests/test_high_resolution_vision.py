@@ -14,6 +14,7 @@ from hwr.perception import CameraCalibration, PinholeIntrinsics
 from hwr.perception.high_resolution import (
     HighResolutionVisionConfig,
     HighResolutionVisionPreprocessor,
+    align_depth_to_rgb,
 )
 
 
@@ -128,3 +129,27 @@ def test_high_resolution_preprocessor_uses_per_frame_wrist_geometry() -> None:
 
     assert result.student_intrinsics[2].tolist() == [120.0, 121.0, 70.0, 71.0]
     assert result.robot_from_camera[2, 1, 3] == 2.0
+
+
+def test_depth_is_projected_into_rgb_pixels_using_dynamic_baseline() -> None:
+    depth = np.zeros((5, 5), np.float32)
+    valid = np.zeros((5, 5), np.bool_)
+    depth[2, 2] = 1.0
+    valid[2, 2] = True
+    intrinsics = np.asarray((10.0, 10.0, 2.0, 2.0), np.float32)
+    robot_from_depth = np.eye(4, dtype=np.float32)
+    robot_from_depth[0, 3] = 0.1
+
+    aligned, aligned_valid = align_depth_to_rgb(
+        depth,
+        valid,
+        intrinsics,
+        intrinsics,
+        robot_from_depth,
+        np.eye(4, dtype=np.float32),
+    )
+
+    assert aligned_valid.sum() == 1
+    assert aligned_valid[2, 3]
+    assert aligned[2, 3] == 1.0
+    assert not aligned_valid[2, 2]
