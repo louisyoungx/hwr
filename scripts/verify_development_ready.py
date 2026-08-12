@@ -9,6 +9,8 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -54,6 +56,38 @@ FOUNDATION_ALGORITHM_PATHS = (
     "src/hwr/train/imagination_rl.py",
     "src/hwr/policy/foundation_runtime.py",
 )
+
+
+@contextmanager
+def _committed_snapshot(root: Path):
+    """Expose HEAD as an isolated worktree for reproducible repository checks."""
+    with tempfile.TemporaryDirectory(prefix="hwr-development-ready-") as temporary:
+        snapshot = Path(temporary) / "source"
+        subprocess.run(
+            (
+                "git",
+                "worktree",
+                "add",
+                "--detach",
+                "--quiet",
+                str(snapshot),
+                "HEAD",
+            ),
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        try:
+            yield snapshot
+        finally:
+            subprocess.run(
+                ("git", "worktree", "remove", "--force", str(snapshot)),
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
 
 
 def _command(
@@ -237,14 +271,29 @@ def verify(
         "algorithm_audit": _algorithm_audit(root),
         "configuration": _configuration_audit(root),
         "weights": _weight_audit(root, model_root),
-        "architecture": _command(root, (sys.executable, "scripts/check_architecture.py")),
-        "python_size": _command(root, (sys.executable, "scripts/check_python_size.py")),
-        "tests": _command(
-            root,
-            (sys.executable, "-m", "pytest", "-q"),
-            environment={"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
-        ),
     }
+    with _committed_snapshot(root) as snapshot:
+        snapshot_environment = {
+            "PYTHONPATH": os.pathsep.join(
+                filter(None, (str(snapshot / "src"), os.environ.get("PYTHONPATH")))
+            )
+        }
+        checks["architecture"] = _command(
+            snapshot, (sys.executable, "scripts/check_architecture.py")
+        )
+        checks["python_size"] = _command(
+            snapshot, (sys.executable, "scripts/check_python_size.py")
+        )
+        checks["tests"] = _command(
+            snapshot,
+            (sys.executable, "-m", "pytest", "-q"),
+            environment={
+                **snapshot_environment,
+                "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+            },
+        )
+        for name in ("architecture", "python_size", "tests"):
+            checks[name]["source_commit"] = current_commit(snapshot)
     checks["foundation_inference"] = _foundation_inference_checks(
         root, model_root, foundation_device
     )
