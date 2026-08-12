@@ -121,8 +121,12 @@ _EXPORTS = {
         "CurrentRLActorActionSource",
     ),
     "RandomRLActionSource": (
-        "hwr.train.foundation_collection",
+        "hwr.train.foundation_exploration",
         "RandomRLActionSource",
+    ),
+    "RandomRLExplorationConfig": (
+        "hwr.train.foundation_exploration",
+        "RandomRLExplorationConfig",
     ),
     "transform_foundation_batch": (
         "hwr.train.foundation_augmentation",
@@ -137,7 +141,7 @@ _EXPORTS = {
         "FoundationEnvironmentFactory",
     ),
     "FoundationOnlineTrainingConfig": (
-        "hwr.train.foundation_online",
+        "hwr.train.foundation_online_config",
         "FoundationOnlineTrainingConfig",
     ),
     "FoundationOnlineTrainingRunner": (

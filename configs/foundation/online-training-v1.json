@@ -13,6 +13,8 @@
   "minimum_action_causality_horizon_fraction": 0.6,
   "minimum_action_causality_ratio": 1.05,
   "published_checkpoint_retention": 3,
+  "random_exploration_gripper_flip_probability": 0.05,
+  "random_exploration_motion_correlation": 0.96,
   "replay_transition_capacity": 18000,
   "schema_version": "hwr.foundation-online-training/v1",
   "seed": 20260812,

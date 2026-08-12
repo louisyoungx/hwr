@@ -27,11 +27,11 @@ from hwr.policy.bimanual_input import (
 )
 from hwr.train.development_gate import require_development_ready
 from hwr.train.foundation_online import (
-    FoundationOnlineTrainingConfig,
     FoundationOnlineTrainingRunner,
     FoundationProviderFactories,
     FoundationTaskInterface,
 )
+from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
 from hwr.train.foundation_setup import build_foundation_learning_stack
 
 

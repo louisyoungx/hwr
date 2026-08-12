@@ -200,6 +200,16 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
         raise RuntimeError("formal causality audit batch does not partition task windows")
     if int(online["batch_size"]) > 2:
         raise RuntimeError("formal visual batch exceeds the verified 48 GB envelope")
+    motion_correlation = float(
+        online["random_exploration_motion_correlation"]
+    )
+    gripper_flip_probability = float(
+        online["random_exploration_gripper_flip_probability"]
+    )
+    if motion_correlation < 0.90:
+        raise RuntimeError("formal random RL motion lacks temporal persistence")
+    if not 0.0 < gripper_flip_probability <= 0.10:
+        raise RuntimeError("formal random RL gripper dwell is invalid")
     trainer = stack.trainer
     if trainer.world_model.config.action_dimension != 16:
         raise RuntimeError("formal world model action dimension is not canonical")
@@ -237,6 +247,10 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
         "causality_audit_windows_per_task": audit_windows,
         "causality_audit_batch_size": audit_batch,
         "formal_batch_size": online["batch_size"],
+        "random_exploration_motion_correlation": motion_correlation,
+        "random_exploration_gripper_flip_probability": (
+            gripper_flip_probability
+        ),
     }
 
 

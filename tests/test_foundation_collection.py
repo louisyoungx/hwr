@@ -25,7 +25,10 @@ from hwr.policy.latent_actions import LatentActionScaling
 from hwr.train.foundation_collection import (
     AutonomousCollectionConfig,
     AutonomousEpisodeCollector,
+)
+from hwr.train.foundation_exploration import (
     RandomRLActionSource,
+    RandomRLExplorationConfig,
 )
 
 
@@ -153,6 +156,13 @@ def test_collector_records_raw_observations_and_actual_safety_actions() -> None:
     ]
     assert episode.arrays["terminated"].tolist() == [False, True]
     assert episode.legal_transform_ids == ("lateral_reflection",)
+    assert episode.metadata["action_process"] == {
+        "schema_version": "hwr.correlated-random-rl/v1",
+        "motion_correlation": 0.96,
+        "gripper_flip_probability": 0.05,
+        "observation_conditioned": False,
+        "task_conditioned": False,
+    }
 
 
 def test_random_rl_source_is_seeded_and_observation_independent() -> None:
@@ -164,3 +174,37 @@ def test_random_rl_source_is_seeded_and_observation_independent() -> None:
     assert first.propose(_observation(0, "a")).vector() == second.propose(
         _observation(0, "b")
     ).vector()
+
+
+def test_random_rl_source_has_persistent_motion_and_gripper_dwell() -> None:
+    source = RandomRLActionSource(
+        LatentActionScaling(),
+        RandomRLExplorationConfig(
+            motion_correlation=0.96,
+            gripper_flip_probability=0.05,
+        ),
+    )
+    source.reset(task_id="fixture/v1", seed=19)
+    actions = np.asarray(
+        [source.propose(_observation(step % 256)).vector() for step in range(512)]
+    )
+
+    motion_correlation = np.corrcoef(
+        actions[:-1, :14].reshape(-1),
+        actions[1:, :14].reshape(-1),
+    )[0, 1]
+    gripper_flip_rate = np.not_equal(
+        actions[:-1, 14:], actions[1:, 14:]
+    ).mean()
+
+    assert motion_correlation > 0.90
+    assert 0.02 < gripper_flip_rate < 0.08
+    assert np.all(np.abs(actions[:, 0]) <= 0.18)
+    assert set(np.unique(actions[:, 14:])) == {0.0, 1.0}
+
+
+def test_random_rl_exploration_config_rejects_iid_gripper_flicker() -> None:
+    with np.testing.assert_raises(ValueError):
+        RandomRLExplorationConfig(motion_correlation=1.0)
+    with np.testing.assert_raises(ValueError):
+        RandomRLExplorationConfig(gripper_flip_probability=0.0)

@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Mapping, Protocol, runtime_checkable
 
 import numpy as np
 
 from hwr.core.embodied import (
-    DUAL_ARM_ACTION_DIM,
     DualArmAction,
     DualArmActionFrame,
     DualArmObservation,
@@ -22,7 +21,6 @@ from hwr.perception.high_resolution import (
     HighResolutionVisionPreprocessor,
 )
 from hwr.policy.foundation_runtime import FoundationWorldModelPolicy
-from hwr.policy.latent_actions import LatentActionScaling, scale_latent_action
 from hwr.train.bimanual_runtime import dual_arm_action_frame
 
 
@@ -30,43 +28,14 @@ from hwr.train.bimanual_runtime import dual_arm_action_frame
 class AutonomousActionSource(Protocol):
     action_source: str
 
+    @property
+    def action_process(self) -> Mapping[str, object]: ...
+
     def reset(self, *, task_id: str, seed: int) -> None: ...
 
     def propose(self, observation: DualArmObservation) -> DualArmAction: ...
 
     def record_applied_action(self, action: DualArmAction) -> None: ...
-
-
-class RandomRLActionSource:
-    """Seeded generic exploration with no observation or scene semantics."""
-
-    action_source = "random_rl_exploration"
-
-    def __init__(self, scaling: LatentActionScaling) -> None:
-        self.scaling = scaling
-        self._rng: np.random.Generator | None = None
-
-    def reset(self, *, task_id: str, seed: int) -> None:
-        del task_id
-        self._rng = np.random.default_rng(seed)
-
-    def propose(self, observation: DualArmObservation) -> DualArmAction:
-        del observation
-        if self._rng is None:
-            raise RuntimeError("random RL source must be reset")
-        normalized = self._rng.uniform(-1.0, 1.0, DUAL_ARM_ACTION_DIM).astype(
-            np.float32
-        )
-        normalized[14:] = self._rng.integers(0, 2, size=2)
-        import torch
-
-        scaled = scale_latent_action(
-            torch.from_numpy(normalized)[None], self.scaling
-        )[0]
-        return DualArmAction.from_vector(scaled.tolist())
-
-    def record_applied_action(self, action: DualArmAction) -> None:
-        del action
 
 
 class CurrentRLActorActionSource:
@@ -76,6 +45,13 @@ class CurrentRLActorActionSource:
 
     def __init__(self, policy: FoundationWorldModelPolicy) -> None:
         self.policy = policy
+
+    @property
+    def action_process(self) -> Mapping[str, object]:
+        return {
+            "schema_version": "hwr.current-stochastic-rl-actor/v1",
+            "policy_id": self.policy.policy_id,
+        }
 
     def reset(self, *, task_id: str, seed: int) -> None:
         self.policy.reset(task_id=task_id, seed=seed)
@@ -163,6 +139,7 @@ class AutonomousEpisodeCollector:
         result = backend.result()
         metadata = {
             "collector": "foundation-autonomous/v1",
+            "action_process": dict(action_source.action_process),
             "success": bool(result and result.success),
             "result_reason": result.reason if result else "step_limit",
             "result_metrics": dict(result.metrics) if result else {},

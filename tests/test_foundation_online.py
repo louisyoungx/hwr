@@ -38,7 +38,6 @@ from hwr.policy.latent_actions import LatentActionScaling
 from hwr.policy.latent_actor import LatentActor, LatentActorConfig
 from hwr.policy.latent_value import LatentValueModel
 from hwr.train.foundation_online import (
-    FoundationOnlineTrainingConfig,
     FoundationOnlineTrainingRunner,
     FoundationProviderFactories,
     FoundationTaskInterface,
@@ -46,8 +45,9 @@ from hwr.train.foundation_online import (
 from hwr.train.foundation_collection import (
     AutonomousCollectionConfig,
     AutonomousEpisodeCollector,
-    RandomRLActionSource,
 )
+from hwr.train.foundation_exploration import RandomRLActionSource
+from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
 from hwr.train.foundation_setup import FoundationLearningStack
 from hwr.train.foundation_trainer import (
     FoundationTrainerConfig,

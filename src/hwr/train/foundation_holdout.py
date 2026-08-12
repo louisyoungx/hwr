@@ -17,7 +17,10 @@ from hwr.train.foundation_batch import FoundationTrainingBatch
 from hwr.train.foundation_collection import (
     AutonomousCollectionConfig,
     AutonomousEpisodeCollector,
+)
+from hwr.train.foundation_exploration import (
     RandomRLActionSource,
+    RandomRLExplorationConfig,
 )
 
 
@@ -31,6 +34,7 @@ def collect_causality_holdout(
     preprocessor: HighResolutionVisionPreprocessor,
     action_scaling: LatentActionScaling,
     *,
+    exploration_config: RandomRLExplorationConfig,
     episodes_per_task: int,
     base_seed: int,
     source_commit: str,
@@ -69,7 +73,7 @@ def collect_causality_holdout(
                 continue
             episode = collector.collect(
                 environments[task_id],
-                RandomRLActionSource(action_scaling),
+                RandomRLActionSource(action_scaling, exploration_config),
                 task_id=task_id,
                 seed=seed,
             )
@@ -182,6 +186,8 @@ def _verify_holdout(
             identity not in expected
             or str(shard["source_commit"]) != source_commit
             or metadata.get("collector") != HOLDOUT_COLLECTOR
+            or metadata.get("action_process", {}).get("schema_version")
+            != "hwr.correlated-random-rl/v1"
         ):
             raise ValueError("causality holdout provenance differs")
         with np.load(store.path / str(shard["path"]), allow_pickle=False) as arrays:
