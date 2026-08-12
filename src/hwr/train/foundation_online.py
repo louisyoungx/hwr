@@ -60,6 +60,7 @@ from hwr.train.foundation_exploration import (
 )
 from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
 from hwr.train.foundation_registry import (
+    ACTION_CAUSALITY_SCHEMA,
     export_foundation_deployment,
     file_sha256 as registry_file_sha256,
     load_foundation_training_checkpoint,
@@ -243,8 +244,7 @@ class FoundationOnlineTrainingRunner:
             raise ValueError("resumed action causality report hash differs")
         diagnostic = json.loads(report.read_text(encoding="utf-8"))
         if (
-            diagnostic.get("schema_version")
-            != "hwr.foundation-action-causality/v2"
+            diagnostic.get("schema_version") != ACTION_CAUSALITY_SCHEMA
             or diagnostic.get("source_commit") != self.source_commit
             or int(diagnostic.get("update_count", -1))
             != int(latest.get("update_count", -2))

@@ -253,7 +253,7 @@ def _stack() -> FoundationLearningStack:
 def _diagnostic(passed: bool) -> dict[str, object]:
     ratio = 1.2 if passed else 1.0
     return {
-        "schema_version": "hwr.foundation-action-causality/v2",
+        "schema_version": "hwr.foundation-action-causality/v3",
         "action_source": "actual_executed_action",
         "report": {"shuffled_to_true_ratio": ratio},
         "assessment": {

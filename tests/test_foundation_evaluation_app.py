@@ -10,6 +10,12 @@ from hwr.apps.evaluate_foundation_world_model import (
     _video_acceptance,
     build_parser,
 )
+from hwr.world_model import (
+    ACTION_CAUSALITY_COMPONENTS,
+    CounterfactualCausalityReport,
+    CounterfactualComponentReport,
+    assess_action_causality,
+)
 
 
 def test_foundation_evaluation_defaults_match_fixed_acceptance_protocol() -> None:
@@ -91,24 +97,53 @@ def _causality_run(tmp_path):
         {
             "schema_version": "hwr.foundation-online-run/v1",
             "source_commit": "abc123",
-            "training_config": {"causality_audit_windows_per_task": 1},
+            "training_config": {
+                "causality_audit_windows_per_task": 1,
+                "minimum_action_causality_ratio": 1.05,
+                "minimum_action_causality_horizon_fraction": 0.60,
+            },
             "tasks": [{"task_id": "task-a/v1"}],
         },
     )
     report = run / "diagnostics/action-causality/update-000000001/report.json"
+    component_reports = {
+        name: CounterfactualComponentReport(
+            1.0, 1.2, 1.2, (1.0, 1.0), (1.2, 1.2)
+        )
+        for name in ACTION_CAUSALITY_COMPONENTS
+    }
+    raw_report = CounterfactualCausalityReport(
+        5.0,
+        6.0,
+        1.2,
+        (5.0, 5.0),
+        (6.0, 6.0),
+        (0.1, 0.1),
+        component_reports,
+        ACTION_CAUSALITY_COMPONENTS,
+    )
+    raw_assessment = assess_action_causality(raw_report)
     _write_json(
         report,
         {
-            "schema_version": "hwr.foundation-action-causality/v2",
+            "schema_version": "hwr.foundation-action-causality/v3",
             "action_source": "actual_executed_action",
             "counterfactual_transform": "deterministic-global-derangement/v1",
             "partition_key": "task_id",
-            "partitions": {"task-a/v1": {"assessment": {"passed": True}}},
+            "partitions": {
+                "task-a/v1": {
+                    "report": raw_report.to_dict(),
+                    "assessment": raw_assessment,
+                }
+            },
             "assessment": {
+                **raw_assessment,
                 "passed": True,
                 "aggregate_passed": True,
                 "all_partitions_passed": True,
+                "partition_count": 1,
             },
+            "report": raw_report.to_dict(),
             "window_selection": [
                 {
                     "task_id": "task-a/v1",
@@ -215,4 +250,27 @@ def test_evaluation_rejects_missing_task_partition(tmp_path) -> None:
     _write_json(latest, latest_value)
 
     with pytest.raises(ValueError, match="partition evidence is incomplete"):
+        _require_action_causality(run)
+
+
+def test_evaluation_recomputes_component_causality_instead_of_trusting_passed(
+    tmp_path,
+) -> None:
+    run, report = _causality_run(tmp_path)
+    value = json.loads(report.read_text())
+    raw = value["report"]
+    safety = raw["component_reports"]["safety"]
+    safety["shuffled_error"] = 1.0
+    safety["shuffled_to_true_ratio"] = 1.0
+    safety["shuffled_horizon_errors"] = [1.0, 1.0]
+    raw["shuffled_action_error"] = 5.8
+    raw["shuffled_to_true_ratio"] = 1.16
+    raw["shuffled_horizon_errors"] = [5.8, 5.8]
+    _write_json(report, value)
+    latest = run / "latest.json"
+    latest_value = json.loads(latest.read_text())
+    latest_value["action_causality_sha256"] = _digest(report)
+    _write_json(latest, latest_value)
+
+    with pytest.raises(ValueError, match="assessment differs from evidence"):
         _require_action_causality(run)

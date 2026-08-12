@@ -7,6 +7,7 @@ from hwr.world_model import (
     ActionCausalityCriteria,
     ActionConditionedWorldModel,
     CounterfactualCausalityReport,
+    CounterfactualComponentReport,
     WorldModelConfig,
     WorldModelLoss,
     WorldModelLossConfig,
@@ -115,6 +116,11 @@ def test_action_shuffle_counterfactual_reports_open_loop_errors() -> None:
         "continue",
         "safety",
     )
+    assert tuple(report.component_reports) == report.error_components
+    assert all(
+        len(component.true_horizon_errors) == 4
+        for component in report.component_reports.values()
+    )
     assert model.training
     assert report.sample_count == 2
 
@@ -133,12 +139,26 @@ def test_action_derangement_is_deterministic_value_preserving_and_has_no_fixed_p
 
 
 def test_action_causality_aggregation_weights_sequence_counts() -> None:
+    first_components = {
+        name: CounterfactualComponentReport(
+            0.5, 1.0, 2.0, (0.5, 0.5), (1.0, 1.0)
+        )
+        for name in ("visual_latent", "proprioception")
+    }
+    second_components = {
+        name: CounterfactualComponentReport(
+            1.5, 2.0, 4.0 / 3.0, (1.5, 1.5), (2.0, 2.0)
+        )
+        for name in ("visual_latent", "proprioception")
+    }
     first = CounterfactualCausalityReport(
         1.0, 2.0, 2.0, (1.0, 1.0), (2.0, 2.0), (0.1, 0.2),
+        first_components,
         sample_count=1,
     )
     second = CounterfactualCausalityReport(
         3.0, 4.0, 4.0 / 3.0, (3.0, 3.0), (4.0, 4.0), (0.3, 0.4),
+        second_components,
         sample_count=3,
     )
 
@@ -151,13 +171,24 @@ def test_action_causality_aggregation_weights_sequence_counts() -> None:
 
 
 def test_action_causality_gate_requires_ratio_and_most_horizons_to_degrade() -> None:
+    components = {
+        name: CounterfactualComponentReport(
+            1.0,
+            1.125,
+            1.125,
+            (1.0, 1.0, 1.0, 1.0),
+            (1.1, 1.2, 0.9, 1.3),
+        )
+        for name in ("visual_latent", "proprioception")
+    }
     report = CounterfactualCausalityReport(
-        true_action_error=1.0,
-        shuffled_action_error=1.2,
-        shuffled_to_true_ratio=1.2,
-        true_horizon_errors=(1.0, 1.0, 1.0, 1.0),
-        shuffled_horizon_errors=(1.1, 1.2, 0.9, 1.3),
+        true_action_error=2.0,
+        shuffled_action_error=2.25,
+        shuffled_to_true_ratio=1.125,
+        true_horizon_errors=(2.0, 2.0, 2.0, 2.0),
+        shuffled_horizon_errors=(2.2, 2.4, 1.8, 2.6),
         uncertainty_by_horizon=(0.1, 0.2, 0.3, 0.4),
+        component_reports=components,
     )
 
     assessment = assess_action_causality(
@@ -172,6 +203,32 @@ def test_action_causality_gate_requires_ratio_and_most_horizons_to_degrade() -> 
         ActionCausalityCriteria(1.25, 0.60),
     )
     assert failed["passed"] is False
+
+
+def test_action_causality_gate_rejects_one_action_independent_prediction_head() -> None:
+    passing = CounterfactualComponentReport(
+        1.0, 1.2, 1.2, (1.0, 1.0), (1.2, 1.2)
+    )
+    ignored = CounterfactualComponentReport(
+        1.0, 1.0, 1.0, (1.0, 1.0), (1.0, 1.0)
+    )
+    report = CounterfactualCausalityReport(
+        2.0,
+        2.2,
+        1.1,
+        (2.0, 2.0),
+        (2.2, 2.2),
+        (0.1, 0.1),
+        {"visual_latent": passing, "safety": ignored},
+        ("visual_latent", "safety"),
+    )
+
+    assessment = assess_action_causality(report)
+
+    assert assessment["aggregate_passed"] is True
+    assert assessment["components"]["visual_latent"]["passed"] is True
+    assert assessment["components"]["safety"]["passed"] is False
+    assert assessment["passed"] is False
 
 
 def test_distributional_reward_round_trip_is_finite() -> None:

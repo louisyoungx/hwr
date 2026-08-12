@@ -24,6 +24,7 @@ from hwr.world_model import (
     ActionCausalityCriteria,
     ActionConditionedWorldModel,
     CounterfactualCausalityReport,
+    CounterfactualComponentReport,
     WorldModelConfig,
     WorldModelLoss,
     WorldModelLossConfig,
@@ -186,6 +187,13 @@ def test_foundation_diagnostic_uses_all_actual_outcome_targets() -> None:
         "safety",
     )
     assert diagnostic["assessment"]["horizon_count"] == 2
+    assert set(diagnostic["assessment"]["components"]) == {
+        "visual_latent",
+        "proprioception",
+        "reward",
+        "continue",
+        "safety",
+    }
     assert diagnostic["counterfactual_transform"] == (
         "deterministic-global-derangement/v1"
     )
@@ -194,12 +202,8 @@ def test_foundation_diagnostic_uses_all_actual_outcome_targets() -> None:
 def test_foundation_causality_audit_requires_every_task_partition(
     monkeypatch,
 ) -> None:
-    passing = CounterfactualCausalityReport(
-        1.0, 1.2, 1.2, (1.0, 1.0), (1.2, 1.2), (0.1, 0.1)
-    )
-    failing = CounterfactualCausalityReport(
-        1.0, 0.9, 0.9, (1.0, 1.0), (0.9, 0.9), (0.1, 0.1)
-    )
+    passing = _synthetic_causality_report(1.2)
+    failing = _synthetic_causality_report(0.9)
     monkeypatch.setattr(
         "hwr.train.foundation_diagnostics._evaluate_batch_report",
         lambda trainer, batch, shuffle_seed: passing if shuffle_seed < 19 else failing,
@@ -218,3 +222,23 @@ def test_foundation_causality_audit_requires_every_task_partition(
     assert diagnostic["assessment"]["aggregate_passed"] is True
     assert diagnostic["assessment"]["all_partitions_passed"] is False
     assert diagnostic["assessment"]["passed"] is False
+
+
+def _synthetic_causality_report(ratio: float) -> CounterfactualCausalityReport:
+    names = ("visual_latent", "proprioception", "reward", "continue", "safety")
+    components = {
+        name: CounterfactualComponentReport(
+            0.2, 0.2 * ratio, ratio, (0.2, 0.2), (0.2 * ratio,) * 2
+        )
+        for name in names
+    }
+    return CounterfactualCausalityReport(
+        1.0,
+        ratio,
+        ratio,
+        (1.0, 1.0),
+        (ratio, ratio),
+        (0.1, 0.1),
+        components,
+        names,
+    )

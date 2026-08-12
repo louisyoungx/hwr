@@ -41,6 +41,12 @@ from hwr.train.foundation_registry import (
     TRAINING_CHECKPOINT_SCHEMA,
     load_foundation_deployment,
 )
+from hwr.world_model import (
+    ACTION_CAUSALITY_COMPONENTS,
+    ActionCausalityCriteria,
+    assess_action_causality,
+    counterfactual_report_from_dict,
+)
 
 
 ABLATIONS = ("none", "lock_left", "lock_right")
@@ -331,6 +337,23 @@ def _require_causality_structure(
     }
     partitions = report.get("partitions", {})
     assessment = report.get("assessment", {})
+    training = run_manifest["training_config"]
+    criteria = ActionCausalityCriteria(
+        float(training["minimum_action_causality_ratio"]),
+        float(training["minimum_action_causality_horizon_fraction"]),
+    )
+    _require_assessment_matches(
+        report.get("report"), assessment, criteria, "aggregate"
+    )
+    for task_id, partition in partitions.items():
+        _require_assessment_matches(
+            partition.get("report"),
+            partition.get("assessment", {}),
+            criteria,
+            task_id,
+        )
+    required_components = set(ACTION_CAUSALITY_COMPONENTS)
+    component_assessments = assessment.get("components", {})
     if (
         report.get("schema_version") != ACTION_CAUSALITY_SCHEMA
         or report.get("action_source") != "actual_executed_action"
@@ -340,9 +363,18 @@ def _require_causality_structure(
         or not expected_tasks
         or set(partitions) != expected_tasks
         or assessment.get("aggregate_passed") is not True
+        or assessment.get("all_components_passed") is not True
+        or set(component_assessments) != required_components
+        or any(
+            value.get("passed") is not True
+            for value in component_assessments.values()
+        )
         or assessment.get("all_partitions_passed") is not True
         or any(
             value.get("assessment", {}).get("passed") is not True
+            or value.get("assessment", {}).get("all_components_passed") is not True
+            or set(value.get("assessment", {}).get("components", {}))
+            != required_components
             for value in partitions.values()
         )
     ):
@@ -368,6 +400,21 @@ def _require_causality_structure(
         raise ValueError("action causality window coverage differs from training")
     if any(_overlaps(values) for values in intervals.values()):
         raise ValueError("action causality windows overlap")
+
+
+def _require_assessment_matches(
+    raw_report: object,
+    claimed: Mapping[str, Any],
+    criteria: ActionCausalityCriteria,
+    label: str,
+) -> None:
+    if not isinstance(raw_report, Mapping):
+        raise ValueError(f"action causality raw evidence is missing: {label}")
+    expected = assess_action_causality(
+        counterfactual_report_from_dict(raw_report), criteria
+    )
+    if any(claimed.get(name) != value for name, value in expected.items()):
+        raise ValueError(f"action causality assessment differs from evidence: {label}")
 
 
 def _overlaps(intervals: Sequence[tuple[int, int]]) -> bool:

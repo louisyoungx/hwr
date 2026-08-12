@@ -22,7 +22,7 @@ from hwr.world_model.model import ActionConditionedWorldModel
 
 TRAINING_CHECKPOINT_SCHEMA = "hwr.foundation-training-checkpoint/v1"
 DEPLOYMENT_SCHEMA = "hwr.foundation-deployment/v1"
-ACTION_CAUSALITY_SCHEMA = "hwr.foundation-action-causality/v2"
+ACTION_CAUSALITY_SCHEMA = "hwr.foundation-action-causality/v3"
 _FORBIDDEN_DEPLOYMENT_NAMES = frozenset(
     {
         "continue_head",
