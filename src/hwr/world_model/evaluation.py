@@ -21,6 +21,11 @@ class CounterfactualCausalityReport:
     shuffled_horizon_errors: tuple[float, ...]
     uncertainty_by_horizon: tuple[float, ...]
     error_components: tuple[str, ...] = ("visual_latent", "proprioception")
+    sample_count: int = 1
+
+    def __post_init__(self) -> None:
+        if self.sample_count <= 0:
+            raise ValueError("action causality sample count must be positive")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -89,6 +94,8 @@ def evaluate_action_causality(
     rewards: torch.Tensor | None = None,
     continues: torch.Tensor | None = None,
     safety: torch.Tensor | None = None,
+    *,
+    shuffle_seed: int = 0,
 ) -> CounterfactualCausalityReport:
     if executed_actions.shape[1] < 2:
         raise ValueError("action causality evaluation requires at least two transitions")
@@ -105,7 +112,9 @@ def evaluate_action_causality(
                 visual[:, 0], language, proprioception[:, 0]
             )
             true_rollout = model.rollout_prior(initial, executed_actions, sample=False)
-            shuffled = torch.roll(executed_actions, shifts=1, dims=1)
+            shuffled = deterministic_action_derangement(
+                executed_actions, seed=shuffle_seed
+            )
             shuffled_rollout = model.rollout_prior(initial, shuffled, sample=False)
             targets = (rewards, continues, safety)
             true_errors = _horizon_errors(
@@ -136,6 +145,69 @@ def evaluate_action_causality(
             "proprioception",
             *(("reward", "continue", "safety") if rewards is not None else ()),
         ),
+        sample_count=int(executed_actions.shape[0]),
+    )
+
+
+def deterministic_action_derangement(
+    executed_actions: torch.Tensor, *, seed: int
+) -> torch.Tensor:
+    """Permute all batch/time actions with no fixed points and no new values."""
+    if seed < 0 or executed_actions.ndim != 3:
+        raise ValueError("action derangement seed or tensor shape is invalid")
+    flattened = executed_actions.flatten(0, 1)
+    count = flattened.shape[0]
+    if count < 2:
+        raise ValueError("action derangement requires at least two actions")
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(seed)
+    cycle = torch.randperm(count, generator=generator)
+    sources = torch.empty_like(cycle)
+    sources[cycle] = torch.roll(cycle, shifts=1)
+    sources = sources.to(executed_actions.device)
+    return flattened[sources].reshape_as(executed_actions)
+
+
+def aggregate_action_causality_reports(
+    reports: tuple[CounterfactualCausalityReport, ...],
+) -> CounterfactualCausalityReport:
+    """Combine equal-horizon reports using their evaluated sequence counts."""
+    if not reports:
+        raise ValueError("action causality aggregation requires reports")
+    horizon_count = len(reports[0].true_horizon_errors)
+    components = reports[0].error_components
+    if horizon_count == 0 or any(
+        len(value.true_horizon_errors) != horizon_count
+        or len(value.shuffled_horizon_errors) != horizon_count
+        or len(value.uncertainty_by_horizon) != horizon_count
+        or value.error_components != components
+        for value in reports
+    ):
+        raise ValueError("action causality reports cannot be aggregated")
+    weights = torch.tensor(
+        [value.sample_count for value in reports], dtype=torch.float64
+    )
+    weights /= weights.sum()
+
+    def average(name: str) -> tuple[float, ...]:
+        values = torch.tensor(
+            [getattr(value, name) for value in reports], dtype=torch.float64
+        )
+        return tuple(float(item) for item in (values * weights[:, None]).sum(dim=0))
+
+    true_horizons = average("true_horizon_errors")
+    shuffled_horizons = average("shuffled_horizon_errors")
+    true_mean = sum(true_horizons) / horizon_count
+    shuffled_mean = sum(shuffled_horizons) / horizon_count
+    return CounterfactualCausalityReport(
+        true_mean,
+        shuffled_mean,
+        shuffled_mean / max(true_mean, 1.0e-8),
+        true_horizons,
+        shuffled_horizons,
+        average("uncertainty_by_horizon"),
+        components,
+        sum(value.sample_count for value in reports),
     )
 
 

@@ -12,6 +12,8 @@ from hwr.world_model import (
     WorldModelLossConfig,
     WorldModelTargets,
     assess_action_causality,
+    aggregate_action_causality_reports,
+    deterministic_action_derangement,
     evaluate_action_causality,
 )
 from hwr.world_model.distributions import reward_expectation, two_hot_symlog
@@ -114,6 +116,38 @@ def test_action_shuffle_counterfactual_reports_open_loop_errors() -> None:
         "safety",
     )
     assert model.training
+    assert report.sample_count == 2
+
+
+def test_action_derangement_is_deterministic_value_preserving_and_has_no_fixed_points() -> None:
+    actions = torch.arange(2 * 4 * 3).reshape(2, 4, 3).float()
+
+    first = deterministic_action_derangement(actions, seed=17)
+    second = deterministic_action_derangement(actions, seed=17)
+
+    torch.testing.assert_close(first, second)
+    assert not torch.any(torch.all(first == actions, dim=-1))
+    assert {
+        tuple(value.tolist()) for value in first.flatten(0, 1)
+    } == {tuple(value.tolist()) for value in actions.flatten(0, 1)}
+
+
+def test_action_causality_aggregation_weights_sequence_counts() -> None:
+    first = CounterfactualCausalityReport(
+        1.0, 2.0, 2.0, (1.0, 1.0), (2.0, 2.0), (0.1, 0.2),
+        sample_count=1,
+    )
+    second = CounterfactualCausalityReport(
+        3.0, 4.0, 4.0 / 3.0, (3.0, 3.0), (4.0, 4.0), (0.3, 0.4),
+        sample_count=3,
+    )
+
+    aggregate = aggregate_action_causality_reports((first, second))
+
+    assert aggregate.true_horizon_errors == pytest.approx((2.5, 2.5))
+    assert aggregate.shuffled_horizon_errors == pytest.approx((3.5, 3.5))
+    assert aggregate.shuffled_to_true_ratio == pytest.approx(1.4)
+    assert aggregate.sample_count == 4
 
 
 def test_action_causality_gate_requires_ratio_and_most_horizons_to_degrade() -> None:
