@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from hwr.data.autonomous_trajectory import (
+    AppendableAutonomousTrajectoryStore,
     AutonomousEpisode,
     AutonomousTrajectoryDatasetBuilder,
     verify_autonomous_trajectory_dataset,
@@ -101,3 +102,15 @@ def test_autonomous_trajectory_verification_detects_corruption(tmp_path) -> None
 
     with pytest.raises(ValueError, match="checksum mismatch"):
         verify_autonomous_trajectory_dataset(path)
+
+
+def test_appendable_trajectory_store_publishes_each_episode_atomically(tmp_path) -> None:
+    store = AppendableAutonomousTrajectoryStore(tmp_path, "online-v1")
+    store.append(_episode())
+    store.append(_episode(episode_id="episode-0002", seed=8))
+
+    reopened = AppendableAutonomousTrajectoryStore(tmp_path, "online-v1")
+
+    assert reopened.manifest["episode_count"] == 2
+    assert reopened.manifest["transition_count"] == 8
+    assert verify_autonomous_trajectory_dataset(reopened.path)["episode_count"] == 2

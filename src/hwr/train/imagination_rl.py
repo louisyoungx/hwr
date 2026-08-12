@@ -93,6 +93,9 @@ class ImaginationActorCritic(nn.Module):
         actor_objective += self.config.gripper_entropy_weight * trajectory.gripper_entropies
         actor_loss = -actor_objective.mean()
         value_logits = self.value(trajectory.features.detach())
+        value_predictions = reward_expectation(
+            value_logits, limit=self.config.value_symlog_limit
+        )
         value_targets = two_hot_symlog(
             returns.detach(),
             bins=self.config.value_bins,
@@ -106,6 +109,7 @@ class ImaginationActorCritic(nn.Module):
             "imagined_return": returns.mean(),
             "imagined_safety": trajectory.safety_probabilities.mean(),
             "imagined_uncertainty": trajectory.uncertainties.mean(),
+            "td_error": (value_predictions - returns.detach()).abs().mean(),
         }
         return losses, trajectory
 

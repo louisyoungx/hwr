@@ -42,6 +42,10 @@ _EXPORTS = {
         "FoundationFeatureCache",
     ),
     "AutonomousEpisode": ("hwr.data.autonomous_trajectory", "AutonomousEpisode"),
+    "AppendableAutonomousTrajectoryStore": (
+        "hwr.data.autonomous_trajectory",
+        "AppendableAutonomousTrajectoryStore",
+    ),
     "AutonomousTrajectoryDatasetBuilder": (
         "hwr.data.autonomous_trajectory",
         "AutonomousTrajectoryDatasetBuilder",

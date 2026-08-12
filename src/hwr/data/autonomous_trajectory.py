@@ -252,6 +252,76 @@ class AutonomousTrajectoryDatasetBuilder:
         return self.path
 
 
+class AppendableAutonomousTrajectoryStore:
+    """Single-writer replay dataset whose manifest is atomic after every Episode."""
+
+    def __init__(self, root: Path, dataset_id: str) -> None:
+        if not dataset_id:
+            raise ValueError("autonomous trajectory dataset id is required")
+        self.path = root / dataset_id
+        self.path.mkdir(parents=True, exist_ok=True)
+        manifest_path = self.path / "manifest.json"
+        if manifest_path.exists():
+            self.manifest = verify_autonomous_trajectory_dataset(self.path)
+        else:
+            self.manifest = {
+                "schema_version": AUTONOMOUS_TRAJECTORY_SCHEMA,
+                "dataset_id": dataset_id,
+                "array_fields": sorted(TRAJECTORY_ARRAY_FIELDS),
+                "allowed_action_sources": sorted(ALLOWED_ACTION_SOURCES),
+                "episode_count": 0,
+                "transition_count": 0,
+                "shards": [],
+            }
+
+    def append(self, episode: AutonomousEpisode) -> Path:
+        if any(
+            shard["episode_id"] == episode.episode_id
+            for shard in self.manifest["shards"]
+        ):
+            raise ValueError("autonomous trajectory episode id must be unique")
+        existing_fingerprints = {
+            shard["preprocess_fingerprint"] for shard in self.manifest["shards"]
+        }
+        if existing_fingerprints and existing_fingerprints != {
+            episode.preprocess_fingerprint
+        }:
+            raise ValueError("trajectory preprocessing changed within one dataset")
+        filename = f"{episode.episode_id}.npz"
+        path = self.path / filename
+        temporary = path.with_name(f".{filename}.{uuid.uuid4().hex}.tmp")
+        try:
+            with temporary.open("wb") as handle:
+                np.savez_compressed(handle, **episode.arrays)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+        transitions = int(episode.arrays["executed_action"].shape[0])
+        shard = {
+            "episode_id": episode.episode_id,
+            "task_id": episode.task_id,
+            "seed": episode.seed,
+            "instruction": episode.instruction,
+            "locale": episode.locale,
+            "environment_version": episode.environment_version,
+            "source_commit": episode.source_commit,
+            "preprocess_fingerprint": episode.preprocess_fingerprint,
+            "legal_transform_ids": list(episode.legal_transform_ids),
+            "metadata": episode.metadata,
+            "path": filename,
+            "observation_count": int(episode.arrays["rgb_uint8"].shape[0]),
+            "transition_count": transitions,
+            "sha256": _sha256(path),
+        }
+        self.manifest["shards"].append(shard)
+        self.manifest["episode_count"] += 1
+        self.manifest["transition_count"] += transitions
+        _write_json_atomic(self.path / "manifest.json", self.manifest)
+        return path
+
+
 def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(
