@@ -212,7 +212,9 @@ def _stack() -> FoundationLearningStack:
     student = VisualStudentModel(visual_config)
     visual_objective = VisualFoundationObjectives(
         VisualObjectiveConfig(
-            student_dimension=8, siglip_dimension=7, dinov2_dimension=5
+            student_dimension=8,
+            vision_language_dimension=7,
+            dense_vision_dimension=5,
         )
     )
     world = ActionConditionedWorldModel(world_config)

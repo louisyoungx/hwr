@@ -26,14 +26,14 @@ def _batch() -> FoundationTrainingBatch:
         ).clone(),
         "repeated_frame": torch.zeros(flattened, history, dtype=torch.bool),
     }
-    siglip = torch.arange(flattened * history * 3 * 2 * 2).reshape(
+    vision_language = torch.arange(flattened * history * 3 * 2 * 2).reshape(
         flattened, history, 3, 2, 2, 1
     ).float()
     targets = VisualTeacherTargets(
-        siglip,
-        torch.ones(siglip.shape[:-1], dtype=torch.bool),
-        siglip.clone(),
-        torch.ones(siglip.shape[:-1], dtype=torch.bool),
+        vision_language,
+        torch.ones(vision_language.shape[:-1], dtype=torch.bool),
+        vision_language.clone(),
+        torch.ones(vision_language.shape[:-1], dtype=torch.bool),
         rgb,
         torch.ones(flattened, history, 3, 1, size, size, dtype=torch.bool),
         inputs["head_depth_m"],

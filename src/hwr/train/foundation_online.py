@@ -366,23 +366,23 @@ class FoundationOnlineTrainingRunner:
     def _materialize_features(self) -> FoundationPreparedFeatures:
         output = self.run_path / "features"
         output.mkdir(parents=True, exist_ok=True)
-        vision_language = self.providers.vision_language()
-        siglip = materialize_visual_features(
+        vision_language_provider = self.providers.vision_language()
+        vision_language = materialize_visual_features(
             self.store.path,
             self.cache,
             self.preprocessor,
-            vision_language,
-            output / "siglip.json",
+            vision_language_provider,
+            output / "vision-language.json",
         )
-        del vision_language
+        del vision_language_provider
         gc.collect()
         dense = self.providers.dense_vision()
-        dinov2 = materialize_visual_features(
+        dense_vision = materialize_visual_features(
             self.store.path,
             self.cache,
             self.preprocessor,
             dense,
-            output / "dinov2.json",
+            output / "dense-vision.json",
         )
         del dense
         gc.collect()
@@ -395,7 +395,7 @@ class FoundationOnlineTrainingRunner:
         )
         del language_provider
         gc.collect()
-        return FoundationPreparedFeatures(siglip, dinov2, language)
+        return FoundationPreparedFeatures(vision_language, dense_vision, language)
 
     def _bound_replay_storage(self) -> None:
         base, remainder = divmod(
@@ -408,7 +408,7 @@ class FoundationOnlineTrainingRunner:
         evicted_sources = self.store.prune_to_task_capacities(capacities)
         if not evicted_sources:
             return
-        for filename in ("siglip.json", "dinov2.json"):
+        for filename in ("vision-language.json", "dense-vision.json"):
             path = self.run_path / "features" / filename
             if not path.is_file():
                 continue

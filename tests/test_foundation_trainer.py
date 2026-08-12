@@ -72,10 +72,14 @@ def _batch(visual: VisualStudentConfig) -> FoundationTrainingBatch:
         "repeated_frame": torch.zeros(flattened, history, dtype=torch.bool),
     }
     targets = VisualTeacherTargets(
-        siglip=torch.randn(flattened, history, 3, 3, 3, 12),
-        siglip_valid=torch.ones(flattened, history, 3, 3, 3, dtype=torch.bool),
-        dinov2=torch.randn(flattened, history, 3, 4, 4, 10),
-        dinov2_valid=torch.ones(flattened, history, 3, 4, 4, dtype=torch.bool),
+        vision_language=torch.randn(flattened, history, 3, 3, 3, 12),
+        vision_language_valid=torch.ones(
+            flattened, history, 3, 3, 3, dtype=torch.bool
+        ),
+        dense_vision=torch.randn(flattened, history, 3, 4, 4, 10),
+        dense_vision_valid=torch.ones(
+            flattened, history, 3, 4, 4, dtype=torch.bool
+        ),
         rgb=torch.rand(flattened, history, 3, 3, size, size),
         reconstruction_mask=torch.ones(flattened, history, 3, 1, size, size, dtype=torch.bool),
         head_depth_m=torch.ones(flattened, history, 1, size, size),
@@ -102,7 +106,9 @@ def _trainer() -> FoundationWorldModelTrainer:
     student = VisualStudentModel(visual_config)
     visual_objective = VisualFoundationObjectives(
         VisualObjectiveConfig(
-            student_dimension=16, siglip_dimension=12, dinov2_dimension=10
+            student_dimension=16,
+            vision_language_dimension=12,
+            dense_vision_dimension=10,
         )
     )
     world = ActionConditionedWorldModel(world_config)

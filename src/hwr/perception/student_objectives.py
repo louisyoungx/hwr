@@ -13,10 +13,10 @@ from hwr.perception.student import VisualStudentOutput
 @dataclass(frozen=True)
 class VisualObjectiveConfig:
     student_dimension: int = 256
-    siglip_dimension: int = 768
-    dinov2_dimension: int = 384
-    siglip_weight: float = 1.0
-    dinov2_weight: float = 1.0
+    vision_language_dimension: int = 768
+    dense_vision_dimension: int = 384
+    vision_language_weight: float = 1.0
+    dense_vision_weight: float = 1.0
     depth_weight: float = 0.25
     reconstruction_weight: float = 0.25
     correspondence_weight: float = 0.5
@@ -24,12 +24,12 @@ class VisualObjectiveConfig:
     def __post_init__(self) -> None:
         dimensions = (
             self.student_dimension,
-            self.siglip_dimension,
-            self.dinov2_dimension,
+            self.vision_language_dimension,
+            self.dense_vision_dimension,
         )
         weights = (
-            self.siglip_weight,
-            self.dinov2_weight,
+            self.vision_language_weight,
+            self.dense_vision_weight,
             self.depth_weight,
             self.reconstruction_weight,
             self.correspondence_weight,
@@ -43,10 +43,10 @@ class VisualObjectiveConfig:
 
 @dataclass(frozen=True)
 class VisualTeacherTargets:
-    siglip: torch.Tensor
-    siglip_valid: torch.Tensor
-    dinov2: torch.Tensor
-    dinov2_valid: torch.Tensor
+    vision_language: torch.Tensor
+    vision_language_valid: torch.Tensor
+    dense_vision: torch.Tensor
+    dense_vision_valid: torch.Tensor
     rgb: torch.Tensor
     reconstruction_mask: torch.Tensor
     head_depth_m: torch.Tensor
@@ -143,28 +143,28 @@ class VisualFoundationObjectives(nn.Module):
     def __init__(self, config: VisualObjectiveConfig) -> None:
         super().__init__()
         self.config = config
-        self.siglip_projection = nn.Linear(
-            config.student_dimension, config.siglip_dimension
+        self.vision_language_projection = nn.Linear(
+            config.student_dimension, config.vision_language_dimension
         )
-        self.dinov2_projection = nn.Linear(
-            config.student_dimension, config.dinov2_dimension
+        self.dense_vision_projection = nn.Linear(
+            config.student_dimension, config.dense_vision_dimension
         )
 
     def forward(
         self, output: VisualStudentOutput, targets: VisualTeacherTargets
     ) -> dict[str, torch.Tensor]:
         losses = {
-            "siglip": _dense_cosine_loss(
+            "vision_language": _dense_cosine_loss(
                 output.spatial_features,
-                self.siglip_projection,
-                targets.siglip,
-                targets.siglip_valid,
+                self.vision_language_projection,
+                targets.vision_language,
+                targets.vision_language_valid,
             ),
-            "dinov2": _dense_cosine_loss(
+            "dense_vision": _dense_cosine_loss(
                 output.spatial_features,
-                self.dinov2_projection,
-                targets.dinov2,
-                targets.dinov2_valid,
+                self.dense_vision_projection,
+                targets.dense_vision,
+                targets.dense_vision_valid,
             ),
             "depth": _depth_loss(output, targets),
             "reconstruction": _reconstruction_loss(output, targets),
@@ -173,8 +173,8 @@ class VisualFoundationObjectives(nn.Module):
             ),
         }
         losses["total"] = (
-            self.config.siglip_weight * losses["siglip"]
-            + self.config.dinov2_weight * losses["dinov2"]
+            self.config.vision_language_weight * losses["vision_language"]
+            + self.config.dense_vision_weight * losses["dense_vision"]
             + self.config.depth_weight * losses["depth"]
             + self.config.reconstruction_weight * losses["reconstruction"]
             + self.config.correspondence_weight * losses["correspondence"]

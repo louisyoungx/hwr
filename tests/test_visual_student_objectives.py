@@ -21,10 +21,10 @@ def _fixture() -> tuple[VisualStudentOutput, VisualTeacherTargets]:
         spatial_validity=torch.ones(1, 2, 3, 2, 2, dtype=torch.bool),
     )
     targets = VisualTeacherTargets(
-        siglip=torch.randn(1, 2, 3, 3, 3, 12),
-        siglip_valid=torch.ones(1, 2, 3, 3, 3, dtype=torch.bool),
-        dinov2=torch.randn(1, 2, 3, 4, 4, 10),
-        dinov2_valid=torch.ones(1, 2, 3, 4, 4, dtype=torch.bool),
+        vision_language=torch.randn(1, 2, 3, 3, 3, 12),
+        vision_language_valid=torch.ones(1, 2, 3, 3, 3, dtype=torch.bool),
+        dense_vision=torch.randn(1, 2, 3, 4, 4, 10),
+        dense_vision_valid=torch.ones(1, 2, 3, 4, 4, dtype=torch.bool),
         rgb=torch.rand(1, 2, 3, 3, 8, 8),
         reconstruction_mask=torch.ones(1, 2, 3, 1, 8, 8, dtype=torch.bool),
         head_depth_m=torch.ones(1, 2, 1, 8, 8),
@@ -37,18 +37,23 @@ def _fixture() -> tuple[VisualStudentOutput, VisualTeacherTargets]:
 def test_action_free_visual_objectives_are_finite_and_differentiable() -> None:
     output, targets = _fixture()
     objective = VisualFoundationObjectives(
-        VisualObjectiveConfig(student_dimension=8, siglip_dimension=12, dinov2_dimension=10)
+        VisualObjectiveConfig(
+            student_dimension=8,
+            vision_language_dimension=12,
+            dense_vision_dimension=10,
+        )
     )
 
     losses = objective(output, targets)
     losses["total"].backward()
 
     assert set(losses) == {
-        "siglip", "dinov2", "depth", "reconstruction", "correspondence", "total"
+        "vision_language", "dense_vision", "depth", "reconstruction",
+        "correspondence", "total",
     }
     assert all(torch.isfinite(value) for value in losses.values())
     assert output.spatial_features.grad is not None
-    assert objective.siglip_projection.weight.grad is not None
+    assert objective.vision_language_projection.weight.grad is not None
 
 
 def test_empty_masks_produce_zero_auxiliary_losses() -> None:
@@ -56,21 +61,25 @@ def test_empty_masks_produce_zero_auxiliary_losses() -> None:
     targets = VisualTeacherTargets(
         **{
             **targets.__dict__,
-            "siglip_valid": torch.zeros_like(targets.siglip_valid),
-            "dinov2_valid": torch.zeros_like(targets.dinov2_valid),
+            "vision_language_valid": torch.zeros_like(targets.vision_language_valid),
+            "dense_vision_valid": torch.zeros_like(targets.dense_vision_valid),
             "reconstruction_mask": torch.zeros_like(targets.reconstruction_mask),
             "head_depth_valid": torch.zeros_like(targets.head_depth_valid),
             "correspondences": torch.empty((0, 10), dtype=torch.long),
         }
     )
     objective = VisualFoundationObjectives(
-        VisualObjectiveConfig(student_dimension=8, siglip_dimension=12, dinov2_dimension=10)
+        VisualObjectiveConfig(
+            student_dimension=8,
+            vision_language_dimension=12,
+            dense_vision_dimension=10,
+        )
     )
 
     losses = objective(output, targets)
 
-    assert losses["siglip"] == 0.0
-    assert losses["dinov2"] == 0.0
+    assert losses["vision_language"] == 0.0
+    assert losses["dense_vision"] == 0.0
     assert losses["depth"] == 0.0
     assert losses["reconstruction"] == 0.0
     assert losses["correspondence"] == 0.0

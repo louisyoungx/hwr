@@ -15,7 +15,7 @@ def test_formal_foundation_stack_is_built_from_one_consistent_config_set() -> No
     assert trainer.visual_student.config.visual_history == 4
     assert trainer.world_model.config.action_dimension == 16
     assert trainer.actor.config.latent_dimension == trainer.world_model.config.feature_dimension
-    assert trainer.visual_objective.config.siglip_dimension == 768
-    assert trainer.visual_objective.config.dinov2_dimension == 384
+    assert trainer.visual_objective.config.vision_language_dimension == 768
+    assert trainer.visual_objective.config.dense_vision_dimension == 384
     assert trainer.imagination.action_scaling == stack.action_scaling
     assert sum(parameter.numel() for parameter in trainer.visual_student.parameters()) >= 20_000_000

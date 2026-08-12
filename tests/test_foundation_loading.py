@@ -142,19 +142,19 @@ def test_materialized_foundation_features_build_continuous_training_batch(tmp_pa
     preprocessor = _preprocessor()
     dataset = _dataset(tmp_path, preprocessor.fingerprint)
     cache = FoundationFeatureCache(tmp_path / "cache")
-    siglip = materialize_visual_features(
+    vision_language = materialize_visual_features(
         dataset,
         cache,
         preprocessor,
         _VisionProvider("vision_language", 7, "a"),
-        tmp_path / "siglip.json",
+        tmp_path / "vision-language.json",
     )
-    dinov2 = materialize_visual_features(
+    dense_vision = materialize_visual_features(
         dataset,
         cache,
         preprocessor,
         _VisionProvider("dense_vision", 5, "b"),
-        tmp_path / "dinov2.json",
+        tmp_path / "dense-vision.json",
     )
     language = materialize_language_features(
         dataset, cache, _LanguageProvider(), tmp_path / "language.json"
@@ -176,7 +176,7 @@ def test_materialized_foundation_features_build_continuous_training_batch(tmp_pa
         cache,
         preprocessor,
         student,
-        FoundationPreparedFeatures(siglip, dinov2, language),
+        FoundationPreparedFeatures(vision_language, dense_vision, language),
         transitions=2,
     )
 
@@ -185,8 +185,8 @@ def test_materialized_foundation_features_build_continuous_training_batch(tmp_pa
     assert batch.sequence_batch_size == 1
     assert batch.observation_count == 3
     assert batch.student_inputs["rgb"].shape == (3, 2, 3, 3, 160, 160)
-    assert batch.visual_targets.siglip.shape == (3, 2, 3, 2, 2, 7)
-    assert batch.visual_targets.dinov2.shape == (3, 2, 3, 2, 2, 5)
+    assert batch.visual_targets.vision_language.shape == (3, 2, 3, 2, 2, 7)
+    assert batch.visual_targets.dense_vision.shape == (3, 2, 3, 2, 2, 5)
     assert batch.language_features.shape == (1, 6)
     assert batch.executed_actions.shape == (1, 2, 16)
     assert batch.continues.tolist() == [[1.0, 0.0]]

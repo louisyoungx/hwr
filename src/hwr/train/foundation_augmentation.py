@@ -94,14 +94,14 @@ def _transform_targets(
     selected: torch.Tensor,
     transformed_rgb: torch.Tensor,
 ) -> VisualTeacherTargets:
-    siglip = targets.siglip.clone()
-    siglip_valid = targets.siglip_valid.clone()
-    dinov2 = targets.dinov2.clone()
-    dinov2_valid = targets.dinov2_valid.clone()
-    for values in (siglip, dinov2):
+    vision_language = targets.vision_language.clone()
+    vision_language_valid = targets.vision_language_valid.clone()
+    dense_vision = targets.dense_vision.clone()
+    dense_vision_valid = targets.dense_vision_valid.clone()
+    for values in (vision_language, dense_vision):
         reflected = torch.flip(values[selected], dims=(-2,))
         values[selected] = _swap_camera(reflected, 1, 2, camera_axis=2)
-    for values in (siglip_valid, dinov2_valid):
+    for values in (vision_language_valid, dense_vision_valid):
         reflected = torch.flip(values[selected], dims=(-1,))
         values[selected] = _swap_camera(reflected, 1, 2, camera_axis=2)
     reconstruction = targets.reconstruction_mask.clone()
@@ -117,10 +117,10 @@ def _transform_targets(
         targets.correspondences, selected, transformed_rgb.shape[-1] // 16
     )
     return VisualTeacherTargets(
-        siglip,
-        siglip_valid,
-        dinov2,
-        dinov2_valid,
+        vision_language,
+        vision_language_valid,
+        dense_vision,
+        dense_vision_valid,
         transformed_rgb,
         reconstruction,
         depth,

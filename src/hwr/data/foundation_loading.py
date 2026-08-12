@@ -30,20 +30,20 @@ from hwr.train.foundation_batch import FoundationTrainingBatch
 
 @dataclass(frozen=True)
 class FoundationPreparedFeatures:
-    siglip: FoundationFeatureIndex
-    dinov2: FoundationFeatureIndex
+    vision_language: FoundationFeatureIndex
+    dense_vision: FoundationFeatureIndex
     language: FoundationFeatureIndex
 
     def __post_init__(self) -> None:
-        if self.siglip.role != "vision_language":
-            raise ValueError("prepared SigLIP feature role is invalid")
-        if self.dinov2.role != "dense_vision":
-            raise ValueError("prepared DINO feature role is invalid")
+        if self.vision_language.role != "vision_language":
+            raise ValueError("prepared vision-language feature role is invalid")
+        if self.dense_vision.role != "dense_vision":
+            raise ValueError("prepared dense-vision feature role is invalid")
         if self.language.role != "language":
             raise ValueError("prepared language feature role is invalid")
         datasets = {
-            self.siglip.dataset_sha256,
-            self.dinov2.dataset_sha256,
+            self.vision_language.dataset_sha256,
+            self.dense_vision.dataset_sha256,
             self.language.dataset_sha256,
         }
         if len(datasets) != 1:
@@ -71,12 +71,12 @@ class FoundationSequenceBatchLoader:
         self.features = features
         self.device = device
         dataset_digest = file_sha256(dataset_path / "manifest.json")
-        if features.siglip.dataset_sha256 != dataset_digest:
+        if features.vision_language.dataset_sha256 != dataset_digest:
             raise ValueError("prepared features refer to a different trajectory manifest")
-        if features.siglip.preprocess_sha256 != preprocessor.fingerprint:
-            raise ValueError("SigLIP feature preprocessing differs")
-        if features.dinov2.preprocess_sha256 != preprocessor.fingerprint:
-            raise ValueError("DINO feature preprocessing differs")
+        if features.vision_language.preprocess_sha256 != preprocessor.fingerprint:
+            raise ValueError("vision-language feature preprocessing differs")
+        if features.dense_vision.preprocess_sha256 != preprocessor.fingerprint:
+            raise ValueError("dense-vision feature preprocessing differs")
 
     def __len__(self) -> int:
         return len(self.windows)
@@ -97,13 +97,17 @@ class FoundationSequenceBatchLoader:
             ).to(self.device)
             for name in sequences[0]["inputs"]
         }
-        siglip, siglip_valid = self._teacher_arrays(sequences, self.features.siglip)
-        dinov2, dinov2_valid = self._teacher_arrays(sequences, self.features.dinov2)
+        vision_language, vision_language_valid = self._teacher_arrays(
+            sequences, self.features.vision_language
+        )
+        dense_vision, dense_vision_valid = self._teacher_arrays(
+            sequences, self.features.dense_vision
+        )
         targets = VisualTeacherTargets(
-            torch.from_numpy(siglip).to(self.device),
-            torch.from_numpy(siglip_valid).to(self.device),
-            torch.from_numpy(dinov2).to(self.device),
-            torch.from_numpy(dinov2_valid).to(self.device),
+            torch.from_numpy(vision_language).to(self.device),
+            torch.from_numpy(vision_language_valid).to(self.device),
+            torch.from_numpy(dense_vision).to(self.device),
+            torch.from_numpy(dense_vision_valid).to(self.device),
             student_inputs["rgb"],
             self._reconstruction_mask(student_inputs["rgb"]),
             student_inputs["head_depth_m"],
