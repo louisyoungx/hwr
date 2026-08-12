@@ -80,6 +80,18 @@ _EXPORTS = {
     "ImaginationRLConfig": ("hwr.train.imagination_rl", "ImaginationRLConfig"),
     "lambda_returns": ("hwr.train.imagination_rl", "lambda_returns"),
     "optimize_imagination_step": ("hwr.train.imagination_rl", "optimize_imagination_step"),
+    "FoundationTrainingBatch": (
+        "hwr.train.foundation_batch",
+        "FoundationTrainingBatch",
+    ),
+    "FoundationTrainerConfig": (
+        "hwr.train.foundation_trainer",
+        "FoundationTrainerConfig",
+    ),
+    "FoundationWorldModelTrainer": (
+        "hwr.train.foundation_trainer",
+        "FoundationWorldModelTrainer",
+    ),
 }
 
 __all__ = sorted(_EXPORTS)
