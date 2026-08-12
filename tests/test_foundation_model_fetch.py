@@ -6,6 +6,10 @@ import json
 import pytest
 
 from scripts.fetch_foundation_models import LOCK_SCHEMA, _load_sources, _lock_model
+from scripts.verify_foundation_models import (
+    _require_language_quality,
+    _require_vision_quality,
+)
 
 
 def test_committed_foundation_sources_are_pinned_and_license_identified() -> None:
@@ -64,3 +68,50 @@ def test_source_loader_rejects_moving_or_duplicate_model_definition(tmp_path) ->
     source.write_text(json.dumps({"schema_version": LOCK_SCHEMA, "models": []}))
     with pytest.raises(ValueError, match="schema mismatch"):
         _load_sources(source)
+
+
+def test_foundation_inference_gate_rejects_degenerate_continuous_features() -> None:
+    vision = {
+        "feature_shape": [3, 14, 14, 384],
+        "valid_patch_count": 392,
+        "minimum_valid_norm": 1.0,
+        "maximum_valid_norm": 1.0,
+        "invalid_features_zero": True,
+        "mean_patch_variation": 0.0,
+        "mean_valid_image_difference": 0.0,
+    }
+    language = {
+        "feature_shape": [1024],
+        "feature_norm": 1.0,
+        "paraphrase_cosine": 0.80,
+        "different_intent_cosine": 0.81,
+    }
+
+    with pytest.raises(RuntimeError, match="non-degeneracy"):
+        _require_vision_quality(vision, 384)
+    with pytest.raises(RuntimeError, match="semantic gate"):
+        _require_language_quality(language, 1024)
+
+
+def test_foundation_inference_gate_accepts_spatial_and_semantic_signal() -> None:
+    _require_vision_quality(
+        {
+            "feature_shape": [3, 14, 14, 384],
+            "valid_patch_count": 392,
+            "minimum_valid_norm": 0.9999,
+            "maximum_valid_norm": 1.0001,
+            "invalid_features_zero": True,
+            "mean_patch_variation": 0.02,
+            "mean_valid_image_difference": 0.03,
+        },
+        384,
+    )
+    _require_language_quality(
+        {
+            "feature_shape": [1024],
+            "feature_norm": 1.0,
+            "paraphrase_cosine": 0.90,
+            "different_intent_cosine": 0.70,
+        },
+        1024,
+    )

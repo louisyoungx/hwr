@@ -41,6 +41,12 @@ def _vision_report(provider: Any) -> dict[str, Any]:
         "minimum_valid_norm": float(norms.min()),
         "maximum_valid_norm": float(norms.max()),
         "invalid_features_zero": bool(np.all(features.values[~features.valid] == 0.0)),
+        "mean_patch_variation": float(
+            np.std(features.values[features.valid], axis=0).mean()
+        ),
+        "mean_valid_image_difference": float(
+            np.abs(features.values[0] - features.values[1]).mean()
+        ),
     }
 
 
@@ -65,18 +71,51 @@ def _verify(name: str, lock: Any, device: str) -> dict[str, Any]:
     }
     if lock.adapter == "dinov3_vit":
         provider = Dinov3ViTDenseVisionProvider(lock, device=device)
-        return {**common, "vision": _vision_report(provider)}
+        vision = _vision_report(provider)
+        _require_vision_quality(vision, lock.model_lock.output_dimension)
+        return {**common, "vision": vision}
     if lock.adapter == "siglip2":
         provider = Siglip2VisionLanguageProvider(lock, device=device)
+        vision = _vision_report(provider)
+        language = _language_report(provider)
+        _require_vision_quality(vision, lock.model_lock.output_dimension)
+        _require_language_quality(language, lock.model_lock.output_dimension)
         return {
             **common,
-            "vision": _vision_report(provider),
-            "language": _language_report(provider),
+            "vision": vision,
+            "language": language,
         }
     if lock.adapter == "qwen3_embedding":
         provider = Qwen3LanguageProvider(lock, device=device)
-        return {**common, "language": _language_report(provider)}
+        language = _language_report(provider)
+        _require_language_quality(language, lock.model_lock.output_dimension)
+        return {**common, "language": language}
     raise ValueError(f"unsupported foundation adapter for {name}: {lock.adapter}")
+
+
+def _require_vision_quality(report: Mapping[str, Any], dimension: int) -> None:
+    if (
+        report.get("feature_shape") != [3, 14, 14, dimension]
+        or int(report.get("valid_patch_count", -1)) != 2 * 14 * 14
+        or not 0.999 <= float(report.get("minimum_valid_norm", 0.0)) <= 1.001
+        or not 0.999 <= float(report.get("maximum_valid_norm", 0.0)) <= 1.001
+        or report.get("invalid_features_zero") is not True
+        or float(report.get("mean_patch_variation", 0.0)) <= 1.0e-5
+        or float(report.get("mean_valid_image_difference", 0.0)) <= 1.0e-5
+    ):
+        raise RuntimeError("foundation vision provider failed the non-degeneracy gate")
+
+
+def _require_language_quality(report: Mapping[str, Any], dimension: int) -> None:
+    norm = float(report.get("feature_norm", 0.0))
+    paraphrase = float(report.get("paraphrase_cosine", -1.0))
+    different = float(report.get("different_intent_cosine", 1.0))
+    if (
+        report.get("feature_shape") != [dimension]
+        or not 0.999 <= norm <= 1.001
+        or paraphrase <= different + 0.01
+    ):
+        raise RuntimeError("foundation language provider failed the semantic gate")
 
 
 def _write_atomic(path: Path, payload: Mapping[str, Any]) -> None:
