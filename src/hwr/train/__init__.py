@@ -108,6 +108,22 @@ _EXPORTS = {
         "hwr.train.foundation_registry",
         "save_foundation_training_checkpoint",
     ),
+    "AutonomousCollectionConfig": (
+        "hwr.train.foundation_collection",
+        "AutonomousCollectionConfig",
+    ),
+    "AutonomousEpisodeCollector": (
+        "hwr.train.foundation_collection",
+        "AutonomousEpisodeCollector",
+    ),
+    "CurrentRLActorActionSource": (
+        "hwr.train.foundation_collection",
+        "CurrentRLActorActionSource",
+    ),
+    "RandomRLActionSource": (
+        "hwr.train.foundation_collection",
+        "RandomRLActionSource",
+    ),
 }
 
 __all__ = sorted(_EXPORTS)

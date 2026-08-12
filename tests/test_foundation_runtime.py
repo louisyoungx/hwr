@@ -139,3 +139,13 @@ def test_static_language_resolver_rejects_unprepared_instruction() -> None:
 
     with pytest.raises(KeyError, match="not prepared"):
         policy.infer((observation,))
+
+
+def test_foundation_runtime_can_sample_only_current_actor_for_collection() -> None:
+    policy = _policy()
+    policy.reset(task_id="fixture/v1", seed=3)
+
+    action = policy.infer_stochastic((_observation(),)).actions[0]
+
+    assert len(action.vector()) == 16
+    policy.record_applied_action(action)

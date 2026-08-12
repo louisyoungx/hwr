@@ -87,6 +87,20 @@ class FoundationWorldModelPolicy:
         self._awaiting_feedback = False
 
     def infer(self, observations: Sequence[DualArmObservation]) -> ActionChunk:
+        return self._infer(observations, deterministic=True)
+
+    def infer_stochastic(
+        self, observations: Sequence[DualArmObservation]
+    ) -> ActionChunk:
+        """Sample only from the current RL Actor during autonomous collection."""
+        return self._infer(observations, deterministic=False)
+
+    def _infer(
+        self,
+        observations: Sequence[DualArmObservation],
+        *,
+        deterministic: bool,
+    ) -> ActionChunk:
         if self._task_id is None:
             raise RuntimeError("foundation deployment policy must be reset")
         if self._awaiting_feedback:
@@ -117,7 +131,11 @@ class FoundationWorldModelPolicy:
                 sample=False,
             )
             latent = self.world_model.features(self._state)
-            normalized = self.actor.deterministic(latent)
+            normalized = (
+                self.actor.deterministic(latent)
+                if deterministic
+                else self.actor.sample(latent).action
+            )
             vector = scale_latent_action(normalized, self.action_scaling)[0].cpu()
         self._pending_action = None
         self._awaiting_feedback = True
