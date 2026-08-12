@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import subprocess
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -194,6 +195,7 @@ def test_foundation_launcher_builds_one_detached_gated_notifying_command(
         HWR_FOUNDATION_MODEL_ROOT=str(model_root),
         HWR_FOUNDATION_OUTPUT_ROOT=str(output_root),
         HWR_FOUNDATION_LOG_ROOT=str(log_root),
+        HWR_FOUNDATION_PYTHON=sys.executable,
         HWR_FOUNDATION_DEVICE="mps",
         HWR_FOUNDATION_TEACHER_DEVICE="cpu",
     )

@@ -27,7 +27,7 @@ fi
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 repository_root="$(cd "$script_dir/.." && pwd)"
-python_binary="$repository_root/.venv/bin/python"
+python_binary="${HWR_FOUNDATION_PYTHON:-$repository_root/.venv/bin/python}"
 notification_wrapper="$script_dir/run_training_with_lark_notify.sh"
 output_root="${HWR_FOUNDATION_OUTPUT_ROOT:-$repository_root/runs/foundation-world-model}"
 log_root="${HWR_FOUNDATION_LOG_ROOT:-$repository_root/logs/foundation-world-model}"
