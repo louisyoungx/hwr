@@ -107,7 +107,8 @@ def _json_compatible(value: object) -> object:
     return json.loads(json.dumps(value, sort_keys=True))
 
 
-def _lineage(source_commit: str) -> dict[str, object]:
+def foundation_lineage(source_commit: str) -> dict[str, object]:
+    """Return the one exact no-expert lineage accepted by formal training."""
     if not source_commit:
         raise ValueError("foundation checkpoint source commit is required")
     return {
@@ -121,6 +122,15 @@ def _lineage(source_commit: str) -> dict[str, object]:
         "action_search": False,
         "legacy_p_series_parent": None,
     }
+
+
+def require_foundation_lineage(
+    value: object, *, source_commit: str
+) -> dict[str, object]:
+    expected = foundation_lineage(source_commit)
+    if not isinstance(value, Mapping) or dict(value) != expected:
+        raise ValueError("foundation no-expert lineage differs")
+    return expected
 
 
 def save_foundation_training_checkpoint(
@@ -162,7 +172,7 @@ def save_foundation_training_checkpoint(
             "imagination": trainer.imagination.config.to_dict(),
             "trainer": trainer.config.to_dict(),
         },
-        "lineage": _lineage(source_commit),
+        "lineage": foundation_lineage(source_commit),
         "deployable": False,
     }
     _atomic_json(path / "manifest.json", manifest)
@@ -173,6 +183,12 @@ def load_foundation_training_checkpoint(
     path: Path, trainer: FoundationWorldModelTrainer
 ) -> Mapping[str, Any]:
     manifest = _read_verified_manifest(path, TRAINING_CHECKPOINT_SCHEMA)
+    lineage = manifest.get("lineage")
+    if not isinstance(lineage, Mapping):
+        raise ValueError("foundation training checkpoint lineage is missing")
+    require_foundation_lineage(
+        lineage, source_commit=str(lineage.get("source_commit", ""))
+    )
     expected = {
         "visual_student": trainer.visual_student.config.to_dict(),
         "visual_objective": trainer.visual_objective.config.to_dict(),

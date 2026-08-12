@@ -16,6 +16,7 @@ from hwr.policy.latent_value import LatentValueModel
 from hwr.train.foundation_registry import (
     export_foundation_deployment,
     file_sha256,
+    foundation_lineage,
     load_foundation_deployment,
     load_foundation_training_checkpoint,
     prune_versioned_artifacts,
@@ -122,6 +123,25 @@ def test_training_checkpoint_restores_models_and_optimizer_metadata(tmp_path) ->
     )
     assert trainer.update_count == 9
     assert manifest["lineage"]["expert_policies"] == []
+    assert manifest["lineage"] == foundation_lineage("abc123")
+
+
+def test_training_checkpoint_rejects_tampered_no_expert_lineage(tmp_path) -> None:
+    trainer = _trainer()
+    path = save_foundation_training_checkpoint(
+        tmp_path / "training",
+        trainer,
+        source_commit="abc123",
+        data_manifest_sha256="d" * 64,
+        training_diagnostics=DIAGNOSTICS,
+    )
+    manifest_path = path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["lineage"]["expert_policies"] = ["forbidden"]
+    manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(ValueError, match="no-expert lineage differs"):
+        load_foundation_training_checkpoint(path, trainer)
 
 
 def test_deployment_export_is_stripped_and_reloads_identically(tmp_path) -> None:

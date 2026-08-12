@@ -39,7 +39,9 @@ from hwr.train.foundation_registry import (
     ACTION_CAUSALITY_SCHEMA,
     DEPLOYMENT_SCHEMA,
     TRAINING_CHECKPOINT_SCHEMA,
+    foundation_lineage,
     load_foundation_deployment,
+    require_foundation_lineage,
 )
 from hwr.world_model import (
     ACTION_CAUSALITY_COMPONENTS,
@@ -291,7 +293,7 @@ def _require_action_causality(run_path: Path) -> Path:
     if latest.get("schema_version") != "hwr.foundation-online-latest/v1":
         raise ValueError("training latest schema differs")
     run_manifest = _read_json(run_path / "run-manifest.json")
-    if run_manifest.get("schema_version") != "hwr.foundation-online-run/v1":
+    if run_manifest.get("schema_version") != "hwr.foundation-online-run/v2":
         raise ValueError("training run schema differs")
     path = _run_member(run_path, latest["action_causality_report"])
     if _sha256(path) != latest.get("action_causality_sha256"):
@@ -437,12 +439,18 @@ def _require_causality_lineage(
     deployment: Mapping[str, Any],
 ) -> None:
     source_commit = str(run_manifest.get("source_commit", ""))
+    expected_lineage = foundation_lineage(source_commit)
     if not source_commit or {
         str(report.get("source_commit", "")),
         str(checkpoint.get("lineage", {}).get("source_commit", "")),
         str(deployment.get("source_commit", "")),
     } != {source_commit}:
         raise ValueError("foundation source lineage differs")
+    require_foundation_lineage(
+        run_manifest.get("lineage"), source_commit=source_commit
+    )
+    if checkpoint.get("lineage") != expected_lineage:
+        raise ValueError("foundation checkpoint no-expert lineage differs")
     update_count = int(latest.get("update_count", -1))
     if update_count <= 0 or {
         int(report.get("update_count", -2)),

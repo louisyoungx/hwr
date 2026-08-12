@@ -317,6 +317,12 @@ Actor 只能对潜在状态求值和采样自己的动作。禁止使用 CEM、M
 对象/目标 token 或旧 P 系列 checkpoint 继承。只有总门禁生成带代码提交和配置哈希的
 `development-ready.json` 后，正式训练命令才允许运行。
 
+正式 run 与训练 checkpoint 必须共享同一个精确的 no-expert lineage：随机初始化的项目
+自有模型、仅 `random_rl_exploration` 与 `rl_actor` 两种动作来源、空专家/示范集合、关闭
+行为克隆/教师动作/动作搜索，并且没有旧 P 系列父 checkpoint。保存、恢复和最终评测都要
+按完整结构比较，不能只检查 `source_commit`，也不能把“字段存在”当作“字段为空”。正式
+run manifest schema 为 `hwr.foundation-online-run/v2`，旧 v1 不进入新谱系。
+
 ### 9.1 本机存储上限
 
 密集基础视觉特征不能随 Episode 数量无限增长。正式 runner 使用任务无关的有界 replay：

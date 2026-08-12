@@ -333,6 +333,7 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert result.latest_deployment.is_dir()
     assert result.latest_action_causality_report.is_file()
     latest = json.loads((tmp_path / "run/latest.json").read_text())
+    run_manifest = json.loads((tmp_path / "run/run-manifest.json").read_text())
     recovery = json.loads(
         (result.latest_checkpoint / "recovery/manifest.json").read_text()
     )
@@ -349,6 +350,10 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert latest["action_causality_sha256"] == checkpoint[
         "training_diagnostics"
     ]["action_causality_report_sha256"]
+    assert run_manifest["schema_version"] == "hwr.foundation-online-run/v2"
+    assert run_manifest["lineage"]["expert_policies"] == []
+    assert run_manifest["lineage"]["teacher_actions"] is False
+    assert run_manifest["lineage"]["action_search"] is False
     assert recovery["schema_version"] == "hwr.foundation-runner-recovery/v3"
     assert all("safety_intervention_rate" in record for record in records)
     assert all("safety_cost_rate" not in record for record in records)

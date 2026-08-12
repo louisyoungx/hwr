@@ -59,6 +59,12 @@ P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为�
 装配三个目标任务且不存在专家、示范、动作标签、航点、技能阶段、对象 token、目标 token
 或旧 checkpoint 等谱系键。旧 v1 报告无法再用于启动训练。
 
+运行谱系复核还发现，旧最终评测只从 checkpoint lineage 读取 `source_commit`，不核对
+专家、示范、行为克隆、教师动作、动作搜索和旧 checkpoint 声明；run manifest 本身也缺少
+后三项。现在保存、恢复、checkpoint 加载和最终评测共用同一个精确 no-expert lineage，任何
+字段缺失、多余、变为非空或来源提交不一致都会失败。run manifest schema 升为
+`hwr.foundation-online-run/v2`，旧 v1 运行不能静默进入当前正式验收。
+
 旧的特权专家完成率测试不再属于正式验收：当前提交中的该专家在 11 个固定回归种子上
 全部失败，这也再次验证了废弃专家路线的决定。它不进入采集、replay、Actor 或世界模型；
 门禁继续通过 AST 审计禁止新训练源码导入专家。

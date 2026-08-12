@@ -63,8 +63,10 @@ from hwr.train.foundation_registry import (
     ACTION_CAUSALITY_SCHEMA,
     export_foundation_deployment,
     file_sha256 as registry_file_sha256,
+    foundation_lineage,
     load_foundation_training_checkpoint,
     prune_versioned_artifacts,
+    require_foundation_lineage,
     save_foundation_training_checkpoint,
 )
 from hwr.train.foundation_recovery import (
@@ -256,6 +258,9 @@ class FoundationOnlineTrainingRunner:
         }
         checkpoint_manifest = json.loads(
             (checkpoint / "manifest.json").read_text(encoding="utf-8")
+        )
+        require_foundation_lineage(
+            checkpoint_manifest.get("lineage"), source_commit=self.source_commit
         )
         if checkpoint_manifest.get("training_diagnostics") != expected:
             raise ValueError("resumed checkpoint diagnostic provenance differs")
@@ -759,7 +764,7 @@ class FoundationOnlineTrainingRunner:
 
     def _write_or_verify_run_manifest(self) -> None:
         manifest = {
-            "schema_version": "hwr.foundation-online-run/v1",
+            "schema_version": "hwr.foundation-online-run/v2",
             "source_commit": self.source_commit,
             "training_config": self.config.to_dict(),
             "tasks": [asdict(self.tasks[name]) for name in self.task_ids],
@@ -767,13 +772,7 @@ class FoundationOnlineTrainingRunner:
                 "fingerprint": self.preprocessor.fingerprint,
                 "config": asdict(self.preprocessor.config),
             },
-            "lineage": {
-                "action_sources": ["random_rl_exploration", "rl_actor"],
-                "expert_policies": [],
-                "demonstration_datasets": [],
-                "behavior_cloning": False,
-                "legacy_p_series_parent": None,
-            },
+            "lineage": foundation_lineage(self.source_commit),
         }
         path = self.run_path / "run-manifest.json"
         if path.is_file():

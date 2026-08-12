@@ -16,6 +16,7 @@ from hwr.world_model import (
     CounterfactualComponentReport,
     assess_action_causality,
 )
+from hwr.train.foundation_registry import foundation_lineage
 
 
 def test_foundation_evaluation_defaults_match_fixed_acceptance_protocol() -> None:
@@ -95,8 +96,9 @@ def _causality_run(tmp_path):
     _write_json(
         run / "run-manifest.json",
         {
-            "schema_version": "hwr.foundation-online-run/v1",
+            "schema_version": "hwr.foundation-online-run/v2",
             "source_commit": "abc123",
+            "lineage": foundation_lineage("abc123"),
             "training_config": {
                 "causality_audit_windows_per_task": 1,
                 "minimum_action_causality_ratio": 1.05,
@@ -178,7 +180,7 @@ def _causality_run(tmp_path):
             "data_manifest_sha256": _digest(training_manifest),
             "training_diagnostics": diagnostics,
             "update_count": 1,
-            "lineage": {"source_commit": "abc123"},
+            "lineage": foundation_lineage("abc123"),
         },
     )
     deployment_artifact = run / "deployments/update-000000001/deployable-state.pt"
@@ -238,6 +240,17 @@ def test_evaluation_rejects_causality_holdout_manifest_drift(tmp_path) -> None:
     )
 
     with pytest.raises(ValueError, match="data provenance differs"):
+        _require_action_causality(run)
+
+
+def test_evaluation_rejects_tampered_no_expert_run_lineage(tmp_path) -> None:
+    run, _ = _causality_run(tmp_path)
+    manifest = run / "run-manifest.json"
+    value = json.loads(manifest.read_text())
+    value["lineage"]["demonstration_datasets"] = ["forbidden"]
+    _write_json(manifest, value)
+
+    with pytest.raises(ValueError, match="no-expert lineage differs"):
         _require_action_causality(run)
 
 
