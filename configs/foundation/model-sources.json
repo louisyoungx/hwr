@@ -1,0 +1,55 @@
+{
+  "schema_version": "hwr.foundation-model-sources/v1",
+  "models": [
+    {
+      "adapter": "siglip2",
+      "license_id": "Apache-2.0",
+      "local_name": "siglip2-base-patch16-224",
+      "model_id": "google/siglip2-base-patch16-224",
+      "output_dimension": 768,
+      "revision": "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2",
+      "role": "vision_language",
+      "required_files": [
+        "config.json",
+        "model.safetensors",
+        "preprocessor_config.json",
+        "special_tokens_map.json",
+        "tokenizer.json",
+        "tokenizer.model",
+        "tokenizer_config.json"
+      ]
+    },
+    {
+      "adapter": "dinov2",
+      "license_id": "Apache-2.0",
+      "local_name": "dinov2-small",
+      "model_id": "facebook/dinov2-small",
+      "output_dimension": 384,
+      "revision": "ed25f3a31f01632728cabb09d1542f84ab7b0056",
+      "role": "dense_vision",
+      "required_files": [
+        "config.json",
+        "model.safetensors",
+        "preprocessor_config.json"
+      ]
+    },
+    {
+      "adapter": "qwen3_embedding",
+      "license_id": "Apache-2.0",
+      "local_name": "qwen3-embedding-0.6b",
+      "model_id": "Qwen/Qwen3-Embedding-0.6B",
+      "output_dimension": 1024,
+      "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+      "role": "language",
+      "required_files": [
+        "config.json",
+        "generation_config.json",
+        "merges.txt",
+        "model.safetensors",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "vocab.json"
+      ]
+    }
+  ]
+}

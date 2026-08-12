@@ -1,0 +1,123 @@
+{
+  "models": [
+    {
+      "adapter": "siglip2",
+      "artifacts": [
+        {
+          "relative_path": "siglip2-base-patch16-224/config.json",
+          "sha256": "fe8b5fe6d5734360678fd71c11c21e1ea3364bd8598d34295d9206335973ffd7",
+          "size_bytes": 253
+        },
+        {
+          "relative_path": "siglip2-base-patch16-224/model.safetensors",
+          "sha256": "612923381c76ec5a9bed335d1c48827e3f2e506ac31b044b63b2031fadee6a0b",
+          "size_bytes": 1500800904
+        },
+        {
+          "relative_path": "siglip2-base-patch16-224/preprocessor_config.json",
+          "sha256": "9b36b57ebaf20f09bf4c22100ccc21877ea6bfe5aead0c00c59f8af8ccefacfc",
+          "size_bytes": 394
+        },
+        {
+          "relative_path": "siglip2-base-patch16-224/special_tokens_map.json",
+          "sha256": "baec30ea10906f16adb8c18af7a34023002c1746542612b8b41c9f09e1351351",
+          "size_bytes": 636
+        },
+        {
+          "relative_path": "siglip2-base-patch16-224/tokenizer.json",
+          "sha256": "cb9140fae3ac5122c972d37adf83e1248471a38147ad76f8215c8872c6fd8322",
+          "size_bytes": 34363039
+        },
+        {
+          "relative_path": "siglip2-base-patch16-224/tokenizer.model",
+          "sha256": "61a7b147390c64585d6c3543dd6fc636906c9af3865a5548f27f31aee1d4c8e2",
+          "size_bytes": 4241003
+        },
+        {
+          "relative_path": "siglip2-base-patch16-224/tokenizer_config.json",
+          "sha256": "14afe629fe4959b9e0d51e1852b8d9f7ad074f90a1a7125a4fcdd17f06e78fc8",
+          "size_bytes": 47164
+        }
+      ],
+      "license_id": "Apache-2.0",
+      "local_name": "siglip2-base-patch16-224",
+      "model_id": "google/siglip2-base-patch16-224",
+      "output_dimension": 768,
+      "revision": "75de2d55ec2d0b4efc50b3e9ad70dba96a7b2fa2",
+      "role": "vision_language"
+    },
+    {
+      "adapter": "dinov2",
+      "artifacts": [
+        {
+          "relative_path": "dinov2-small/config.json",
+          "sha256": "1809f83e3bdb1609a501a610ad4a742f4fd8ae44d72ca4aa0df52d1f2ac8628d",
+          "size_bytes": 547
+        },
+        {
+          "relative_path": "dinov2-small/model.safetensors",
+          "sha256": "ae1e99fcefd534ed978cdeb8326f08030c96e28b7a81ffcbc98a857c84d14be1",
+          "size_bytes": 88249960
+        },
+        {
+          "relative_path": "dinov2-small/preprocessor_config.json",
+          "sha256": "14e780d86fa1861f8751f868d7f45425b5feb55c38ca26f152ca5097ab30f828",
+          "size_bytes": 436
+        }
+      ],
+      "license_id": "Apache-2.0",
+      "local_name": "dinov2-small",
+      "model_id": "facebook/dinov2-small",
+      "output_dimension": 384,
+      "revision": "ed25f3a31f01632728cabb09d1542f84ab7b0056",
+      "role": "dense_vision"
+    },
+    {
+      "adapter": "qwen3_embedding",
+      "artifacts": [
+        {
+          "relative_path": "qwen3-embedding-0.6b/config.json",
+          "sha256": "b5bf1f51fc45be473a54718cef92448d90a1be001bf9b9a44b8c7f10a19feaa9",
+          "size_bytes": 727
+        },
+        {
+          "relative_path": "qwen3-embedding-0.6b/generation_config.json",
+          "sha256": "28396d421a2108acce96383f6a7de78008f7f1b17f807958f3c14c51dbfb65fb",
+          "size_bytes": 117
+        },
+        {
+          "relative_path": "qwen3-embedding-0.6b/merges.txt",
+          "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+          "size_bytes": 1671853
+        },
+        {
+          "relative_path": "qwen3-embedding-0.6b/model.safetensors",
+          "sha256": "0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd",
+          "size_bytes": 1191586416
+        },
+        {
+          "relative_path": "qwen3-embedding-0.6b/tokenizer.json",
+          "sha256": "def76fb086971c7867b829c23a26261e38d9d74e02139253b38aeb9df8b4b50a",
+          "size_bytes": 11423705
+        },
+        {
+          "relative_path": "qwen3-embedding-0.6b/tokenizer_config.json",
+          "sha256": "253153d0738ceb4c668d2eff957714dd2bea0b56de772a9fdccd96cbf517e6a0",
+          "size_bytes": 9706
+        },
+        {
+          "relative_path": "qwen3-embedding-0.6b/vocab.json",
+          "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+          "size_bytes": 2776833
+        }
+      ],
+      "license_id": "Apache-2.0",
+      "local_name": "qwen3-embedding-0.6b",
+      "model_id": "Qwen/Qwen3-Embedding-0.6B",
+      "output_dimension": 1024,
+      "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+      "role": "language"
+    }
+  ],
+  "schema_version": "hwr.foundation-model-lock-set/v1"
+}

@@ -18,6 +18,12 @@ dev = ["pytest>=8.0", "Pillow>=11.0"]
 assets3d = ["certifi>=2025.0", "trimesh==4.12.2"]
 sim3d = ["mujoco==3.10.0"]
 video = ["Pillow>=11.0"]
+foundation = [
+  "huggingface-hub>=0.34,<1.0",
+  "safetensors>=0.4,<1.0",
+  "sentencepiece>=0.2,<1.0",
+  "transformers>=4.56,<5.0",
+]
 
 [project.scripts]
 hwr-train-scenario = "hwr.apps.train_scenario:main"

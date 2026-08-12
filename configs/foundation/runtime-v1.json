@@ -1,0 +1,10 @@
+{
+  "dense_vision_model": "dinov2-small",
+  "language_model": "qwen3-embedding-0.6b",
+  "maximum_language_tokens": 512,
+  "schema_version": "hwr.foundation-runtime/v1",
+  "student_image_size": 160,
+  "teacher_image_size": 224,
+  "vision_language_model": "siglip2-base-patch16-224",
+  "visual_history": 4
+}

@@ -20,8 +20,10 @@ from hwr.perception.foundation import (
     FoundationModelLock,
     FrozenLanguageFeatureProvider,
     FrozenVisionFeatureProvider,
+    FrozenVisionLanguageFeatureProvider,
     SemanticLanguageFeatures,
     WeightArtifact,
+    language_source_sha256,
 )
 from hwr.perception.high_resolution import (
     HighResolutionVision,
@@ -43,9 +45,11 @@ __all__ = [
     "FoundationModelLock",
     "FrozenLanguageFeatureProvider",
     "FrozenVisionFeatureProvider",
+    "FrozenVisionLanguageFeatureProvider",
     "HighResolutionVision",
     "HighResolutionVisionConfig",
     "HighResolutionVisionPreprocessor",
     "SemanticLanguageFeatures",
     "WeightArtifact",
+    "language_source_sha256",
 ]

@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+import hashlib
+import json
+
+import pytest
+
+from scripts.fetch_foundation_models import LOCK_SCHEMA, _load_sources, _lock_model
+
+
+def test_committed_foundation_sources_are_pinned_and_publicly_licensed() -> None:
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    models = _load_sources(root / "configs/foundation/model-sources.json")
+
+    assert {model["adapter"] for model in models} == {
+        "siglip2",
+        "dinov2",
+        "qwen3_embedding",
+    }
+    assert all(len(model["revision"]) == 40 for model in models)
+    assert all(model["license_id"] == "Apache-2.0" for model in models)
+    assert all("model.safetensors" in model["required_files"] for model in models)
+
+
+def test_lock_model_hashes_every_required_file(tmp_path) -> None:
+    model_root = tmp_path / "models"
+    local = model_root / "fixture"
+    local.mkdir(parents=True)
+    (local / "config.json").write_text("{}")
+    (local / "model.safetensors").write_bytes(b"fixture-weight")
+    model = {
+        "adapter": "fixture",
+        "local_name": "fixture",
+        "model_id": "fixture/model",
+        "revision": "a" * 40,
+        "role": "dense_vision",
+        "license_id": "Apache-2.0",
+        "output_dimension": 4,
+        "required_files": ["config.json", "model.safetensors"],
+    }
+
+    lock = _lock_model(model, local, model_root)
+
+    assert lock["artifacts"][1]["sha256"] == hashlib.sha256(b"fixture-weight").hexdigest()
+    assert lock["artifacts"][0]["relative_path"] == "fixture/config.json"
+
+
+def test_source_loader_rejects_moving_or_duplicate_model_definition(tmp_path) -> None:
+    source = tmp_path / "models.json"
+    source.write_text(json.dumps({"schema_version": LOCK_SCHEMA, "models": []}))
+    with pytest.raises(ValueError, match="schema mismatch"):
+        _load_sources(source)

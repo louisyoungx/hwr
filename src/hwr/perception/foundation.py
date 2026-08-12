@@ -32,6 +32,27 @@ def _readonly_float32(value: np.ndarray, name: str) -> np.ndarray:
     return result
 
 
+def language_source_sha256(text: str, locale: str) -> str:
+    normalized = " ".join(text.split())
+    if not normalized or not locale:
+        raise ValueError("language feature source requires text and locale")
+    payload = json.dumps(
+        {"locale": locale, "text": normalized},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(4 * 1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 @dataclass(frozen=True)
 class WeightArtifact:
     """One immutable local file belonging to a frozen model revision."""
@@ -91,7 +112,7 @@ class FoundationModelLock:
             if path.stat().st_size != artifact.size_bytes:
                 errors.append(f"size:{artifact.relative_path}")
                 continue
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            digest = _file_sha256(path)
             if digest != artifact.sha256:
                 errors.append(f"sha256:{artifact.relative_path}")
         return tuple(errors)
@@ -153,7 +174,12 @@ class FrozenVisionFeatureProvider(Protocol):
     @property
     def model_lock(self) -> FoundationModelLock: ...
 
-    def encode(self, rgb: np.ndarray, camera_valid: np.ndarray) -> DenseVisualFeatures: ...
+    def encode_vision(
+        self,
+        rgb: np.ndarray,
+        camera_valid: np.ndarray,
+        source_sha256: str,
+    ) -> DenseVisualFeatures: ...
 
 
 @runtime_checkable
@@ -163,4 +189,11 @@ class FrozenLanguageFeatureProvider(Protocol):
     @property
     def model_lock(self) -> FoundationModelLock: ...
 
-    def encode(self, text: str, locale: str) -> SemanticLanguageFeatures: ...
+    def encode_language(self, text: str, locale: str) -> SemanticLanguageFeatures: ...
+
+
+@runtime_checkable
+class FrozenVisionLanguageFeatureProvider(
+    FrozenVisionFeatureProvider, FrozenLanguageFeatureProvider, Protocol
+):
+    """A joint frozen embedding space without generative outputs."""
