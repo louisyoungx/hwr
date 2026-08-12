@@ -175,6 +175,7 @@ class FoundationOnlineTrainingRunner:
         self.records: list[FoundationEpisodeRecord] = []
         self.latest_checkpoint: Path | None = None
         self.latest_deployment: Path | None = None
+        self._write_or_verify_run_manifest()
 
     def train(self) -> FoundationOnlineTrainingResult:
         environments = {
@@ -464,6 +465,16 @@ class FoundationOnlineTrainingRunner:
             temporary,
         )
         os.replace(temporary, self.run_path / "runner-state.pt")
+        records_path = self.run_path / "episodes.jsonl"
+        records_temporary = records_path.with_suffix(".jsonl.tmp")
+        records_temporary.write_text(
+            "".join(
+                json.dumps(asdict(item), ensure_ascii=False, sort_keys=True) + "\n"
+                for item in self.records
+            ),
+            encoding="utf-8",
+        )
+        os.replace(records_temporary, records_path)
         latest = {
             "schema_version": "hwr.foundation-online-latest/v1",
             "training_checkpoint": str(self.latest_checkpoint.relative_to(self.run_path)),
@@ -476,3 +487,33 @@ class FoundationOnlineTrainingRunner:
             json.dumps(latest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         os.replace(temporary_json, self.run_path / "latest.json")
+
+    def _write_or_verify_run_manifest(self) -> None:
+        manifest = {
+            "schema_version": "hwr.foundation-online-run/v1",
+            "source_commit": self.source_commit,
+            "training_config": self.config.to_dict(),
+            "tasks": [asdict(self.tasks[name]) for name in self.task_ids],
+            "preprocessing": {
+                "fingerprint": self.preprocessor.fingerprint,
+                "config": asdict(self.preprocessor.config),
+            },
+            "lineage": {
+                "action_sources": ["random_rl_exploration", "rl_actor"],
+                "expert_policies": [],
+                "demonstration_datasets": [],
+                "behavior_cloning": False,
+                "legacy_p_series_parent": None,
+            },
+        }
+        path = self.run_path / "run-manifest.json"
+        if path.is_file():
+            if json.loads(path.read_text(encoding="utf-8")) != manifest:
+                raise ValueError("foundation run manifest differs on resume")
+            return
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)

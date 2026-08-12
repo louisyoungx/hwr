@@ -37,6 +37,7 @@ hwr-evaluate-formal-visual = "hwr.apps.evaluate_formal_visual:main"
 hwr-train-formal-visual-knn = "hwr.apps.train_formal_visual_knn:main"
 hwr-train-bimanual-rl = "hwr.apps.train_bimanual_rl:main"
 hwr-evaluate-bimanual-rl = "hwr.apps.evaluate_bimanual_rl:main"
+hwr-train-foundation-world-model = "hwr.apps.train_foundation_world_model:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
