@@ -18,6 +18,8 @@ class Siglip2VisionLanguageProvider:
     def __init__(self, locked: LockedFoundationModel, *, device: str = "auto") -> None:
         if locked.adapter != "siglip2" or locked.model_lock.role != "vision_language":
             raise ValueError("SigLIP2 adapter requires a vision-language lock")
+        if locked.model_lock.representation_id != "patch-grid-and-text-pool-l2/v1":
+            raise ValueError("SigLIP2 representation identity differs")
         locked.verify()
         from transformers import AutoImageProcessor, AutoModel, AutoTokenizer
 

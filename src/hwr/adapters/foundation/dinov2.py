@@ -15,6 +15,8 @@ class Dinov2DenseVisionProvider:
     def __init__(self, locked: LockedFoundationModel, *, device: str = "auto") -> None:
         if locked.adapter != "dinov2" or locked.model_lock.role != "dense_vision":
             raise ValueError("DINOv2 adapter requires a dense vision lock")
+        if locked.model_lock.representation_id != "patch-grid-l2/v1":
+            raise ValueError("DINOv2 representation identity differs")
         locked.verify()
         from transformers import AutoImageProcessor, AutoModel
 

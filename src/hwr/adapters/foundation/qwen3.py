@@ -23,6 +23,8 @@ class Qwen3LanguageProvider:
     ) -> None:
         if locked.adapter != "qwen3_embedding" or locked.model_lock.role != "language":
             raise ValueError("Qwen3 adapter requires a language lock")
+        if locked.model_lock.representation_id != "last-token-pool-l2/v1":
+            raise ValueError("Qwen3 representation identity differs")
         if maximum_tokens <= 0:
             raise ValueError("Qwen3 maximum token count must be positive")
         locked.verify()
