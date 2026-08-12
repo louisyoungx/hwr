@@ -1,0 +1,13 @@
+{
+  "attention_heads": 8,
+  "backbone_depths": [3, 3, 9, 3],
+  "backbone_dimensions": [96, 192, 384, 512],
+  "feature_dimension": 256,
+  "formal": true,
+  "fusion_layers": 2,
+  "image_size": 160,
+  "schema_version": "hwr.visual-student-config/v1",
+  "state_queries": 16,
+  "temporal_layers": 2,
+  "visual_history": 4
+}
