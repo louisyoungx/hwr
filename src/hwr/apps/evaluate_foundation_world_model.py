@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from hwr.adapters.mujoco import (
+    BIMANUAL_EVIDENCE_VIEWS,
     MujocoBimanualEvidenceSource,
     MujocoBimanualTaskBackend,
     load_default_bimanual_training_catalogs,
@@ -34,7 +35,12 @@ from hwr.policy.bimanual_input import (
 )
 from hwr.policy.foundation_runtime import FoundationWorldModelPolicy
 from hwr.render import BimanualVideoRecorder, BimanualVideoResult
-from hwr.train.foundation_registry import load_foundation_deployment
+from hwr.train.foundation_registry import (
+    ACTION_CAUSALITY_SCHEMA,
+    DEPLOYMENT_SCHEMA,
+    TRAINING_CHECKPOINT_SCHEMA,
+    load_foundation_deployment,
+)
 
 
 ABLATIONS = ("none", "lock_left", "lock_right")
@@ -60,25 +66,33 @@ class _VideoObserver:
     def __init__(
         self,
         output_directory: Path,
-        recorded_seeds: set[int],
+        candidate_seeds: set[int],
         *,
+        successful_videos_per_task: int,
         width: int,
         height: int,
     ) -> None:
         self.output_directory = output_directory
-        self.recorded_seeds = recorded_seeds
+        self.candidate_seeds = candidate_seeds
+        self.successful_videos_per_task = successful_videos_per_task
         self.width = width
         self.height = height
         self.source: MujocoBimanualEvidenceSource | None = None
         self.recorder: BimanualVideoRecorder | None = None
         self.results: list[dict[str, Any]] = []
+        self.success_counts: dict[str, int] = {}
 
     def episode_started(
         self, backend, observation, *, seed: int, ablation: str
     ) -> None:
         if self.source is not None or self.recorder is not None:
             raise RuntimeError("previous evaluation recording was not closed")
-        if seed not in self.recorded_seeds or ablation != "none":
+        task_id = observation.task_id
+        if (
+            seed not in self.candidate_seeds
+            or ablation != "none"
+            or self.success_counts.get(task_id, 0) >= self.successful_videos_per_task
+        ):
             return
         if not isinstance(backend, MujocoBimanualTaskBackend):
             raise TypeError("foundation video observer requires a MuJoCo backend")
@@ -106,11 +120,24 @@ class _VideoObserver:
         del backend
         if self.source is None or self.recorder is None:
             return
-        video = self.recorder.close()
-        self.source.close()
-        self.results.append(_video_result(record, video))
-        self.source = None
-        self.recorder = None
+        try:
+            video = self.recorder.close()
+            if video.frame_count != record.steps + 1:
+                for path in video.paths.values():
+                    path.unlink()
+                raise RuntimeError("evaluation video omitted control-loop frames")
+            if record.success:
+                self.results.append(_video_result(record, video))
+                self.success_counts[record.task_id] = (
+                    self.success_counts.get(record.task_id, 0) + 1
+                )
+            else:
+                for path in video.paths.values():
+                    path.unlink()
+        finally:
+            self.source.close()
+            self.source = None
+            self.recorder = None
 
     def abort(self) -> None:
         if self.recorder is not None:
@@ -129,6 +156,8 @@ def _video_result(
         "seed": record.seed,
         "success": record.success,
         "frame_count": video.frame_count,
+        "expected_frame_count": record.steps + 1,
+        "uncut": video.frame_count == record.steps + 1,
         "duration_seconds": video.duration_seconds,
         "views": {name: str(path) for name, path in video.paths.items()},
     }
@@ -153,6 +182,17 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _run_member(run_path: Path, relative: object) -> Path:
+    value = Path(str(relative))
+    if value.is_absolute():
+        raise ValueError("training artifact path must be relative to its run")
+    root = run_path.resolve()
+    result = (root / value).resolve()
+    if result == root or root not in result.parents:
+        raise ValueError("training artifact path escaped its run")
+    return result
 
 
 def _unseen_seeds(
@@ -238,27 +278,134 @@ def _policy(run_path: Path, *, device: str) -> FoundationWorldModelPolicy:
 
 def _require_action_causality(run_path: Path) -> Path:
     latest = _read_json(run_path / "latest.json")
-    path = run_path / str(latest["action_causality_report"])
+    if latest.get("schema_version") != "hwr.foundation-online-latest/v1":
+        raise ValueError("training latest schema differs")
+    run_manifest = _read_json(run_path / "run-manifest.json")
+    if run_manifest.get("schema_version") != "hwr.foundation-online-run/v1":
+        raise ValueError("training run schema differs")
+    path = _run_member(run_path, latest["action_causality_report"])
     if _sha256(path) != latest.get("action_causality_sha256"):
         raise ValueError("training action causality report hash differs")
     report = _read_json(path)
-    if report.get("assessment", {}).get("passed") is not True:
+    _require_causality_structure(report, run_manifest)
+    if report["assessment"]["passed"] is not True:
         raise RuntimeError("evaluation requires passed action-shuffle causality")
-    checkpoint = _read_json(
-        run_path / latest["training_checkpoint"] / "manifest.json"
+    checkpoint_path = _run_member(run_path, latest["training_checkpoint"])
+    deployment_path = _run_member(run_path, latest["deployment"])
+    checkpoint = _read_json(checkpoint_path / "manifest.json")
+    deployment = _read_json(deployment_path / "manifest.json")
+    if checkpoint.get("schema_version") != TRAINING_CHECKPOINT_SCHEMA:
+        raise ValueError("training checkpoint schema differs")
+    if deployment.get("schema_version") != DEPLOYMENT_SCHEMA:
+        raise ValueError("foundation deployment schema differs")
+    checkpoint_artifact = checkpoint_path / str(checkpoint["artifact_file"])
+    if _sha256(checkpoint_artifact) != checkpoint.get("artifact_sha256"):
+        raise ValueError("training checkpoint artifact hash differs")
+    if deployment.get("training_checkpoint_sha256") != _sha256(checkpoint_artifact):
+        raise ValueError("deployment and training checkpoint hash differ")
+    _require_causality_lineage(
+        run_path, latest, run_manifest, report, checkpoint, deployment
     )
     checkpoint_diagnostics = checkpoint.get("training_diagnostics", {})
     if checkpoint_diagnostics.get("action_causality_report_sha256") != _sha256(path):
         raise ValueError("checkpoint and action causality provenance differ")
     if checkpoint_diagnostics.get("action_causality_passed") is not True:
         raise ValueError("checkpoint did not pass action causality")
-    deployment = _read_json(run_path / latest["deployment"] / "manifest.json")
     diagnostics = deployment.get("training_diagnostics", {})
     if diagnostics.get("action_causality_report_sha256") != _sha256(path):
         raise ValueError("deployment and action causality provenance differ")
     if diagnostics.get("action_causality_passed") is not True:
         raise ValueError("deployment was exported before causality passed")
     return path
+
+
+def _require_causality_structure(
+    report: Mapping[str, Any], run_manifest: Mapping[str, Any]
+) -> None:
+    expected_tasks = {
+        str(task["task_id"]) for task in run_manifest.get("tasks", ())
+    }
+    partitions = report.get("partitions", {})
+    assessment = report.get("assessment", {})
+    if (
+        report.get("schema_version") != ACTION_CAUSALITY_SCHEMA
+        or report.get("action_source") != "actual_executed_action"
+        or report.get("counterfactual_transform")
+        != "deterministic-global-derangement/v1"
+        or report.get("partition_key") != "task_id"
+        or not expected_tasks
+        or set(partitions) != expected_tasks
+        or assessment.get("aggregate_passed") is not True
+        or assessment.get("all_partitions_passed") is not True
+        or any(
+            value.get("assessment", {}).get("passed") is not True
+            for value in partitions.values()
+        )
+    ):
+        raise ValueError("action causality partition evidence is incomplete")
+    selected = report.get("window_selection", ())
+    configured = int(
+        run_manifest["training_config"]["causality_audit_windows_per_task"]
+    )
+    counts = {task_id: 0 for task_id in expected_tasks}
+    intervals: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    for window in selected:
+        task_id = str(window.get("task_id"))
+        start, stop = int(window.get("transition_start", -1)), int(
+            window.get("transition_stop", -1)
+        )
+        if task_id not in counts or start < 0 or stop <= start:
+            raise ValueError("action causality window selection is invalid")
+        counts[task_id] += 1
+        intervals.setdefault((task_id, str(window.get("episode_id"))), []).append(
+            (start, stop)
+        )
+    if any(value != configured for value in counts.values()):
+        raise ValueError("action causality window coverage differs from training")
+    if any(_overlaps(values) for values in intervals.values()):
+        raise ValueError("action causality windows overlap")
+
+
+def _overlaps(intervals: Sequence[tuple[int, int]]) -> bool:
+    ordered = sorted(intervals)
+    return any(
+        current[0] < previous[1]
+        for previous, current in zip(ordered, ordered[1:])
+    )
+
+
+def _require_causality_lineage(
+    run_path: Path,
+    latest: Mapping[str, Any],
+    run_manifest: Mapping[str, Any],
+    report: Mapping[str, Any],
+    checkpoint: Mapping[str, Any],
+    deployment: Mapping[str, Any],
+) -> None:
+    source_commit = str(run_manifest.get("source_commit", ""))
+    if not source_commit or {
+        str(report.get("source_commit", "")),
+        str(checkpoint.get("lineage", {}).get("source_commit", "")),
+        str(deployment.get("source_commit", "")),
+    } != {source_commit}:
+        raise ValueError("foundation source lineage differs")
+    update_count = int(latest.get("update_count", -1))
+    if update_count <= 0 or {
+        int(report.get("update_count", -2)),
+        int(checkpoint.get("update_count", -3)),
+    } != {update_count}:
+        raise ValueError("foundation update lineage differs")
+    training_manifest = run_path / "replay/autonomous/manifest.json"
+    audit_manifest = run_path / "causality-holdout/autonomous/manifest.json"
+    training_sha = _sha256(training_manifest)
+    audit_sha = _sha256(audit_manifest)
+    if (
+        report.get("training_data_manifest_sha256") != training_sha
+        or checkpoint.get("data_manifest_sha256") != training_sha
+        or report.get("audit_data_manifest_sha256") != audit_sha
+        or report.get("holdout_collector") != "foundation-causality-holdout/v1"
+    ):
+        raise ValueError("action causality data provenance differs")
 
 
 def _artifact_manifest(
@@ -281,7 +428,7 @@ def _artifact_manifest(
         }
     )
     latest = _read_json(run_path / "latest.json")
-    deployment_manifest = run_path / latest["deployment"] / "manifest.json"
+    deployment_manifest = _run_member(run_path, latest["deployment"]) / "manifest.json"
     return {
         "schema_version": "hwr.foundation-evaluation-run/v1",
         "training_run": str(run_path),
@@ -299,9 +446,37 @@ def _artifact_manifest(
     }
 
 
+def _video_acceptance(
+    videos: Sequence[Mapping[str, Any]],
+    task_ids: Sequence[str],
+    successful_videos_per_task: int,
+) -> dict[str, Any]:
+    if successful_videos_per_task <= 0 or not task_ids:
+        raise ValueError("successful video evidence configuration is invalid")
+    counts = {
+        task_id: sum(
+            video.get("task_id") == task_id
+            and video.get("success") is True
+            and video.get("uncut") is True
+            and set(video.get("views", ())) == set(BIMANUAL_EVIDENCE_VIEWS)
+            for video in videos
+        )
+        for task_id in task_ids
+    }
+    passed = all(
+        count >= successful_videos_per_task for count in counts.values()
+    )
+    return {
+        "passed": passed,
+        "successful_uncut_videos_per_task": counts,
+        "required_per_task": successful_videos_per_task,
+        "required_views": list(BIMANUAL_EVIDENCE_VIEWS),
+    }
+
+
 def run(arguments: argparse.Namespace) -> dict[str, Any]:
-    if arguments.video_seed_count < 0:
-        raise ValueError("video seed count cannot be negative")
+    if arguments.video_seed_count <= 0:
+        raise ValueError("at least one successful video is required per task")
     root = Path(__file__).resolve().parents[3]
     run_path = arguments.run_path.resolve()
     _require_action_causality(run_path)
@@ -318,7 +493,8 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
     policy = _policy(run_path, device=arguments.device)
     observer = _VideoObserver(
         output_path / "videos",
-        set(seeds[: arguments.video_seed_count]),
+        set(seeds),
+        successful_videos_per_task=arguments.video_seed_count,
         width=arguments.video_width,
         height=arguments.video_height,
     )
@@ -355,6 +531,11 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
     acceptance = assess_bimanual_acceptance(
         report, {task_id: task.control_hz for task_id, task in tasks.items()}
     )
+    video_evidence = _video_acceptance(
+        observer.results, tuple(sorted(tasks)), arguments.video_seed_count
+    )
+    acceptance["video_evidence"] = video_evidence
+    acceptance["passed"] = acceptance["passed"] and video_evidence["passed"]
     _write_json(output_path / "report.json", report.to_dict())
     _write_json(output_path / "acceptance.json", acceptance)
     manifest = _artifact_manifest(

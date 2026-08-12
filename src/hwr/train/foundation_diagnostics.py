@@ -12,6 +12,7 @@ from typing import Iterable, Mapping
 import torch
 
 from hwr.train.foundation_batch import FoundationTrainingBatch
+from hwr.train.foundation_registry import ACTION_CAUSALITY_SCHEMA
 from hwr.train.foundation_trainer import FoundationWorldModelTrainer
 from hwr.world_model import (
     ActionCausalityCriteria,
@@ -20,9 +21,6 @@ from hwr.world_model import (
     assess_action_causality,
     evaluate_action_causality,
 )
-
-
-ACTION_CAUSALITY_SCHEMA = "hwr.foundation-action-causality/v2"
 
 
 def evaluate_foundation_action_causality(
