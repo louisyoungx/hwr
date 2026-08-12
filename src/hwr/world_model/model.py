@@ -166,6 +166,14 @@ class ActionConditionedWorldModel(nn.Module):
             self.safety_head(features).squeeze(-1),
         )
 
+    def decode_features(
+        self, features: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Decode latent features without exposing any action answer."""
+        if features.shape[-1] != self.config.feature_dimension:
+            raise ValueError("world model decoded feature dimension is invalid")
+        return self._decode(features)
+
     def _check_observation_shapes(
         self,
         visual: torch.Tensor,

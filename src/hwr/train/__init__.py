@@ -1,124 +1,99 @@
-"""Local behavior policy training and model registry."""
+"""Training APIs with dependency-light lazy exports."""
 
-from hwr.train.registry import load_policy, save_training_result
-from hwr.train.trainer import TrainingConfig, TrainingResult, train_behavior_policy
-from hwr.train.visual_registry import load_visual_policy, save_visual_training_result
-from hwr.train.visual_knn import load_visual_knn_policy, save_visual_knn_policy
-from hwr.train.visual_trainer import (
-    VisualTrainingConfig,
-    VisualTrainingResult,
-    train_visual_policy,
-)
-from hwr.train.vla_registry import (
-    load_deployable_vla_actor,
-    save_vla_actor_checkpoint,
-    save_vla_behavior_result,
-)
-from hwr.train.vla_trainer import (
-    VLABehaviorTrainingConfig,
-    VLABehaviorTrainingResult,
-    train_vla_behavior_cloning,
-)
-from hwr.train.asymmetric_rl import (
-    AsymmetricActorCriticTrainer,
-    AsymmetricRLBatch,
-    AsymmetricRLConfig,
-)
-from hwr.train.asymmetric_replay import AsymmetricReplayBuffer
-from hwr.train.action_exploration import (
-    TemporalActionExplorer,
-    TemporalExplorationConfig,
-)
-from hwr.train.asymmetric_registry import (
-    load_asymmetric_training_checkpoint,
-    save_asymmetric_training_checkpoint,
-)
-from hwr.train.curriculum import AutomaticCurriculum, CurriculumConfig, CurriculumUpdate
-from hwr.train.learning_frontier import (
-    LearningFrontierCandidate,
-    LearningFrontierConfig,
-    LearningFrontierEntry,
-    LearningSignal,
-    TaskAgnosticLearningFrontier,
-)
-from hwr.train.autonomous_replay import (
-    AutonomousEpisode,
-    AutonomousReplayAddResult,
-    AutonomousReplayBuffer,
-    transform_batch,
-)
-from hwr.train.task_replay import TaskPartitionedAutonomousReplayBuffer
-from hwr.train.task_sampling import (
-    OutcomeAdaptiveTaskSampler,
-    OutcomeAdaptiveTaskSamplingConfig,
-    TaskOutcome,
-)
-from hwr.train.n_step import NStepTargets, build_n_step_targets
-from hwr.train.bimanual_records import TrainingEpisodeRecord
-from hwr.train.bimanual_config import BimanualRLTrainingConfig
-from hwr.train.bimanual_training import BimanualTrainingResult, BimanualTrainingRunner
-from hwr.train.bimanual_registry import (
-    fork_bimanual_training_run,
-    load_bimanual_actor,
-    resume_bimanual_training_run,
-    save_bimanual_live_progress,
-    save_bimanual_training_run,
-    verify_bimanual_training_run,
-)
+from __future__ import annotations
 
-__all__ = [
-    "TrainingConfig",
-    "TrainingResult",
-    "VisualTrainingConfig",
-    "VisualTrainingResult",
-    "load_policy",
-    "load_visual_policy",
-    "load_visual_knn_policy",
-    "save_training_result",
-    "save_visual_training_result",
-    "save_visual_knn_policy",
-    "train_behavior_policy",
-    "train_visual_policy",
-    "VLABehaviorTrainingConfig",
-    "VLABehaviorTrainingResult",
-    "load_deployable_vla_actor",
-    "save_vla_behavior_result",
-    "train_vla_behavior_cloning",
-    "AsymmetricActorCriticTrainer",
-    "AsymmetricRLBatch",
-    "AsymmetricRLConfig",
-    "AsymmetricReplayBuffer",
-    "TemporalActionExplorer",
-    "TemporalExplorationConfig",
-    "load_asymmetric_training_checkpoint",
-    "save_asymmetric_training_checkpoint",
-    "save_vla_actor_checkpoint",
-    "AutomaticCurriculum",
-    "CurriculumConfig",
-    "CurriculumUpdate",
-    "fork_bimanual_training_run",
-    "LearningFrontierCandidate",
-    "LearningFrontierConfig",
-    "LearningFrontierEntry",
-    "LearningSignal",
-    "TaskAgnosticLearningFrontier",
-    "AutonomousEpisode",
-    "AutonomousReplayAddResult",
-    "AutonomousReplayBuffer",
-    "transform_batch",
-    "BimanualRLTrainingConfig",
-    "BimanualTrainingResult",
-    "BimanualTrainingRunner",
-    "TrainingEpisodeRecord",
-    "TaskPartitionedAutonomousReplayBuffer",
-    "OutcomeAdaptiveTaskSampler",
-    "OutcomeAdaptiveTaskSamplingConfig",
-    "TaskOutcome",
-    "NStepTargets",
-    "build_n_step_targets",
-    "load_bimanual_actor",
-    "resume_bimanual_training_run",
-    "save_bimanual_live_progress",
-    "save_bimanual_training_run",
-    "verify_bimanual_training_run",
-]
+from importlib import import_module
+from typing import Any
+
+
+_EXPORTS = {
+    "TrainingConfig": ("hwr.train.trainer", "TrainingConfig"),
+    "TrainingResult": ("hwr.train.trainer", "TrainingResult"),
+    "train_behavior_policy": ("hwr.train.trainer", "train_behavior_policy"),
+    "load_policy": ("hwr.train.registry", "load_policy"),
+    "save_training_result": ("hwr.train.registry", "save_training_result"),
+    "VisualTrainingConfig": ("hwr.train.visual_trainer", "VisualTrainingConfig"),
+    "VisualTrainingResult": ("hwr.train.visual_trainer", "VisualTrainingResult"),
+    "train_visual_policy": ("hwr.train.visual_trainer", "train_visual_policy"),
+    "load_visual_policy": ("hwr.train.visual_registry", "load_visual_policy"),
+    "save_visual_training_result": ("hwr.train.visual_registry", "save_visual_training_result"),
+    "load_visual_knn_policy": ("hwr.train.visual_knn", "load_visual_knn_policy"),
+    "save_visual_knn_policy": ("hwr.train.visual_knn", "save_visual_knn_policy"),
+    "VLABehaviorTrainingConfig": ("hwr.train.vla_trainer", "VLABehaviorTrainingConfig"),
+    "VLABehaviorTrainingResult": ("hwr.train.vla_trainer", "VLABehaviorTrainingResult"),
+    "train_vla_behavior_cloning": ("hwr.train.vla_trainer", "train_vla_behavior_cloning"),
+    "load_deployable_vla_actor": ("hwr.train.vla_registry", "load_deployable_vla_actor"),
+    "save_vla_actor_checkpoint": ("hwr.train.vla_registry", "save_vla_actor_checkpoint"),
+    "save_vla_behavior_result": ("hwr.train.vla_registry", "save_vla_behavior_result"),
+    "AsymmetricActorCriticTrainer": ("hwr.train.asymmetric_rl", "AsymmetricActorCriticTrainer"),
+    "AsymmetricRLBatch": ("hwr.train.asymmetric_rl", "AsymmetricRLBatch"),
+    "AsymmetricRLConfig": ("hwr.train.asymmetric_rl", "AsymmetricRLConfig"),
+    "AsymmetricReplayBuffer": ("hwr.train.asymmetric_replay", "AsymmetricReplayBuffer"),
+    "TemporalActionExplorer": ("hwr.train.action_exploration", "TemporalActionExplorer"),
+    "TemporalExplorationConfig": ("hwr.train.action_exploration", "TemporalExplorationConfig"),
+    "load_asymmetric_training_checkpoint": (
+        "hwr.train.asymmetric_registry",
+        "load_asymmetric_training_checkpoint",
+    ),
+    "save_asymmetric_training_checkpoint": (
+        "hwr.train.asymmetric_registry",
+        "save_asymmetric_training_checkpoint",
+    ),
+    "AutomaticCurriculum": ("hwr.train.curriculum", "AutomaticCurriculum"),
+    "CurriculumConfig": ("hwr.train.curriculum", "CurriculumConfig"),
+    "CurriculumUpdate": ("hwr.train.curriculum", "CurriculumUpdate"),
+    "LearningFrontierCandidate": ("hwr.train.learning_frontier", "LearningFrontierCandidate"),
+    "LearningFrontierConfig": ("hwr.train.learning_frontier", "LearningFrontierConfig"),
+    "LearningFrontierEntry": ("hwr.train.learning_frontier", "LearningFrontierEntry"),
+    "LearningSignal": ("hwr.train.learning_frontier", "LearningSignal"),
+    "TaskAgnosticLearningFrontier": (
+        "hwr.train.learning_frontier",
+        "TaskAgnosticLearningFrontier",
+    ),
+    "AutonomousEpisode": ("hwr.train.autonomous_replay", "AutonomousEpisode"),
+    "AutonomousReplayAddResult": ("hwr.train.autonomous_replay", "AutonomousReplayAddResult"),
+    "AutonomousReplayBuffer": ("hwr.train.autonomous_replay", "AutonomousReplayBuffer"),
+    "transform_batch": ("hwr.train.autonomous_replay", "transform_batch"),
+    "TaskPartitionedAutonomousReplayBuffer": (
+        "hwr.train.task_replay",
+        "TaskPartitionedAutonomousReplayBuffer",
+    ),
+    "OutcomeAdaptiveTaskSampler": ("hwr.train.task_sampling", "OutcomeAdaptiveTaskSampler"),
+    "OutcomeAdaptiveTaskSamplingConfig": (
+        "hwr.train.task_sampling",
+        "OutcomeAdaptiveTaskSamplingConfig",
+    ),
+    "TaskOutcome": ("hwr.train.task_sampling", "TaskOutcome"),
+    "NStepTargets": ("hwr.train.n_step", "NStepTargets"),
+    "build_n_step_targets": ("hwr.train.n_step", "build_n_step_targets"),
+    "TrainingEpisodeRecord": ("hwr.train.bimanual_records", "TrainingEpisodeRecord"),
+    "BimanualRLTrainingConfig": ("hwr.train.bimanual_config", "BimanualRLTrainingConfig"),
+    "BimanualTrainingResult": ("hwr.train.bimanual_training", "BimanualTrainingResult"),
+    "BimanualTrainingRunner": ("hwr.train.bimanual_training", "BimanualTrainingRunner"),
+    "fork_bimanual_training_run": ("hwr.train.bimanual_registry", "fork_bimanual_training_run"),
+    "load_bimanual_actor": ("hwr.train.bimanual_registry", "load_bimanual_actor"),
+    "resume_bimanual_training_run": ("hwr.train.bimanual_registry", "resume_bimanual_training_run"),
+    "save_bimanual_live_progress": ("hwr.train.bimanual_registry", "save_bimanual_live_progress"),
+    "save_bimanual_training_run": ("hwr.train.bimanual_registry", "save_bimanual_training_run"),
+    "verify_bimanual_training_run": ("hwr.train.bimanual_registry", "verify_bimanual_training_run"),
+    "ImaginationActorCritic": ("hwr.train.imagination_rl", "ImaginationActorCritic"),
+    "ImaginationRLConfig": ("hwr.train.imagination_rl", "ImaginationRLConfig"),
+    "lambda_returns": ("hwr.train.imagination_rl", "lambda_returns"),
+    "optimize_imagination_step": ("hwr.train.imagination_rl", "optimize_imagination_step"),
+}
+
+__all__ = sorted(_EXPORTS)
+
+
+def __getattr__(name: str) -> Any:
+    try:
+        module_name, attribute_name = _EXPORTS[name]
+    except KeyError as error:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from error
+    value = getattr(import_module(module_name), attribute_name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted({*globals(), *_EXPORTS})
