@@ -99,6 +99,14 @@ _EXPORTS = {
         "hwr.perception.geometric_correspondence",
         "build_cross_camera_patch_correspondences",
     ),
+    "LanguageFeatureResolver": (
+        "hwr.perception.language_cache",
+        "LanguageFeatureResolver",
+    ),
+    "StaticLanguageFeatureResolver": (
+        "hwr.perception.language_cache",
+        "StaticLanguageFeatureResolver",
+    ),
 }
 
 __all__ = sorted(_EXPORTS)

@@ -32,6 +32,12 @@ _EXPORTS = {
     "LatentActorConfig": ("hwr.policy.latent_actor", "LatentActorConfig"),
     "LatentActorSample": ("hwr.policy.latent_actor", "LatentActorSample"),
     "LatentValueModel": ("hwr.policy.latent_value", "LatentValueModel"),
+    "LatentActionScaling": ("hwr.policy.latent_actions", "LatentActionScaling"),
+    "scale_latent_action": ("hwr.policy.latent_actions", "scale_latent_action"),
+    "FoundationWorldModelPolicy": (
+        "hwr.policy.foundation_runtime",
+        "FoundationWorldModelPolicy",
+    ),
 }
 
 __all__ = sorted(_EXPORTS)

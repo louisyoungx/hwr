@@ -143,6 +143,35 @@ class CategoricalRSSM(nn.Module):
             sequence.deterministic[:, index], sequence.stochastic[:, index]
         )
 
+    def update_posterior(
+        self,
+        observation_embedding: torch.Tensor,
+        *,
+        previous: RSSMState | None,
+        executed_action: torch.Tensor | None,
+        sample: bool,
+    ) -> RSSMState:
+        batch = observation_embedding.shape[0]
+        if observation_embedding.shape != (
+            batch,
+            self.config.observation_embedding_dimension,
+        ):
+            raise ValueError("RSSM posterior observation embedding shape is invalid")
+        if previous is None:
+            if executed_action is not None:
+                raise ValueError("initial RSSM posterior cannot consume an earlier action")
+            prior = self.initial(batch, observation_embedding.device)
+        else:
+            if executed_action is None:
+                raise ValueError("subsequent RSSM posterior requires the executed action")
+            prior, _, _ = self.step_prior(previous, executed_action, sample=sample)
+        logits = self._logits(
+            self.posterior(
+                torch.cat((prior.deterministic, observation_embedding), dim=-1)
+            )
+        )
+        return RSSMState(prior.deterministic, self._sample(logits, sample=sample))
+
     def features(self, state: RSSMState) -> torch.Tensor:
         return torch.cat((state.deterministic, state.stochastic), dim=-1)
 

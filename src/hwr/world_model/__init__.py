@@ -1,6 +1,7 @@
 """Action-conditioned latent dynamics and evaluation."""
 
 from hwr.world_model.config import WorldModelConfig
+from hwr.world_model.deploy import DeployableWorldModelStateFilter
 from hwr.world_model.evaluation import (
     CounterfactualCausalityReport,
     evaluate_action_causality,
@@ -20,6 +21,7 @@ from hwr.world_model.rssm import RSSMState
 __all__ = [
     "ActionConditionedWorldModel",
     "CounterfactualCausalityReport",
+    "DeployableWorldModelStateFilter",
     "RSSMState",
     "WorldModelConfig",
     "WorldModelLoss",

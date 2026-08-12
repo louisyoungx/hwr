@@ -117,6 +117,28 @@ class ActionConditionedWorldModel(nn.Module):
         )
         return self.rssm.posterior_state(output.sequence)
 
+    def posterior_step(
+        self,
+        visual: torch.Tensor,
+        language: torch.Tensor,
+        proprioception: torch.Tensor,
+        *,
+        previous: RSSMState | None,
+        executed_action: torch.Tensor | None,
+        sample: bool = False,
+    ) -> RSSMState:
+        if visual.ndim != 2 or proprioception.ndim != 2:
+            raise ValueError("world model posterior step requires one observation")
+        embedding = self.encode_observations(
+            visual[:, None], language, proprioception[:, None]
+        )[:, 0]
+        return self.rssm.update_posterior(
+            embedding,
+            previous=previous,
+            executed_action=executed_action,
+            sample=sample,
+        )
+
     def rollout_prior(
         self, initial: RSSMState, actions: torch.Tensor, *, sample: bool = False
     ) -> WorldModelPriorRollout:
