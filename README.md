@@ -15,6 +15,9 @@
 - 1.60 m 四轮中央箱体、左右各 6-DOF 机械臂、双钳形夹爪和头部/双腕相机的 MuJoCo 模型；
 - 客厅收纳篮、餐厅托盘和厨房回弹抽屉三个必须双臂并发的物理任务；
 - 无专家在线采样、仅保存自主 transition 的分层回放、自动课程、断点续训和 Actor 导出；
+- 锁定 SigLIP2、DINOv2 与 Qwen3-Embedding 的高分辨率连续感知缓存；
+- 24.4M 参数视觉学生、动作条件 categorical RSSM 与想象空间强化学习；
+- 动态腕部相机标定、自主序列 replay、统一三任务在线闭环及剥离式部署导出；
 - 重载 Actor 的未见种子评测、左右单臂锁定消融及四视角同进程视频录制；
 - 带校验和的本地模型注册表；
 - 三个独立家务场景的历史二维闭环基准；
@@ -35,6 +38,17 @@ python3 scripts/check_architecture.py
 python3 -m pytest
 python3 scripts/verify_benchmarks.py
 ```
+
+基础模型—世界模型主线必须先通过一次不可跳过的总开发门禁，再启动正式训练：
+
+```bash
+.venv/bin/python -m pip install -e ".[dev,video,sim3d,foundation]"
+.venv/bin/python scripts/verify_development_ready.py \
+  --output artifacts/development-ready.json
+hwr-train-foundation-world-model --run-id foundation-wm-001 --device cpu
+```
+
+在门禁产生与当前提交、配置和受保护源码哈希一致的报告前，训练命令会直接拒绝运行。
 
 三维开发环境与机器人模型验证：
 

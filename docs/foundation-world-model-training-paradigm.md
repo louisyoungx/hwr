@@ -245,3 +245,27 @@ Actor 只能对潜在状态求值和采样自己的动作。禁止使用 CEM、M
 
 基础模型的语义检索、世界模型 loss 或想象回报都不是家务成功证据；最终证据仍是隔离种子
 中由 RL Actor 实际执行的双臂物理结果。
+
+## 11. 当前实现映射
+
+截至 2026-08-12，以上设计对应的项目自有模块如下：
+
+| 责任 | 实现 |
+|---|---|
+| 基础模型边界与锁 | `hwr.perception.foundation`、`hwr.adapters.foundation`、`configs/foundation/model-locks.json` |
+| 高分辨率与动态标定 | `hwr.perception.high_resolution`、`FrameCameraCalibration` |
+| 视觉学生与无动作标签目标 | `hwr.perception.student`、`student_objectives`、`geometric_correspondence` |
+| 自主序列与缓存 | `hwr.data.autonomous_trajectory`、`foundation_cache`、`foundation_features`、`foundation_loading` |
+| 动作条件世界模型 | `hwr.world_model` |
+| 想象 RL | `hwr.train.imagination`、`imagination_rl` |
+| 环境声明的通用增强 | `hwr.train.foundation_augmentation` |
+| 单一在线闭环 | `hwr.train.foundation_online`、`foundation_trainer` |
+| 训练/部署 checkpoint | `hwr.train.foundation_registry` |
+| 剥离部署运行时 | `hwr.world_model.deploy`、`hwr.policy.foundation_runtime` |
+| 总门禁 | `scripts/verify_development_ready.py`、`hwr.train.development_gate` |
+| 固定验收与视频 | `hwr.apps.evaluate_foundation_world_model`、`hwr.eval.bimanual` |
+
+`hwr-train-foundation-world-model` 是唯一新主线正式训练入口。它不能跳过
+`development-ready.json`，并把三个任务装入同一个循环；任务差异只通过环境的观测、奖励、
+终止和合法变换进入平台。开发提交可以按可验证模块拆分，但第一次正式参数更新必须发生在
+全部模块开发、全量测试、真实基础模型推理和部署审计都通过之后。

@@ -2,6 +2,63 @@
 
 本文只记录可复查的训练事实和历史调整，不替代[当前训练范式](./foundation-world-model-training-paradigm.md)与最终验收门槛。P076～P080 已冻结为失败基线；统一开发门禁完成前不再启动策略训练。
 
+## 2026-08-12 基础模型—世界模型主线重建
+
+当前没有 P081，也没有新的正式训练 checkpoint。已完成的是训练前软件栈开发和 fixture
+闭环验证，不能解释为模型已经获得家务能力。
+
+已经接通的单一路径为：
+
+```text
+四相机原始 RGB-D + 动态内外参
+  -> SigLIP2 / DINOv2 / Qwen3-Embedding 离线连续特征缓存
+  -> 24.4M 参数高分辨率视觉学生
+  -> 13.0M 参数动作条件 categorical RSSM
+  -> 想象空间 Actor-Critic
+  -> 同一个 16 维 Actor
+  -> 独立安全层
+  -> 三任务 MuJoCo / 未来真机 RuntimeBackend
+```
+
+关键实现事实：
+
+- 基础模型 revision、许可证与本地文件 SHA-256 已锁定；正式控制回路不加载教师；
+- 自主轨迹只接受 `random_rl_exploration` 和 `rl_actor` 两种动作来源，同时记录 Actor
+  提案与安全层实际执行动作；
+- RSSM transition 和想象 rollout 使用与真实回放相同的物理动作单位；
+- 三个任务共享一个采集器、缓存、batch loader、Trainer、Actor 和 checkpoint 谱系；
+- 横向反射只能由环境声明，通用增强器变换视觉、动态标定、本体、动作和连续教师特征；
+- 部署导出只含视觉学生、RSSM posterior state filter 和 Actor，不含基础教师、Critic、
+  reward/continue/safety 预测头或训练优化器；
+- 评测固定为每任务至少 20 个未见种子，同时运行正常、锁左臂、锁右臂三种条件，正常
+  Episode 可同步录制第三人称、头部、左腕和右腕未剪辑视频。
+
+开发门禁命令为：
+
+```bash
+.venv/bin/python scripts/verify_development_ready.py \
+  --foundation-device cpu \
+  --output artifacts/development-ready.json
+```
+
+它会检查受保护源码已提交、全仓 Python 尺寸、架构边界、全量测试、基础权重哈希、三个
+冻结模型的真实 fixture 推理、三任务统一配置、动作单位一致性和部署剥离。正式训练入口
+没有跳过门禁的参数，且会再次核对源码提交、配置哈希和受保护源码树哈希。
+
+门禁通过后才允许执行：
+
+```bash
+hwr-train-foundation-world-model --run-id foundation-wm-001 --device cpu
+```
+
+训练完成后的固定评测命令为：
+
+```bash
+hwr-evaluate-foundation-world-model \
+  runs/foundation-world-model/foundation-wm-001 \
+  --seed-count 20 --video-seed-count 1
+```
+
 ## `pilot-074` 检查结论
 
 - 父 run：`pilot-073`；源码提交：`cd57dbd77a396d6d6bd2090a905dc8240b8d3ac6`。
