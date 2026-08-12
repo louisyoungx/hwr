@@ -57,6 +57,7 @@ FORKABLE_TRAINING_FIELDS = frozenset(
         "failure_replay_fraction",
         "discovery_replay_fraction",
         "progress_replay_fraction",
+        "td_error_replay_fraction",
         "safety_replay_fraction",
         "visual_temporal_contrastive_weight",
         "augmentation_consistency_weight",
@@ -211,6 +212,7 @@ def save_bimanual_training_run(
         "failure_size": result.replay.failure_size,
         "state_novelty_size": result.replay.discovery_size,
         "reward_improvement_size": result.replay.progress_size,
+        "td_error_size": result.replay.td_error_size,
         "safety_event_size": result.replay.safety_size,
         "episode_count": result.replay.episode_count,
         "hindsight_enabled": False,
@@ -237,6 +239,7 @@ def save_bimanual_training_run(
             "reward_improvement": (
                 "global-top-k-positive-episode-local-reward-improvement-speed"
             ),
+            "td_error": "global-top-k-current-bellman-error",
             "distance_thresholds": False,
             "task_semantic_fields": [],
             "action_labels": False,
@@ -535,6 +538,8 @@ def _normalized_training_config(value: Mapping[str, Any]) -> dict[str, Any]:
         saved.setdefault(name, default)
     if "progress_replay_fraction" not in value:
         saved["progress_replay_fraction"] = 0.0
+    if "td_error_replay_fraction" not in value:
+        saved["td_error_replay_fraction"] = 0.0
     if "frontier_signature_uniform_fraction" not in value:
         saved["frontier_signature_uniform_fraction"] = 1.0
     if "frontier_max_entries_per_source_signature" not in value:

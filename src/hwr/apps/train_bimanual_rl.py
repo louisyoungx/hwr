@@ -64,6 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--failure-replay", type=float, default=0.25)
     parser.add_argument("--discovery-replay", type=float, default=0.25)
     parser.add_argument("--progress-replay", type=float, default=0.35)
+    parser.add_argument("--td-error-replay", type=float, default=0.0)
     parser.add_argument("--safety-replay", type=float, default=0.15)
     parser.add_argument("--visual-contrastive-weight", type=float, default=0.05)
     parser.add_argument("--augmentation-consistency-weight", type=float, default=0.0)
@@ -137,6 +138,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         failure_replay_fraction=arguments.failure_replay,
         discovery_replay_fraction=arguments.discovery_replay,
         progress_replay_fraction=arguments.progress_replay,
+        td_error_replay_fraction=arguments.td_error_replay,
         safety_replay_fraction=arguments.safety_replay,
         visual_temporal_contrastive_weight=arguments.visual_contrastive_weight,
         augmentation_consistency_weight=(

@@ -42,6 +42,7 @@ def test_task_partitioned_replay_round_trips_all_partition_state() -> None:
     )
     assert restored.discovery_size == replay.discovery_size
     assert restored.progress_size == replay.progress_size
+    assert restored.td_error_size == replay.td_error_size
     assert restored.safety_size == replay.safety_size
 
 
@@ -72,6 +73,7 @@ def test_task_partitioned_replay_discards_only_requested_task() -> None:
 
     assert discarded["tray"]["size"] == 4
     assert discarded["tray"]["episode_count"] == 1
+    assert discarded["tray"]["td_error_size"] == 0
     assert discarded["tray"]["augmentation_eligible_transition_count"] == 4
     assert discarded["tray"]["legacy_discarded_hindsight_transition_count"] == 0
     assert (

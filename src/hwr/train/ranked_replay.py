@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
+
 import torch
 
 from hwr.train.asymmetric_replay import (
@@ -51,6 +53,47 @@ class RankedReplayRetention:
             raise ValueError("ranked replay checkpoint scores are invalid")
         self._scores.fill_(-torch.inf)
         self._scores[: scores.numel()].copy_(scores)
+
+    def rebuild(
+        self,
+        stores: Sequence[AsymmetricReplayBuffer],
+        estimate: Callable[[AsymmetricRLBatch], torch.Tensor],
+        *,
+        chunk_size: int = 64,
+    ) -> int:
+        """Build an exact global Top-K from retained autonomous stores."""
+        for store in stores:
+            if not store.size:
+                continue
+            batch = store.chronological()
+            chunks = []
+            for indices in torch.arange(store.size).split(chunk_size):
+                chunks.append(estimate(select_batch_rows(batch, indices)))
+            scores = torch.cat(chunks).to(torch.float32)
+            eligible = torch.ones(scores.shape, dtype=torch.bool)
+            if batch.safety_costs is not None:
+                eligible &= batch.safety_costs <= 0.0
+            indices = torch.nonzero(eligible).flatten()
+            order = torch.argsort(scores[indices], descending=True, stable=True)
+            selected = indices[order[: self.replay.capacity]]
+            self.add(select_batch_rows(batch, selected), scores[selected])
+        return self.replay.size
+
+    def refresh(
+        self,
+        estimate: Callable[[AsymmetricRLBatch], torch.Tensor],
+        *,
+        chunk_size: int = 64,
+    ) -> int:
+        """Refresh non-stationary scores for all retained rows in place."""
+        if not self.replay.size:
+            return 0
+        batch = self.replay.all()
+        scores = []
+        for indices in torch.arange(self.replay.size).split(chunk_size):
+            scores.append(estimate(select_batch_rows(batch, indices)))
+        self.load_scores(torch.cat(scores))
+        return self.replay.size
 
     def _append_available(
         self, batch: AsymmetricRLBatch, scores: torch.Tensor

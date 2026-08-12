@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 import torch
 
@@ -98,6 +98,12 @@ class TaskPartitionedAutonomousReplayBuffer:
         )
 
     @property
+    def td_error_size(self) -> int:
+        return sum(
+            partition.td_error_size for partition in self.partitions.values()
+        )
+
+    @property
     def episode_count(self) -> int:
         return sum(
             partition.episode_count for partition in self.partitions.values()
@@ -138,7 +144,7 @@ class TaskPartitionedAutonomousReplayBuffer:
         if not tasks:
             return None
         return {
-            "schema_version": "hwr.partitioned-reward-priority-migration/v1",
+            "schema_version": "hwr.partitioned-task-agnostic-priority-migration/v2",
             "tasks": tasks,
             "primary_autonomous_rows_retained": sum(
                 int(item["primary_autonomous_rows_retained"])
@@ -152,16 +158,46 @@ class TaskPartitionedAutonomousReplayBuffer:
                 int(item["rebuilt_priority_rows"])
                 for item in tasks.values()
             ),
+            "discarded_legacy_td_priority_rows": sum(
+                int(item["discarded_legacy_td_priority_rows"])
+                for item in tasks.values()
+            ),
+            "rebuilt_td_priority_rows": sum(
+                int(item["rebuilt_td_priority_rows"])
+                for item in tasks.values()
+            ),
         }
 
     def add_episode(
-        self, task_id: str, episode: AutonomousEpisode
+        self,
+        task_id: str,
+        episode: AutonomousEpisode,
+        *,
+        td_errors: torch.Tensor | None = None,
     ) -> AutonomousReplayAddResult:
         try:
             partition = self.partitions[task_id]
         except KeyError as exc:
             raise ValueError(f"partitioned replay does not know {task_id}") from exc
-        return partition.add_episode(episode)
+        return partition.add_episode(episode, td_errors=td_errors)
+
+    def ensure_td_priority(
+        self,
+        estimate: Callable[[AsymmetricRLBatch], torch.Tensor],
+    ) -> int:
+        return sum(
+            partition.ensure_td_priority(estimate)
+            for partition in self.partitions.values()
+        )
+
+    def refresh_td_priority(
+        self,
+        estimate: Callable[[AsymmetricRLBatch], torch.Tensor],
+    ) -> int:
+        return sum(
+            partition.refresh_td_priority(estimate)
+            for partition in self.partitions.values()
+        )
 
     def discard_tasks(
         self, task_ids: Sequence[str]
@@ -182,6 +218,7 @@ class TaskPartitionedAutonomousReplayBuffer:
                 "failure_size": partition.failure_size,
                 "discovery_size": partition.discovery_size,
                 "progress_size": partition.progress_size,
+                "td_error_size": partition.td_error_size,
                 "safety_size": partition.safety_size,
                 "episode_count": partition.episode_count,
                 "augmentation_eligible_transition_count": (
@@ -206,6 +243,7 @@ class TaskPartitionedAutonomousReplayBuffer:
         failure_fraction: float = 0.35,
         discovery_fraction: float = 0.35,
         progress_fraction: float = 0.0,
+        td_error_fraction: float = 0.0,
         safety_fraction: float = 0.15,
     ) -> AsymmetricRLBatch:
         active = [
@@ -222,6 +260,7 @@ class TaskPartitionedAutonomousReplayBuffer:
                 failure_fraction=failure_fraction,
                 discovery_fraction=discovery_fraction,
                 progress_fraction=progress_fraction,
+                td_error_fraction=td_error_fraction,
                 safety_fraction=safety_fraction,
             )
             for partition, count in zip(active, counts, strict=True)

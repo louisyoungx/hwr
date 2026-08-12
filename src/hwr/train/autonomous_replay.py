@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Mapping
+from typing import Callable, Mapping
 
 import torch
 
@@ -25,6 +25,7 @@ from hwr.train.ranked_replay import RankedReplayRetention
 
 
 PROGRESS_REPLAY_SCHEMA = "hwr.task-agnostic-reward-improvement-speed/v5"
+TD_ERROR_REPLAY_SCHEMA = "hwr.task-agnostic-td-error/v1"
 AUTONOMOUS_REPLAY_STORAGE_SCHEMA = "hwr.autonomous-replay-storage/v1"
 SAMPLE_AUGMENTATION_PROBABILITY = 0.50
 
@@ -208,6 +209,10 @@ class AutonomousReplayBuffer:
             max(1, capacity // 8), seed=seed ^ 0xA091
         )
         self._ranked_progress = RankedReplayRetention(self.progress_events)
+        self.td_events = AsymmetricReplayBuffer(
+            max(1, capacity // 8), seed=seed ^ 0x7DE1
+        )
+        self._ranked_td = RankedReplayRetention(self.td_events)
         self.safety_events = AsymmetricReplayBuffer(
             max(1, capacity // 8), seed=seed ^ 0x5AFE
         )
@@ -218,6 +223,9 @@ class AutonomousReplayBuffer:
         self.augmentation_count = 0
         self._load_migration_discarded_reward_priority_count = 0
         self._load_migration_rebuilt_reward_priority_count = 0
+        self._load_migration_discarded_td_priority_count = 0
+        self._load_migration_rebuilt_td_priority_count = 0
+        self._td_priority_needs_rebuild = False
 
     @property
     def size(self) -> int:
@@ -239,7 +247,16 @@ class AutonomousReplayBuffer:
     def progress_size(self) -> int:
         return self.progress_events.size
 
-    def add_episode(self, episode: AutonomousEpisode) -> AutonomousReplayAddResult:
+    @property
+    def td_error_size(self) -> int:
+        return self.td_events.size
+
+    def add_episode(
+        self,
+        episode: AutonomousEpisode,
+        *,
+        td_errors: torch.Tensor | None = None,
+    ) -> AutonomousReplayAddResult:
         original = _with_actor_weights(episode.batch, 1.0)
         augmentation_count = 0
         transforms = episode.legal_transforms
@@ -252,6 +269,7 @@ class AutonomousReplayBuffer:
             self.failures.add(original)
         self._add_discoveries(original)
         self._add_progress_events(original, episode.reward_improvements)
+        self._add_td_events(original, td_errors)
         self._add_safety_events(original)
         count = original.rewards.shape[0]
         self.episode_count += 1
@@ -269,12 +287,14 @@ class AutonomousReplayBuffer:
         failure_fraction: float = 0.35,
         discovery_fraction: float = 0.35,
         progress_fraction: float = 0.0,
+        td_error_fraction: float = 0.0,
         safety_fraction: float = 0.15,
     ) -> AsymmetricRLBatch:
         fractions = (
             failure_fraction,
             discovery_fraction,
             progress_fraction,
+            td_error_fraction,
             safety_fraction,
         )
         if not all(0.0 <= value <= 1.0 for value in fractions):
@@ -289,12 +309,26 @@ class AutonomousReplayBuffer:
         progress_count = min(
             progress_count, max(0, batch_size - safety_count - 1)
         )
+        td_error_count = min(
+            round(batch_size * td_error_fraction), self.td_error_size
+        )
+        td_error_count = min(
+            td_error_count,
+            max(0, batch_size - safety_count - progress_count - 1),
+        )
         discovery_count = min(
             round(batch_size * discovery_fraction), self.discovery_size
         )
         discovery_count = min(
             discovery_count,
-            max(0, batch_size - safety_count - progress_count - 1),
+            max(
+                0,
+                batch_size
+                - safety_count
+                - progress_count
+                - td_error_count
+                - 1,
+            ),
         )
         failure_count = min(round(batch_size * failure_fraction), self.failure_size)
         failure_count = min(
@@ -304,6 +338,7 @@ class AutonomousReplayBuffer:
                 batch_size
                 - safety_count
                 - progress_count
+                - td_error_count
                 - discovery_count
                 - 1,
             ),
@@ -312,6 +347,7 @@ class AutonomousReplayBuffer:
             batch_size
             - safety_count
             - progress_count
+            - td_error_count
             - discovery_count
             - failure_count
         )
@@ -324,6 +360,8 @@ class AutonomousReplayBuffer:
             result = _concat_batches(
                 result, self.progress_events.sample(progress_count)
             )
+        if td_error_count:
+            result = _concat_batches(result, self.td_events.sample(td_error_count))
         if safety_count:
             result = _concat_batches(result, self.safety_events.sample(safety_count))
         return _sample_time_augmentation(result, self._generator)
@@ -383,20 +421,74 @@ class AutonomousReplayBuffer:
             )
         return 0
 
+    def _add_td_events(
+        self,
+        batch: AsymmetricRLBatch,
+        scores: torch.Tensor | None,
+    ) -> int:
+        if scores is None:
+            return 0
+        values = scores.to(batch.rewards.device, dtype=batch.rewards.dtype)
+        if values.shape != batch.rewards.shape or not torch.isfinite(values).all():
+            raise ValueError("TD error scores must be finite and align with replay")
+        eligible = (
+            batch.actor_weights > 0
+            if batch.actor_weights is not None
+            else torch.ones_like(values, dtype=torch.bool)
+        )
+        if batch.safety_costs is not None:
+            eligible &= batch.safety_costs <= 0.0
+        indices = _top_ranked_indices(values, eligible)
+        if not indices.numel():
+            return 0
+        return self._ranked_td.add(
+            select_batch_rows(batch, indices), values[indices]
+        )
+
+    def ensure_td_priority(
+        self,
+        estimate: Callable[[AsymmetricRLBatch], torch.Tensor],
+    ) -> int:
+        if (
+            not self._td_priority_needs_rebuild
+            and (self.td_events.size or not self.regular.size)
+        ):
+            return 0
+        rebuilt = self._ranked_td.rebuild(
+            (self.regular, self.discoveries), estimate
+        )
+        self._load_migration_rebuilt_td_priority_count = rebuilt
+        self._td_priority_needs_rebuild = False
+        return rebuilt
+
+    def refresh_td_priority(
+        self,
+        estimate: Callable[[AsymmetricRLBatch], torch.Tensor],
+    ) -> int:
+        return self._ranked_td.refresh(estimate)
+
     def priority_migration_audit(self) -> dict[str, object] | None:
         discarded = self._load_migration_discarded_reward_priority_count
         rebuilt = self._load_migration_rebuilt_reward_priority_count
-        if not discarded and not rebuilt:
+        td_discarded = self._load_migration_discarded_td_priority_count
+        td_rebuilt = self._load_migration_rebuilt_td_priority_count
+        if not discarded and not rebuilt and not td_discarded and not td_rebuilt:
             return None
         return {
-            "schema_version": "hwr.reward-priority-migration/v2",
-            "reason": "priority_changed_to_global_reward_improvement_top_k",
+            "schema_version": "hwr.task-agnostic-priority-migration/v3",
+            "reason": "task_agnostic_priority_schemas_migrated",
             "discarded_legacy_priority_rows": discarded,
             "rebuilt_priority_rows": rebuilt,
+            "discarded_legacy_td_priority_rows": td_discarded,
+            "rebuilt_td_priority_rows": td_rebuilt,
             "primary_autonomous_rows_retained": self.regular.size,
             "legacy_priority_rebuild": (
                 "disabled-because-main-replay-stores-n-step-targets-not-raw-rewards"
             ),
+            "td_priority_rebuild_sources": [
+                "primary_autonomous_replay",
+                "state_novelty_replay",
+            ],
             "action_labels": False,
             "task_semantic_fields": [],
         }
@@ -410,6 +502,9 @@ class AutonomousReplayBuffer:
             "progress_events": self.progress_events.state_dict(),
             "progress_event_schema": PROGRESS_REPLAY_SCHEMA,
             "progress_event_scores": self._ranked_progress.score_state(),
+            "td_events": self.td_events.state_dict(),
+            "td_event_schema": TD_ERROR_REPLAY_SCHEMA,
+            "td_event_scores": self._ranked_td.score_state(),
             "safety_events": self.safety_events.state_dict(),
             "generator_state": self._generator.get_state(),
             "episode_count": self.episode_count,
@@ -425,6 +520,9 @@ class AutonomousReplayBuffer:
     def load_state_dict(self, value: Mapping[str, object]) -> None:
         self._load_migration_discarded_reward_priority_count = 0
         self._load_migration_rebuilt_reward_priority_count = 0
+        self._load_migration_discarded_td_priority_count = 0
+        self._load_migration_rebuilt_td_priority_count = 0
+        self._td_priority_needs_rebuild = False
         current_schema = (
             value.get("autonomous_replay_storage_schema")
             == AUTONOMOUS_REPLAY_STORAGE_SCHEMA
@@ -457,6 +555,19 @@ class AutonomousReplayBuffer:
             discarded = int(value.get("progress_events", {}).get("size", 0))
             self._load_migration_discarded_reward_priority_count = discarded
             self._load_migration_rebuilt_reward_priority_count = 0
+        if (
+            current_schema
+            and "td_events" in value
+            and value.get("td_event_schema") == TD_ERROR_REPLAY_SCHEMA
+            and "td_event_scores" in value
+        ):
+            self.td_events.load_state_dict(value["td_events"])
+            self._ranked_td.load_scores(value["td_event_scores"])
+        elif self.regular.size:
+            self._load_migration_discarded_td_priority_count = int(
+                value.get("td_events", {}).get("size", 0)
+            )
+            self._td_priority_needs_rebuild = True
         self._generator.set_state(value["generator_state"])
         self.episode_count = int(value["episode_count"])
         self.legacy_discarded_reward_priority_count = (

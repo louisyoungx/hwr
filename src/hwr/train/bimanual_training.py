@@ -296,6 +296,8 @@ class BimanualTrainingRunner:
         """Restore all learning state before continuing at the next episode."""
         self.trainer.load_state_dict(value["trainer"])
         self.replay.load_state_dict(value["replay"])
+        if self.config.td_error_replay_fraction > 0.0:
+            self.replay.ensure_td_priority(self.trainer.estimate_td_error)
         self.curriculum.load_state_dict(value["curriculum"])
         if "frontier" in value:
             self.frontier.load_state_dict(value["frontier"])
@@ -442,7 +444,7 @@ class BimanualTrainingRunner:
             terminated_failure,
         )
         self.frontier.consider_episode(task_id, candidates)
-        self.replay.add_episode(task_id, episode)
+        self.replay.add_episode(task_id, episode, td_errors=td_errors)
         update_summary = self._update_after_episode(len(buffers.rewards))
         self.curriculum.record(
             task_id,
@@ -681,9 +683,12 @@ class BimanualTrainingRunner:
                 failure_fraction=self.config.failure_replay_fraction,
                 discovery_fraction=self.config.discovery_replay_fraction,
                 progress_fraction=self.config.progress_replay_fraction,
+                td_error_fraction=self.config.td_error_replay_fraction,
                 safety_fraction=self.config.safety_replay_fraction,
             )
             metrics.append(self.trainer.update(batch))
+        if self.config.td_error_replay_fraction > 0.0:
+            self.replay.refresh_td_priority(self.trainer.estimate_td_error)
         return _summarize_updates(metrics)
 
 

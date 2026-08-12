@@ -89,6 +89,7 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert replay["safety_event_size"] == 0
     assert replay["safety_cost_labels"].endswith("observed_severe_collision")
     assert replay["reward_improvement_size"] >= 0
+    assert replay["td_error_size"] > 0
     assert replay["task_agnostic_priority_replay"]["action_labels"] is False
     assert set(replay["task_partition_sizes"]) == {
         "carry_dining_tray/v1",
@@ -126,6 +127,9 @@ def test_training_run_saves_verified_no_demonstration_lineage(tmp_path) -> None:
     assert replay["task_agnostic_priority_replay"]["reward_improvement"] == (
         "global-top-k-positive-episode-local-reward-improvement-speed"
     )
+    assert replay["task_agnostic_priority_replay"]["td_error"] == (
+        "global-top-k-current-bellman-error"
+    )
     assert replay["schema_version"] == "hwr.autonomous-replay/v1"
     assert replay["augmentation_eligible_transition_count"] == 2
     assert replay["stored_transform_copies"] is False
@@ -157,6 +161,7 @@ def test_training_run_resumes_at_next_episode_with_replay_and_rng(tmp_path) -> N
     legacy_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     legacy_manifest["training_config"].pop("discovery_replay_fraction")
     legacy_manifest["training_config"].pop("progress_replay_fraction")
+    legacy_manifest["training_config"].pop("td_error_replay_fraction")
     legacy_manifest["training_config"].pop("safety_replay_fraction")
     manifest_path.write_text(json.dumps(legacy_manifest), encoding="utf-8")
     tasks, bindings = load_default_bimanual_training_catalogs(ROOT)

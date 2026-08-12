@@ -38,6 +38,7 @@ class BimanualRLTrainingConfig:
     failure_replay_fraction: float = 0.25
     discovery_replay_fraction: float = 0.25
     progress_replay_fraction: float = 0.35
+    td_error_replay_fraction: float = 0.0
     safety_replay_fraction: float = 0.15
     visual_temporal_contrastive_weight: float = 0.05
     augmentation_consistency_weight: float = 0.0
@@ -106,6 +107,7 @@ class BimanualRLTrainingConfig:
             self.failure_replay_fraction,
             self.discovery_replay_fraction,
             self.progress_replay_fraction,
+            self.td_error_replay_fraction,
             self.safety_replay_fraction,
             self.visual_temporal_contrastive_weight,
             self.augmentation_consistency_weight,
@@ -118,6 +120,7 @@ class BimanualRLTrainingConfig:
             self.failure_replay_fraction
             + self.discovery_replay_fraction
             + self.progress_replay_fraction
+            + self.td_error_replay_fraction
             + self.safety_replay_fraction
         )
         if replay_fraction > 1.0 + 1e-9:

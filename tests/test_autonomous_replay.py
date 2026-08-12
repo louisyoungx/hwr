@@ -360,6 +360,51 @@ def test_reward_priority_retains_global_top_score_across_episodes() -> None:
     assert restored.state_dict()["progress_event_scores"].tolist() == [2.0]
 
 
+def test_td_error_priority_retains_high_bellman_error_without_task_fields() -> None:
+    episode = _episode(success=False, legal_transforms=())
+    replay = AutonomousReplayBuffer(8, seed=24)
+
+    replay.add_episode(
+        episode,
+        td_errors=torch.tensor((0.1, 0.2, 2.0, 0.3)),
+    )
+    sampled = replay.sample(
+        4,
+        failure_fraction=0.0,
+        discovery_fraction=0.0,
+        progress_fraction=0.0,
+        td_error_fraction=0.75,
+        safety_fraction=0.0,
+    )
+
+    assert replay.td_error_size == 1
+    assert replay.state_dict()["td_event_scores"].tolist() == [2.0]
+    assert int((sampled.privileged_state[:, 0] == 0.2).sum()) >= 1
+
+    replay.refresh_td_priority(lambda batch: batch.rewards.abs() + 0.25)
+    assert replay.state_dict()["td_event_scores"].tolist() == pytest.approx([0.35])
+
+
+def test_legacy_td_priority_is_rebuilt_from_autonomous_replay() -> None:
+    replay = AutonomousReplayBuffer(64, seed=25)
+    replay.add_episode(_episode(success=False, legal_transforms=()))
+    legacy = replay.state_dict()
+    legacy.pop("td_event_schema")
+    restored = AutonomousReplayBuffer(64, seed=26)
+
+    restored.load_state_dict(legacy)
+    rebuilt = restored.ensure_td_priority(lambda batch: batch.rewards.abs() + 0.1)
+    audit = restored.priority_migration_audit()
+
+    assert rebuilt == restored.td_error_size > 0
+    assert audit is not None
+    assert audit["rebuilt_td_priority_rows"] == restored.td_error_size
+    assert audit["td_priority_rebuild_sources"] == [
+        "primary_autonomous_replay",
+        "state_novelty_replay",
+    ]
+
+
 def test_automatic_curriculum_expands_only_after_safe_success_window() -> None:
     curriculum = AutomaticCurriculum(
         ("basket",),

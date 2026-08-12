@@ -57,6 +57,8 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
             "0.08",
             "--augmentation-consistency-weight",
             "0.2",
+            "--td-error-replay",
+            "0.15",
         ]
     )
 
@@ -73,6 +75,7 @@ def test_bimanual_training_cli_exposes_bounded_replay_capacity() -> None:
     assert arguments.frontier_source_capacity == 3
     assert arguments.visual_contrastive_weight == 0.08
     assert arguments.augmentation_consistency_weight == 0.2
+    assert arguments.td_error_replay == 0.15
     assert arguments.episode_steps is None
 
 
