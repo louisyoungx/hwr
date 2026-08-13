@@ -19,7 +19,7 @@
       "initial_base": {"x": [-0.10, 0.10], "y": [-2.15, -1.95], "z": [0.22, 0.22], "yaw": [-0.10, 0.10]},
       "objects": [
         {"object_id": "duck", "target_id": "living_bin", "reset": {"x": [1.45, 1.62], "y": [-0.74, -0.56], "z": [0.0, 0.0], "yaw": [1.45, 1.69]}, "grasp_site_z_offset": 0.10, "grip_fraction": 1.0, "standoff_m": 0.88},
-        {"object_id": "football", "target_id": "living_bin", "reset": {"x": [-0.72, -0.58], "y": [-1.43, -1.27], "z": [0.077, 0.077], "yaw": [-3.14, 3.14]}, "grasp_site_z_offset": 0.03, "grip_fraction": 1.0, "standoff_m": 0.68}
+        {"object_id": "football", "target_id": "living_bin", "reset": {"x": [-0.72, -0.58], "y": [-1.43, -1.27], "z": [0.077, 0.077], "yaw": [-3.14, 3.14]}, "grasp_site_z_offset": 0.03, "grip_fraction": 0.60, "standoff_m": 0.68}
       ]
     },
     {

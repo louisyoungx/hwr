@@ -39,7 +39,7 @@
     <camera name="third_person" pos="5.1 -5.4 3.8" xyaxes="0.727 0.687 0 -0.362 0.383 0.850" fovy="46"/>
     <camera name="room_overview" pos="0 0 6.5" xyaxes="1 0 0 0 1 0" fovy="54"/>
     <include file="../common/robot_body.xml"/>
-    <body name="cabinet_main" pos="2.25 2.28 0" euler="0 0 3.14159">
+    <body name="cabinet_main" pos="2.75 2.28 0" euler="0 0 3.14159">
       <geom name="cabinet_main_visual" type="mesh" mesh="kitchen_cabinet_mesh" material="kitchen_cabinet_mat" contype="0" conaffinity="0" group="1"/>
       <geom name="cabinet_main_collision" type="box" pos="0 0 0.90" size="0.54 0.22 0.90" rgba="0 0 0 0" group="3"/>
     </body>
@@ -57,7 +57,7 @@
       <geom name="island_worktop" type="box" pos="0 0 0.825" size="0.78 0.46 0.035" material="counter_mat"/>
       <geom name="island_sink" type="box" pos="0.30 0 0.875" size="0.28 0.25 0.02" material="steel"/>
     </body>
-    <body name="kitchen_drawer_frame" pos="1.25 2.32 0">
+    <body name="kitchen_drawer_frame" pos="1.55 2.32 0">
       <geom name="drawer_frame_left" type="box" pos="-0.50 0 0.84" size="0.06 0.29 0.50" material="drawer_wood"/>
       <geom name="drawer_frame_right" type="box" pos="0.50 0 0.84" size="0.06 0.29 0.50" material="drawer_wood"/>
       <geom name="drawer_frame_top" type="box" pos="0 0 1.37" size="0.48 0.33 0.035" material="counter_mat"/>

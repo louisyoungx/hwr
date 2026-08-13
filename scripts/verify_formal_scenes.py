@@ -11,6 +11,15 @@ from typing import Any
 import mujoco
 import numpy as np
 
+from hwr.adapters.mujoco.names import (
+    ARM_ACTUATORS,
+    ARM_HOME,
+    ARM_JOINTS,
+    SECONDARY_ARM_ACTUATORS,
+    SECONDARY_ARM_HOME,
+    SECONDARY_ARM_JOINTS,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CATALOG = ROOT / "configs/scenes/formal_3d_v1.json"
@@ -36,6 +45,22 @@ def _settled_object_speeds(
     model: mujoco.MjModel, joint_names: list[str], seconds: float = 2.0
 ) -> dict[str, float]:
     data = mujoco.MjData(model)
+    base_joint = _name_id(model, mujoco.mjtObj.mjOBJ_JOINT, "base_free")
+    base_qpos = int(model.jnt_qposadr[base_joint])
+    data.qpos[base_qpos : base_qpos + 3] = (-10.0, -10.0, 0.22)
+    for joints, actuators, home in (
+        (ARM_JOINTS, ARM_ACTUATORS, ARM_HOME),
+        (SECONDARY_ARM_JOINTS, SECONDARY_ARM_ACTUATORS, SECONDARY_ARM_HOME),
+    ):
+        for joint_name, actuator_name, target in zip(
+            joints, actuators, home, strict=True
+        ):
+            joint_id = _name_id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+            actuator_id = _name_id(
+                model, mujoco.mjtObj.mjOBJ_ACTUATOR, actuator_name
+            )
+            data.qpos[model.jnt_qposadr[joint_id]] = target
+            data.ctrl[actuator_id] = target
     mujoco.mj_forward(model, data)
     for _ in range(round(seconds / float(model.opt.timestep))):
         mujoco.mj_step(model, data)

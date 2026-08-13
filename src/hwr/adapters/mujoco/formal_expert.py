@@ -3,39 +3,42 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 
 import mujoco
 import numpy as np
 
 from hwr.adapters.mujoco.expert import PrivilegedCartesianExpert
+from hwr.adapters.mujoco.formal_expert_types import ExpertStage, FormalExpertOutput
+from hwr.adapters.mujoco.formal_postures import (
+    ARM_DRAWER_GRASP,
+    ARM_READY_DRAWER,
+    ARM_READY_KITCHEN,
+    ARM_READY_TABLE,
+    ARM_STOW,
+    DRAWER_GRIPPER_ROTATION,
+    drawer_posture,
+)
+from hwr.adapters.mujoco.formal_routes import (
+    drawer_base_commands,
+    drawer_base_is_aligned,
+    formal_waypoints,
+    gripper_rotation,
+    navigation_linear_speed,
+    navigation_tolerances,
+    object_approach_yaw,
+    object_orientation_weight,
+    target_approach_yaw,
+    top_down_gripper_rotation,
+    top_down_site_compensation,
+    wrap_angle,
+)
+from hwr.adapters.mujoco.formal_state import FormalExpertStateMixin
 from hwr.adapters.mujoco.household_backend import MujocoHouseholdBackend
 from hwr.adapters.mujoco.names import ARM_HOME
 from hwr.core.types import ActionFrame, ObservationFrame
 
 
-ARM_STOW = (0.0, -0.90, -1.00, 0.0, 1.70, 0.0)
-ARM_READY_TABLE = (0.0, -1.30, 0.70, 0.0, 0.60, 0.0)
-ARM_READY_DRAWER = (0.0, -1.50, 0.50, 0.0, 1.00, 0.0)
-ARM_READY_KITCHEN = (0.0, -1.60, 0.0, 0.0, 1.60, 0.0)
-
-
-@dataclass(frozen=True)
-class ExpertStage:
-    name: str
-    kind: str
-    object_id: str | None = None
-
-
-@dataclass(frozen=True)
-class FormalExpertOutput:
-    action: ActionFrame
-    stage: str
-    stage_step: int
-    privileged_label: bool = True
-
-
-class PrivilegedHouseholdExpert:
+class PrivilegedHouseholdExpert(FormalExpertStateMixin):
     """Read engine truth for labels; never use this object during learned-policy evaluation."""
 
     def __init__(self, backend: MujocoHouseholdBackend) -> None:
@@ -55,6 +58,7 @@ class PrivilegedHouseholdExpert:
         self.drawer_bilateral_steps = 0
         self.object_bilateral_steps = 0
         self.drawer_contact_start_substeps = 0
+        self.drawer_pull_origin: tuple[float, float, float] | None = None
         self.object_contact_start_substeps = 0
         self.holding_contact_loss_steps = 0
         self.failed = False
@@ -116,10 +120,19 @@ class PrivilegedHouseholdExpert:
                     self.failed = True
                     self._advance()
         elif stage.kind == "grip_drawer":
-            action = self.cartesian.action(
+            error = np.asarray(ARM_DRAWER_GRASP) - np.asarray(
+                observation.joint_position
+            )
+            arm_command = tuple(
+                float(value) for value in np.clip(2.0 * error, -0.5, 0.5)
+            )
+            linear, angular = drawer_base_commands(observation.base_pose, 1.30)
+            action = self._action(
                 observation,
-                target_position=self._drawer_grasp_target(),
-                gripper_target=1.0,
+                linear=linear,
+                angular=angular,
+                gripper=1.0,
+                arm_command=arm_command,
             )
             contact_substeps = (
                 self.backend._drawer_bilateral_contact_steps  # noqa: SLF001
@@ -159,6 +172,7 @@ class PrivilegedHouseholdExpert:
                     ("navigate_to_drawer", "nav_drawer"),
                     ("unfold_arm_for_drawer", "unstow_arm"),
                     ("approach_drawer_handle", "arm_drawer_above"),
+                    ("prealign_over_drawer_handle", "arm_drawer_prealign"),
                     ("descend_to_drawer_handle", "arm_drawer_descend"),
                     ("close_on_drawer_handle", "grip_drawer"),
                     ("contact_pull_drawer", "pull_drawer"),
@@ -182,6 +196,8 @@ class PrivilegedHouseholdExpert:
             "release_object",
             "arm_target_retract",
         ]
+        if self.task.task_id.startswith("tidy_living"):
+            object_kinds.insert(3, "arm_object_clearance")
         if self.task.task_id.startswith("store_kitchen"):
             object_kinds.insert(8, "arm_target_raise")
         for obj in self.task.objects:
@@ -209,11 +225,23 @@ class PrivilegedHouseholdExpert:
             self.object_contact_start_substeps = (
                 self.backend._bilateral_contact_steps[self.stage.object_id]  # noqa: SLF001
             )
+        elif self.stage.kind == "pull_drawer":
+            self.drawer_pull_origin = self.cartesian.site_position()
         stage = self.stage
         if stage.kind.startswith("nav_"):
             self.nav_targets = self._navigation_targets(stage)
         elif stage.kind.startswith("arm_"):
             self.cartesian.reset_orientation_target()
+            if "drawer" in stage.kind:
+                self.cartesian.set_orientation_target(np.asarray(DRAWER_GRIPPER_ROTATION))
+            elif "object" in stage.kind:
+                yaw = object_approach_yaw(self.task.task_id, stage.object_id)
+                rotation = (
+                    top_down_gripper_rotation(yaw)
+                    if self.task.task_id.startswith("tidy_living")
+                    else gripper_rotation(yaw)
+                )
+                self.cartesian.set_orientation_target(np.asarray(rotation))
             self.stage_target = self._cartesian_target(stage)
 
     def _advance(self) -> None:
@@ -221,16 +249,21 @@ class PrivilegedHouseholdExpert:
         self._enter_stage()
 
     def _navigation_targets(self, stage: ExpertStage) -> list[tuple[float, float, float | None]]:
-        waypoints = self._waypoints(stage)
+        waypoints = formal_waypoints(self.task.task_id, stage.kind, stage.object_id)
         if stage.kind == "nav_drawer":
             target = self._drawer_handle_position()
-            yaw, standoff = math.pi / 2, 0.55
+            yaw, standoff = math.pi / 2, 0.61
         elif stage.kind == "nav_object":
             target = self._object_position(stage.object_id)
-            yaw = self._object_approach_yaw(stage.object_id)
+            yaw = object_approach_yaw(self.task.task_id, stage.object_id)
             standoff = self._object_spec(stage.object_id).standoff_m
-            if self.task.task_id.startswith("clear_dining"):
+            if (
+                self.task.task_id.startswith("clear_dining")
+                and stage.object_id != "plate"
+            ):
                 standoff -= 0.12
+            elif self.task.task_id.startswith("tidy_living"):
+                standoff = min(standoff, 0.58)
             elif (
                 self.task.task_id.startswith("store_kitchen")
                 and stage.object_id == "cleaner_yellow"
@@ -238,24 +271,89 @@ class PrivilegedHouseholdExpert:
                 standoff += 0.15
         else:
             target = self._target_position(stage.object_id)
-            yaw = self._target_approach_yaw()
+            yaw = target_approach_yaw(self.task.task_id)
             standoff = (
                 0.65
                 if self.task.task_id.startswith("store_kitchen")
                 else self._object_spec(stage.object_id).standoff_m
             )
-        lateral_offset = (
-            0.20
-            if self.task.task_id.startswith("store_kitchen")
-            and stage.kind == "nav_target"
-            else 0.0
+            if self.task.task_id.startswith("clear_dining"):
+                standoff -= 0.22
+        lateral_offset = 0.0
+        if self.task.task_id.startswith("store_kitchen"):
+            if stage.kind == "nav_drawer":
+                lateral_offset = 0.30
+            elif stage.kind == "nav_target":
+                lateral_offset = 0.20
+        shoulder_id = mujoco.mj_name2id(
+            self.backend.model,
+            mujoco.mjtObj.mjOBJ_BODY,
+            "right_shoulder_pan_link",
         )
+        shoulder_x, shoulder_y = (
+            float(value) for value in self.backend.model.body_pos[shoulder_id, :2]
+        )
+        mount_x = shoulder_x * math.cos(yaw) - shoulder_y * math.sin(yaw)
+        mount_y = shoulder_x * math.sin(yaw) + shoulder_y * math.cos(yaw)
         goal = (
-            target[0] - standoff * math.cos(yaw) + lateral_offset,
-            target[1] - standoff * math.sin(yaw),
+            target[0] - standoff * math.cos(yaw) - mount_x + lateral_offset,
+            target[1] - standoff * math.sin(yaw) - mount_y,
             yaw,
         )
-        return [(*point, None) for point in waypoints] + [goal]
+        targets = [(*point, None) for point in waypoints]
+        if (
+            self.task.task_id.startswith("tidy_living")
+            and stage.kind == "nav_target"
+            and stage.object_id == "football"
+            and targets
+        ):
+            base = self.backend.data.xpos[self.backend.bundle.ids.base_body]
+            heading = math.atan2(targets[0][1] - base[1], targets[0][0] - base[0])
+            targets.insert(0, (float(base[0]), float(base[1]), heading))
+        if (
+            self.task.task_id.startswith("store_kitchen")
+            and stage.kind == "nav_drawer"
+        ):
+            targets.append((goal[0], 0.65, yaw))
+        elif (
+            self.task.task_id.startswith("store_kitchen")
+            and stage.kind == "nav_target"
+        ):
+            targets.append((goal[0], 0.65, yaw))
+        if (
+            self.task.task_id.startswith("clear_dining")
+            and stage.kind == "nav_target"
+            and stage.object_id == "plate"
+        ):
+            base = self.backend.data.xpos[self.backend.bundle.ids.base_body]
+            targets.insert(
+                0,
+                (
+                    float(base[0]) - 0.30 * math.cos(yaw),
+                    float(base[1]) - 0.30 * math.sin(yaw),
+                    yaw,
+                ),
+            )
+            targets.append(
+                (
+                    goal[0] - 0.35 * math.cos(yaw),
+                    goal[1] - 0.35 * math.sin(yaw),
+                    yaw,
+                )
+            )
+        if (
+            self.task.task_id.startswith("clear_dining")
+            and stage.kind == "nav_object"
+            and stage.object_id == "plate"
+        ):
+            targets.append(
+                (
+                    goal[0] - 0.30 * math.cos(yaw),
+                    goal[1] - 0.30 * math.sin(yaw),
+                    yaw,
+                )
+            )
+        return targets + [goal]
 
     def _navigation_action(self, observation: ObservationFrame) -> ActionFrame:
         if not self.nav_targets:
@@ -263,8 +361,11 @@ class PrivilegedHouseholdExpert:
             return self._stop(observation)
         navigation_timeout = (
             1299
-            if self.task.task_id.startswith("store_kitchen")
-            and self.stage.kind in {"nav_object", "nav_target"}
+            if self.holding_object is not None
+            or (
+                self.task.task_id.startswith("store_kitchen")
+                and self.stage.kind in {"nav_drawer", "nav_object", "nav_target"}
+            )
             else (1199 if self.task.task_id.startswith("clear_dining") else 899)
         )
         if self.stage_step >= navigation_timeout:
@@ -274,11 +375,8 @@ class PrivilegedHouseholdExpert:
         target_x, target_y, final_yaw = self.nav_targets[0]
         x, y, yaw = observation.base_pose
         distance = math.hypot(target_x - x, target_y - y)
-        final_tolerance = (
-            (0.05 if self.stage.kind == "nav_object" else 0.10)
-            if self.task.task_id.startswith("store_kitchen")
-            and self.stage.kind in {"nav_object", "nav_target"}
-            else 0.12
+        final_tolerance, yaw_tolerance = navigation_tolerances(
+            self.task.task_id, self.stage.kind
         )
         if self.nav_aligning and distance > 1.5 * final_tolerance:
             self.nav_aligning = False
@@ -287,14 +385,14 @@ class PrivilegedHouseholdExpert:
             return self._stop(observation)
         if final_yaw is not None and (self.nav_aligning or distance <= final_tolerance):
             self.nav_aligning = True
-            yaw_error = _wrap(final_yaw - yaw)
-            if abs(yaw_error) <= 0.10:
+            yaw_error = wrap_angle(final_yaw - yaw)
+            if abs(yaw_error) <= yaw_tolerance:
                 self.nav_targets.pop(0)
                 self.nav_aligning = False
                 if not self.nav_targets:
                     self._advance()
                 return self._stop(observation)
-            if abs(yaw_error) > 0.10:
+            if abs(yaw_error) > yaw_tolerance:
                 return self._action(
                     observation,
                     linear=0.0,
@@ -302,13 +400,13 @@ class PrivilegedHouseholdExpert:
                     gripper=self._gripper(),
                 )
         heading = math.atan2(target_y - y, target_x - x) if distance > 0.05 else final_yaw or yaw
-        heading_error = _wrap(heading - yaw)
+        heading_error = wrap_angle(heading - yaw)
         direction = 1.0
         if abs(heading_error) > math.pi / 2:
             direction = -1.0
-            heading = _wrap(heading + math.pi)
-            heading_error = _wrap(heading - yaw)
-        yaw_error = _wrap(
+            heading = wrap_angle(heading + math.pi)
+            heading_error = wrap_angle(heading - yaw)
+        yaw_error = wrap_angle(
             (
                 final_yaw
                 if distance < final_tolerance and final_yaw is not None
@@ -317,8 +415,18 @@ class PrivilegedHouseholdExpert:
             - yaw
         )
         alignment = max(0.0, 1.0 - abs(heading_error) / 0.75)
-        linear = direction * min(0.42, 1.1 * distance) * alignment
+        linear = direction * navigation_linear_speed(
+            self.task.task_id, self.stage.kind, distance
+        ) * alignment
         angular = float(np.clip(1.8 * yaw_error, -0.85, 0.85))
+        if self.holding_object is not None:
+            linear_limit, angular_limit = (
+                (0.12, 0.15)
+                if self.holding_object == "football"
+                else (0.24, 0.40)
+            )
+            linear = float(np.clip(linear, -linear_limit, linear_limit))
+            angular = float(np.clip(angular, -angular_limit, angular_limit))
         return self._action(observation, linear=linear, angular=angular, gripper=self._gripper())
 
     def _stow_phase_action(self, observation: ObservationFrame) -> ActionFrame:
@@ -330,14 +438,31 @@ class PrivilegedHouseholdExpert:
 
     def _unstow_action(self, observation: ObservationFrame) -> ActionFrame:
         error = np.asarray(self._operation_ready()) - np.asarray(observation.joint_position)
-        if float(np.max(np.abs(error))) <= 0.04 and self._base_is_settled(observation):
+        drawer_stage = self.stage.object_id is None and self.task.articulation is not None
+        base_aligned = not drawer_stage or drawer_base_is_aligned(
+            observation.base_pose, 1.30
+        )
+        if (
+            float(np.max(np.abs(error))) <= 0.04
+            and self._base_is_settled(observation)
+            and base_aligned
+        ):
             self._advance()
             return self._stop(observation)
-        arm_command = tuple(float(value) for value in np.clip(2.0 * error, -0.5, 0.5))
+        arm_command = (
+            tuple(float(value) for value in np.clip(2.0 * error, -0.5, 0.5))
+            if base_aligned
+            else self._hold_arm_command(observation)
+        )
+        linear, angular = (
+            drawer_base_commands(observation.base_pose, 1.30)
+            if drawer_stage
+            else (0.0, 0.0)
+        )
         return self._action(
             observation,
-            linear=0.0,
-            angular=0.0,
+            linear=linear,
+            angular=angular,
             gripper=self._gripper(),
             arm_command=arm_command,
         )
@@ -397,6 +522,8 @@ class PrivilegedHouseholdExpert:
         if self.stage_target is None:
             raise RuntimeError("arm stage has no target")
         stage = self.stage
+        if stage.kind.startswith("arm_drawer_") and stage.kind != "arm_drawer_retract":
+            return self._drawer_joint_action(observation, drawer_posture(stage.kind))
         if (
             self.task.task_id.startswith("store_kitchen")
             and stage.kind == "arm_object_descend"
@@ -412,7 +539,29 @@ class PrivilegedHouseholdExpert:
             observation,
             target_position=self.stage_target,
             gripper_target=grip,
+            orientation_weight=(
+                0.50
+                if "drawer" in stage.kind
+                else object_orientation_weight(
+                    self.task.task_id, stage.kind, stage.object_id
+                )
+            ),
         )
+        if stage.kind == "arm_object_clearance":
+            position_error = float(
+                np.linalg.norm(
+                    np.asarray(self.stage_target)
+                    - np.asarray(self.cartesian.site_position())
+                )
+            )
+            if self.stage_step >= 25 and position_error < 0.05:
+                self._advance()
+                return self._stop(observation)
+            if self.stage_step >= 179:
+                self.failed = True
+                self._advance()
+                return self._stop(observation)
+            return action
         if (
             stage.kind in {"arm_target_above", "arm_target_lower"}
             and self.stage_step >= 4
@@ -443,6 +592,7 @@ class PrivilegedHouseholdExpert:
             physically_validated_later = (
                 stage.kind.startswith("arm_target")
                 or stage.kind.startswith("arm_object")
+                or stage.kind.startswith("arm_drawer")
             )
             if (
                 self.stage_step >= 179
@@ -453,6 +603,30 @@ class PrivilegedHouseholdExpert:
             self._advance()
             return self._stop(observation)
         return action
+
+    def _drawer_joint_action(
+        self, observation: ObservationFrame, target: tuple[float, ...]
+    ) -> ActionFrame:
+        error = np.asarray(target) - np.asarray(observation.joint_position)
+        if (
+            float(np.max(np.abs(error))) <= 0.035
+            and drawer_base_is_aligned(observation.base_pose, 1.30)
+        ) or self.stage_step >= 399:
+            self._advance()
+            return self._stop(observation)
+        arm_command = (
+            tuple(float(value) for value in np.clip(2.0 * error, -0.5, 0.5))
+            if drawer_base_is_aligned(observation.base_pose, 1.30)
+            else self._hold_arm_command(observation)
+        )
+        linear, angular = drawer_base_commands(observation.base_pose, 1.30)
+        return self._action(
+            observation,
+            linear=linear,
+            angular=angular,
+            gripper=self._gripper(),
+            arm_command=arm_command,
+        )
 
     def _object_inside_target(self, object_id: str | None) -> bool:
         if object_id is None:
@@ -496,11 +670,27 @@ class PrivilegedHouseholdExpert:
         if position >= 0.38:
             self._advance()
             return self._stop(observation, gripper=1.0)
-        if self.stage_step >= 499:
+        if self.stage_step >= 549:
             self.failed = True
             self._advance()
             return self._stop(observation, gripper=1.0)
-        return self._action(observation, linear=-0.02, angular=0.0, gripper=1.0)
+        progress = min(0.42, 0.0008 * self.stage_step)
+        error = np.asarray(ARM_DRAWER_GRASP) - np.asarray(
+            observation.joint_position
+        )
+        arm_command = tuple(
+            float(value) for value in np.clip(2.0 * error, -0.5, 0.5)
+        )
+        linear, angular = drawer_base_commands(
+            observation.base_pose, 1.30 - progress
+        )
+        return self._action(
+            observation,
+            linear=linear,
+            angular=angular,
+            gripper=1.0,
+            arm_command=arm_command,
+        )
 
     def _back_away_drawer_action(self, observation: ObservationFrame) -> ActionFrame:
         if observation.base_pose[1] <= 0.40:
@@ -529,10 +719,23 @@ class PrivilegedHouseholdExpert:
             return (site[0], site[1] - 0.05, site[2] + 0.24)
         spec = self._object_spec(stage.object_id)
         if "object" in stage.kind:
+            if stage.kind == "arm_object_clearance":
+                site = self.cartesian.site_position()
+                return (site[0], site[1], site[2] + 0.25)
             position = self._object_position(stage.object_id)
             grasp = (position[0], position[1], position[2] + spec.grasp_site_z_offset)
+            if self.task.task_id.startswith("tidy_living"):
+                yaw = object_approach_yaw(self.task.task_id, stage.object_id)
+                compensation = top_down_site_compensation(yaw)
+                grasp = tuple(
+                    grasp[index] + compensation[index] for index in range(3)
+                )
             if stage.kind.endswith("above"):
-                clearance = 0.20 if self.task.task_id.startswith("store_kitchen") else 0.24
+                clearance = (
+                    0.20
+                    if self.task.task_id.startswith("store_kitchen")
+                    else (0.36 if self.task.task_id.startswith("tidy_living") else 0.24)
+                )
                 return (grasp[0], grasp[1], grasp[2] + clearance)
             if stage.kind.endswith("descend"):
                 return grasp
@@ -546,7 +749,7 @@ class PrivilegedHouseholdExpert:
             placement = self.backend._placement_sample(stage.object_id).position  # noqa: SLF001
             site = self.cartesian.site_position()
             grasp_offset = tuple(site[index] - placement[index] for index in range(3))
-            lateral_bias = -0.07 if self.task.task_id.startswith("clear_dining") else 0.0
+            lateral_bias = 0.05 if self.task.task_id.startswith("clear_dining") else 0.0
             lower = (
                 target[0] + grasp_offset[0],
                 target[1] + grasp_offset[1] + lateral_bias,
@@ -573,106 +776,6 @@ class PrivilegedHouseholdExpert:
         site = self.cartesian.site_position()
         return (site[0], site[1], site[2] + 0.24)
 
-    def _waypoints(self, stage: ExpertStage) -> list[tuple[float, float]]:
-        task = self.task.task_id
-        object_id = stage.object_id
-        if task.startswith("tidy_living"):
-            if stage.kind == "nav_object" and object_id == "duck":
-                return [(0.70, -1.35)]
-            if stage.kind == "nav_object":
-                return [(1.60, 0.20), (0.65, -0.90)]
-            return []
-        if task.startswith("clear_dining"):
-            if stage.kind == "nav_object":
-                return (
-                    [(2.85, 1.10), (2.85, -0.35), (1.75, -0.35)]
-                    if object_id == "plate"
-                    else [(0.30, -0.95)]
-                )
-            return [(1.80, -0.35), (2.75, -0.35), (2.85, 0.30)]
-        if stage.kind == "nav_drawer":
-            return [(1.55, -0.70), (1.55, 1.10), (1.25, 1.10)]
-        if stage.kind == "nav_object":
-            if object_id == "cleaner_pink":
-                return [(1.35, -0.20), (1.35, 0.45)]
-            # Clear the island's south-east corner before turning west.  A
-            # closer waypoint lets the differential drive cut the corner and
-            # puts its front-right wheel into the island under some seeds.
-            return [(1.55, -0.45), (-0.42, -0.45)]
-        start_x = 1.35 if object_id == "cleaner_pink" else -0.42
-        return [(start_x, -0.45), (1.90, -0.45), (1.90, 1.20)]
-
-    def _object_approach_yaw(self, object_id: str | None) -> float:
-        if self.task.task_id.startswith("tidy_living"):
-            return math.pi if object_id == "football" else 0.0
-        if self.task.task_id.startswith("store_kitchen") and object_id == "cleaner_pink":
-            return math.pi
-        return math.pi / 2
-
-    def _target_approach_yaw(self) -> float:
-        if self.task.task_id.startswith("store_kitchen"):
-            return math.pi / 2
-        if self.task.task_id.startswith("tidy_living"):
-            return 0.80
-        return math.pi / 2
-
-    def _object_position(self, object_id: str | None) -> tuple[float, float, float]:
-        if object_id is None:
-            raise ValueError("object ID is required")
-        body_id = self.backend.household_ids.object_bodies[object_id]
-        return tuple(float(value) for value in self.backend.data.xpos[body_id])
-
-    def _target_position(self, object_id: str | None) -> tuple[float, float, float]:
-        if object_id is None:
-            raise ValueError("object ID is required")
-        site_id = self.backend.household_ids.target_sites[object_id]
-        return tuple(float(value) for value in self.backend.data.site_xpos[site_id])
-
-    def _drawer_handle_position(self) -> tuple[float, float, float]:
-        binding = self.backend.binding.articulation
-        if binding is None:
-            raise RuntimeError("task has no drawer binding")
-        geom_id = mujoco.mj_name2id(
-            self.backend.model, mujoco.mjtObj.mjOBJ_GEOM, binding.handle_geom
-        )
-        return tuple(float(value) for value in self.backend.data.geom_xpos[geom_id])
-
-    def _drawer_grasp_target(self) -> tuple[float, float, float]:
-        handle = self._drawer_handle_position()
-        return (handle[0] - 0.020, handle[1] - 0.040, handle[2] + 0.03)
-
-    def _object_spec(self, object_id: str | None):
-        return next(obj for obj in self.task.objects if obj.object_id == object_id)
-
-    def _grip_fraction(self, object_id: str | None) -> float:
-        return self._object_spec(object_id).grip_fraction
-
-    def _gripper(self) -> float:
-        if self.drawer_holding:
-            return 1.0
-        return self._grip_fraction(self.holding_object) if self.holding_object else 0.0
-
-    def _hold_action(self, observation: ObservationFrame, gripper: float) -> ActionFrame:
-        return self._action(
-            observation,
-            linear=0.0,
-            angular=0.0,
-            gripper=gripper,
-            arm_command=self._hold_arm_command(observation),
-        )
-
-    def _hold_arm_command(self, observation: ObservationFrame) -> tuple[float, ...]:
-        target_error = (
-            np.asarray(observation.joint_position)
-            - self.backend._arm_targets  # noqa: SLF001
-        )
-        return tuple(
-            float(value) for value in np.clip(20.0 * target_error, -1.0, 1.0)
-        )
-
-    def _stop(self, observation: ObservationFrame, gripper: float | None = None) -> ActionFrame:
-        return self._hold_action(observation, self._gripper() if gripper is None else gripper)
-
     def _action(
         self,
         observation: ObservationFrame,
@@ -693,7 +796,3 @@ class PrivilegedHouseholdExpert:
             arm_command=arm_command,
             gripper_target=gripper,
         )
-
-
-def _wrap(angle: float) -> float:
-    return (angle + math.pi) % (2 * math.pi) - math.pi
