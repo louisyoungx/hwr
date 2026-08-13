@@ -220,13 +220,64 @@ def test_foundation_launcher_builds_one_detached_gated_notifying_command(
         str(ROOT),
     ]
     assert f"HWR_TRAINING_RUN_ROOT={output_root}" in arguments
+    assert "PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.65" in arguments
+    assert "PYTORCH_MPS_LOW_WATERMARK_RATIO=0.50" in arguments
     assert str(ROOT / "scripts/run_training_with_lark_notify.sh") in arguments
+    assert "nice" in arguments
+    assert "10" in arguments
     assert "hwr.apps.train_foundation_world_model" in arguments
     assert "--development-ready" in arguments
     assert str(readiness) in arguments
     assert "--model-root" in arguments
     assert str(model_root) in arguments
     assert "--resume" in arguments
+
+
+def test_foundation_launcher_forwards_resource_overrides(tmp_path: Path) -> None:
+    binary_dir = tmp_path / "bin"
+    binary_dir.mkdir()
+    tmux_arguments = tmp_path / "tmux-arguments.txt"
+    tmux = binary_dir / "tmux"
+    tmux.write_text(
+        '#!/usr/bin/env bash\n'
+        'if [[ "$1" == "has-session" ]]; then exit 1; fi\n'
+        'printf "%s\\n" "$@" > "$TMUX_ARGUMENTS"\n',
+        encoding="utf-8",
+    )
+    tmux.chmod(0o755)
+    lark = binary_dir / "lark-cli"
+    lark.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    lark.chmod(0o755)
+    readiness = tmp_path / "development-ready.json"
+    readiness.write_text("{}")
+    model_root = tmp_path / "models"
+    model_root.mkdir()
+    environment = os.environ.copy()
+    environment.update(
+        PATH=f"{binary_dir}:{environment['PATH']}",
+        TMUX_ARGUMENTS=str(tmux_arguments),
+        HWR_FOUNDATION_DEVELOPMENT_READY=str(readiness),
+        HWR_FOUNDATION_MODEL_ROOT=str(model_root),
+        HWR_FOUNDATION_PYTHON=sys.executable,
+        PYTORCH_MPS_HIGH_WATERMARK_RATIO="0.70",
+        PYTORCH_MPS_LOW_WATERMARK_RATIO="0.55",
+        HWR_FOUNDATION_NICE_LEVEL="5",
+    )
+
+    result = subprocess.run(
+        (str(FOUNDATION_LAUNCHER), "resource-override"),
+        cwd=ROOT,
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    arguments = tmux_arguments.read_text().splitlines()
+    assert "PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.70" in arguments
+    assert "PYTORCH_MPS_LOW_WATERMARK_RATIO=0.55" in arguments
+    assert arguments[arguments.index("nice") + 2] == "5"
 
 
 def test_foundation_launcher_rejects_unsafe_run_id_before_tmux() -> None:

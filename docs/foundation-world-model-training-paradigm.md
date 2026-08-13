@@ -336,6 +336,22 @@ Checkpoint 和部署导出同样采用固定保留数，只删除格式合法的
 两套三视角 dense grid 的未压缩上界估算约 54 GB，连同原始 RGB-D、模型和 checkpoint
 控制在当前本机约 130 GB 可用空间以内。容量策略只管理存储，不产生动作或课程答案。
 
+### 9.2 本机统一内存上限
+
+Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默认低水位是设备推荐工作集
+的 1.4 倍；在 48 GiB 本机上，MPS 推荐工作集约为 37.44 GiB，默认低水位因此高于物理内存，
+不能保证桌面仍有可用内存。正式 tmux 启动器固定传入以下任务无关的资源策略：
+
+- `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.65`，即 MPS 分配硬上限约 24.34 GiB；
+- `PYTORCH_MPS_LOW_WATERMARK_RATIO=0.50`，约 18.72 GiB 后启用 allocator 回收与 adaptive commit；
+- 训练进程以 `nice 10` 运行，让交互程序优先获得 CPU；
+- 每卸载一个冻结基础模型，并且每 10 个优化 step，释放一次不再被活跃 tensor 引用的
+  MPS/CUDA allocator cache。
+
+这些约束只回收缓存和调节资源调度，不改变观测、动作、奖励、终止、合法环境变换、采样
+规则或 loss，也不提供场景动作答案。可通过同名 PyTorch 环境变量和
+`HWR_FOUNDATION_NICE_LEVEL` 覆盖启动器默认值；覆盖值应与 run 日志一起保留。
+
 ## 10. 统一训练与最终验收
 
 开发完成后只启动一条正式训练主线，同时从三个任务分布采样，不先训练单场景策略，也不

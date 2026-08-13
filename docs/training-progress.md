@@ -231,6 +231,20 @@ scripts/start_foundation_training_tmux.sh foundation-wm-004
 飞书机器人身份发送 run、日志、Episode 数、checkpoint 路径和 SHA-256；无需在训练期间
 保持当前 Codex 会话占用。
 
+`foundation-wm-004` 于 2026-08-13 首次启动后暴露出本机资源门禁缺口：冻结教师特征已在
+16:01 完成，但首个 200-step 更新周期运行三十余分钟仍未落盘 checkpoint。MPS/Metal 统一
+内存 footprint 达到约 34 GiB、峰值约 36 GiB，系统 swap 使用量约 22 GiB，桌面交互明显
+卡顿。该进程在确认没有 `latest.json`、checkpoint、部署或逐 Episode 结果后被主动中止；
+它没有可恢复的学习参数，也不能作为训练或评测证据。小型 run manifest、特征索引、replay
+manifest、留出集 manifest 和有界日志已封存到
+`artifacts/retired-foundation-runs/foundation-wm-004-memory-abort-audit-metadata.tar.gz`，SHA-256
+为 `89ee8796784479b50d7c5ccdde5d83a0711d0d6d5ec9a96d597ee2a5a425d67e`；约 13 GiB 可重建
+缓存和未形成 checkpoint 的轨迹随后删除。
+
+后续正式 run 使用训练范式文档 9.2 节的 MPS 资源策略：推荐工作集的 0.65 硬水位、0.50
+软水位、每 10 个优化 step 回收空闲 accelerator cache，并以 `nice 10` 运行。该修改只处理
+任务无关的资源使用，不改变无专家谱系、策略动作来源、任务采样或成功条件。
+
 训练完成后的固定评测命令为：
 
 ```bash

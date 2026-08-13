@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import gc
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -33,6 +32,10 @@ from hwr.perception.foundation import (
 from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 from hwr.perception.language_cache import StaticLanguageFeatureResolver
 from hwr.policy.foundation_runtime import FoundationWorldModelPolicy
+from hwr.train.accelerator_memory import (
+    release_accelerator_memory_after_step,
+    release_unused_accelerator_memory,
+)
 from hwr.train.foundation_augmentation import transform_foundation_batch
 from hwr.train.foundation_collection import (
     AutonomousCollectionConfig,
@@ -457,7 +460,7 @@ class FoundationOnlineTrainingRunner:
             causality_output / "vision-language.json",
         )
         del vision_language_provider
-        gc.collect()
+        release_unused_accelerator_memory()
         dense = self.providers.dense_vision()
         dense_vision = materialize_visual_features(
             self.store.path,
@@ -474,7 +477,7 @@ class FoundationOnlineTrainingRunner:
             causality_output / "dense-vision.json",
         )
         del dense
-        gc.collect()
+        release_unused_accelerator_memory()
         language_provider = self.providers.language()
         language = materialize_language_features(
             self.store.path,
@@ -489,7 +492,7 @@ class FoundationOnlineTrainingRunner:
             causality_output / "language.json",
         )
         del language_provider
-        gc.collect()
+        release_unused_accelerator_memory()
         return (
             FoundationPreparedFeatures(vision_language, dense_vision, language),
             FoundationPreparedFeatures(
@@ -551,6 +554,7 @@ class FoundationOnlineTrainingRunner:
             transforms = [self._sample_transform(loader, int(value)) for value in indices]
             batch = transform_foundation_batch(batch, transforms)
             metrics.append(self.stack.trainer.train_step(batch))
+            release_accelerator_memory_after_step(len(metrics))
         names = metrics[0]
         result = {
             name: float(sum(item[name] for item in metrics) / len(metrics))

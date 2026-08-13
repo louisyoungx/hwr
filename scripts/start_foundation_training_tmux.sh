@@ -35,6 +35,9 @@ readiness="${HWR_FOUNDATION_DEVELOPMENT_READY:-$repository_root/artifacts/develo
 model_root="${HWR_FOUNDATION_MODEL_ROOT:-$repository_root/models/foundation}"
 device="${HWR_FOUNDATION_DEVICE:-mps}"
 teacher_device="${HWR_FOUNDATION_TEACHER_DEVICE:-mps}"
+mps_high_watermark="${PYTORCH_MPS_HIGH_WATERMARK_RATIO:-0.65}"
+mps_low_watermark="${PYTORCH_MPS_LOW_WATERMARK_RATIO:-0.50}"
+nice_level="${HWR_FOUNDATION_NICE_LEVEL:-10}"
 session_name="hwr-foundation-$run_id"
 log_path="$log_root/$run_id.log"
 
@@ -62,6 +65,7 @@ if tmux has-session -t "=$session_name" 2>/dev/null; then
 fi
 
 training_command=(
+  nice -n "$nice_level"
   "$python_binary"
   -m hwr.apps.train_foundation_world_model
   --run-id "$run_id"
@@ -78,6 +82,8 @@ fi
 mkdir -p "$log_root"
 tmux new-session -d -s "$session_name" -c "$repository_root" \
   env "HWR_TRAINING_RUN_ROOT=$output_root" \
+  "PYTORCH_MPS_HIGH_WATERMARK_RATIO=$mps_high_watermark" \
+  "PYTORCH_MPS_LOW_WATERMARK_RATIO=$mps_low_watermark" \
   "$notification_wrapper" "$run_id" "$log_path" \
   "${training_command[@]}"
 
