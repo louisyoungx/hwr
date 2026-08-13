@@ -176,13 +176,13 @@ def optimize_imagination_step(
         value_optimizer.zero_grad(set_to_none=True)
         losses, _ = algorithm.losses(initial)
         losses["actor"].backward(retain_graph=True)
-        nn.utils.clip_grad_norm_(
+        actor_gradient_norm = nn.utils.clip_grad_norm_(
             algorithm.actor.parameters(), algorithm.config.maximum_gradient_norm
         )
         actor_optimizer.step()
         value_optimizer.zero_grad(set_to_none=True)
         losses["value"].backward()
-        nn.utils.clip_grad_norm_(
+        value_gradient_norm = nn.utils.clip_grad_norm_(
             algorithm.value.parameters(), algorithm.config.maximum_gradient_norm
         )
         value_optimizer.step()
@@ -192,4 +192,7 @@ def optimize_imagination_step(
             world_parameters, original_grad_states, strict=True
         ):
             parameter.requires_grad_(requires_grad)
-    return {name: float(value.detach().cpu()) for name, value in losses.items()}
+    metrics = {name: float(value.detach().cpu()) for name, value in losses.items()}
+    metrics["actor_gradient_norm"] = float(actor_gradient_norm.detach().cpu())
+    metrics["value_gradient_norm"] = float(value_gradient_norm.detach().cpu())
+    return metrics

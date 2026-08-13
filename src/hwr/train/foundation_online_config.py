@@ -30,6 +30,7 @@ class FoundationOnlineTrainingConfig:
     random_exploration_motion_correlation: float = 0.96
     random_exploration_gripper_flip_probability: float = 0.05
     learning_signal_windows_per_episode: int = 4
+    metrics_publish_interval_updates: int = 10
     seed: int = 20260812
 
     def __post_init__(self) -> None:
@@ -49,6 +50,7 @@ class FoundationOnlineTrainingConfig:
             self.causality_audit_windows_per_task,
             self.causality_audit_batch_size,
             self.learning_signal_windows_per_episode,
+            self.metrics_publish_interval_updates,
         )
         if min(positive) <= 0 or self.seed < 0:
             raise ValueError("foundation online training dimensions are invalid")

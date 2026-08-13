@@ -133,7 +133,7 @@ class FoundationWorldModelTrainer:
         world_losses = self.world_objective(world_output, world_targets)
         self.world_optimizer.zero_grad(set_to_none=True)
         world_losses["total"].backward()
-        nn.utils.clip_grad_norm_(
+        world_gradient_norm = nn.utils.clip_grad_norm_(
             self.world_model.parameters(), self.config.maximum_gradient_norm
         )
         self.world_optimizer.step()
@@ -154,6 +154,8 @@ class FoundationWorldModelTrainer:
             **{f"world/{name}": float(value.detach()) for name, value in world_losses.items()},
             **{f"imagination/{name}": value for name, value in imagination_metrics.items()},
             "trainer/visual_microbatch_count": float(visual_update.microbatch_count),
+            "trainer/visual_gradient_norm": visual_update.gradient_norm,
+            "trainer/world_gradient_norm": float(world_gradient_norm.detach().cpu()),
             "trainer/update_count": float(self.update_count),
         }
         return metrics

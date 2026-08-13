@@ -356,6 +356,25 @@ Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默�
 一次 optimizer step 仍覆盖配置声明的完整 batch。可通过同名 PyTorch 环境变量和
 `HWR_FOUNDATION_NICE_LEVEL` 覆盖启动器默认值；覆盖值应与 run 日志一起保留。
 
+### 9.3 训练可观测性
+
+`loss` 只在进程标准输出中出现不构成训练证据。统一 runner 必须在 `run/metrics/` 原子发布
+当前阶段与每个完整 cycle 的不可变小型 JSON，至少包含：
+
+- 视觉学生、世界模型、Actor、Value 的全部平均损失与裁剪前梯度范数；
+- 更新数、Episode 数、各阶段耗时，以及动作因果门结果；
+- 16 维实际执行动作按统一量程归一化后的均值、标准差、范围、饱和率、有效秩；
+- Actor 提案与安全层实际执行动作的差值、夹爪切换率和安全干预率；
+- 逐任务 Episode 数、成功数和环境提供的数值物理结果，但训练器不能据此增加任务分支。
+
+中断恢复时删除晚于恢复 checkpoint 的未提交 cycle 指标，不能把已回滚的更新留在曲线中。
+本机只读面板只能轮询这些 JSON 和有界的最近 Episode 记录，不得扫描 replay、特征缓存或
+模型权重。面板默认仅监听 `127.0.0.1`，是旁路观测工具，不参与采样、奖励或优化。
+
+观测体系是后续准入门禁的前提，不是补救失败训练的可视化包装。若梯度非有限、动作有效
+维度塌缩、提案持续被安全层覆盖，或动作因果长期约等于 `1`，runner 必须据此阻止升级采集
+阶段，而不是继续堆更新。
+
 ## 10. 统一训练与最终验收
 
 开发完成后只启动一条正式训练主线，同时从三个任务分布采样，不先训练单场景策略，也不
@@ -399,6 +418,7 @@ Episode 评测、验收结果和每路视频，不能只通过目录路径间接
 | 想象 RL | `hwr.train.imagination`、`imagination_rl` |
 | 环境声明的通用增强 | `hwr.train.foundation_augmentation` |
 | 单一在线闭环 | `hwr.train.foundation_online`、`foundation_trainer`、`foundation_run_manifest` |
+| 指标与本机面板 | `hwr.train.foundation_metrics`、`foundation_dashboard`、`hwr.apps.serve_foundation_dashboard` |
 | 训练/部署 checkpoint | `hwr.train.foundation_registry` |
 | 剥离部署运行时 | `hwr.world_model.deploy`、`hwr.policy.foundation_runtime` |
 | 总门禁 | `scripts/verify_development_ready.py`、`hwr.train.development_gate` |

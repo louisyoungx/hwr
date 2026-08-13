@@ -372,6 +372,13 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert len(list((tmp_path / "run/checkpoints").glob("update-*"))) == 1
     assert len(list((tmp_path / "run/deployments").glob("update-*"))) == 1
     assert runner.task_sampler.audit()["distance_thresholds"] is False
+    cycle_metrics = json.loads(
+        (tmp_path / "run/metrics/cycle-000002.json").read_text()
+    )
+    assert cycle_metrics["training"]["trainer/visual_gradient_norm"] >= 0.0
+    assert cycle_metrics["action_coverage"]["transition_count"] == 6
+    assert cycle_metrics["episodes"]["count"] == 3
+    assert cycle_metrics["action_causality"]["passed"] is True
 
     resumed = _runner(tmp_path, config)
     resumed.resume_latest()

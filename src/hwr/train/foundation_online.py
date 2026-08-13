@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Protocol
@@ -12,13 +13,10 @@ import numpy as np
 
 from hwr.core.runtime import RuntimeBackend
 from hwr.data.autonomous_trajectory import AppendableAutonomousTrajectoryStore
-from hwr.data.foundation_cache import FoundationCacheKey, FoundationFeatureCache
+from hwr.data.foundation_cache import FoundationFeatureCache
 from hwr.data.foundation_features import (
     LANGUAGE_PREPROCESS_SHA256,
     file_sha256,
-    load_feature_index,
-    materialize_language_features,
-    materialize_visual_features,
 )
 from hwr.data.foundation_loading import (
     FoundationPreparedFeatures,
@@ -27,7 +25,6 @@ from hwr.data.foundation_loading import (
 from hwr.perception.foundation import (
     FrozenLanguageFeatureProvider,
     FrozenVisionFeatureProvider,
-    language_source_sha256,
 )
 from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 from hwr.perception.language_cache import StaticLanguageFeatureResolver
@@ -56,6 +53,14 @@ from hwr.train.foundation_learning_signals import (
     EpisodeLearningSignals,
     evaluate_episode_learning_signals,
 )
+from hwr.train.foundation_materialization import materialize_foundation_replay_features
+from hwr.train.foundation_metrics import (
+    FoundationMetricsProgress,
+    FoundationMetricsStore,
+    mean_metrics,
+    summarize_action_coverage,
+    summarize_episode_outcomes,
+)
 from hwr.train.foundation_exploration import (
     RandomRLActionSource,
     RandomRLExplorationConfig,
@@ -77,6 +82,10 @@ from hwr.train.foundation_recovery import (
     publish_runner_progress,
     restore_torch_rng_state,
     restore_runner_progress,
+)
+from hwr.train.foundation_replay_features import (
+    discard_visual_feature_sources,
+    language_resolver_from_replay,
 )
 from hwr.train.foundation_setup import FoundationLearningStack
 from hwr.train.learning_signals import failure_boundary_step
@@ -189,6 +198,11 @@ class FoundationOnlineTrainingRunner:
         self.latest_action_causality: dict[str, object] | None = None
         self.latest_action_causality_report: Path | None = None
         self.completed_cycles = 0
+        self.metrics_store = FoundationMetricsStore(
+            self.run_path,
+            source_commit=self.source_commit,
+            target_episodes=self.config.episodes,
+        )
         write_or_verify_foundation_run_manifest(
             self.run_path,
             source_commit=self.source_commit,
@@ -210,19 +224,40 @@ class FoundationOnlineTrainingRunner:
         }
         cycle = self.completed_cycles
         try:
+            self._publish_progress("preparing_causality_holdout", cycle)
             self._prepare_causality_holdout(environments)
             while len(self.records) < self.config.episodes:
+                next_cycle = cycle + 1
+                timings: dict[str, float] = {}
+                started = time.perf_counter()
+                self._publish_progress("collecting", next_cycle)
                 collected = self._collect_cycle(environments)
                 self._bound_replay_storage()
+                timings["collection_seconds"] = time.perf_counter() - started
+                started = time.perf_counter()
+                self._publish_progress("materializing_features", next_cycle)
                 prepared, causality_prepared = self._materialize_features()
-                metrics = self._update_cycle(prepared)
+                timings["materialization_seconds"] = time.perf_counter() - started
+                started = time.perf_counter()
+                metrics = self._update_cycle(prepared, next_cycle)
+                timings["update_seconds"] = time.perf_counter() - started
+                started = time.perf_counter()
+                self._publish_progress("evaluating", next_cycle, metrics)
                 signals = self._episode_learning_signals(prepared, collected)
                 self._evaluate_action_causality(causality_prepared, metrics)
                 self._record_learning_outcomes(collected, signals)
-                cycle += 1
+                timings["evaluation_seconds"] = time.perf_counter() - started
+                cycle = next_cycle
                 self.completed_cycles = cycle
                 if cycle % self.config.checkpoint_interval_cycles == 0:
+                    started = time.perf_counter()
+                    self._publish_progress("checkpointing", cycle, metrics)
                     self._checkpoint(cycle, prepared)
+                    timings["checkpoint_seconds"] = time.perf_counter() - started
+                self.metrics_store.publish_cycle(
+                    cycle,
+                    self._cycle_metrics(collected, metrics, timings),
+                )
         finally:
             for environment in environments.values():
                 environment.close()
@@ -332,6 +367,7 @@ class FoundationOnlineTrainingRunner:
         )
         self.records = [FoundationEpisodeRecord(**item) for item in restored.records]
         self.completed_cycles = restored.cycle
+        self.metrics_store.rollback_after(restored.cycle)
         self._discard_cached_visual_sources(
             restored.discarded_observation_sources
         )
@@ -417,89 +453,25 @@ class FoundationOnlineTrainingRunner:
         )
 
     def _language_resolver(self) -> StaticLanguageFeatureResolver:
-        features = {}
-        language_index_path = self.run_path / "features/language.json"
-        if not language_index_path.is_file():
-            raise RuntimeError("language features must be materialized before Actor collection")
-        from hwr.data.foundation_features import load_feature_index
-
-        index = load_feature_index(language_index_path)
-        for shard in self.store.manifest["shards"]:
-            text, locale = shard["instruction"], shard["locale"]
-            source = language_source_sha256(text, locale)
-            key = FoundationCacheKey(
-                "language", source, index.encoder_lock_sha256, index.preprocess_sha256
-            )
-            features[(locale, text)] = self.cache.load_language(key).values.copy()
-        return StaticLanguageFeatureResolver(
-            features,
-            encoder_lock_sha256=index.encoder_lock_sha256,
-            output_dimension=index.output_dimension,
+        return language_resolver_from_replay(
+            self.store.manifest["shards"],
+            self.cache,
+            self.run_path / "features/language.json",
         )
 
     def _materialize_features(
         self,
     ) -> tuple[FoundationPreparedFeatures, FoundationPreparedFeatures]:
-        output = self.run_path / "features"
-        causality_output = self.run_path / "causality-holdout/features"
-        output.mkdir(parents=True, exist_ok=True)
-        causality_output.mkdir(parents=True, exist_ok=True)
-        vision_language_provider = self.providers.vision_language()
-        vision_language = materialize_visual_features(
+        return materialize_foundation_replay_features(
             self.store.path,
-            self.cache,
-            self.preprocessor,
-            vision_language_provider,
-            output / "vision-language.json",
-        )
-        causality_vision_language = materialize_visual_features(
             self.causality_store.path,
             self.cache,
             self.preprocessor,
-            vision_language_provider,
-            causality_output / "vision-language.json",
-        )
-        del vision_language_provider
-        release_unused_accelerator_memory()
-        dense = self.providers.dense_vision()
-        dense_vision = materialize_visual_features(
-            self.store.path,
-            self.cache,
-            self.preprocessor,
-            dense,
-            output / "dense-vision.json",
-        )
-        causality_dense_vision = materialize_visual_features(
-            self.causality_store.path,
-            self.cache,
-            self.preprocessor,
-            dense,
-            causality_output / "dense-vision.json",
-        )
-        del dense
-        release_unused_accelerator_memory()
-        language_provider = self.providers.language()
-        language = materialize_language_features(
-            self.store.path,
-            self.cache,
-            language_provider,
-            output / "language.json",
-        )
-        causality_language = materialize_language_features(
-            self.causality_store.path,
-            self.cache,
-            language_provider,
-            causality_output / "language.json",
-        )
-        del language_provider
-        release_unused_accelerator_memory()
-        return (
-            FoundationPreparedFeatures(vision_language, dense_vision, language),
-            FoundationPreparedFeatures(
-                causality_vision_language,
-                causality_dense_vision,
-                causality_language,
-            ),
+            self.run_path / "features",
+            self.run_path / "causality-holdout/features",
+            vision_language_factory=self.providers.vision_language,
+            dense_vision_factory=self.providers.dense_vision,
+            language_factory=self.providers.language,
         )
 
     def _bound_replay_storage(self) -> None:
@@ -517,26 +489,18 @@ class FoundationOnlineTrainingRunner:
         self._discard_cached_visual_sources(evicted_sources)
 
     def _discard_cached_visual_sources(self, sources: tuple[str, ...]) -> None:
-        evicted_sources = tuple(sources)
-        if not evicted_sources:
-            return
-        for filename in ("vision-language.json", "dense-vision.json"):
-            path = self.run_path / "features" / filename
-            if not path.is_file():
-                continue
-            index = load_feature_index(path)
-            for source in evicted_sources:
-                self.cache.discard(
-                    FoundationCacheKey(
-                        "visual",
-                        source,
-                        index.encoder_lock_sha256,
-                        self.preprocessor.fingerprint,
-                    )
-                )
+        discard_visual_feature_sources(
+            tuple(sources),
+            self.cache,
+            self.preprocessor,
+            (
+                self.run_path / "features/vision-language.json",
+                self.run_path / "features/dense-vision.json",
+            ),
+        )
 
     def _update_cycle(
-        self, prepared: FoundationPreparedFeatures
+        self, prepared: FoundationPreparedFeatures, cycle: int
     ) -> dict[str, float]:
         loader = FoundationSequenceBatchLoader(
             self.store.path,
@@ -555,12 +519,61 @@ class FoundationOnlineTrainingRunner:
             batch = transform_foundation_batch(batch, transforms)
             metrics.append(self.stack.trainer.train_step(batch))
             release_accelerator_memory_after_step(len(metrics))
+            if len(metrics) % self.config.metrics_publish_interval_updates == 0:
+                self._publish_progress(
+                    "updating",
+                    cycle,
+                    mean_metrics(metrics),
+                    completed_updates=len(metrics),
+                )
         names = metrics[0]
         result = {
             name: float(sum(item[name] for item in metrics) / len(metrics))
             for name in names
         }
         return result
+
+    def _publish_progress(
+        self,
+        stage: str,
+        cycle: int,
+        metrics: Mapping[str, float] | None = None,
+        *,
+        completed_updates: int = 0,
+    ) -> None:
+        self.metrics_store.publish_progress(
+            FoundationMetricsProgress(
+                stage,
+                cycle,
+                self.stack.trainer.update_count,
+                len(self.records),
+                self.config.updates_per_cycle if stage == "updating" else 0,
+                completed_updates,
+            ),
+            metrics=metrics,
+        )
+
+    def _cycle_metrics(
+        self,
+        episodes: list[object],
+        metrics: Mapping[str, float],
+        timings: Mapping[str, float],
+    ) -> dict[str, object]:
+        return {
+            "update_count": self.stack.trainer.update_count,
+            "episode_count": len(self.records),
+            "training": dict(metrics),
+            "action_coverage": summarize_action_coverage(
+                episodes, self.stack.action_scaling
+            ),
+            "episodes": summarize_episode_outcomes(episodes),
+            "timing_seconds": dict(timings),
+            "action_causality": dict(
+                self.latest_action_causality["assessment"]
+                if self.latest_action_causality is not None
+                else {}
+            ),
+        }
 
     def _evaluate_action_causality(
         self,

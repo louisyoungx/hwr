@@ -22,6 +22,7 @@ class VisualUpdateResult:
     pooled_state: torch.Tensor
     losses: Mapping[str, float]
     microbatch_count: int
+    gradient_norm: float
 
 
 def optimize_visual_student(
@@ -60,10 +61,13 @@ def optimize_visual_student(
         if stop < observation_total:
             release_unused_accelerator_memory()
     parameters = [*student.parameters(), *objective.parameters()]
-    nn.utils.clip_grad_norm_(parameters, maximum_gradient_norm)
+    gradient_norm = nn.utils.clip_grad_norm_(parameters, maximum_gradient_norm)
     optimizer.step()
     return VisualUpdateResult(
-        torch.cat(pooled, dim=0), aggregate, microbatch_count
+        torch.cat(pooled, dim=0),
+        aggregate,
+        microbatch_count,
+        float(gradient_norm.detach().cpu()),
     )
 
 

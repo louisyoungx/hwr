@@ -41,6 +41,7 @@ hwr-train-bimanual-rl = "hwr.apps.train_bimanual_rl:main"
 hwr-evaluate-bimanual-rl = "hwr.apps.evaluate_bimanual_rl:main"
 hwr-train-foundation-world-model = "hwr.apps.train_foundation_world_model:main"
 hwr-evaluate-foundation-world-model = "hwr.apps.evaluate_foundation_world_model:main"
+hwr-serve-foundation-dashboard = "hwr.apps.serve_foundation_dashboard:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
