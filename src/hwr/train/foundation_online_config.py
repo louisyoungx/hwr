@@ -11,7 +11,12 @@ from hwr.world_model.evaluation import ActionCausalityCriteria
 @dataclass(frozen=True)
 class FoundationOnlineTrainingConfig:
     episodes: int = 120
-    initial_random_episodes: int = 6
+    minimum_actor_readiness_episodes: int = 12
+    actor_readiness_consecutive_passes: int = 2
+    minimum_active_action_dimension_fraction: float = 0.75
+    minimum_action_effective_rank: float = 6.0
+    minimum_data_action_probe_ratio: float = 1.05
+    minimum_data_action_probe_ratio_p05: float = 1.01
     collection_episodes_per_cycle: int = 3
     updates_per_cycle: int = 200
     batch_size: int = 2
@@ -27,6 +32,7 @@ class FoundationOnlineTrainingConfig:
     causality_holdout_episodes_per_task: int = 2
     causality_audit_windows_per_task: int = 8
     causality_audit_batch_size: int = 2
+    causality_shuffle_repeats: int = 5
     random_exploration_motion_correlation: float = 0.96
     random_exploration_gripper_flip_probability: float = 0.05
     learning_signal_windows_per_episode: int = 4
@@ -36,7 +42,8 @@ class FoundationOnlineTrainingConfig:
     def __post_init__(self) -> None:
         positive = (
             self.episodes,
-            self.initial_random_episodes,
+            self.minimum_actor_readiness_episodes,
+            self.actor_readiness_consecutive_passes,
             self.collection_episodes_per_cycle,
             self.updates_per_cycle,
             self.batch_size,
@@ -49,13 +56,14 @@ class FoundationOnlineTrainingConfig:
             self.causality_holdout_episodes_per_task,
             self.causality_audit_windows_per_task,
             self.causality_audit_batch_size,
+            self.causality_shuffle_repeats,
             self.learning_signal_windows_per_episode,
             self.metrics_publish_interval_updates,
         )
         if min(positive) <= 0 or self.seed < 0:
             raise ValueError("foundation online training dimensions are invalid")
-        if self.initial_random_episodes > self.episodes:
-            raise ValueError("initial random Episodes exceed total Episodes")
+        if self.minimum_actor_readiness_episodes > self.episodes:
+            raise ValueError("Actor readiness Episodes exceed total Episodes")
         if not 0.0 <= self.augmentation_probability <= 1.0:
             raise ValueError("foundation augmentation probability is invalid")
         if min(self.camera_width, self.camera_height) < 160:
@@ -72,6 +80,15 @@ class FoundationOnlineTrainingConfig:
             self.random_exploration_motion_correlation,
             self.random_exploration_gripper_flip_probability,
         )
+        if not 0.0 < self.minimum_active_action_dimension_fraction <= 1.0:
+            raise ValueError("minimum active action dimension fraction is invalid")
+        if self.minimum_action_effective_rank <= 0.0:
+            raise ValueError("minimum action effective rank is invalid")
+        if min(
+            self.minimum_data_action_probe_ratio,
+            self.minimum_data_action_probe_ratio_p05,
+        ) <= 1.0:
+            raise ValueError("data action probe ratios must exceed one")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

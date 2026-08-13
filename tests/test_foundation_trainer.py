@@ -249,8 +249,11 @@ def test_foundation_causality_audit_requires_every_task_partition(
     passing = _synthetic_causality_report(1.2)
     failing = _synthetic_causality_report(0.9)
     monkeypatch.setattr(
-        "hwr.train.foundation_diagnostics._evaluate_batch_report",
-        lambda trainer, batch, shuffle_seed: passing if shuffle_seed < 19 else failing,
+        "hwr.train.foundation_diagnostics._evaluate_batch_reports",
+        lambda trainer, batch, shuffle_seeds: (
+            (passing if shuffle_seeds[0] < 19 else failing,),
+            (passing,),
+        ),
     )
     batch = _batch(_visual_config())
 
@@ -266,6 +269,7 @@ def test_foundation_causality_audit_requires_every_task_partition(
     assert diagnostic["assessment"]["aggregate_passed"] is True
     assert diagnostic["assessment"]["all_partitions_passed"] is False
     assert diagnostic["assessment"]["passed"] is False
+    assert diagnostic["one_step_action_utilization"]["assessment"]["passed"] is True
 
 
 def _synthetic_causality_report(ratio: float) -> CounterfactualCausalityReport:

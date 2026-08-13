@@ -99,7 +99,9 @@ class FoundationWorldModelTrainer:
         )
         self.update_count = 0
 
-    def train_step(self, batch: FoundationTrainingBatch) -> dict[str, float]:
+    def train_step(
+        self, batch: FoundationTrainingBatch, *, train_task_actor: bool = True
+    ) -> dict[str, float]:
         self._check_batch_dimensions(batch)
         self.visual_student.train()
         self.world_model.train()
@@ -138,16 +140,18 @@ class FoundationWorldModelTrainer:
         )
         self.world_optimizer.step()
 
-        initial = RSSMState(
-            world_output.sequence.deterministic.detach().flatten(0, 1),
-            world_output.sequence.stochastic.detach().flatten(0, 1),
-        )
-        imagination_metrics = optimize_imagination_step(
-            self.imagination,
-            initial,
-            self.actor_optimizer,
-            self.value_optimizer,
-        )
+        imagination_metrics: dict[str, float] = {}
+        if train_task_actor:
+            initial = RSSMState(
+                world_output.sequence.deterministic.detach().flatten(0, 1),
+                world_output.sequence.stochastic.detach().flatten(0, 1),
+            )
+            imagination_metrics = optimize_imagination_step(
+                self.imagination,
+                initial,
+                self.actor_optimizer,
+                self.value_optimizer,
+            )
         self.update_count += 1
         metrics = {
             **{f"visual/{name}": value for name, value in visual_update.losses.items()},
@@ -156,6 +160,7 @@ class FoundationWorldModelTrainer:
             "trainer/visual_microbatch_count": float(visual_update.microbatch_count),
             "trainer/visual_gradient_norm": visual_update.gradient_norm,
             "trainer/world_gradient_norm": float(world_gradient_norm.detach().cpu()),
+            "trainer/task_actor_updated": float(train_task_actor),
             "trainer/update_count": float(self.update_count),
         }
         return metrics

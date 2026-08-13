@@ -152,6 +152,22 @@ def summarize_action_coverage(
     }
 
 
+def summarize_replay_action_coverage(
+    replay_path: Path,
+    replay_manifest: Mapping[str, object],
+    scaling: LatentActionScaling,
+) -> dict[str, object]:
+    episodes = []
+    for shard in replay_manifest.get("shards", ()):
+        with np.load(replay_path / str(shard["path"]), allow_pickle=False) as arrays:
+            values = {
+                "actor_proposal": arrays["actor_proposal"].copy(),
+                "executed_action": arrays["executed_action"].copy(),
+            }
+        episodes.append(_ArrayEpisode(values))
+    return summarize_action_coverage(episodes, scaling)
+
+
 def summarize_episode_outcomes(episodes: Sequence[object]) -> dict[str, object]:
     if not episodes:
         raise ValueError("Episode outcome summary cannot be empty")
@@ -168,6 +184,29 @@ def summarize_episode_outcomes(episodes: Sequence[object]) -> dict[str, object]:
         "return_max": float(np.max(returns)),
         "safety_intervention_rate_mean": float(np.mean(safety)),
         "by_task": _outcomes_by_task(episodes),
+    }
+
+
+def build_foundation_cycle_metrics(
+    episodes: Sequence[object],
+    metrics: Mapping[str, float],
+    timings: Mapping[str, float],
+    scaling: LatentActionScaling,
+    *,
+    update_count: int,
+    episode_count: int,
+    action_causality: Mapping[str, object] | None,
+    actor_readiness: Mapping[str, object] | None,
+) -> dict[str, object]:
+    return {
+        "update_count": update_count,
+        "episode_count": episode_count,
+        "training": dict(metrics),
+        "action_coverage": summarize_action_coverage(episodes, scaling),
+        "episodes": summarize_episode_outcomes(episodes),
+        "timing_seconds": dict(timings),
+        "action_causality": dict(action_causality or {}),
+        "actor_readiness": dict(actor_readiness or {}),
     }
 
 
@@ -196,6 +235,11 @@ def _effective_rank(values: np.ndarray) -> float:
         return 0.0
     probabilities = eigenvalues[eigenvalues > 0.0] / total
     return float(math.exp(float(-(probabilities * np.log(probabilities)).sum())))
+
+
+@dataclass(frozen=True)
+class _ArrayEpisode:
+    arrays: Mapping[str, np.ndarray]
 
 
 def _gripper_switch_rate(episodes: Sequence[object]) -> float:

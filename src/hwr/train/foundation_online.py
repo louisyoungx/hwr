@@ -5,9 +5,9 @@ from __future__ import annotations
 import copy
 import json
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
-from typing import Callable, Mapping, Protocol
+from typing import Mapping
 
 import numpy as np
 
@@ -22,10 +22,6 @@ from hwr.data.foundation_loading import (
     FoundationPreparedFeatures,
     FoundationSequenceBatchLoader,
 )
-from hwr.perception.foundation import (
-    FrozenLanguageFeatureProvider,
-    FrozenVisionFeatureProvider,
-)
 from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 from hwr.perception.language_cache import StaticLanguageFeatureResolver
 from hwr.policy.foundation_runtime import FoundationWorldModelPolicy
@@ -34,6 +30,11 @@ from hwr.train.accelerator_memory import (
     release_unused_accelerator_memory,
 )
 from hwr.train.foundation_augmentation import transform_foundation_batch
+from hwr.train.foundation_action_probe import evaluate_foundation_data_action_probe
+from hwr.train.foundation_actor_readiness import (
+    FoundationActorReadinessCriteria,
+    FoundationActorReadinessTracker,
+)
 from hwr.train.foundation_collection import (
     AutonomousCollectionConfig,
     AutonomousEpisodeCollector,
@@ -41,6 +42,7 @@ from hwr.train.foundation_collection import (
 )
 from hwr.train.foundation_diagnostics import (
     evaluate_foundation_action_causality_audit,
+    foundation_action_causality_qualified,
     publish_action_causality_report,
 )
 from hwr.train.foundation_holdout import (
@@ -57,18 +59,26 @@ from hwr.train.foundation_materialization import materialize_foundation_replay_f
 from hwr.train.foundation_metrics import (
     FoundationMetricsProgress,
     FoundationMetricsStore,
+    build_foundation_cycle_metrics,
     mean_metrics,
-    summarize_action_coverage,
-    summarize_episode_outcomes,
+    summarize_replay_action_coverage,
 )
 from hwr.train.foundation_exploration import (
     RandomRLActionSource,
     RandomRLExplorationConfig,
 )
 from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
+from hwr.train.foundation_online_types import (
+    FoundationEnvironmentFactory,
+    FoundationEpisodeRecord,
+    FoundationOnlineTrainingResult,
+    FoundationProviderFactories,
+    FoundationTaskInterface,
+)
 from hwr.train.foundation_registry import (
     ACTION_CAUSALITY_SCHEMA,
     export_foundation_deployment,
+    foundation_deployment_qualified,
     file_sha256 as registry_file_sha256,
     load_foundation_training_checkpoint,
     prune_versioned_artifacts,
@@ -92,57 +102,6 @@ from hwr.train.learning_signals import failure_boundary_step
 from hwr.train.task_sampling import OutcomeAdaptiveTaskSampler, TaskOutcome
 from hwr.world_model.deploy import DeployableWorldModelStateFilter
 from hwr.world_model.evaluation import ActionCausalityCriteria
-
-
-@dataclass(frozen=True)
-class FoundationTaskInterface:
-    task_id: str
-    maximum_steps: int
-
-    def __post_init__(self) -> None:
-        if not self.task_id or self.maximum_steps <= 0:
-            raise ValueError("foundation task interface is invalid")
-
-
-class FoundationEnvironmentFactory(Protocol):
-    def __call__(
-        self, task_id: str, camera_width: int, camera_height: int
-    ) -> RuntimeBackend: ...
-
-
-@dataclass(frozen=True)
-class FoundationProviderFactories:
-    vision_language: Callable[[], FrozenVisionFeatureProvider]
-    dense_vision: Callable[[], FrozenVisionFeatureProvider]
-    language: Callable[[], FrozenLanguageFeatureProvider]
-
-
-@dataclass(frozen=True)
-class FoundationEpisodeRecord:
-    episode_index: int
-    task_id: str
-    seed: int
-    action_source: str
-    episode_return: float
-    success: bool
-    safety_intervention_rate: float
-    environment_steps: int
-    update_count: int
-    state_novelty: float = 0.0
-    td_error: float = 0.0
-    reward_improvement: float = 0.0
-    failure_boundary: float = 0.0
-
-
-@dataclass(frozen=True)
-class FoundationOnlineTrainingResult:
-    records: tuple[FoundationEpisodeRecord, ...]
-    update_count: int
-    replay_path: Path
-    latest_checkpoint: Path
-    latest_deployment: Path
-    latest_action_causality_report: Path
-
 
 class FoundationOnlineTrainingRunner:
     """All tasks share the same models, optimizer, replay, and update code."""
@@ -198,6 +157,16 @@ class FoundationOnlineTrainingRunner:
         self.latest_action_causality: dict[str, object] | None = None
         self.latest_action_causality_report: Path | None = None
         self.completed_cycles = 0
+        self.actor_readiness = FoundationActorReadinessTracker(
+            FoundationActorReadinessCriteria(
+                config.minimum_actor_readiness_episodes,
+                config.actor_readiness_consecutive_passes,
+                config.minimum_active_action_dimension_fraction,
+                config.minimum_action_effective_rank,
+                config.minimum_data_action_probe_ratio,
+                config.minimum_data_action_probe_ratio_p05,
+            )
+        )
         self.metrics_store = FoundationMetricsStore(
             self.run_path,
             source_commit=self.source_commit,
@@ -256,7 +225,20 @@ class FoundationOnlineTrainingRunner:
                     timings["checkpoint_seconds"] = time.perf_counter() - started
                 self.metrics_store.publish_cycle(
                     cycle,
-                    self._cycle_metrics(collected, metrics, timings),
+                    build_foundation_cycle_metrics(
+                        collected,
+                        metrics,
+                        timings,
+                        self.stack.action_scaling,
+                        update_count=self.stack.trainer.update_count,
+                        episode_count=len(self.records),
+                        action_causality=(
+                            self.latest_action_causality["assessment"]
+                            if self.latest_action_causality is not None
+                            else None
+                        ),
+                        actor_readiness=self.actor_readiness.last_assessment,
+                    ),
                 )
         finally:
             for environment in environments.values():
@@ -276,7 +258,9 @@ class FoundationOnlineTrainingRunner:
         if (
             self.latest_deployment is None
             or self.latest_action_causality is None
-            or self.latest_action_causality["assessment"]["passed"] is not True
+            or not foundation_action_causality_qualified(
+                self.latest_action_causality
+            )
         ):
             raise RuntimeError(
                 "foundation training has no causality-qualified deployment"
@@ -309,17 +293,21 @@ class FoundationOnlineTrainingRunner:
             != int(latest.get("update_count", -2))
         ):
             raise ValueError("resumed action causality lineage differs")
-        expected = {
-            "action_causality_report_sha256": latest["action_causality_sha256"],
-            "action_causality_passed": diagnostic["assessment"]["passed"],
-        }
         checkpoint_manifest = json.loads(
             (checkpoint / "manifest.json").read_text(encoding="utf-8")
         )
         require_foundation_lineage(
             checkpoint_manifest.get("lineage"), source_commit=self.source_commit
         )
-        if checkpoint_manifest.get("training_diagnostics") != expected:
+        expected = checkpoint_manifest.get("training_diagnostics")
+        if not isinstance(expected, Mapping):
+            raise ValueError("resumed checkpoint diagnostics are missing")
+        if (
+            expected.get("action_causality_report_sha256")
+            != latest["action_causality_sha256"]
+            or expected.get("action_causality_passed")
+            != foundation_action_causality_qualified(diagnostic)
+        ):
             raise ValueError("resumed checkpoint diagnostic provenance differs")
         deployment = latest.get("deployment")
         deployment_path = (
@@ -329,8 +317,8 @@ class FoundationOnlineTrainingRunner:
             deployment_manifest = json.loads(
                 (deployment_path / "manifest.json").read_text(encoding="utf-8")
             )
-            if expected["action_causality_passed"] is not True:
-                raise ValueError("failed causality checkpoint exposed a deployment")
+            if not foundation_deployment_qualified(expected):
+                raise ValueError("unqualified checkpoint exposed a deployment")
             if deployment_manifest.get("training_diagnostics") != expected:
                 raise ValueError("resumed deployment diagnostic provenance differs")
             artifact = checkpoint / str(checkpoint_manifest["artifact_file"])
@@ -338,8 +326,8 @@ class FoundationOnlineTrainingRunner:
                 "training_checkpoint_sha256"
             ) != registry_file_sha256(artifact):
                 raise ValueError("resumed deployment checkpoint hash differs")
-        elif expected["action_causality_passed"] is True:
-            raise ValueError("passed causality checkpoint is missing its deployment")
+        elif foundation_deployment_qualified(expected):
+            raise ValueError("qualified checkpoint is missing its deployment")
         load_foundation_training_checkpoint(checkpoint, self.stack.trainer)
         restored = restore_runner_progress(
             self.run_path,
@@ -360,6 +348,7 @@ class FoundationOnlineTrainingRunner:
         ):
             raise ValueError("resumed checkpoint data provenance differs")
         self.task_sampler.load_state_dict(restored.task_sampler)
+        self.actor_readiness.load_state_dict(restored.actor_readiness)
         self.rng.bit_generator.state = restored.rng_state
         restore_torch_rng_state(
             restored.torch_rng_state,
@@ -389,11 +378,10 @@ class FoundationOnlineTrainingRunner:
             task_id, _ = self.task_sampler.sample(self.rng)
             task = self.tasks[task_id]
             seed = self.config.seed + episode_index * 104729
-            random_phase = episode_index < self.config.initial_random_episodes
             source = (
-                self._random_action_source()
-                if random_phase
-                else CurrentRLActorActionSource(self._collection_policy())
+                CurrentRLActorActionSource(self._collection_policy())
+                if self.actor_readiness.unlocked
+                else self._random_action_source()
             )
             collector = AutonomousEpisodeCollector(
                 self.preprocessor,
@@ -517,7 +505,11 @@ class FoundationOnlineTrainingRunner:
             batch = loader.build([int(value) for value in indices])
             transforms = [self._sample_transform(loader, int(value)) for value in indices]
             batch = transform_foundation_batch(batch, transforms)
-            metrics.append(self.stack.trainer.train_step(batch))
+            metrics.append(
+                self.stack.trainer.train_step(
+                    batch, train_task_actor=self.actor_readiness.unlocked
+                )
+            )
             release_accelerator_memory_after_step(len(metrics))
             if len(metrics) % self.config.metrics_publish_interval_updates == 0:
                 self._publish_progress(
@@ -531,6 +523,10 @@ class FoundationOnlineTrainingRunner:
             name: float(sum(item[name] for item in metrics) / len(metrics))
             for name in names
         }
+        if self.actor_readiness.unlocked:
+            self.actor_readiness.record_task_actor_updates(
+                self.config.updates_per_cycle
+            )
         return result
 
     def _publish_progress(
@@ -552,28 +548,6 @@ class FoundationOnlineTrainingRunner:
             ),
             metrics=metrics,
         )
-
-    def _cycle_metrics(
-        self,
-        episodes: list[object],
-        metrics: Mapping[str, float],
-        timings: Mapping[str, float],
-    ) -> dict[str, object]:
-        return {
-            "update_count": self.stack.trainer.update_count,
-            "episode_count": len(self.records),
-            "training": dict(metrics),
-            "action_coverage": summarize_action_coverage(
-                episodes, self.stack.action_scaling
-            ),
-            "episodes": summarize_episode_outcomes(episodes),
-            "timing_seconds": dict(timings),
-            "action_causality": dict(
-                self.latest_action_causality["assessment"]
-                if self.latest_action_causality is not None
-                else {}
-            ),
-        }
 
     def _evaluate_action_causality(
         self,
@@ -607,6 +581,7 @@ class FoundationOnlineTrainingRunner:
                 self.config.minimum_action_causality_horizon_fraction,
             ),
             shuffle_seed=self.config.seed,
+            shuffle_repeats=self.config.causality_shuffle_repeats,
         )
         diagnostic["window_selection"] = causality_window_manifest(loader, selected)
         diagnostic["holdout_collector"] = "foundation-causality-holdout/v1"
@@ -615,7 +590,29 @@ class FoundationOnlineTrainingRunner:
         metrics["world/action_causality_ratio"] = float(
             assessment["shuffled_to_true_ratio"]
         )
-        metrics["world/action_causality_passed"] = float(assessment["passed"])
+        metrics["world/action_causality_passed"] = float(
+            foundation_action_causality_qualified(diagnostic)
+        )
+        replay_coverage = summarize_replay_action_coverage(
+            self.store.path, self.store.manifest, self.stack.action_scaling
+        )
+        probe = evaluate_foundation_data_action_probe(
+            self.store.path,
+            self.store.manifest,
+            self.causality_store.path,
+            self.causality_store.manifest,
+            bootstrap_seed=self.config.seed,
+        )
+        readiness = self.actor_readiness.assess(
+            diagnostic,
+            probe,
+            replay_coverage,
+            replay_episodes=int(self.store.manifest["episode_count"]),
+        )
+        metrics["actor_readiness/unlocked"] = float(readiness["unlocked"])
+        metrics["actor_readiness/consecutive_passes"] = float(
+            readiness["consecutive_passes"]
+        )
 
     def _sample_transform(
         self, loader: FoundationSequenceBatchLoader, index: int
@@ -722,12 +719,14 @@ class FoundationOnlineTrainingRunner:
         training_diagnostics = {
             "action_causality_report_sha256": causality_sha,
             "action_causality_passed": bool(
-                self.latest_action_causality["assessment"]["passed"]
+                foundation_action_causality_qualified(
+                    self.latest_action_causality
+                )
             ),
+            "actor_readiness_unlocked": self.actor_readiness.unlocked,
+            "task_actor_update_count": self.actor_readiness.task_actor_update_count,
         }
-        checkpoint = self.run_path / "checkpoints" / (
-            version
-        )
+        checkpoint = self.run_path / "checkpoints" / version
         save_foundation_training_checkpoint(
             checkpoint,
             self.stack.trainer,
@@ -739,7 +738,7 @@ class FoundationOnlineTrainingRunner:
         self.latest_checkpoint = checkpoint
         self.latest_action_causality_report = causality
         self.latest_deployment = None
-        if training_diagnostics["action_causality_passed"] is True:
+        if foundation_deployment_qualified(training_diagnostics):
             deployment = self.run_path / "deployments" / version
             export_foundation_deployment(
                 deployment,
@@ -790,10 +789,9 @@ class FoundationOnlineTrainingRunner:
                 next(self.stack.trainer.actor.parameters()).device
             ),
             task_sampler=self.task_sampler.state_dict(),
+            actor_readiness=self.actor_readiness.state_dict(),
             records=[asdict(item) for item in self.records],
             replay_manifest=self.store.manifest,
             causality_manifest=self.causality_store.manifest,
         )
-        clear_replay_archive(
-            self.run_path / "recovery/replay-prune-archive"
-        )
+        clear_replay_archive(self.run_path / "recovery/replay-prune-archive")

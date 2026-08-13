@@ -38,6 +38,8 @@ from hwr.world_model import (
 DIAGNOSTICS = {
     "action_causality_report_sha256": "c" * 64,
     "action_causality_passed": True,
+    "actor_readiness_unlocked": True,
+    "task_actor_update_count": 10,
 }
 
 
@@ -199,7 +201,7 @@ def test_deployment_export_rejects_failed_causality(tmp_path) -> None:
     trainer = _trainer()
     diagnostics = {**DIAGNOSTICS, "action_causality_passed": False}
 
-    with pytest.raises(ValueError, match="requires passed action causality"):
+    with pytest.raises(ValueError, match="causal and trained Actor"):
         export_foundation_deployment(
             tmp_path / "deployment",
             trainer.visual_student,

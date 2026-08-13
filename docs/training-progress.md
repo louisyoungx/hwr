@@ -20,6 +20,15 @@
 和实际动作覆盖共同解锁，并接入只使用状态新颖度、TD error、奖励改善速度和失败边界的
 任务无关课程。完成因果统计校准、内在 RL 探索和 replay I/O 优化前，不启动下一 run。
 
+可观测性与第一版准入门已完成。runner 不再读取 `initial_random_episodes`：准入前任务 Actor
+和 Value 不更新、采集也不使用 Actor；准入状态随 checkpoint 原子恢复。因果报告升级为
+`hwr.foundation-action-causality/v5`，增加固定真实后验状态的单步视觉/本体动作利用诊断，
+每次审计执行 5 个独立置换并保存原始结果，要求每次通过且误差比 5% 分位数过线。另用
+state-only/state+实际动作的独立岭回归 probe 判断 replay 是否具有动作可辨识性；动作覆盖、
+有效秩、probe bootstrap 下界和至少 12 个 replay Episode 连续两次通过后才解锁 Actor。
+恢复 schema 同步升为 `hwr.foundation-runner-recovery/v4`。`foundation-wm-006` 的 v4 因果
+报告和 v3 恢复状态不能进入这条新谱系。
+
 ## 2026-08-12 基础模型—世界模型主线重建
 
 P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为无效开发运行；它们

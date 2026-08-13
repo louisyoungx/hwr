@@ -16,6 +16,7 @@ from hwr.world_model import (
     aggregate_action_causality_reports,
     deterministic_action_derangement,
     evaluate_action_causality,
+    evaluate_one_step_action_utilization,
 )
 from hwr.world_model.distributions import reward_expectation, two_hot_symlog
 
@@ -151,6 +152,21 @@ def test_action_shuffle_counterfactual_reports_open_loop_errors() -> None:
     )
     assert model.training
     assert report.sample_count == 2
+
+
+def test_one_step_action_utilization_holds_posterior_states_fixed() -> None:
+    config = _config()
+    model = ActionConditionedWorldModel(config)
+    visual, language, proprioception, proposals, actions = _inputs(config)
+
+    report = evaluate_one_step_action_utilization(
+        model, visual, language, proprioception, proposals, actions, shuffle_seed=3
+    )
+
+    assert report.error_components == ("visual_latent", "proprioception")
+    assert report.sample_count == actions.shape[0] * actions.shape[1]
+    assert len(report.true_horizon_errors) == 1
+    assert model.training
 
 
 def test_action_derangement_is_deterministic_value_preserving_and_has_no_fixed_points() -> None:

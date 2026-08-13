@@ -151,10 +151,41 @@ def _causality_run(tmp_path):
         ACTION_CAUSALITY_COMPONENTS,
     )
     raw_assessment = assess_action_causality(raw_report)
+    physical_components = {
+        name: component_reports[name]
+        for name in ("visual_latent", "proprioception")
+    }
+    physical_report = CounterfactualCausalityReport(
+        2.0,
+        2.4,
+        1.2,
+        (2.0, 2.0),
+        (2.4, 2.4),
+        (0.1, 0.1),
+        physical_components,
+        ("visual_latent", "proprioception"),
+    )
+    physical_assessment = assess_action_causality(physical_report)
+    statistics = {
+        "count": 1,
+        "reports": [raw_report.to_dict()],
+        "shuffled_to_true_ratios": [1.2],
+        "ratio_p05": 1.2,
+        "ratio_median": 1.2,
+        "ratio_p95": 1.2,
+        "lower_bound_passed": True,
+        "passed_fraction": 1.0,
+        "all_reports_passed": True,
+        "robust_passed": True,
+    }
+    physical_statistics = {
+        **statistics,
+        "reports": [physical_report.to_dict()],
+    }
     _write_json(
         report,
         {
-            "schema_version": "hwr.foundation-action-causality/v4",
+            "schema_version": "hwr.foundation-action-causality/v5",
             "action_source": "actual_executed_action",
             "safety_action_source": "actor_proposal",
             "counterfactual_pairing": "proposal-executed-pair/v1",
@@ -164,6 +195,12 @@ def _causality_run(tmp_path):
                 "task-a/v1": {
                     "report": raw_report.to_dict(),
                     "assessment": raw_assessment,
+                    "shuffle_statistics": statistics,
+                    "one_step_action_utilization": {
+                        "report": physical_report.to_dict(),
+                        "assessment": physical_assessment,
+                        "shuffle_statistics": physical_statistics,
+                    },
                 }
             },
             "assessment": {
@@ -174,6 +211,15 @@ def _causality_run(tmp_path):
                 "partition_count": 1,
             },
             "report": raw_report.to_dict(),
+            "shuffle_repeats": 1,
+            "shuffle_statistics": statistics,
+            "one_step_action_utilization": {
+                "conditioning": "teacher-forced-posterior-state/v1",
+                "physical_components": ["visual_latent", "proprioception"],
+                "report": physical_report.to_dict(),
+                "assessment": physical_assessment,
+                "shuffle_statistics": physical_statistics,
+            },
             "window_selection": [
                 {
                     "task_id": "task-a/v1",
@@ -193,6 +239,8 @@ def _causality_run(tmp_path):
     diagnostics = {
         "action_causality_report_sha256": digest,
         "action_causality_passed": True,
+        "actor_readiness_unlocked": True,
+        "task_actor_update_count": 1,
     }
     checkpoint_artifact = run / "checkpoints/update-000000001/training-state.pt"
     checkpoint_artifact.parent.mkdir(parents=True)

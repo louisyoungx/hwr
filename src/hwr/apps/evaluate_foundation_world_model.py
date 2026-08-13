@@ -23,6 +23,7 @@ from hwr.eval import (
     combine_bimanual_reports,
     evaluate_bimanual_policy,
 )
+from hwr.eval.foundation_causality import require_foundation_causality_structure
 from hwr.perception.foundation import language_source_sha256
 from hwr.perception.high_resolution import (
     HighResolutionVisionConfig,
@@ -36,9 +37,9 @@ from hwr.policy.bimanual_input import (
 from hwr.policy.foundation_runtime import FoundationWorldModelPolicy
 from hwr.render import BimanualVideoRecorder, BimanualVideoResult
 from hwr.train.foundation_registry import (
-    ACTION_CAUSALITY_SCHEMA,
     DEPLOYMENT_SCHEMA,
     TRAINING_CHECKPOINT_SCHEMA,
+    foundation_deployment_qualified,
     foundation_lineage,
     load_foundation_deployment,
     require_foundation_lineage,
@@ -47,12 +48,6 @@ from hwr.train.development_gate import (
     COMMITTED_SNAPSHOT_CHECKS,
     DEVELOPMENT_READY_SCHEMA,
     REQUIRED_DEVELOPMENT_CHECKS,
-)
-from hwr.world_model import (
-    ACTION_CAUSALITY_COMPONENTS,
-    ActionCausalityCriteria,
-    assess_action_causality,
-    counterfactual_report_from_dict,
 )
 
 
@@ -316,7 +311,7 @@ def _require_action_causality(run_path: Path) -> Path:
     if _sha256(path) != latest.get("action_causality_sha256"):
         raise ValueError("training action causality report hash differs")
     report = _read_json(path)
-    _require_causality_structure(report, run_manifest)
+    require_foundation_causality_structure(report, run_manifest)
     if report["assessment"]["passed"] is not True:
         raise RuntimeError("evaluation requires passed action-shuffle causality")
     checkpoint_path = _run_member(run_path, latest["training_checkpoint"])
@@ -340,7 +335,11 @@ def _require_action_causality(run_path: Path) -> Path:
         raise ValueError("checkpoint and action causality provenance differ")
     if checkpoint_diagnostics.get("action_causality_passed") is not True:
         raise ValueError("checkpoint did not pass action causality")
+    if not foundation_deployment_qualified(checkpoint_diagnostics):
+        raise ValueError("checkpoint has no causality-qualified trained Actor")
     diagnostics = deployment.get("training_diagnostics", {})
+    if diagnostics != checkpoint_diagnostics:
+        raise ValueError("deployment and checkpoint diagnostics differ")
     if diagnostics.get("action_causality_report_sha256") != _sha256(path):
         raise ValueError("deployment and action causality provenance differ")
     if diagnostics.get("action_causality_passed") is not True:
@@ -385,105 +384,6 @@ def _require_development_readiness(
     ):
         raise ValueError("training development readiness evidence is incomplete")
     return path
-
-
-def _require_causality_structure(
-    report: Mapping[str, Any], run_manifest: Mapping[str, Any]
-) -> None:
-    expected_tasks = {
-        str(task["task_id"]) for task in run_manifest.get("tasks", ())
-    }
-    partitions = report.get("partitions", {})
-    assessment = report.get("assessment", {})
-    training = run_manifest["training_config"]
-    criteria = ActionCausalityCriteria(
-        float(training["minimum_action_causality_ratio"]),
-        float(training["minimum_action_causality_horizon_fraction"]),
-    )
-    _require_assessment_matches(
-        report.get("report"), assessment, criteria, "aggregate"
-    )
-    for task_id, partition in partitions.items():
-        _require_assessment_matches(
-            partition.get("report"),
-            partition.get("assessment", {}),
-            criteria,
-            task_id,
-        )
-    required_components = set(ACTION_CAUSALITY_COMPONENTS)
-    component_assessments = assessment.get("components", {})
-    if (
-        report.get("schema_version") != ACTION_CAUSALITY_SCHEMA
-        or report.get("action_source") != "actual_executed_action"
-        or report.get("safety_action_source") != "actor_proposal"
-        or report.get("counterfactual_pairing")
-        != "proposal-executed-pair/v1"
-        or report.get("counterfactual_transform")
-        != "deterministic-global-derangement/v1"
-        or report.get("partition_key") != "task_id"
-        or not expected_tasks
-        or set(partitions) != expected_tasks
-        or assessment.get("aggregate_passed") is not True
-        or assessment.get("all_components_passed") is not True
-        or set(component_assessments) != required_components
-        or any(
-            value.get("passed") is not True
-            for value in component_assessments.values()
-        )
-        or assessment.get("all_partitions_passed") is not True
-        or any(
-            value.get("assessment", {}).get("passed") is not True
-            or value.get("assessment", {}).get("all_components_passed") is not True
-            or set(value.get("assessment", {}).get("components", {}))
-            != required_components
-            for value in partitions.values()
-        )
-    ):
-        raise ValueError("action causality partition evidence is incomplete")
-    selected = report.get("window_selection", ())
-    configured = int(
-        run_manifest["training_config"]["causality_audit_windows_per_task"]
-    )
-    counts = {task_id: 0 for task_id in expected_tasks}
-    intervals: dict[tuple[str, str], list[tuple[int, int]]] = {}
-    for window in selected:
-        task_id = str(window.get("task_id"))
-        start, stop = int(window.get("transition_start", -1)), int(
-            window.get("transition_stop", -1)
-        )
-        if task_id not in counts or start < 0 or stop <= start:
-            raise ValueError("action causality window selection is invalid")
-        counts[task_id] += 1
-        intervals.setdefault((task_id, str(window.get("episode_id"))), []).append(
-            (start, stop)
-        )
-    if any(value != configured for value in counts.values()):
-        raise ValueError("action causality window coverage differs from training")
-    if any(_overlaps(values) for values in intervals.values()):
-        raise ValueError("action causality windows overlap")
-
-
-def _require_assessment_matches(
-    raw_report: object,
-    claimed: Mapping[str, Any],
-    criteria: ActionCausalityCriteria,
-    label: str,
-) -> None:
-    if not isinstance(raw_report, Mapping):
-        raise ValueError(f"action causality raw evidence is missing: {label}")
-    expected = assess_action_causality(
-        counterfactual_report_from_dict(raw_report), criteria
-    )
-    if any(claimed.get(name) != value for name, value in expected.items()):
-        raise ValueError(f"action causality assessment differs from evidence: {label}")
-
-
-def _overlaps(intervals: Sequence[tuple[int, int]]) -> bool:
-    ordered = sorted(intervals)
-    return any(
-        current[0] < previous[1]
-        for previous, current in zip(ordered, ordered[1:])
-    )
 
 
 def _require_causality_lineage(

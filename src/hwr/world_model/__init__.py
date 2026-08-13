@@ -11,6 +11,7 @@ from hwr.world_model.evaluation import (
     assess_action_causality,
     counterfactual_report_from_dict,
     evaluate_action_causality,
+    evaluate_one_step_action_utilization,
     deterministic_action_derangement,
 )
 from hwr.world_model.model import (
@@ -44,4 +45,5 @@ __all__ = [
     "counterfactual_report_from_dict",
     "deterministic_action_derangement",
     "evaluate_action_causality",
+    "evaluate_one_step_action_utilization",
 ]

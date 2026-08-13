@@ -22,7 +22,7 @@ from hwr.world_model.model import ActionConditionedWorldModel
 
 TRAINING_CHECKPOINT_SCHEMA = "hwr.foundation-training-checkpoint/v1"
 DEPLOYMENT_SCHEMA = "hwr.foundation-deployment/v1"
-ACTION_CAUSALITY_SCHEMA = "hwr.foundation-action-causality/v4"
+ACTION_CAUSALITY_SCHEMA = "hwr.foundation-action-causality/v5"
 _FORBIDDEN_DEPLOYMENT_NAMES = frozenset(
     {
         "continue_head",
@@ -282,7 +282,12 @@ def export_foundation_deployment(
 def _validate_training_diagnostics(
     value: Mapping[str, object], *, require_passed: bool = False
 ) -> None:
-    expected = {"action_causality_report_sha256", "action_causality_passed"}
+    expected = {
+        "action_causality_report_sha256",
+        "action_causality_passed",
+        "actor_readiness_unlocked",
+        "task_actor_update_count",
+    }
     if set(value) != expected:
         raise ValueError("foundation training diagnostic fields differ")
     digest = str(value["action_causality_report_sha256"])
@@ -290,8 +295,26 @@ def _validate_training_diagnostics(
         raise ValueError("action causality report requires a SHA-256 identity")
     if not isinstance(value["action_causality_passed"], bool):
         raise ValueError("action causality pass state must be boolean")
-    if require_passed and value["action_causality_passed"] is not True:
-        raise ValueError("deployment requires passed action causality evidence")
+    if not isinstance(value["actor_readiness_unlocked"], bool):
+        raise ValueError("Actor readiness state must be boolean")
+    updates = value["task_actor_update_count"]
+    if not isinstance(updates, int) or isinstance(updates, bool) or updates < 0:
+        raise ValueError("task Actor update count must be a non-negative integer")
+    if require_passed and (
+        value["action_causality_passed"] is not True
+        or value["actor_readiness_unlocked"] is not True
+        or updates <= 0
+    ):
+        raise ValueError("deployment requires causal and trained Actor evidence")
+
+
+def foundation_deployment_qualified(value: Mapping[str, object]) -> bool:
+    _validate_training_diagnostics(value)
+    return bool(
+        value["action_causality_passed"] is True
+        and value["actor_readiness_unlocked"] is True
+        and int(value["task_actor_update_count"]) > 0
+    )
 
 
 def load_foundation_deployment(

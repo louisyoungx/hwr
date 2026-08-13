@@ -215,7 +215,7 @@ RGB-D 对齐必须使用每帧动态标定，而不能假设头部 RGB 与深度
 奖励、终止和最终验收报告定义。安全过滤器本身独立于学习模型；训练头只估计它对提案的
 干预概率，不能替代过滤器。
 
-世界模型必须通过动作因果反作弊评测。审计数据由独立的固定种子随机 RL 采集器生成，
+世界模型必须通过三层动作因果反作弊评测。审计数据由独立的固定种子随机 RL 采集器生成，
 每个任务至少两个 Episode；它和训练 replay 分库存储，任何样本都不得交给视觉学生、
 世界模型、Actor 或 Critic 的优化器。每个任务确定性选择至少八个互不重叠的序列窗口，
 保持观测序列不变，再将每步的“Actor 提案、实际执行动作”视为不可拆分的二元组，对所有
@@ -225,11 +225,33 @@ continue/terminal 和安全干预的多步 open-loop 误差。成对置换既打
 任务语义。报告必须声明两个动作源和配对变换，并保留五个分量
 各自的真实动作误差、打乱动作误差、比率和逐 horizon 序列，不能只保存相加后的总分。
 
+三层诊断分别回答不同问题：
+
+1. 数据可辨识性 probe 用普通 replay 拟合两个任务无关的岭回归，只比较“本体状态”和
+   “本体状态 + 实际执行动作”预测下一步本体增量的独立留出误差，并对误差比做 bootstrap；
+   它只判断采集数据是否含有动作效果，不进入策略或世界模型训练。
+2. 单步动作利用诊断固定每个真实后验状态，只替换下一步动作，评估视觉潜变量和本体预测；
+   这隔离了开环漂移，用于判断世界模型是否真的读取动作。
+3. 原有多步 open-loop 诊断继续覆盖视觉、本体、奖励、终止和安全五个头，作为部署门禁。
+
+每次审计使用五个独立无固定点置换。报告保存每次原始反事实结果，部署评测重新计算每次
+assessment、误差比的 5% 分位数和全部汇总；误差比下界必须达到 `1.05`，且每一次置换
+都须通过分量与 horizon 条件，不能依赖一次幸运置换。
+
 正式门槛要求打乱动作后的平均误差至少为真实动作误差的 `1.05` 倍，且至少 `60%` 的
 预测 horizon 逐项恶化；上述条件必须同时适用于总误差、五个预测分量、全局汇总以及按
 通用 `task_id` 划分的每个分区。任一预测头或任务失败都使 checkpoint 不可部署，不能由
 单个强预测头或强任务掩盖。最终评测从原始逐 horizon 数值重新计算所有 assessment，不能
 信任报告中预填的 `passed`。若没有恶化，说明模型只学习了视频连续性，不能用于策略想象。
+
+Actor 准入与部署准入分开。不能再按“采集了若干 Episode”自动切换 Actor。Actor 训练和
+Actor 采集只有在以下任务无关条件连续两次通过后才解锁：普通 replay 至少 12 个 Episode、
+单步视觉/本体动作利用在全局及每个数据分区通过、五次置换全部通过且比率 5% 分位数过线、
+数据 probe 的状态/状态动作误差比及其 bootstrap 下界过线，以及实际 16 维动作覆盖率和
+协方差有效秩过线。任一后续审计失败立即撤销准入。在准入前只更新视觉学生和世界模型，
+不得在因果未成立的想象轨迹中更新任务 Actor/Value；即使多步部署门通过，任务 Actor 尚无
+至少一次合格更新也不得导出 deployment。奖励、终止和安全等稀疏头仍是最终部署门，不被
+误用为早期物理动力学准入条件。
 
 每个训练 checkpoint 都必须生成不可变的动作因果报告，报告绑定源码提交、更新次数、
 训练 replay manifest SHA-256、独立审计数据 manifest SHA-256 和确切窗口清单；报告
@@ -415,6 +437,7 @@ Episode 评测、验收结果和每路视频，不能只通过目录路径间接
 | 视觉学生与无动作标签目标 | `hwr.perception.student`、`student_objectives`、`geometric_correspondence` |
 | 自主序列与缓存 | `hwr.data.autonomous_trajectory`、`foundation_cache`、`foundation_features`、`foundation_loading` |
 | 动作条件世界模型 | `hwr.world_model` |
+| 数据可辨识性与 Actor 准入 | `hwr.train.foundation_action_probe`、`foundation_actor_readiness` |
 | 想象 RL | `hwr.train.imagination`、`imagination_rl` |
 | 环境声明的通用增强 | `hwr.train.foundation_augmentation` |
 | 单一在线闭环 | `hwr.train.foundation_online`、`foundation_trainer`、`foundation_run_manifest` |

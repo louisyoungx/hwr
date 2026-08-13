@@ -11,6 +11,7 @@ from torch import nn
 
 from hwr.world_model.distributions import two_hot_symlog
 from hwr.world_model.model import ActionConditionedWorldModel, WorldModelPriorRollout
+from hwr.world_model.rssm import RSSMState
 
 
 ACTION_CAUSALITY_COMPONENTS = (
@@ -337,6 +338,88 @@ def evaluate_action_causality(
         component_reports=component_reports,
         error_components=tuple(component_reports),
         sample_count=int(executed_actions.shape[0]),
+    )
+
+
+def evaluate_one_step_action_utilization(
+    model: ActionConditionedWorldModel,
+    visual: torch.Tensor,
+    language: torch.Tensor,
+    proprioception: torch.Tensor,
+    actor_proposals: torch.Tensor,
+    executed_actions: torch.Tensor,
+    *,
+    shuffle_seed: int = 0,
+) -> CounterfactualCausalityReport:
+    """Hold posterior states fixed and test one-step physical action use."""
+    if executed_actions.shape[1] < 1 or actor_proposals.shape != executed_actions.shape:
+        raise ValueError("one-step action utilization requires paired transitions")
+    was_training = model.training
+    model.eval()
+    try:
+        with torch.inference_mode():
+            observed = model.observe(
+                visual,
+                language,
+                proprioception,
+                actor_proposals,
+                executed_actions,
+            )
+            initial = RSSMState(
+                observed.sequence.deterministic[:, :-1].flatten(0, 1),
+                observed.sequence.stochastic[:, :-1].flatten(0, 1),
+            )
+            proposals = actor_proposals.flatten(0, 1)[:, None]
+            actions = executed_actions.flatten(0, 1)[:, None]
+            paired = torch.cat((proposals, actions), dim=-1)
+            shuffled = deterministic_action_derangement(paired, seed=shuffle_seed)
+            dimension = proposals.shape[-1]
+            true_rollout = model.rollout_prior(
+                initial, actions, proposals, sample=False
+            )
+            shuffled_rollout = model.rollout_prior(
+                initial,
+                shuffled[..., dimension:],
+                shuffled[..., :dimension],
+                sample=False,
+            )
+            target_visual = visual[:, 1:].flatten(0, 1)[:, None]
+            target_proprioception = proprioception[:, 1:].flatten(0, 1)[:, None]
+            empty_outcomes = (None, None, None)
+            true_components = _horizon_component_errors(
+                model,
+                true_rollout,
+                target_visual,
+                target_proprioception,
+                empty_outcomes,
+            )
+            shuffled_components = _horizon_component_errors(
+                model,
+                shuffled_rollout,
+                target_visual,
+                target_proprioception,
+                empty_outcomes,
+            )
+    finally:
+        model.train(was_training)
+    component_reports = {
+        name: _component_report(value, shuffled_components[name])
+        for name, value in true_components.items()
+    }
+    true_errors = torch.stack(tuple(true_components.values())).sum(dim=0)
+    shuffled_errors = torch.stack(tuple(shuffled_components.values())).sum(dim=0)
+    true_mean = float(true_errors.mean().cpu())
+    shuffled_mean = float(shuffled_errors.mean().cpu())
+    return CounterfactualCausalityReport(
+        true_mean,
+        shuffled_mean,
+        shuffled_mean / max(true_mean, 1.0e-8),
+        tuple(float(value) for value in true_errors.cpu()),
+        tuple(float(value) for value in shuffled_errors.cpu()),
+        tuple(float(value) for value in true_rollout.uncertainty.mean(dim=0).cpu()),
+        component_reports,
+        tuple(component_reports),
+        int(actions.shape[0]),
     )
 
 

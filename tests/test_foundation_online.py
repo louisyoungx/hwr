@@ -252,8 +252,21 @@ def _stack() -> FoundationLearningStack:
 
 def _diagnostic(passed: bool) -> dict[str, object]:
     ratio = 1.2 if passed else 1.0
+    physical = {
+        "passed": passed,
+        "components": {
+            "visual_latent": {"passed": passed},
+            "proprioception": {"passed": passed},
+        },
+    }
+    statistics = {
+        "count": 1,
+        "ratio_p05": ratio,
+        "lower_bound_passed": passed,
+        "robust_passed": passed,
+    }
     return {
-        "schema_version": "hwr.foundation-action-causality/v4",
+        "schema_version": "hwr.foundation-action-causality/v5",
         "action_source": "actual_executed_action",
         "safety_action_source": "actor_proposal",
         "counterfactual_pairing": "proposal-executed-pair/v1",
@@ -265,6 +278,30 @@ def _diagnostic(passed: bool) -> dict[str, object]:
             "worse_horizon_count": 2 if passed else 0,
             "worse_horizon_fraction": 1.0 if passed else 0.0,
         },
+        "shuffle_statistics": statistics,
+        "one_step_action_utilization": {
+            "assessment": physical,
+            "shuffle_statistics": statistics,
+        },
+        "partitions": {
+            task_id: {
+                "assessment": {"passed": passed},
+                "shuffle_statistics": statistics,
+                "one_step_action_utilization": {
+                    "assessment": physical,
+                    "shuffle_statistics": statistics,
+                },
+            }
+            for task_id in TASK_IDS
+        },
+    }
+
+
+def _passing_action_probe(*args, **kwargs):
+    del args, kwargs
+    return {
+        "state_only_to_state_action_ratio": 1.2,
+        "bootstrap": {"ratio_p05": 1.1},
     }
 
 
@@ -291,7 +328,10 @@ def _runner(tmp_path, config: FoundationOnlineTrainingConfig):
 def _config(*, episodes: int = 6) -> FoundationOnlineTrainingConfig:
     return FoundationOnlineTrainingConfig(
             episodes=episodes,
-            initial_random_episodes=3,
+            minimum_actor_readiness_episodes=min(3, episodes),
+            actor_readiness_consecutive_passes=1,
+            minimum_active_action_dimension_fraction=0.01,
+            minimum_action_effective_rank=0.01,
             collection_episodes_per_cycle=3,
             updates_per_cycle=1,
             batch_size=1,
@@ -312,7 +352,11 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
 ) -> None:
     monkeypatch.setattr(
         "hwr.train.foundation_online.evaluate_foundation_action_causality_audit",
-        lambda trainer, batches, criteria, shuffle_seed: _diagnostic(True),
+        lambda trainer, batches, criteria, shuffle_seed, shuffle_repeats: _diagnostic(True),
+    )
+    monkeypatch.setattr(
+        "hwr.train.foundation_online.evaluate_foundation_data_action_probe",
+        _passing_action_probe,
     )
     config = _config()
     runner = _runner(tmp_path, config)
@@ -360,7 +404,7 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert run_manifest["lineage"]["expert_policies"] == []
     assert run_manifest["lineage"]["teacher_actions"] is False
     assert run_manifest["lineage"]["action_search"] is False
-    assert recovery["schema_version"] == "hwr.foundation-runner-recovery/v3"
+    assert recovery["schema_version"] == "hwr.foundation-runner-recovery/v4"
     assert all("safety_intervention_rate" in record for record in records)
     assert all("safety_cost_rate" not in record for record in records)
     assert deployment["training_diagnostics"] == checkpoint[
@@ -379,6 +423,8 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert cycle_metrics["action_coverage"]["transition_count"] == 6
     assert cycle_metrics["episodes"]["count"] == 3
     assert cycle_metrics["action_causality"]["passed"] is True
+    assert cycle_metrics["actor_readiness"]["unlocked"] is True
+    assert checkpoint["training_diagnostics"]["task_actor_update_count"] == 1
 
     resumed = _runner(tmp_path, config)
     resumed.resume_latest()
@@ -397,7 +443,11 @@ def test_online_runner_never_exports_a_failed_causality_deployment(
 ) -> None:
     monkeypatch.setattr(
         "hwr.train.foundation_online.evaluate_foundation_action_causality_audit",
-        lambda trainer, batches, criteria, shuffle_seed: _diagnostic(False),
+        lambda trainer, batches, criteria, shuffle_seed, shuffle_repeats: _diagnostic(False),
+    )
+    monkeypatch.setattr(
+        "hwr.train.foundation_online.evaluate_foundation_data_action_probe",
+        _passing_action_probe,
     )
     runner = _runner(tmp_path, _config(episodes=3))
 
@@ -421,7 +471,11 @@ def test_resume_rolls_replay_back_to_last_atomic_checkpoint(
 ) -> None:
     monkeypatch.setattr(
         "hwr.train.foundation_online.evaluate_foundation_action_causality_audit",
-        lambda trainer, batches, criteria, shuffle_seed: _diagnostic(True),
+        lambda trainer, batches, criteria, shuffle_seed, shuffle_repeats: _diagnostic(True),
+    )
+    monkeypatch.setattr(
+        "hwr.train.foundation_online.evaluate_foundation_data_action_probe",
+        _passing_action_probe,
     )
     config = _config()
     runner = _runner(tmp_path, config)
@@ -463,10 +517,14 @@ def test_resume_rolls_replay_back_to_last_atomic_checkpoint(
 def test_resume_restores_next_torch_random_values(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         "hwr.train.foundation_online.evaluate_foundation_action_causality_audit",
-        lambda trainer, batches, criteria, shuffle_seed: _diagnostic(True),
+        lambda trainer, batches, criteria, shuffle_seed, shuffle_repeats: _diagnostic(True),
+    )
+    monkeypatch.setattr(
+        "hwr.train.foundation_online.evaluate_foundation_data_action_probe",
+        _passing_action_probe,
     )
     torch.manual_seed(101)
-    config = _config(episodes=3)
+    config = _config(episodes=6)
     runner = _runner(tmp_path, config)
     runner.train()
     expected = torch.rand(16)
