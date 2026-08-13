@@ -381,6 +381,12 @@ Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默�
 - 视觉学生保持有效 batch 和完整 16-step 世界模型窗口，但按最多 4 个 observation 做梯度
   累积；相邻 observation 的四帧三相机 ConvNeXt 激活不再同时驻留统一内存。视觉更新完成
   后再把按原顺序拼接且停止梯度的连续 latent 交给世界模型和想象 RL。
+- 世界模型保持每步更新；视觉学生按固定的 4-step 全局间隔更新。非视觉更新只以最多 8 个
+  observation 的无梯度微批生成 latent，不构建几何对应，也不加载 DINOv3/SigLIP teacher
+  target。间隔只读取全局 update count，不读取任务或环境反馈。
+- replay window 的边际分布仍为均匀分布，但一个 batch 只从同一 Episode shard 抽样，避免
+  在两个序列之间反复解压大 shard；冻结视觉特征按 source hash 在 batch 内去重，并使用
+  最多 16 条只读 LRU，缓存容量不能随 replay 增长。
 
 这些约束只回收缓存和调节资源调度，不改变观测、动作、奖励、终止、合法环境变换、采样
 规则或动作标签，也不提供场景动作答案。视觉微批对各块 loss 按 observation 数量加权，
@@ -392,7 +398,8 @@ Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默�
 `loss` 只在进程标准输出中出现不构成训练证据。统一 runner 必须在 `run/metrics/` 原子发布
 当前阶段与每个完整 cycle 的不可变小型 JSON，至少包含：
 
-- 视觉学生、世界模型、Actor、Value 的全部平均损失与裁剪前梯度范数；
+- 视觉学生、世界模型、Actor、Value 的全部平均损失与裁剪前梯度范数；低频视觉 loss 只对
+  实际视觉更新求平均，并单独记录 `trainer/visual_updated` 比例；
 - 更新数、Episode 数、各阶段耗时，以及动作因果门结果；
 - 16 维实际执行动作按统一量程归一化后的均值、标准差、范围、饱和率、有效秩；
 - Actor 提案与安全层实际执行动作的差值、夹爪切换率和安全干预率；

@@ -1,10 +1,12 @@
 {
   "actor_learning_rate": 0.00003,
   "maximum_gradient_norm": 100.0,
-  "schema_version": "hwr.foundation-trainer-config/v1",
+  "schema_version": "hwr.foundation-trainer-config/v2",
   "value_learning_rate": 0.0001,
   "visual_learning_rate": 0.0001,
   "visual_microbatch_observations": 4,
+  "visual_update_interval": 4,
+  "visual_inference_microbatch_observations": 8,
   "weight_decay": 0.0001,
   "world_model_learning_rate": 0.0001
 }

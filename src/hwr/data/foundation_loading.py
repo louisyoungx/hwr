@@ -87,10 +87,21 @@ class FoundationSequenceBatchLoader:
     def window_metadata(self, index: int) -> dict[str, object]:
         return self.windows.window_metadata(index)
 
-    def build(self, indices: Sequence[int]) -> FoundationTrainingBatch:
+    def window_shard_index(self, index: int) -> int:
+        return self.windows.indices[index].shard_index
+
+    def build(
+        self,
+        indices: Sequence[int],
+        *,
+        include_visual_targets: bool = True,
+    ) -> FoundationTrainingBatch:
         if not indices:
             raise ValueError("foundation batch requires at least one sequence window")
-        sequences = [self._sequence(index) for index in indices]
+        sequences = [
+            self._sequence(index, include_visual_targets=include_visual_targets)
+            for index in indices
+        ]
         observation_count = self.windows.transitions + 1
         student_inputs = {
             name: torch.from_numpy(
@@ -100,25 +111,10 @@ class FoundationSequenceBatchLoader:
             ).to(self.device)
             for name in sequences[0]["inputs"]
         }
-        vision_language, vision_language_valid = self._teacher_arrays(
-            sequences, self.features.vision_language
-        )
-        dense_vision, dense_vision_valid = self._teacher_arrays(
-            sequences, self.features.dense_vision
-        )
-        targets = VisualTeacherTargets(
-            torch.from_numpy(vision_language).to(self.device),
-            torch.from_numpy(vision_language_valid).to(self.device),
-            torch.from_numpy(dense_vision).to(self.device),
-            torch.from_numpy(dense_vision_valid).to(self.device),
-            student_inputs["rgb"],
-            self._reconstruction_mask(student_inputs["rgb"]),
-            student_inputs["head_depth_m"],
-            student_inputs["head_depth_valid"],
-            batch_correspondence_indices(
-                [item for sequence in sequences for item in sequence["correspondences"]],
-                device=self.device,
-            ),
+        targets = (
+            self._visual_targets(sequences, student_inputs)
+            if include_visual_targets
+            else None
         )
         return FoundationTrainingBatch(
             student_inputs,
@@ -150,7 +146,9 @@ class FoundationSequenceBatchLoader:
             ),
         )
 
-    def _sequence(self, index: int) -> dict[str, object]:
+    def _sequence(
+        self, index: int, *, include_visual_targets: bool
+    ) -> dict[str, object]:
         arrays = self.windows[index]
         metadata = self.windows.shard_metadata(index)
         frames = [
@@ -170,19 +168,20 @@ class FoundationSequenceBatchLoader:
             assembled = assembler.build(frame)
             for name, value in assembled.named_arrays().items():
                 named.setdefault(name, []).append(value)
-            sources.append(assembled.source_sha256)
-            frame_history.append(frame)
-            padded = [frame_history[0]] * (
-                self.student_config.visual_history - len(frame_history)
-            ) + frame_history[-self.student_config.visual_history :]
-            correspondences.append(
-                [
-                    build_cross_camera_patch_correspondences(
-                        value, feature_grid_size=grid_size
-                    )
-                    for value in padded
-                ]
-            )
+            if include_visual_targets:
+                sources.append(assembled.source_sha256)
+                frame_history.append(frame)
+                padded = [frame_history[0]] * (
+                    self.student_config.visual_history - len(frame_history)
+                ) + frame_history[-self.student_config.visual_history :]
+                correspondences.append(
+                    [
+                        build_cross_camera_patch_correspondences(
+                            value, feature_grid_size=grid_size
+                        )
+                        for value in padded
+                    ]
+                )
         language_source = language_source_sha256(
             str(metadata["instruction"]), str(metadata["locale"])
         )
@@ -211,6 +210,20 @@ class FoundationSequenceBatchLoader:
         sequences: list[dict[str, object]],
         index: FoundationFeatureIndex,
     ) -> tuple[np.ndarray, np.ndarray]:
+        sources = tuple(
+            dict.fromkeys(
+                source
+                for sequence in sequences
+                for history in sequence["sources"]
+                for source in history
+            )
+        )
+        loaded = {}
+        for source in sources:
+            key = FoundationCacheKey(
+                "visual", source, index.encoder_lock_sha256, index.preprocess_sha256
+            )
+            loaded[source] = self.cache.load_visual(key)
         values: list[np.ndarray] = []
         valid: list[np.ndarray] = []
         for sequence in sequences:
@@ -218,15 +231,42 @@ class FoundationSequenceBatchLoader:
                 history_values: list[np.ndarray] = []
                 history_valid: list[np.ndarray] = []
                 for source in history:
-                    key = FoundationCacheKey(
-                        "visual", source, index.encoder_lock_sha256, index.preprocess_sha256
-                    )
-                    feature = self.cache.load_visual(key)
-                    history_values.append(feature.values.copy())
-                    history_valid.append(feature.valid.copy())
+                    feature = loaded[source]
+                    history_values.append(feature.values)
+                    history_valid.append(feature.valid)
                 values.append(np.stack(history_values))
                 valid.append(np.stack(history_valid))
         return np.stack(values), np.stack(valid)
+
+    def _visual_targets(
+        self,
+        sequences: list[dict[str, object]],
+        student_inputs: dict[str, torch.Tensor],
+    ) -> VisualTeacherTargets:
+        vision_language, vision_language_valid = self._teacher_arrays(
+            sequences, self.features.vision_language
+        )
+        dense_vision, dense_vision_valid = self._teacher_arrays(
+            sequences, self.features.dense_vision
+        )
+        return VisualTeacherTargets(
+            torch.from_numpy(vision_language).to(self.device),
+            torch.from_numpy(vision_language_valid).to(self.device),
+            torch.from_numpy(dense_vision).to(self.device),
+            torch.from_numpy(dense_vision_valid).to(self.device),
+            student_inputs["rgb"],
+            self._reconstruction_mask(student_inputs["rgb"]),
+            student_inputs["head_depth_m"],
+            student_inputs["head_depth_valid"],
+            batch_correspondence_indices(
+                [
+                    item
+                    for sequence in sequences
+                    for item in sequence["correspondences"]
+                ],
+                device=self.device,
+            ),
+        )
 
     def _reconstruction_mask(self, rgb: torch.Tensor) -> torch.Tensor:
         batch, history, cameras, _, height, width = rgb.shape

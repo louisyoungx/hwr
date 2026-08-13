@@ -48,7 +48,11 @@ def transform_foundation_batch(
     proposals[selected] = transform_action(
         proposals[selected], LATERAL_REFLECTION
     )
-    targets = _transform_targets(batch.visual_targets, flat_selected, inputs["rgb"])
+    targets = (
+        _transform_targets(batch.visual_targets, flat_selected, inputs["rgb"])
+        if batch.visual_targets is not None
+        else None
+    )
     return FoundationTrainingBatch(
         inputs,
         targets,

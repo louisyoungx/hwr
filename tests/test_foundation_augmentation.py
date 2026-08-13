@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import torch
 
 from hwr.perception.student_objectives import VisualTeacherTargets
@@ -107,3 +109,12 @@ def test_foundation_augmentation_is_an_involution() -> None:
     torch.testing.assert_close(
         transformed.proprioception, original.proprioception
     )
+
+
+def test_foundation_augmentation_supports_world_only_batch() -> None:
+    transformed = transform_foundation_batch(
+        replace(_batch(), visual_targets=None), ("lateral_reflection", None)
+    )
+
+    assert transformed.visual_targets is None
+    assert transformed.executed_actions[0, 0, 1] == -0.3

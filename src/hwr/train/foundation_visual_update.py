@@ -37,6 +37,8 @@ def optimize_visual_student(
     """Accumulate one visual update without retaining every activation at once."""
     if min(microbatch_observations, maximum_gradient_norm) <= 0:
         raise ValueError("visual microbatch and gradient norm must be positive")
+    if batch.visual_targets is None:
+        raise ValueError("visual update requires frozen teacher targets")
     observation_total = batch.sequence_batch_size * batch.observation_count
     optimizer.zero_grad(set_to_none=True)
     pooled: list[torch.Tensor] = []
@@ -68,6 +70,39 @@ def optimize_visual_student(
         aggregate,
         microbatch_count,
         float(gradient_norm.detach().cpu()),
+    )
+
+
+def encode_visual_student_bounded(
+    student: VisualStudentModel,
+    batch: FoundationTrainingBatch,
+    *,
+    microbatch_observations: int,
+) -> VisualUpdateResult:
+    """Encode a world-model batch without teacher I/O or visual gradients."""
+    if microbatch_observations <= 0:
+        raise ValueError("visual inference microbatch must be positive")
+    observation_total = batch.sequence_batch_size * batch.observation_count
+    training = student.training
+    student.eval()
+    pooled: list[torch.Tensor] = []
+    microbatch_count = 0
+    try:
+        with torch.no_grad():
+            for start in range(0, observation_total, microbatch_observations):
+                stop = min(start + microbatch_observations, observation_total)
+                inputs = {
+                    name: value[start:stop]
+                    for name, value in batch.student_inputs.items()
+                }
+                pooled.append(student(inputs).pooled_state.detach())
+                microbatch_count += 1
+                if stop < observation_total:
+                    release_unused_accelerator_memory()
+    finally:
+        student.train(training)
+    return VisualUpdateResult(
+        torch.cat(pooled, dim=0), {}, microbatch_count, 0.0
     )
 
 

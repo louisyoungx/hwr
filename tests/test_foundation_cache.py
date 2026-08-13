@@ -62,3 +62,27 @@ def test_foundation_cache_rejects_corrupt_or_cross_kind_entries(tmp_path) -> Non
         cache.load_visual(key)
     with pytest.raises(ValueError, match="visual cache key"):
         cache.load_visual(FoundationCacheKey("language", SOURCE, ENCODER, PREPROCESS))
+
+
+def test_visual_memory_cache_is_small_lru_and_discard_invalidates_it(tmp_path) -> None:
+    cache = FoundationFeatureCache(tmp_path, visual_memory_cache_entries=1)
+    keys = [
+        FoundationCacheKey("visual", str(index) * 64, ENCODER, PREPROCESS)
+        for index in (4, 5)
+    ]
+    for index, key in enumerate(keys):
+        cache.store_visual(
+            key,
+            DenseVisualFeatures(
+                np.full((1, 1, 1, 1), index, np.float32),
+                np.ones((1, 1, 1), np.bool_),
+                ENCODER,
+                key.source_sha256,
+            ),
+        )
+
+    first = cache.load_visual(keys[0])
+    assert cache.load_visual(keys[0]) is first
+    cache.load_visual(keys[1])
+    assert cache.load_visual(keys[0]) is not first
+    assert cache.discard(keys[0]) is True

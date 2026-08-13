@@ -195,3 +195,19 @@ def test_materialized_foundation_features_build_continuous_training_batch(tmp_pa
     assert batch.safety_interventions.tolist() == [[0.0, 1.0]]
     assert batch.continues.tolist() == [[1.0, 0.0]]
     assert batch.visual_targets.correspondences.shape[1] == 10
+
+    calls = 0
+    original = cache.load_visual
+
+    def counted(key):
+        nonlocal calls
+        calls += 1
+        return original(key)
+
+    cache.load_visual = counted
+    deduplicated = loader.build([0])
+    world_only = loader.build([0], include_visual_targets=False)
+
+    assert calls == 6
+    assert deduplicated.visual_targets is not None
+    assert world_only.visual_targets is None

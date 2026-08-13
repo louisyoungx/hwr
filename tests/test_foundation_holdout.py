@@ -32,7 +32,8 @@ class _Loader:
     def window_metadata(self, index):
         return self.metadata[index]
 
-    def build(self, indices):
+    def build(self, indices, *, include_visual_targets=True):
+        assert include_visual_targets is False
         return tuple(indices)
 
 

@@ -20,11 +20,12 @@ METRICS_SCHEMA = "hwr.foundation-training-metrics/v1"
 def mean_metrics(values: Sequence[Mapping[str, float]]) -> dict[str, float]:
     if not values:
         raise ValueError("foundation metric mean cannot be empty")
-    names = set(values[0])
-    if any(set(item) != names for item in values):
-        raise ValueError("foundation metric keys changed within one cycle")
+    names = set().union(*(set(item) for item in values))
     return {
-        name: float(sum(item[name] for item in values) / len(values))
+        name: float(
+            sum(item[name] for item in values if name in item)
+            / sum(name in item for item in values)
+        )
         for name in sorted(names)
     }
 

@@ -14,7 +14,7 @@ from hwr.perception.student_objectives import VisualTeacherTargets
 @dataclass(frozen=True)
 class FoundationTrainingBatch:
     student_inputs: Mapping[str, torch.Tensor]
-    visual_targets: VisualTeacherTargets
+    visual_targets: VisualTeacherTargets | None
     sequence_batch_size: int
     observation_count: int
     language_features: torch.Tensor

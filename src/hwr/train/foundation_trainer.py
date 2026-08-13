@@ -13,7 +13,10 @@ from hwr.policy.latent_actor import LatentActor
 from hwr.policy.latent_actions import LatentActionScaling
 from hwr.policy.latent_value import LatentValueModel
 from hwr.train.foundation_batch import FoundationTrainingBatch
-from hwr.train.foundation_visual_update import optimize_visual_student
+from hwr.train.foundation_visual_update import (
+    encode_visual_student_bounded,
+    optimize_visual_student,
+)
 from hwr.train.imagination_rl import (
     ImaginationActorCritic,
     ImaginationRLConfig,
@@ -41,6 +44,8 @@ class FoundationTrainerConfig:
     weight_decay: float = 1.0e-4
     maximum_gradient_norm: float = 100.0
     visual_microbatch_observations: int = 4
+    visual_update_interval: int = 4
+    visual_inference_microbatch_observations: int = 8
 
     def __post_init__(self) -> None:
         values = tuple(self.__dict__.values())
@@ -141,16 +146,26 @@ class FoundationWorldModelTrainer:
         train_exploration_actor: bool = False,
     ) -> dict[str, float]:
         self._check_batch_dimensions(batch)
-        self.visual_student.train()
         self.world_model.train()
-        visual_update = optimize_visual_student(
-            self.visual_student,
-            self.visual_objective,
-            batch,
-            self.visual_optimizer,
-            microbatch_observations=self.config.visual_microbatch_observations,
-            maximum_gradient_norm=self.config.maximum_gradient_norm,
-        )
+        visual_updated = self.visual_update_due
+        if visual_updated:
+            self.visual_student.train()
+            visual_update = optimize_visual_student(
+                self.visual_student,
+                self.visual_objective,
+                batch,
+                self.visual_optimizer,
+                microbatch_observations=self.config.visual_microbatch_observations,
+                maximum_gradient_norm=self.config.maximum_gradient_norm,
+            )
+        else:
+            visual_update = encode_visual_student_bounded(
+                self.visual_student,
+                batch,
+                microbatch_observations=(
+                    self.config.visual_inference_microbatch_observations
+                ),
+            )
         visual_sequence = visual_update.pooled_state.reshape(
             batch.sequence_batch_size,
             batch.observation_count,
@@ -206,12 +221,17 @@ class FoundationWorldModelTrainer:
             **{f"exploration/{name}": value for name, value in exploration_metrics.items()},
             "trainer/visual_microbatch_count": float(visual_update.microbatch_count),
             "trainer/visual_gradient_norm": visual_update.gradient_norm,
+            "trainer/visual_updated": float(visual_updated),
             "trainer/world_gradient_norm": float(world_gradient_norm.detach().cpu()),
             "trainer/task_actor_updated": float(train_task_actor),
             "trainer/exploration_actor_updated": float(train_exploration_actor),
             "trainer/update_count": float(self.update_count),
         }
         return metrics
+
+    @property
+    def visual_update_due(self) -> bool:
+        return self.update_count % self.config.visual_update_interval == 0
 
     def _check_batch_dimensions(self, batch: FoundationTrainingBatch) -> None:
         config = self.world_model.config

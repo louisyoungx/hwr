@@ -153,7 +153,7 @@ def _evaluate_indices(
 ) -> EpisodeLearningEvidence:
     if not indices:
         return EpisodeLearningEvidence(EpisodeLearningSignals(0.0, 0.0, 0), ())
-    batch = loader.build(indices)
+    batch = loader.build(indices, include_visual_targets=False)
     visual = trainer.visual_student(batch.student_inputs).pooled_state.reshape(
         batch.sequence_batch_size,
         batch.observation_count,

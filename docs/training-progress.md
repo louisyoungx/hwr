@@ -46,6 +46,14 @@ state-only/state+实际动作的独立岭回归 probe 判断 replay 是否具有
 升级为 `hwr.foundation-runner-recovery/v5`。前沿快照不写入 replay，也不进入视觉学生、
 世界模型或 Actor 输入。
 
+本机吞吐和统一内存优化也已进入正式配置。一个训练 batch 仍按所有 replay window 等概率
+抽样，但 batch 内窗口固定来自同一 Episode shard，避免一批内反复解压大文件；两套冻结
+视觉特征先按内容哈希去重，同一历史帧每个 encoder 只读取一次，并只保留 16 条只读内存
+LRU。世界模型仍每个 update 更新，视觉学生固定每 4 个 update 更新一次；其余 update 只用
+8-observation 无梯度微批编码，不构建跨相机对应关系，也不读取或搬运 DINOv3/SigLIP 教师
+target。视觉 loss 只对实际视觉更新求平均，`trainer/visual_updated` 单独记录更新占比。该
+调度只读取全局 update count，不读取任务、奖励、对象、接触或阶段。
+
 ## 2026-08-12 基础模型—世界模型主线重建
 
 P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为无效开发运行；它们

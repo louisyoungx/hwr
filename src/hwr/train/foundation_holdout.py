@@ -164,7 +164,10 @@ def causality_batches_by_task(
 
     def batches(indices: tuple[int, ...]) -> Iterable[FoundationTrainingBatch]:
         for start in range(0, len(indices), batch_size):
-            yield loader.build(indices[start : start + batch_size])
+            yield loader.build(
+                indices[start : start + batch_size],
+                include_visual_targets=False,
+            )
 
     return {task_id: batches(indices) for task_id, indices in selected.items()}
 

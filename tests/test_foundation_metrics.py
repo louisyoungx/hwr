@@ -10,8 +10,21 @@ from hwr.train.foundation_dashboard import load_dashboard_snapshot
 from hwr.train.foundation_metrics import (
     FoundationMetricsProgress,
     FoundationMetricsStore,
+    mean_metrics,
     summarize_action_coverage,
 )
+
+
+def test_metric_mean_supports_lower_frequency_visual_measurements() -> None:
+    result = mean_metrics(
+        (
+            {"world/total": 2.0, "visual/total": 4.0},
+            {"world/total": 1.0},
+            {"world/total": 3.0, "visual/total": 2.0},
+        )
+    )
+
+    assert result == {"visual/total": 3.0, "world/total": 2.0}
 
 
 def _episode(task_id: str, offset: float = 0.0):

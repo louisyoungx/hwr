@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -49,8 +50,12 @@ class FoundationCacheKey:
 class FoundationFeatureCache:
     """Persist derived features without treating them as original observations."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, visual_memory_cache_entries: int = 16) -> None:
+        if visual_memory_cache_entries < 0:
+            raise ValueError("visual memory cache capacity cannot be negative")
         self.root = root
+        self.visual_memory_cache_entries = visual_memory_cache_entries
+        self._visual_memory: OrderedDict[str, DenseVisualFeatures] = OrderedDict()
 
     def path_for(self, key: FoundationCacheKey) -> Path:
         return self.root / key.kind / key.digest[:2] / f"{key.digest}.npz"
@@ -60,6 +65,7 @@ class FoundationFeatureCache:
 
     def discard(self, key: FoundationCacheKey) -> bool:
         """Remove one rebuildable cache entry and report whether it existed."""
+        self._visual_memory.pop(key.digest, None)
         path = self.path_for(key)
         if not path.is_file():
             return False
@@ -79,13 +85,22 @@ class FoundationFeatureCache:
     def load_visual(self, key: FoundationCacheKey) -> DenseVisualFeatures:
         if key.kind != "visual":
             raise ValueError("visual feature load requires a visual cache key")
+        cached = self._visual_memory.pop(key.digest, None)
+        if cached is not None:
+            self._visual_memory[key.digest] = cached
+            return cached
         arrays = self._load(key, ("values", "valid"))
-        return DenseVisualFeatures(
+        result = DenseVisualFeatures(
             arrays["values"],
             arrays["valid"],
             key.encoder_lock_sha256,
             key.source_sha256,
         )
+        if self.visual_memory_cache_entries:
+            self._visual_memory[key.digest] = result
+            while len(self._visual_memory) > self.visual_memory_cache_entries:
+                self._visual_memory.popitem(last=False)
+        return result
 
     def store_language(
         self, key: FoundationCacheKey, features: SemanticLanguageFeatures

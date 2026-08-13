@@ -112,7 +112,11 @@ def _batch(visual: VisualStudentConfig) -> FoundationTrainingBatch:
     )
 
 
-def _trainer(*, visual_microbatch_observations: int = 4) -> FoundationWorldModelTrainer:
+def _trainer(
+    *,
+    visual_microbatch_observations: int = 4,
+    visual_update_interval: int = 4,
+) -> FoundationWorldModelTrainer:
     visual_config = _visual_config()
     world_config = _world_config()
     student = VisualStudentModel(visual_config)
@@ -149,7 +153,8 @@ def _trainer(*, visual_microbatch_observations: int = 4) -> FoundationWorldModel
         ),
         LatentActionScaling(),
         FoundationTrainerConfig(
-            visual_microbatch_observations=visual_microbatch_observations
+            visual_microbatch_observations=visual_microbatch_observations,
+            visual_update_interval=visual_update_interval,
         ),
     )
 
@@ -234,6 +239,28 @@ def test_visual_microbatch_rebases_only_internal_correspondences() -> None:
 def test_foundation_trainer_rejects_empty_visual_microbatches() -> None:
     with pytest.raises(ValueError, match="rates and limits must be positive"):
         FoundationTrainerConfig(visual_microbatch_observations=0)
+
+
+def test_visual_student_updates_at_fixed_task_independent_interval() -> None:
+    trainer = _trainer(visual_update_interval=2)
+    batch = _batch(_visual_config())
+    first = trainer.train_step(batch, train_task_actor=False)
+    visual_after_first = (
+        trainer.visual_student.rgb_backbone.stem[0].weight.detach().clone()
+    )
+    world_before = trainer.world_model.visual_head[-1].weight.detach().clone()
+
+    second = trainer.train_step(
+        replace(batch, visual_targets=None), train_task_actor=False
+    )
+
+    torch.testing.assert_close(
+        trainer.visual_student.rgb_backbone.stem[0].weight, visual_after_first
+    )
+    assert torch.any(trainer.world_model.visual_head[-1].weight != world_before)
+    assert first["trainer/visual_updated"] == 1.0
+    assert second["trainer/visual_updated"] == 0.0
+    assert "visual/total" not in second
 
 
 def test_foundation_diagnostic_uses_all_actual_outcome_targets() -> None:
