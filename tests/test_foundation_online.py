@@ -55,6 +55,7 @@ from hwr.train.foundation_trainer import (
     FoundationWorldModelTrainer,
 )
 from hwr.train.imagination_rl import ImaginationRLConfig
+from hwr.train.intrinsic_exploration import IntrinsicExplorationConfig
 from hwr.world_model import (
     ActionConditionedWorldModel,
     WorldModelConfig,
@@ -245,6 +246,10 @@ def _stack() -> FoundationLearningStack:
         actor,
         value,
         ImaginationRLConfig(horizon=2, value_bins=11, value_symlog_limit=5.0),
+        IntrinsicExplorationConfig(
+            horizon=2, value_bins=11, value_symlog_limit=5.0
+        ),
+        LatentActionScaling(),
         FoundationTrainerConfig(),
     )
     return FoundationLearningStack(trainer, LatentActionScaling())

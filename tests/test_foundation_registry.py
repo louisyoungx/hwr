@@ -27,6 +27,7 @@ from hwr.train.foundation_trainer import (
     FoundationWorldModelTrainer,
 )
 from hwr.train.imagination_rl import ImaginationRLConfig
+from hwr.train.intrinsic_exploration import IntrinsicExplorationConfig
 from hwr.world_model import (
     ActionConditionedWorldModel,
     WorldModelConfig,
@@ -97,6 +98,10 @@ def _trainer() -> FoundationWorldModelTrainer:
         actor,
         value,
         ImaginationRLConfig(horizon=3, value_bins=11, value_symlog_limit=5.0),
+        IntrinsicExplorationConfig(
+            horizon=3, value_bins=11, value_symlog_limit=5.0
+        ),
+        LatentActionScaling(),
         FoundationTrainerConfig(),
     )
 
@@ -105,6 +110,7 @@ def test_training_checkpoint_restores_models_and_optimizer_metadata(tmp_path) ->
     trainer = _trainer()
     with torch.no_grad():
         trainer.actor.mean_head.bias.fill_(0.125)
+        trainer.exploration_actor.mean_head.bias.fill_(0.25)
     trainer.update_count = 9
     path = save_foundation_training_checkpoint(
         tmp_path / "training",
@@ -115,6 +121,7 @@ def test_training_checkpoint_restores_models_and_optimizer_metadata(tmp_path) ->
     )
     with torch.no_grad():
         trainer.actor.mean_head.bias.zero_()
+        trainer.exploration_actor.mean_head.bias.zero_()
     trainer.update_count = 0
 
     manifest = load_foundation_training_checkpoint(path, trainer)
@@ -122,6 +129,10 @@ def test_training_checkpoint_restores_models_and_optimizer_metadata(tmp_path) ->
     torch.testing.assert_close(
         trainer.actor.mean_head.bias,
         torch.full_like(trainer.actor.mean_head.bias, 0.125),
+    )
+    torch.testing.assert_close(
+        trainer.exploration_actor.mean_head.bias,
+        torch.full_like(trainer.exploration_actor.mean_head.bias, 0.25),
     )
     assert trainer.update_count == 9
     assert manifest["lineage"]["expert_policies"] == []

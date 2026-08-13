@@ -21,6 +21,7 @@ from hwr.train.foundation_trainer import (
     FoundationWorldModelTrainer,
 )
 from hwr.train.imagination_rl import ImaginationRLConfig
+from hwr.train.intrinsic_exploration import IntrinsicExplorationConfig
 from hwr.world_model.config import WorldModelConfig
 from hwr.world_model.model import ActionConditionedWorldModel
 from hwr.world_model.objectives import WorldModelLoss, WorldModelLossConfig
@@ -60,6 +61,9 @@ def build_foundation_learning_stack(
     imagination_config = ImaginationRLConfig(
         **_config(config_root / "imagination-rl-v1.json")
     )
+    intrinsic_config = IntrinsicExplorationConfig(
+        **_config(config_root / "intrinsic-exploration-v1.json")
+    )
     trainer_config = FoundationTrainerConfig(
         **_config(config_root / "unified-trainer-v1.json")
     )
@@ -88,6 +92,8 @@ def build_foundation_learning_stack(
         actor,
         value,
         imagination_config,
+        intrinsic_config,
+        scaling,
         trainer_config,
     )
     return FoundationLearningStack(trainer, scaling)

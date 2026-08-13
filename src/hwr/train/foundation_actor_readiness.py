@@ -38,7 +38,9 @@ class FoundationActorReadinessTracker:
     def __init__(self, criteria: FoundationActorReadinessCriteria) -> None:
         self.criteria = criteria
         self.consecutive_passes = 0
-        self.unlocked = False
+        self.exploration_unlocked = False
+        self.task_actor_consecutive_passes = 0
+        self.task_actor_unlocked = False
         self.task_actor_update_count = 0
         self.last_assessment: dict[str, object] | None = None
 
@@ -74,12 +76,25 @@ class FoundationActorReadinessTracker:
         }
         current_passed = all(checks.values())
         self.consecutive_passes = self.consecutive_passes + 1 if current_passed else 0
-        self.unlocked = self.consecutive_passes >= self.criteria.consecutive_passes
+        self.exploration_unlocked = (
+            self.consecutive_passes >= self.criteria.consecutive_passes
+        )
+        deployment_passed = _deployment_causality_passed(diagnostic)
+        task_passed = self.exploration_unlocked and deployment_passed
+        self.task_actor_consecutive_passes = (
+            self.task_actor_consecutive_passes + 1 if task_passed else 0
+        )
+        self.task_actor_unlocked = (
+            self.task_actor_consecutive_passes >= self.criteria.consecutive_passes
+        )
         assessment = {
             "schema_version": ACTOR_READINESS_SCHEMA,
             "passed_this_cycle": current_passed,
-            "unlocked": self.unlocked,
+            "unlocked": self.task_actor_unlocked,
+            "exploration_unlocked": self.exploration_unlocked,
+            "task_actor_unlocked": self.task_actor_unlocked,
             "consecutive_passes": self.consecutive_passes,
+            "task_actor_consecutive_passes": self.task_actor_consecutive_passes,
             "criteria": asdict(self.criteria),
             "checks": checks,
             "replay_episodes": replay_episodes,
@@ -101,7 +116,9 @@ class FoundationActorReadinessTracker:
             "schema_version": ACTOR_READINESS_SCHEMA,
             "criteria": asdict(self.criteria),
             "consecutive_passes": self.consecutive_passes,
-            "unlocked": self.unlocked,
+            "exploration_unlocked": self.exploration_unlocked,
+            "task_actor_consecutive_passes": self.task_actor_consecutive_passes,
+            "task_actor_unlocked": self.task_actor_unlocked,
             "task_actor_update_count": self.task_actor_update_count,
             "last_assessment": self.last_assessment,
         }
@@ -114,16 +131,28 @@ class FoundationActorReadinessTracker:
         if any(value.get(name) != item for name, item in expected.items()):
             raise ValueError("Actor readiness checkpoint differs")
         self.consecutive_passes = int(value["consecutive_passes"])
-        self.unlocked = bool(value["unlocked"])
+        self.exploration_unlocked = bool(value["exploration_unlocked"])
+        self.task_actor_consecutive_passes = int(
+            value["task_actor_consecutive_passes"]
+        )
+        self.task_actor_unlocked = bool(value["task_actor_unlocked"])
         self.task_actor_update_count = int(value["task_actor_update_count"])
         last = value.get("last_assessment")
         self.last_assessment = dict(last) if isinstance(last, Mapping) else None
-        if self.consecutive_passes < 0 or self.task_actor_update_count < 0:
+        if min(
+            self.consecutive_passes,
+            self.task_actor_consecutive_passes,
+            self.task_actor_update_count,
+        ) < 0:
             raise ValueError("Actor readiness checkpoint counters are invalid")
-        if self.unlocked != (
+        if self.exploration_unlocked != (
             self.consecutive_passes >= self.criteria.consecutive_passes
         ):
-            raise ValueError("Actor readiness checkpoint unlock state differs")
+            raise ValueError("exploration readiness checkpoint state differs")
+        if self.task_actor_unlocked != (
+            self.task_actor_consecutive_passes >= self.criteria.consecutive_passes
+        ):
+            raise ValueError("task Actor readiness checkpoint state differs")
 
 
 def _physical_causality_passed(diagnostic: Mapping[str, object]) -> bool:
@@ -160,3 +189,23 @@ def _physical_causality_passed(diagnostic: Mapping[str, object]) -> bool:
         ):
             return False
     return True
+
+
+def _deployment_causality_passed(diagnostic: Mapping[str, object]) -> bool:
+    assessment = diagnostic.get("assessment")
+    statistics = diagnostic.get("shuffle_statistics")
+    partitions = diagnostic.get("partitions")
+    if (
+        not isinstance(assessment, Mapping)
+        or assessment.get("passed") is not True
+        or not isinstance(statistics, Mapping)
+        or statistics.get("robust_passed") is not True
+        or not isinstance(partitions, Mapping)
+    ):
+        return False
+    return all(
+        isinstance(value, Mapping)
+        and value.get("assessment", {}).get("passed") is True
+        and value.get("shuffle_statistics", {}).get("robust_passed") is True
+        for value in partitions.values()
+    )

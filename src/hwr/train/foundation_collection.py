@@ -63,6 +63,27 @@ class CurrentRLActorActionSource:
         self.policy.record_applied_action(action)
 
 
+class IntrinsicRLActorActionSource(CurrentRLActorActionSource):
+    """Stochastic actions from the separately trained task-independent explorer."""
+
+    action_source = "intrinsic_rl_actor"
+
+    @property
+    def action_process(self) -> Mapping[str, object]:
+        return {
+            "schema_version": "hwr.current-intrinsic-rl-actor/v1",
+            "policy_id": self.policy.policy_id,
+            "reward_sources": [
+                "world_model_uncertainty",
+                "latent_state_novelty",
+                "predicted_safety_cost",
+                "policy_entropy",
+            ],
+            "environment_reward": False,
+            "task_conditioned": False,
+        }
+
+
 @dataclass(frozen=True)
 class AutonomousCollectionConfig:
     environment_version: str

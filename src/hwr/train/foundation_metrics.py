@@ -210,6 +210,30 @@ def build_foundation_cycle_metrics(
     }
 
 
+def publish_foundation_progress(
+    store: FoundationMetricsStore,
+    stage: str,
+    cycle: int,
+    update_count: int,
+    episode_count: int,
+    updates_per_cycle: int,
+    metrics: Mapping[str, float] | None = None,
+    *,
+    completed_updates: int = 0,
+) -> None:
+    store.publish_progress(
+        FoundationMetricsProgress(
+            stage,
+            cycle,
+            update_count,
+            episode_count,
+            updates_per_cycle if stage == "updating" else 0,
+            completed_updates,
+        ),
+        metrics=metrics,
+    )
+
+
 def _outcomes_by_task(episodes: Sequence[object]) -> dict[str, object]:
     result: dict[str, object] = {}
     for task_id in sorted({str(item.task_id) for item in episodes}):

@@ -25,6 +25,7 @@ from hwr.policy.latent_actions import LatentActionScaling
 from hwr.train.foundation_collection import (
     AutonomousCollectionConfig,
     AutonomousEpisodeCollector,
+    IntrinsicRLActorActionSource,
 )
 from hwr.train.foundation_exploration import (
     RandomRLActionSource,
@@ -208,3 +209,12 @@ def test_random_rl_exploration_config_rejects_iid_gripper_flicker() -> None:
         RandomRLExplorationConfig(motion_correlation=1.0)
     with np.testing.assert_raises(ValueError):
         RandomRLExplorationConfig(gripper_flip_probability=0.0)
+
+
+def test_intrinsic_rl_source_declares_no_environment_reward() -> None:
+    policy = type("Policy", (), {"policy_id": "intrinsic-fixture"})()
+    source = IntrinsicRLActorActionSource(policy)
+
+    assert source.action_source == "intrinsic_rl_actor"
+    assert source.action_process["environment_reward"] is False
+    assert source.action_process["task_conditioned"] is False

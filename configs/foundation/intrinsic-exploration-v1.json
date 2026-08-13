@@ -1,0 +1,15 @@
+{
+  "schema_version": "hwr.intrinsic-exploration/v1",
+  "discount": 0.997,
+  "gripper_entropy_weight": 0.0003,
+  "horizon": 15,
+  "lambda_return": 0.95,
+  "maximum_gradient_norm": 100.0,
+  "motion_entropy_weight": 0.003,
+  "safety_weight": 2.0,
+  "slow_value_rate": 0.01,
+  "state_novelty_weight": 0.25,
+  "uncertainty_weight": 1.0,
+  "value_bins": 255,
+  "value_symlog_limit": 20.0
+}

@@ -15,8 +15,10 @@ import numpy as np
 from hwr.core.embodied import DUAL_ARM_ACTION_DIM
 
 
-AUTONOMOUS_TRAJECTORY_SCHEMA = "hwr.autonomous-trajectory/v3"
-ALLOWED_ACTION_SOURCES = frozenset({"random_rl_exploration", "rl_actor"})
+AUTONOMOUS_TRAJECTORY_SCHEMA = "hwr.autonomous-trajectory/v4"
+ALLOWED_ACTION_SOURCES = frozenset(
+    {"random_rl_exploration", "intrinsic_rl_actor", "rl_actor"}
+)
 OBSERVATION_ARRAY_FIELDS = frozenset(
     {
         "rgb_uint8",

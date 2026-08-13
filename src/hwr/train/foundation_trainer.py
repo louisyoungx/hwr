@@ -10,6 +10,7 @@ from torch import nn
 from hwr.perception.student import VisualStudentModel
 from hwr.perception.student_objectives import VisualFoundationObjectives
 from hwr.policy.latent_actor import LatentActor
+from hwr.policy.latent_actions import LatentActionScaling
 from hwr.policy.latent_value import LatentValueModel
 from hwr.train.foundation_batch import FoundationTrainingBatch
 from hwr.train.foundation_visual_update import optimize_visual_student
@@ -17,6 +18,11 @@ from hwr.train.imagination_rl import (
     ImaginationActorCritic,
     ImaginationRLConfig,
     optimize_imagination_step,
+)
+from hwr.train.intrinsic_exploration import (
+    IntrinsicExplorationActorCritic,
+    IntrinsicExplorationConfig,
+    optimize_intrinsic_exploration_step,
 )
 from hwr.world_model.model import ActionConditionedWorldModel
 from hwr.world_model.objectives import (
@@ -57,6 +63,8 @@ class FoundationWorldModelTrainer:
         actor: LatentActor,
         value: LatentValueModel,
         imagination_config: ImaginationRLConfig,
+        intrinsic_config: IntrinsicExplorationConfig,
+        action_scaling: LatentActionScaling,
         trainer_config: FoundationTrainerConfig,
     ) -> None:
         if visual_student.config.feature_dimension != world_model.config.visual_dimension:
@@ -71,6 +79,22 @@ class FoundationWorldModelTrainer:
         self.value = value
         self.imagination = ImaginationActorCritic(
             world_model, actor, value, imagination_config
+        )
+        self.exploration_actor = LatentActor(actor.config).to(
+            next(world_model.parameters()).device
+        )
+        self.exploration_value = LatentValueModel(
+            world_model.config.feature_dimension,
+            bins=intrinsic_config.value_bins,
+            hidden_dimension=actor.config.hidden_dimension,
+            hidden_layers=actor.config.hidden_layers,
+        ).to(next(world_model.parameters()).device)
+        self.intrinsic_exploration = IntrinsicExplorationActorCritic(
+            world_model,
+            self.exploration_actor,
+            self.exploration_value,
+            action_scaling,
+            intrinsic_config,
         )
         self.config = trainer_config
         visual_parameters = [
@@ -97,10 +121,24 @@ class FoundationWorldModelTrainer:
             lr=trainer_config.value_learning_rate,
             weight_decay=trainer_config.weight_decay,
         )
+        self.exploration_actor_optimizer = torch.optim.AdamW(
+            self.exploration_actor.parameters(),
+            lr=trainer_config.actor_learning_rate,
+            weight_decay=trainer_config.weight_decay,
+        )
+        self.exploration_value_optimizer = torch.optim.AdamW(
+            self.exploration_value.parameters(),
+            lr=trainer_config.value_learning_rate,
+            weight_decay=trainer_config.weight_decay,
+        )
         self.update_count = 0
 
     def train_step(
-        self, batch: FoundationTrainingBatch, *, train_task_actor: bool = True
+        self,
+        batch: FoundationTrainingBatch,
+        *,
+        train_task_actor: bool = True,
+        train_exploration_actor: bool = False,
     ) -> dict[str, float]:
         self._check_batch_dimensions(batch)
         self.visual_student.train()
@@ -141,11 +179,19 @@ class FoundationWorldModelTrainer:
         self.world_optimizer.step()
 
         imagination_metrics: dict[str, float] = {}
-        if train_task_actor:
-            initial = RSSMState(
-                world_output.sequence.deterministic.detach().flatten(0, 1),
-                world_output.sequence.stochastic.detach().flatten(0, 1),
+        exploration_metrics: dict[str, float] = {}
+        initial = RSSMState(
+            world_output.sequence.deterministic.detach().flatten(0, 1),
+            world_output.sequence.stochastic.detach().flatten(0, 1),
+        )
+        if train_exploration_actor:
+            exploration_metrics = optimize_intrinsic_exploration_step(
+                self.intrinsic_exploration,
+                initial,
+                self.exploration_actor_optimizer,
+                self.exploration_value_optimizer,
             )
+        if train_task_actor:
             imagination_metrics = optimize_imagination_step(
                 self.imagination,
                 initial,
@@ -157,10 +203,12 @@ class FoundationWorldModelTrainer:
             **{f"visual/{name}": value for name, value in visual_update.losses.items()},
             **{f"world/{name}": float(value.detach()) for name, value in world_losses.items()},
             **{f"imagination/{name}": value for name, value in imagination_metrics.items()},
+            **{f"exploration/{name}": value for name, value in exploration_metrics.items()},
             "trainer/visual_microbatch_count": float(visual_update.microbatch_count),
             "trainer/visual_gradient_norm": visual_update.gradient_norm,
             "trainer/world_gradient_norm": float(world_gradient_norm.detach().cpu()),
             "trainer/task_actor_updated": float(train_task_actor),
+            "trainer/exploration_actor_updated": float(train_exploration_actor),
             "trainer/update_count": float(self.update_count),
         }
         return metrics
@@ -190,6 +238,11 @@ class FoundationWorldModelTrainer:
             "world_model": self.world_optimizer.state_dict(),
             "actor": self.actor_optimizer.state_dict(),
             "value": self.value_optimizer.state_dict(),
+            "exploration_actor": self.exploration_actor_optimizer.state_dict(),
+            "exploration_value": self.exploration_value_optimizer.state_dict(),
+            "exploration_slow_value": (
+                self.intrinsic_exploration.slow_value.state_dict()
+            ),
             "slow_value": self.imagination.slow_value.state_dict(),
             "update_count": self.update_count,
         }
@@ -199,5 +252,10 @@ class FoundationWorldModelTrainer:
         self.world_optimizer.load_state_dict(state["world_model"])
         self.actor_optimizer.load_state_dict(state["actor"])
         self.value_optimizer.load_state_dict(state["value"])
+        self.exploration_actor_optimizer.load_state_dict(state["exploration_actor"])
+        self.exploration_value_optimizer.load_state_dict(state["exploration_value"])
+        self.intrinsic_exploration.slow_value.load_state_dict(
+            state["exploration_slow_value"]
+        )
         self.imagination.slow_value.load_state_dict(state["slow_value"])
         self.update_count = int(state["update_count"])

@@ -29,6 +29,14 @@ state-only/state+实际动作的独立岭回归 probe 判断 replay 是否具有
 恢复 schema 同步升为 `hwr.foundation-runner-recovery/v4`。`foundation-wm-006` 的 v4 因果
 报告和 v3 恢复状态不能进入这条新谱系。
 
+物理因果准入与任务 Actor 准入进一步拆分。单步物理因果、数据 probe 和动作覆盖连续通过
+后，先训练独立的 `intrinsic_rl_actor`；它只最大化世界模型 ensemble 不确定性、潜状态
+新颖度和策略熵，并扣除预测安全干预，不使用环境奖励、任务对象、距离或阶段。只有完整
+多步五头因果也连续通过后，才训练/采集任务 `rl_actor`。探索 Actor、探索 Value、慢 Value
+和优化器只存在于训练 checkpoint，不进入 deployment。自主轨迹 schema 升为
+`hwr.autonomous-trajectory/v4`，no-expert lineage 明确允许随机探索、内在 RL 探索与任务 RL
+三种动作来源；三者都不含专家、示范、教师动作或搜索器。
+
 ## 2026-08-12 基础模型—世界模型主线重建
 
 P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为无效开发运行；它们

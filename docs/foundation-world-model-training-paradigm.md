@@ -342,7 +342,8 @@ Actor 只能对潜在状态求值和采样自己的动作。禁止使用 CEM、M
 `development-ready.json` 后，正式训练命令才允许运行。
 
 正式 run 与训练 checkpoint 必须共享同一个精确的 no-expert lineage：随机初始化的项目
-自有模型、仅 `random_rl_exploration` 与 `rl_actor` 两种动作来源、空专家/示范集合、关闭
+自有模型、仅 `random_rl_exploration`、`intrinsic_rl_actor` 与 `rl_actor` 三种动作来源、
+空专家/示范集合、关闭
 行为克隆/教师动作/动作搜索，并且没有旧 P 系列父 checkpoint。保存、恢复和最终评测都要
 按完整结构比较，不能只检查 `source_commit`，也不能把“字段存在”当作“字段为空”。正式
 run manifest schema 为 `hwr.foundation-online-run/v3`，旧 v1/v2 不进入新谱系。
@@ -439,6 +440,7 @@ Episode 评测、验收结果和每路视频，不能只通过目录路径间接
 | 动作条件世界模型 | `hwr.world_model` |
 | 数据可辨识性与 Actor 准入 | `hwr.train.foundation_action_probe`、`foundation_actor_readiness` |
 | 想象 RL | `hwr.train.imagination`、`imagination_rl` |
+| 无环境奖励内在探索 RL | `hwr.train.intrinsic_exploration`、`intrinsic_rl_actor` |
 | 环境声明的通用增强 | `hwr.train.foundation_augmentation` |
 | 单一在线闭环 | `hwr.train.foundation_online`、`foundation_trainer`、`foundation_run_manifest` |
 | 指标与本机面板 | `hwr.train.foundation_metrics`、`foundation_dashboard`、`hwr.apps.serve_foundation_dashboard` |

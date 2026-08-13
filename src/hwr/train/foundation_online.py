@@ -26,10 +26,8 @@ from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 from hwr.perception.language_cache import StaticLanguageFeatureResolver
 from hwr.policy.foundation_runtime import FoundationWorldModelPolicy
 from hwr.train.accelerator_memory import (
-    release_accelerator_memory_after_step,
     release_unused_accelerator_memory,
 )
-from hwr.train.foundation_augmentation import transform_foundation_batch
 from hwr.train.foundation_action_probe import evaluate_foundation_data_action_probe
 from hwr.train.foundation_actor_readiness import (
     FoundationActorReadinessCriteria,
@@ -39,6 +37,7 @@ from hwr.train.foundation_collection import (
     AutonomousCollectionConfig,
     AutonomousEpisodeCollector,
     CurrentRLActorActionSource,
+    IntrinsicRLActorActionSource,
 )
 from hwr.train.foundation_diagnostics import (
     evaluate_foundation_action_causality_audit,
@@ -57,10 +56,10 @@ from hwr.train.foundation_learning_signals import (
 )
 from hwr.train.foundation_materialization import materialize_foundation_replay_features
 from hwr.train.foundation_metrics import (
-    FoundationMetricsProgress,
     FoundationMetricsStore,
     build_foundation_cycle_metrics,
     mean_metrics,
+    publish_foundation_progress,
     summarize_replay_action_coverage,
 )
 from hwr.train.foundation_exploration import (
@@ -98,6 +97,7 @@ from hwr.train.foundation_replay_features import (
     language_resolver_from_replay,
 )
 from hwr.train.foundation_setup import FoundationLearningStack
+from hwr.train.foundation_update_cycle import run_foundation_update_cycle
 from hwr.train.learning_signals import failure_boundary_step
 from hwr.train.task_sampling import OutcomeAdaptiveTaskSampler, TaskOutcome
 from hwr.world_model.deploy import DeployableWorldModelStateFilter
@@ -378,11 +378,14 @@ class FoundationOnlineTrainingRunner:
             task_id, _ = self.task_sampler.sample(self.rng)
             task = self.tasks[task_id]
             seed = self.config.seed + episode_index * 104729
-            source = (
-                CurrentRLActorActionSource(self._collection_policy())
-                if self.actor_readiness.unlocked
-                else self._random_action_source()
-            )
+            if self.actor_readiness.task_actor_unlocked:
+                source = CurrentRLActorActionSource(self._collection_policy())
+            elif self.actor_readiness.exploration_unlocked:
+                source = IntrinsicRLActorActionSource(
+                    self._collection_policy(exploration=True)
+                )
+            else:
+                source = self._random_action_source()
             collector = AutonomousEpisodeCollector(
                 self.preprocessor,
                 AutonomousCollectionConfig(
@@ -398,18 +401,25 @@ class FoundationOnlineTrainingRunner:
             collected.append(episode)
         return collected
 
-    def _collection_policy(self) -> FoundationWorldModelPolicy:
+    def _collection_policy(
+        self, *, exploration: bool = False
+    ) -> FoundationWorldModelPolicy:
         resolver = self._language_resolver()
         trainer = self.stack.trainer
         device = str(next(trainer.actor.parameters()).device)
         return FoundationWorldModelPolicy(
             copy.deepcopy(trainer.visual_student),
             DeployableWorldModelStateFilter.from_world_model(trainer.world_model),
-            copy.deepcopy(trainer.actor),
+            copy.deepcopy(
+                trainer.exploration_actor if exploration else trainer.actor
+            ),
             self.preprocessor,
             resolver,
             self.stack.action_scaling,
-            policy_id=f"foundation-actor-update-{trainer.update_count}",
+            policy_id=(
+                f"foundation-{'exploration-' if exploration else ''}actor-"
+                f"update-{trainer.update_count}"
+            ),
             device=device,
         )
 
@@ -499,31 +509,27 @@ class FoundationOnlineTrainingRunner:
             transitions=self.config.sequence_transitions,
             device=str(next(self.stack.trainer.actor.parameters()).device),
         )
-        metrics: list[dict[str, float]] = []
-        for _ in range(self.config.updates_per_cycle):
-            indices = self.rng.integers(0, len(loader), size=self.config.batch_size)
-            batch = loader.build([int(value) for value in indices])
-            transforms = [self._sample_transform(loader, int(value)) for value in indices]
-            batch = transform_foundation_batch(batch, transforms)
-            metrics.append(
-                self.stack.trainer.train_step(
-                    batch, train_task_actor=self.actor_readiness.unlocked
-                )
-            )
-            release_accelerator_memory_after_step(len(metrics))
-            if len(metrics) % self.config.metrics_publish_interval_updates == 0:
-                self._publish_progress(
-                    "updating",
-                    cycle,
-                    mean_metrics(metrics),
-                    completed_updates=len(metrics),
-                )
-        names = metrics[0]
-        result = {
-            name: float(sum(item[name] for item in metrics) / len(metrics))
-            for name in names
-        }
-        if self.actor_readiness.unlocked:
+        result = run_foundation_update_cycle(
+            self.stack.trainer,
+            loader,
+            self.rng,
+            updates=self.config.updates_per_cycle,
+            batch_size=self.config.batch_size,
+            augmentation_probability=self.config.augmentation_probability,
+            train_task_actor=self.actor_readiness.task_actor_unlocked,
+            train_exploration_actor=(
+                self.actor_readiness.exploration_unlocked
+                and not self.actor_readiness.task_actor_unlocked
+            ),
+            progress_interval=self.config.metrics_publish_interval_updates,
+            progress=lambda values: self._publish_progress(
+                "updating",
+                cycle,
+                mean_metrics(values),
+                completed_updates=len(values),
+            ),
+        )
+        if self.actor_readiness.task_actor_unlocked:
             self.actor_readiness.record_task_actor_updates(
                 self.config.updates_per_cycle
             )
@@ -537,16 +543,15 @@ class FoundationOnlineTrainingRunner:
         *,
         completed_updates: int = 0,
     ) -> None:
-        self.metrics_store.publish_progress(
-            FoundationMetricsProgress(
-                stage,
-                cycle,
-                self.stack.trainer.update_count,
-                len(self.records),
-                self.config.updates_per_cycle if stage == "updating" else 0,
-                completed_updates,
-            ),
+        publish_foundation_progress(
+            self.metrics_store,
+            stage,
+            cycle,
+            self.stack.trainer.update_count,
+            len(self.records),
+            self.config.updates_per_cycle,
             metrics=metrics,
+            completed_updates=completed_updates,
         )
 
     def _evaluate_action_causality(
@@ -613,14 +618,6 @@ class FoundationOnlineTrainingRunner:
         metrics["actor_readiness/consecutive_passes"] = float(
             readiness["consecutive_passes"]
         )
-
-    def _sample_transform(
-        self, loader: FoundationSequenceBatchLoader, index: int
-    ) -> str | None:
-        legal = loader.legal_transform_ids(index)
-        if not legal or self.rng.random() >= self.config.augmentation_probability:
-            return None
-        return str(self.rng.choice(legal))
 
     def _episode_learning_signals(
         self,
@@ -723,7 +720,7 @@ class FoundationOnlineTrainingRunner:
                     self.latest_action_causality
                 )
             ),
-            "actor_readiness_unlocked": self.actor_readiness.unlocked,
+            "actor_readiness_unlocked": self.actor_readiness.task_actor_unlocked,
             "task_actor_update_count": self.actor_readiness.task_actor_update_count,
         }
         checkpoint = self.run_path / "checkpoints" / version

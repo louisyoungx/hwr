@@ -21,12 +21,16 @@ def _diagnostic(passed: bool = True):
     }
     statistics = {"robust_passed": passed}
     return {
+        "assessment": {"passed": passed},
+        "shuffle_statistics": {"robust_passed": passed},
         "one_step_action_utilization": {
             "assessment": assessment,
             "shuffle_statistics": statistics,
         },
         "partitions": {
             "partition-a": {
+                "assessment": {"passed": passed},
+                "shuffle_statistics": {"robust_passed": passed},
                 "one_step_action_utilization": {
                     "assessment": assessment,
                     "shuffle_statistics": statistics,
@@ -58,13 +62,20 @@ def test_actor_readiness_requires_repeated_physical_evidence_and_revokes() -> No
     second = tracker.assess(
         _diagnostic(), _probe(), _coverage(), replay_episodes=12
     )
+    third = tracker.assess(
+        _diagnostic(), _probe(), _coverage(), replay_episodes=12
+    )
     failed = tracker.assess(
         _diagnostic(False), _probe(), _coverage(), replay_episodes=12
     )
 
     assert first["unlocked"] is False
-    assert second["unlocked"] is True
+    assert first["exploration_unlocked"] is False
+    assert second["unlocked"] is False
+    assert second["exploration_unlocked"] is True
+    assert third["task_actor_unlocked"] is True
     assert failed["unlocked"] is False
+    assert failed["exploration_unlocked"] is False
     assert failed["consecutive_passes"] == 0
 
 
@@ -94,3 +105,19 @@ def test_data_action_probe_detects_action_identifiability(tmp_path) -> None:
 
     assert report["state_only_to_state_action_ratio"] > 100.0
     assert report["bootstrap"]["ratio_p05"] > 10.0
+
+
+def test_physical_gate_can_unlock_explorer_without_task_actor() -> None:
+    tracker = FoundationActorReadinessTracker(
+        FoundationActorReadinessCriteria(3, consecutive_passes=1)
+    )
+    diagnostic = _diagnostic()
+    diagnostic["assessment"]["passed"] = False
+    diagnostic["partitions"]["partition-a"]["assessment"]["passed"] = False
+
+    result = tracker.assess(
+        diagnostic, _probe(), _coverage(), replay_episodes=3
+    )
+
+    assert result["exploration_unlocked"] is True
+    assert result["task_actor_unlocked"] is False

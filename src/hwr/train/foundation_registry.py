@@ -114,7 +114,11 @@ def foundation_lineage(source_commit: str) -> dict[str, object]:
     return {
         "source_commit": source_commit,
         "initialization": "random_project_owned_models",
-        "action_sources": ["random_rl_exploration", "rl_actor"],
+        "action_sources": [
+            "random_rl_exploration",
+            "intrinsic_rl_actor",
+            "rl_actor",
+        ],
         "expert_policies": [],
         "demonstration_datasets": [],
         "behavior_cloning": False,
@@ -153,6 +157,8 @@ def save_foundation_training_checkpoint(
         "world_model": trainer.world_model.state_dict(),
         "actor": trainer.actor.state_dict(),
         "value": trainer.value.state_dict(),
+        "exploration_actor": trainer.exploration_actor.state_dict(),
+        "exploration_value": trainer.exploration_value.state_dict(),
         "optimizers": trainer.optimizer_state_dict(),
     }
     _atomic_torch_save(artifact_path, state)
@@ -170,6 +176,7 @@ def save_foundation_training_checkpoint(
             "world_objective": trainer.world_objective.loss_config.to_dict(),
             "actor": trainer.actor.config.to_dict(),
             "imagination": trainer.imagination.config.to_dict(),
+            "intrinsic_exploration": trainer.intrinsic_exploration.config.to_dict(),
             "trainer": trainer.config.to_dict(),
         },
         "lineage": foundation_lineage(source_commit),
@@ -196,6 +203,7 @@ def load_foundation_training_checkpoint(
         "world_objective": trainer.world_objective.loss_config.to_dict(),
         "actor": trainer.actor.config.to_dict(),
         "imagination": trainer.imagination.config.to_dict(),
+        "intrinsic_exploration": trainer.intrinsic_exploration.config.to_dict(),
         "trainer": trainer.config.to_dict(),
     }
     if manifest.get("configs") != _json_compatible(expected):
@@ -208,6 +216,8 @@ def load_foundation_training_checkpoint(
     trainer.world_model.load_state_dict(state["world_model"])
     trainer.actor.load_state_dict(state["actor"])
     trainer.value.load_state_dict(state["value"])
+    trainer.exploration_actor.load_state_dict(state["exploration_actor"])
+    trainer.exploration_value.load_state_dict(state["exploration_value"])
     trainer.load_optimizer_state_dict(state["optimizers"])
     return manifest
 

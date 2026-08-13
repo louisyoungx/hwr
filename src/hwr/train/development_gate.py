@@ -27,6 +27,7 @@ REQUIRED_DEVELOPMENT_CHECKS = frozenset(
 COMMITTED_SNAPSHOT_CHECKS = frozenset({"architecture", "python_size", "tests"})
 FOUNDATION_CONFIG_FILES = (
     "imagination-rl-v1.json",
+    "intrinsic-exploration-v1.json",
     "latent-actor-v1.json",
     "model-locks.json",
     "online-training-v1.json",
@@ -102,9 +103,11 @@ PROTECTED_PATHS = (
     "src/hwr/train/foundation_registry.py",
     "src/hwr/train/foundation_setup.py",
     "src/hwr/train/foundation_trainer.py",
+    "src/hwr/train/foundation_update_cycle.py",
     "src/hwr/train/foundation_visual_update.py",
     "src/hwr/train/imagination.py",
     "src/hwr/train/imagination_rl.py",
+    "src/hwr/train/intrinsic_exploration.py",
     "src/hwr/train/task_sampling.py",
     "src/hwr/world_model",
 )

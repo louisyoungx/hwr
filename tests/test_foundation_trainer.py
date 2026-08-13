@@ -12,6 +12,7 @@ from hwr.perception.student_objectives import (
     VisualTeacherTargets,
 )
 from hwr.policy.latent_actor import LatentActor, LatentActorConfig
+from hwr.policy.latent_actions import LatentActionScaling
 from hwr.policy.latent_value import LatentValueModel
 from hwr.train.foundation_batch import FoundationTrainingBatch
 from hwr.train.foundation_diagnostics import (
@@ -24,6 +25,7 @@ from hwr.train.foundation_trainer import (
 )
 from hwr.train.foundation_visual_update import _slice_targets
 from hwr.train.imagination_rl import ImaginationRLConfig
+from hwr.train.intrinsic_exploration import IntrinsicExplorationConfig
 from hwr.world_model import (
     ActionCausalityCriteria,
     ActionConditionedWorldModel,
@@ -142,6 +144,10 @@ def _trainer(*, visual_microbatch_observations: int = 4) -> FoundationWorldModel
         actor,
         value,
         ImaginationRLConfig(horizon=3, value_bins=21, value_symlog_limit=5.0),
+        IntrinsicExplorationConfig(
+            horizon=3, value_bins=21, value_symlog_limit=5.0
+        ),
+        LatentActionScaling(),
         FoundationTrainerConfig(
             visual_microbatch_observations=visual_microbatch_observations
         ),
@@ -175,6 +181,24 @@ def test_unified_trainer_optimizer_state_round_trip() -> None:
 
     assert second.update_count == 1
     assert second.optimizer_state_dict()["update_count"] == 1
+
+
+def test_intrinsic_explorer_updates_without_environment_reward_actor() -> None:
+    trainer = _trainer()
+    task_actor = trainer.actor.mean_head.weight.detach().clone()
+    explorer = trainer.exploration_actor.mean_head.weight.detach().clone()
+
+    metrics = trainer.train_step(
+        _batch(_visual_config()),
+        train_task_actor=False,
+        train_exploration_actor=True,
+    )
+
+    torch.testing.assert_close(trainer.actor.mean_head.weight, task_actor)
+    assert torch.any(trainer.exploration_actor.mean_head.weight != explorer)
+    assert metrics["trainer/task_actor_updated"] == 0.0
+    assert metrics["trainer/exploration_actor_updated"] == 1.0
+    assert "exploration/state_novelty" in metrics
 
 
 def test_unified_trainer_bounds_visual_activation_microbatches() -> None:
