@@ -347,9 +347,13 @@ Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默�
 - 训练进程以 `nice 10` 运行，让交互程序优先获得 CPU；
 - 每卸载一个冻结基础模型，并且每 10 个优化 step，释放一次不再被活跃 tensor 引用的
   MPS/CUDA allocator cache。
+- 视觉学生保持有效 batch 和完整 16-step 世界模型窗口，但按最多 4 个 observation 做梯度
+  累积；相邻 observation 的四帧三相机 ConvNeXt 激活不再同时驻留统一内存。视觉更新完成
+  后再把按原顺序拼接且停止梯度的连续 latent 交给世界模型和想象 RL。
 
 这些约束只回收缓存和调节资源调度，不改变观测、动作、奖励、终止、合法环境变换、采样
-规则或 loss，也不提供场景动作答案。可通过同名 PyTorch 环境变量和
+规则或动作标签，也不提供场景动作答案。视觉微批对各块 loss 按 observation 数量加权，
+一次 optimizer step 仍覆盖配置声明的完整 batch。可通过同名 PyTorch 环境变量和
 `HWR_FOUNDATION_NICE_LEVEL` 覆盖启动器默认值；覆盖值应与 run 日志一起保留。
 
 ## 10. 统一训练与最终验收

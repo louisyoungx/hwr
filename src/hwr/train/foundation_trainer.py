@@ -12,6 +12,7 @@ from hwr.perception.student_objectives import VisualFoundationObjectives
 from hwr.policy.latent_actor import LatentActor
 from hwr.policy.latent_value import LatentValueModel
 from hwr.train.foundation_batch import FoundationTrainingBatch
+from hwr.train.foundation_visual_update import optimize_visual_student
 from hwr.train.imagination_rl import (
     ImaginationActorCritic,
     ImaginationRLConfig,
@@ -33,13 +34,14 @@ class FoundationTrainerConfig:
     value_learning_rate: float = 1.0e-4
     weight_decay: float = 1.0e-4
     maximum_gradient_norm: float = 100.0
+    visual_microbatch_observations: int = 4
 
     def __post_init__(self) -> None:
         values = tuple(self.__dict__.values())
         if min(values) <= 0.0:
             raise ValueError("foundation trainer rates and limits must be positive")
 
-    def to_dict(self) -> dict[str, float]:
+    def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
 
@@ -101,17 +103,15 @@ class FoundationWorldModelTrainer:
         self._check_batch_dimensions(batch)
         self.visual_student.train()
         self.world_model.train()
-        visual_output = self.visual_student(batch.student_inputs)
-        visual_losses = self.visual_objective(visual_output, batch.visual_targets)
-        self.visual_optimizer.zero_grad(set_to_none=True)
-        visual_losses["total"].backward()
-        visual_parameters = [
-            *self.visual_student.parameters(), *self.visual_objective.parameters()
-        ]
-        nn.utils.clip_grad_norm_(visual_parameters, self.config.maximum_gradient_norm)
-        self.visual_optimizer.step()
-
-        visual_sequence = visual_output.pooled_state.detach().reshape(
+        visual_update = optimize_visual_student(
+            self.visual_student,
+            self.visual_objective,
+            batch,
+            self.visual_optimizer,
+            microbatch_observations=self.config.visual_microbatch_observations,
+            maximum_gradient_norm=self.config.maximum_gradient_norm,
+        )
+        visual_sequence = visual_update.pooled_state.reshape(
             batch.sequence_batch_size,
             batch.observation_count,
             self.world_model.config.visual_dimension,
@@ -150,9 +150,10 @@ class FoundationWorldModelTrainer:
         )
         self.update_count += 1
         metrics = {
-            **{f"visual/{name}": float(value.detach()) for name, value in visual_losses.items()},
+            **{f"visual/{name}": value for name, value in visual_update.losses.items()},
             **{f"world/{name}": float(value.detach()) for name, value in world_losses.items()},
             **{f"imagination/{name}": value for name, value in imagination_metrics.items()},
+            "trainer/visual_microbatch_count": float(visual_update.microbatch_count),
             "trainer/update_count": float(self.update_count),
         }
         return metrics

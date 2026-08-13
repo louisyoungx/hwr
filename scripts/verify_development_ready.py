@@ -359,6 +359,7 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
         "causality_audit_windows_per_task": audit_windows,
         "causality_audit_batch_size": audit_batch,
         "formal_batch_size": online["batch_size"],
+        "visual_microbatch_observations": trainer.config.visual_microbatch_observations,
         "random_exploration_motion_correlation": motion_correlation,
         "random_exploration_gripper_flip_probability": (
             gripper_flip_probability

@@ -245,6 +245,25 @@ manifest、留出集 manifest 和有界日志已封存到
 软水位、每 10 个优化 step 回收空闲 accelerator cache，并以 `nice 10` 运行。该修改只处理
 任务无关的资源使用，不改变无专家谱系、策略动作来源、任务采样或成功条件。
 
+`foundation-wm-005` 验证了水位确实生效，但也暴露了视觉反向传播本身的活跃 tensor 峰值：
+首轮冻结特征完成后，第一批视觉学生 backward 已分配 23.71 GiB MPS 内存，另有约
+0.55 GiB driver 分配；申请额外 117.14 MiB 时被 24.34 GiB 硬上限拒绝。该 run 因而异常
+退出，飞书机器人通知发送成功。检查确认它仍没有 `latest.json`、checkpoint、deployment、
+动作因果报告或逐 Episode 训练结果，不能恢复，也没有可进入评测的模型。
+小型审计材料已封存为
+`artifacts/retired-foundation-runs/foundation-wm-005-mps-oom-audit-metadata.tar.gz`，SHA-256
+为 `320d8c8dfdd0218954731bb6339c7f93b0e702386372746b2d4ab9855fbecb1e`；13 GiB 可重建
+feature cache 和无 checkpoint 轨迹不再保留。
+
+根因不是有效 batch 或 16-step 世界模型窗口本身，而是视觉 loader 把 batch 中 34 个
+observation 的四帧三相机历史一次性送进 ConvNeXt，并为约 408 张图同时保留反向激活。
+修复在统一 trainer 内进行任务无关的视觉梯度累积：有效 batch=2、序列长度=16 均不变，
+每个视觉微批最多处理 4 个 observation，完成全部微批后只执行一次视觉 optimizer step。
+来自原 run replay 的真实 MPS smoke 覆盖完整视觉、世界模型和想象 RL 更新，共 9 个视觉
+微批；微批回收点 driver allocation 稳定在 3.29～3.31 GiB，完整 train step 结束为
+3.47 GiB，`trainer/update_count=1`，不再触碰硬水位。该调整不认识任务或对象，也不改变
+无专家动作谱系。
+
 训练完成后的固定评测命令为：
 
 ```bash

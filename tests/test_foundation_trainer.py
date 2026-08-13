@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
+import pytest
 import torch
 
 from hwr.perception.student import VisualStudentConfig, VisualStudentModel
@@ -19,6 +22,7 @@ from hwr.train.foundation_trainer import (
     FoundationTrainerConfig,
     FoundationWorldModelTrainer,
 )
+from hwr.train.foundation_visual_update import _slice_targets
 from hwr.train.imagination_rl import ImaginationRLConfig
 from hwr.world_model import (
     ActionCausalityCriteria,
@@ -106,7 +110,7 @@ def _batch(visual: VisualStudentConfig) -> FoundationTrainingBatch:
     )
 
 
-def _trainer() -> FoundationWorldModelTrainer:
+def _trainer(*, visual_microbatch_observations: int = 4) -> FoundationWorldModelTrainer:
     visual_config = _visual_config()
     world_config = _world_config()
     student = VisualStudentModel(visual_config)
@@ -138,7 +142,9 @@ def _trainer() -> FoundationWorldModelTrainer:
         actor,
         value,
         ImaginationRLConfig(horizon=3, value_bins=21, value_symlog_limit=5.0),
-        FoundationTrainerConfig(),
+        FoundationTrainerConfig(
+            visual_microbatch_observations=visual_microbatch_observations
+        ),
     )
 
 
@@ -169,6 +175,41 @@ def test_unified_trainer_optimizer_state_round_trip() -> None:
 
     assert second.update_count == 1
     assert second.optimizer_state_dict()["update_count"] == 1
+
+
+def test_unified_trainer_bounds_visual_activation_microbatches() -> None:
+    trainer = _trainer(visual_microbatch_observations=2)
+    observed: list[int] = []
+    handle = trainer.visual_student.register_forward_pre_hook(
+        lambda module, arguments: observed.append(arguments[0]["rgb"].shape[0])
+    )
+
+    metrics = trainer.train_step(_batch(_visual_config()))
+    handle.remove()
+
+    assert observed == [2, 1]
+    assert metrics["trainer/visual_microbatch_count"] == 2.0
+
+
+def test_visual_microbatch_rebases_only_internal_correspondences() -> None:
+    targets = _batch(_visual_config()).visual_targets
+    correspondences = torch.tensor(
+        [
+            [0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
+            [1, 0, 0, 0, 0, 1, 0, 1, 1, 1],
+            [0, 0, 0, 0, 0, 1, 0, 1, 1, 1],
+        ]
+    )
+
+    sliced = _slice_targets(replace(targets, correspondences=correspondences), 1, 3)
+
+    assert sliced.vision_language.shape[0] == 2
+    assert sliced.correspondences.tolist() == [[0, 0, 0, 0, 0, 0, 0, 1, 1, 1]]
+
+
+def test_foundation_trainer_rejects_empty_visual_microbatches() -> None:
+    with pytest.raises(ValueError, match="rates and limits must be positive"):
+        FoundationTrainerConfig(visual_microbatch_observations=0)
 
 
 def test_foundation_diagnostic_uses_all_actual_outcome_targets() -> None:

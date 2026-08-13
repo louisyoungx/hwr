@@ -12,6 +12,7 @@ from hwr.apps.train_foundation_world_model import (
 from hwr.train.development_gate import (
     COMMITTED_SNAPSHOT_CHECKS,
     DEVELOPMENT_READY_SCHEMA,
+    PROTECTED_PATHS,
     REQUIRED_DEVELOPMENT_CHECKS,
     current_commit,
     foundation_config_hashes,
@@ -46,6 +47,11 @@ def test_development_gate_requires_the_full_named_evidence_set() -> None:
         "tests",
         "foundation_inference",
     }
+
+
+def test_development_gate_protects_accelerator_memory_implementation() -> None:
+    assert "src/hwr/train/accelerator_memory.py" in PROTECTED_PATHS
+    assert "src/hwr/train/foundation_visual_update.py" in PROTECTED_PATHS
 
 
 def test_development_gate_rejects_missing_or_stale_report(tmp_path) -> None:
