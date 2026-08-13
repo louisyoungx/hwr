@@ -14,6 +14,7 @@ from hwr.core.embodied import (
     DualArmObservation,
 )
 from hwr.core.runtime import RuntimeBackend
+from hwr.core.state_snapshot import PhysicalStateSnapshot
 from hwr.data.autonomous_trajectory import AutonomousEpisode
 from hwr.perception.contracts import DUAL_ARM_CAMERA_IDS
 from hwr.perception.high_resolution import (
@@ -113,8 +114,10 @@ class AutonomousEpisodeCollector:
         *,
         task_id: str,
         seed: int,
+        initial_observation: DualArmObservation | None = None,
+        snapshot_sink: list[PhysicalStateSnapshot] | None = None,
     ) -> AutonomousEpisode:
-        observation = backend.reset(seed=seed, task_id=task_id)
+        observation = initial_observation or backend.reset(seed=seed, task_id=task_id)
         action_source.reset(task_id=task_id, seed=seed)
         observations = [observation]
         proposals: list[tuple[float, ...]] = []
@@ -142,6 +145,14 @@ class AutonomousEpisodeCollector:
             )
             observation = outcome.observation
             observations.append(observation)
+            if snapshot_sink is not None:
+                capture = getattr(backend, "capture_state_snapshot", None)
+                if not callable(capture):
+                    raise TypeError("snapshot collection requires a snapshot backend")
+                snapshot = capture()
+                if not isinstance(snapshot, PhysicalStateSnapshot):
+                    raise TypeError("runtime returned an invalid physical snapshot")
+                snapshot_sink.append(snapshot)
             if outcome.terminated or outcome.truncated or limit:
                 break
         arrays, preprocess_fingerprint = self._episode_arrays(

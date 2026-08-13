@@ -271,6 +271,14 @@ Episode seed 初始化的私有设备生成器，不能与 RSSM/想象训练的�
 恢复事件，然后才能继续采集。这样不会重复使用同一 Episode 序号和训练种子，也不会让
 checkpoint 指向已经被容量裁剪删除的数据。
 
+统一 runner 的初始状态课程复用同一任务无关 frontier：随机冷启动只积累自主访问过的物理
+快照，不能从 frontier 起步；物理动作可辨识性门通过后才允许按固定概率恢复候选状态。候选
+排序只使用后验潜状态相对候选池的余弦新颖度、真实 transition 的一步 TD error、Episode
+内局部奖励改善速度和环境声明的终止失败边界。终止或截断后的状态、安全干预状态不进入
+候选池。状态恢复必须逐项复现后端指纹、广义位置/速度/加速度、执行器控制、求解器状态和
+运行时状态；任一不一致都退回原始 reset。快照只存在于 runner 的课程恢复状态，不写进
+replay，不进入模型输入，隐藏评测始终禁用 frontier reset。
+
 ## 7. 想象空间强化学习
 
 Actor/Critic 在世界模型产生的潜在轨迹中优化：
@@ -441,6 +449,7 @@ Episode 评测、验收结果和每路视频，不能只通过目录路径间接
 | 数据可辨识性与 Actor 准入 | `hwr.train.foundation_action_probe`、`foundation_actor_readiness` |
 | 想象 RL | `hwr.train.imagination`、`imagination_rl` |
 | 无环境奖励内在探索 RL | `hwr.train.intrinsic_exploration`、`intrinsic_rl_actor` |
+| 任务无关物理状态课程 | `hwr.train.foundation_frontier`、`learning_frontier`、`foundation_learning_signals` |
 | 环境声明的通用增强 | `hwr.train.foundation_augmentation` |
 | 单一在线闭环 | `hwr.train.foundation_online`、`foundation_trainer`、`foundation_run_manifest` |
 | 指标与本机面板 | `hwr.train.foundation_metrics`、`foundation_dashboard`、`hwr.apps.serve_foundation_dashboard` |

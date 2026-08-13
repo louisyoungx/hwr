@@ -22,7 +22,7 @@ from hwr.data.autonomous_trajectory import (
 )
 
 
-RECOVERY_SCHEMA = "hwr.foundation-runner-recovery/v4"
+RECOVERY_SCHEMA = "hwr.foundation-runner-recovery/v5"
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,7 @@ class RestoredRunnerState:
     torch_rng_state: Mapping[str, Any]
     task_sampler: Mapping[str, Any]
     actor_readiness: Mapping[str, Any]
+    learning_frontier: Mapping[str, Any]
     records: tuple[dict[str, Any], ...]
     discarded_observation_sources: tuple[str, ...]
 
@@ -48,6 +49,7 @@ def publish_runner_progress(
     torch_rng_state: Mapping[str, Any],
     task_sampler: Mapping[str, Any],
     actor_readiness: Mapping[str, Any],
+    learning_frontier: Mapping[str, Any],
     records: Sequence[Mapping[str, Any]],
     replay_manifest: Mapping[str, Any],
     causality_manifest: Mapping[str, Any],
@@ -61,6 +63,7 @@ def publish_runner_progress(
         "torch_rng_state": dict(torch_rng_state),
         "task_sampler": dict(task_sampler),
         "actor_readiness": dict(actor_readiness),
+        "learning_frontier": dict(learning_frontier),
         "records": [dict(value) for value in records],
     }
     recovery = checkpoint_path / "recovery"
@@ -185,6 +188,7 @@ def restore_runner_progress(
         state["torch_rng_state"],
         state["task_sampler"],
         state["actor_readiness"],
+        state["learning_frontier"],
         records,
         tuple(
             source

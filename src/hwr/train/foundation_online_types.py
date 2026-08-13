@@ -51,6 +51,12 @@ class FoundationEpisodeRecord:
     td_error: float = 0.0
     reward_improvement: float = 0.0
     failure_boundary: float = 0.0
+    frontier_entries_added: int = 0
+    frontier_reset_applied: bool = False
+    frontier_reset_validated: bool = False
+    frontier_reset_reproduced: bool = False
+    frontier_source_episode: int = -1
+    frontier_source_step: int = -1
 
 
 @dataclass(frozen=True)

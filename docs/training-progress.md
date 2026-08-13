@@ -26,7 +26,7 @@
 每次审计执行 5 个独立置换并保存原始结果，要求每次通过且误差比 5% 分位数过线。另用
 state-only/state+实际动作的独立岭回归 probe 判断 replay 是否具有动作可辨识性；动作覆盖、
 有效秩、probe bootstrap 下界和至少 12 个 replay Episode 连续两次通过后才解锁 Actor。
-恢复 schema 同步升为 `hwr.foundation-runner-recovery/v4`。`foundation-wm-006` 的 v4 因果
+恢复 schema 先同步升为 `hwr.foundation-runner-recovery/v4`。`foundation-wm-006` 的 v4 因果
 报告和 v3 恢复状态不能进入这条新谱系。
 
 物理因果准入与任务 Actor 准入进一步拆分。单步物理因果、数据 probe 和动作覆盖连续通过
@@ -36,6 +36,15 @@ state-only/state+实际动作的独立岭回归 probe 判断 replay 是否具有
 和优化器只存在于训练 checkpoint，不进入 deployment。自主轨迹 schema 升为
 `hwr.autonomous-trajectory/v4`，no-expert lineage 明确允许随机探索、内在 RL 探索与任务 RL
 三种动作来源；三者都不含专家、示范、教师动作或搜索器。
+
+任务无关物理状态前沿现已接入统一 runner。随机冷启动阶段只从真实自主 transition 保存
+完整仿真状态候选，不执行前沿 reset；只有物理动作可辨识性门通过后，才以默认 `0.20`
+概率混合前沿起点。候选只来自每个 Episode 的世界模型后验状态、一步 TD error、局部奖励
+改善速度和环境终止失败边界，终止/截断后的状态与安全干预状态不能进入候选池。恢复前同时
+校验后端指纹、位置、速度、加速度、执行器控制、求解器和运行时状态；失败即回到普通 reset。
+候选池、独立随机流、选择次数和逐 Episode 来源随 checkpoint 原子恢复，恢复 schema 因此
+升级为 `hwr.foundation-runner-recovery/v5`。前沿快照不写入 replay，也不进入视觉学生、
+世界模型或 Actor 输入。
 
 ## 2026-08-12 基础模型—世界模型主线重建
 

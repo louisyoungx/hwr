@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections import deque
 from dataclasses import asdict, dataclass, replace
-from typing import Mapping, Protocol, Sequence
+from typing import Mapping, Protocol, Sequence, runtime_checkable
 
 import numpy as np
 
@@ -94,6 +94,7 @@ class LearningFrontierEntry:
     source_step: int
 
 
+@runtime_checkable
 class LearningFrontierBackend(Protocol):
     def reset(
         self,
@@ -465,6 +466,10 @@ def _snapshot_close(
     pairs = (
         (expected.generalized_positions, actual.generalized_positions),
         (expected.generalized_velocities, actual.generalized_velocities),
+        (expected.generalized_accelerations, actual.generalized_accelerations),
+        (expected.actuator_controls, actual.actuator_controls),
+        (expected.solver_state, actual.solver_state),
+        (expected.runtime_state, actual.runtime_state),
     )
     return all(
         len(left) == len(right)

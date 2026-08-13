@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 from hwr.train.foundation_exploration import RandomRLExplorationConfig
+from hwr.train.learning_frontier import LearningFrontierConfig
 from hwr.world_model.evaluation import ActionCausalityCriteria
 
 
@@ -36,6 +37,11 @@ class FoundationOnlineTrainingConfig:
     random_exploration_motion_correlation: float = 0.96
     random_exploration_gripper_flip_probability: float = 0.05
     learning_signal_windows_per_episode: int = 4
+    learning_frontier_capacity_per_task: int = 16
+    learning_frontier_reset_probability: float = 0.20
+    learning_frontier_candidates_per_episode: int = 4
+    learning_frontier_signature_uniform_fraction: float = 0.20
+    learning_frontier_maximum_entries_per_source_signature: int = 2
     metrics_publish_interval_updates: int = 10
     seed: int = 20260812
 
@@ -58,6 +64,9 @@ class FoundationOnlineTrainingConfig:
             self.causality_audit_batch_size,
             self.causality_shuffle_repeats,
             self.learning_signal_windows_per_episode,
+            self.learning_frontier_capacity_per_task,
+            self.learning_frontier_candidates_per_episode,
+            self.learning_frontier_maximum_entries_per_source_signature,
             self.metrics_publish_interval_updates,
         )
         if min(positive) <= 0 or self.seed < 0:
@@ -79,6 +88,17 @@ class FoundationOnlineTrainingConfig:
         RandomRLExplorationConfig(
             self.random_exploration_motion_correlation,
             self.random_exploration_gripper_flip_probability,
+        )
+        LearningFrontierConfig(
+            capacity_per_task=self.learning_frontier_capacity_per_task,
+            reset_probability=self.learning_frontier_reset_probability,
+            candidates_per_episode=self.learning_frontier_candidates_per_episode,
+            signature_uniform_fraction=(
+                self.learning_frontier_signature_uniform_fraction
+            ),
+            maximum_entries_per_source_signature=(
+                self.learning_frontier_maximum_entries_per_source_signature
+            ),
         )
         if not 0.0 < self.minimum_active_action_dimension_fraction <= 1.0:
             raise ValueError("minimum active action dimension fraction is invalid")

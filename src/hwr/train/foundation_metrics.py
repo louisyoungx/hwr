@@ -197,6 +197,7 @@ def build_foundation_cycle_metrics(
     episode_count: int,
     action_causality: Mapping[str, object] | None,
     actor_readiness: Mapping[str, object] | None,
+    learning_frontier: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     return {
         "update_count": update_count,
@@ -207,6 +208,7 @@ def build_foundation_cycle_metrics(
         "timing_seconds": dict(timings),
         "action_causality": dict(action_causality or {}),
         "actor_readiness": dict(actor_readiness or {}),
+        "learning_frontier": dict(learning_frontier or {}),
     }
 
 

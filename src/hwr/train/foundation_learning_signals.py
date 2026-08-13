@@ -20,6 +20,19 @@ class EpisodeLearningSignals:
     window_count: int
 
 
+@dataclass(frozen=True)
+class EpisodeWindowLearningSignal:
+    source_step: int
+    state_embedding: tuple[float, ...]
+    td_error: float
+
+
+@dataclass(frozen=True)
+class EpisodeLearningEvidence:
+    summary: EpisodeLearningSignals
+    windows: tuple[EpisodeWindowLearningSignal, ...]
+
+
 def evaluate_episode_learning_signals(
     trainer: FoundationWorldModelTrainer,
     loader: FoundationSequenceBatchLoader,
@@ -28,6 +41,25 @@ def evaluate_episode_learning_signals(
     maximum_windows: int,
 ) -> dict[str, EpisodeLearningSignals]:
     """Evaluate each Episode independently without task or geometry features."""
+    return {
+        episode_id: evidence.summary
+        for episode_id, evidence in evaluate_episode_learning_evidence(
+            trainer,
+            loader,
+            episode_ids,
+            maximum_windows=maximum_windows,
+        ).items()
+    }
+
+
+def evaluate_episode_learning_evidence(
+    trainer: FoundationWorldModelTrainer,
+    loader: FoundationSequenceBatchLoader,
+    episode_ids: Sequence[str],
+    *,
+    maximum_windows: int,
+) -> dict[str, EpisodeLearningEvidence]:
+    """Return learned window states without exposing simulator state to models."""
     identities = tuple(dict.fromkeys(episode_ids))
     if not identities or any(not value for value in identities) or maximum_windows <= 0:
         raise ValueError("Episode learning signal request is invalid")
@@ -118,9 +150,9 @@ def _evaluate_indices(
     trainer: FoundationWorldModelTrainer,
     loader: FoundationSequenceBatchLoader,
     indices: tuple[int, ...],
-) -> EpisodeLearningSignals:
+) -> EpisodeLearningEvidence:
     if not indices:
-        return EpisodeLearningSignals(0.0, 0.0, 0)
+        return EpisodeLearningEvidence(EpisodeLearningSignals(0.0, 0.0, 0), ())
     batch = loader.build(indices)
     visual = trainer.visual_student(batch.student_inputs).pooled_state.reshape(
         batch.sequence_batch_size,
@@ -145,8 +177,19 @@ def _evaluate_indices(
         discount=config.discount,
         symlog_limit=config.value_symlog_limit,
     )
-    return EpisodeLearningSignals(
-        float(novelty.mean().cpu()),
-        float(td_error.mean().cpu()),
-        len(indices),
+    windows = tuple(
+        EpisodeWindowLearningSignal(
+            int(loader.window_metadata(index)["transition_stop"]) - 1,
+            tuple(float(value) for value in world.features[row, -1].cpu()),
+            float(td_error[row, -1].cpu()),
+        )
+        for row, index in enumerate(indices)
+    )
+    return EpisodeLearningEvidence(
+        EpisodeLearningSignals(
+            float(novelty.mean().cpu()),
+            float(td_error.mean().cpu()),
+            len(indices),
+        ),
+        windows,
     )

@@ -51,9 +51,10 @@ from hwr.train.foundation_holdout import (
     select_causality_windows,
 )
 from hwr.train.foundation_learning_signals import (
-    EpisodeLearningSignals,
-    evaluate_episode_learning_signals,
+    EpisodeLearningEvidence,
+    evaluate_episode_learning_evidence,
 )
+from hwr.train.foundation_frontier import FoundationLearningFrontierController
 from hwr.train.foundation_materialization import materialize_foundation_replay_features
 from hwr.train.foundation_metrics import (
     FoundationMetricsStore,
@@ -74,6 +75,7 @@ from hwr.train.foundation_online_types import (
     FoundationProviderFactories,
     FoundationTaskInterface,
 )
+from hwr.train.foundation_outcomes import record_foundation_learning_outcomes
 from hwr.train.foundation_registry import (
     ACTION_CAUSALITY_SCHEMA,
     export_foundation_deployment,
@@ -98,8 +100,8 @@ from hwr.train.foundation_replay_features import (
 )
 from hwr.train.foundation_setup import FoundationLearningStack
 from hwr.train.foundation_update_cycle import run_foundation_update_cycle
-from hwr.train.learning_signals import failure_boundary_step
-from hwr.train.task_sampling import OutcomeAdaptiveTaskSampler, TaskOutcome
+from hwr.train.learning_frontier import LearningFrontierConfig
+from hwr.train.task_sampling import OutcomeAdaptiveTaskSampler
 from hwr.world_model.deploy import DeployableWorldModelStateFilter
 from hwr.world_model.evaluation import ActionCausalityCriteria
 
@@ -167,6 +169,24 @@ class FoundationOnlineTrainingRunner:
                 config.minimum_data_action_probe_ratio_p05,
             )
         )
+        self.frontier = FoundationLearningFrontierController(
+            self.task_ids,
+            LearningFrontierConfig(
+                capacity_per_task=config.learning_frontier_capacity_per_task,
+                reset_probability=config.learning_frontier_reset_probability,
+                candidates_per_episode=(
+                    config.learning_frontier_candidates_per_episode
+                ),
+                signature_uniform_fraction=(
+                    config.learning_frontier_signature_uniform_fraction
+                ),
+                maximum_entries_per_source_signature=(
+                    config.learning_frontier_maximum_entries_per_source_signature
+                ),
+            ),
+            seed=config.seed + 1_000_003,
+            episode_seed_base=config.seed,
+        )
         self.metrics_store = FoundationMetricsStore(
             self.run_path,
             source_commit=self.source_commit,
@@ -212,9 +232,9 @@ class FoundationOnlineTrainingRunner:
                 timings["update_seconds"] = time.perf_counter() - started
                 started = time.perf_counter()
                 self._publish_progress("evaluating", next_cycle, metrics)
-                signals = self._episode_learning_signals(prepared, collected)
+                evidence = self._episode_learning_signals(prepared, collected)
                 self._evaluate_action_causality(causality_prepared, metrics)
-                self._record_learning_outcomes(collected, signals)
+                self._record_learning_outcomes(collected, evidence)
                 timings["evaluation_seconds"] = time.perf_counter() - started
                 cycle = next_cycle
                 self.completed_cycles = cycle
@@ -238,6 +258,7 @@ class FoundationOnlineTrainingRunner:
                             else None
                         ),
                         actor_readiness=self.actor_readiness.last_assessment,
+                        learning_frontier=self.frontier.audit(),
                     ),
                 )
         finally:
@@ -349,6 +370,7 @@ class FoundationOnlineTrainingRunner:
             raise ValueError("resumed checkpoint data provenance differs")
         self.task_sampler.load_state_dict(restored.task_sampler)
         self.actor_readiness.load_state_dict(restored.actor_readiness)
+        self.frontier.load_state_dict(restored.learning_frontier)
         self.rng.bit_generator.state = restored.rng_state
         restore_torch_rng_state(
             restored.torch_rng_state,
@@ -394,9 +416,24 @@ class FoundationOnlineTrainingRunner:
                     task.maximum_steps,
                 ),
             )
-            episode = collector.collect(
-                environments[task_id], source, task_id=task_id, seed=seed
+            prepared = self.frontier.prepare_collection(
+                environments[task_id],
+                task_id=task_id,
+                episode_index=episode_index,
+                episode_seed=seed,
+                resets_enabled=self.actor_readiness.exploration_unlocked,
             )
+            episode = collector.collect(
+                environments[task_id],
+                source,
+                task_id=task_id,
+                seed=seed,
+                initial_observation=prepared.initial_observation,
+                snapshot_sink=(
+                    prepared.snapshots if prepared.reset is not None else None
+                ),
+            )
+            self.frontier.remember(episode.episode_id, episode_index, prepared)
             self.store.append(episode)
             collected.append(episode)
         return collected
@@ -623,7 +660,7 @@ class FoundationOnlineTrainingRunner:
         self,
         prepared: FoundationPreparedFeatures,
         episodes: list[object],
-    ) -> dict[str, EpisodeLearningSignals]:
+    ) -> dict[str, EpisodeLearningEvidence]:
         loader = FoundationSequenceBatchLoader(
             self.store.path,
             self.cache,
@@ -633,7 +670,7 @@ class FoundationOnlineTrainingRunner:
             transitions=self.config.sequence_transitions,
             device=str(next(self.stack.trainer.actor.parameters()).device),
         )
-        return evaluate_episode_learning_signals(
+        return evaluate_episode_learning_evidence(
             self.stack.trainer,
             loader,
             [episode.episode_id for episode in episodes],
@@ -643,56 +680,16 @@ class FoundationOnlineTrainingRunner:
     def _record_learning_outcomes(
         self,
         episodes: list[object],
-        learning_signals: Mapping[str, EpisodeLearningSignals],
+        learning_evidence: Mapping[str, EpisodeLearningEvidence],
     ) -> None:
-        for episode in episodes:
-            arrays = episode.arrays
-            signal = learning_signals[episode.episode_id]
-            episode_return = float(arrays["reward"].sum())
-            safety_rate = float(arrays["safety_intervention"].mean())
-            success = bool(episode.metadata["success"])
-            terminated_failure = bool(arrays["terminated"][-1]) and not success
-            boundary = failure_boundary_step(
-                arrays["safety_intervention"],
-                terminated_failure=terminated_failure,
-            )
-            boundary_signal = (
-                float(boundary + 1) / len(arrays["safety_intervention"])
-                if boundary >= 0
-                else 0.0
-            )
-            improvement = self.task_sampler.reward_improvement(
-                episode.task_id, episode_return
-            )
-            self.task_sampler.record(
-                episode.task_id,
-                TaskOutcome(
-                    episode_return,
-                    signal.state_novelty,
-                    signal.td_error,
-                    improvement,
-                    boundary_signal,
-                    success,
-                    safety_rate,
-                ),
-            )
-            self.records.append(
-                FoundationEpisodeRecord(
-                    len(self.records),
-                    episode.task_id,
-                    episode.seed,
-                    str(arrays["action_source"][0]),
-                    episode_return,
-                    success,
-                    safety_rate,
-                    len(arrays["executed_action"]),
-                    self.stack.trainer.update_count,
-                    signal.state_novelty,
-                    signal.td_error,
-                    improvement,
-                    boundary_signal,
-                )
-            )
+        record_foundation_learning_outcomes(
+            episodes,
+            learning_evidence,
+            self.task_sampler,
+            self.frontier,
+            self.records,
+            update_count=self.stack.trainer.update_count,
+        )
 
     def _checkpoint(
         self, cycle: int, prepared: FoundationPreparedFeatures
@@ -787,6 +784,7 @@ class FoundationOnlineTrainingRunner:
             ),
             task_sampler=self.task_sampler.state_dict(),
             actor_readiness=self.actor_readiness.state_dict(),
+            learning_frontier=self.frontier.state_dict(),
             records=[asdict(item) for item in self.records],
             replay_manifest=self.store.manifest,
             causality_manifest=self.causality_store.manifest,

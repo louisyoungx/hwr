@@ -409,7 +409,7 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert run_manifest["lineage"]["expert_policies"] == []
     assert run_manifest["lineage"]["teacher_actions"] is False
     assert run_manifest["lineage"]["action_search"] is False
-    assert recovery["schema_version"] == "hwr.foundation-runner-recovery/v4"
+    assert recovery["schema_version"] == "hwr.foundation-runner-recovery/v5"
     assert all("safety_intervention_rate" in record for record in records)
     assert all("safety_cost_rate" not in record for record in records)
     assert deployment["training_diagnostics"] == checkpoint[
@@ -430,6 +430,8 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert cycle_metrics["action_causality"]["passed"] is True
     assert cycle_metrics["actor_readiness"]["unlocked"] is True
     assert checkpoint["training_diagnostics"]["task_actor_update_count"] == 1
+    assert cycle_metrics["learning_frontier"]["task_semantic_fields"] == []
+    assert all("frontier_entries_added" in record for record in records)
 
     resumed = _runner(tmp_path, config)
     resumed.resume_latest()
