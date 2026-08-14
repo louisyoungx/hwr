@@ -21,6 +21,12 @@ Actor 准入已经拆成两级：动作覆盖、逐任务 probe 和单步物理�
 接触、受控运动、碰撞头验证和完整多步因果只约束任务 Actor。24 Episode 的随机校准停止也
 只检查第一级证据，不再要求随机策略先完成探索 Actor 应负责的接触发现。
 
+固定一次 Actor warm-up 已删除。新 Actor 至少更新 200 次，并以最近三个 50-update 窗口
+检查梯度、运动/夹爪熵和想象回报稳定性；最多 1,000 次仍不通过即终止。单 run 最终评测
+schema 升为 `hwr.foundation-evaluation-run/v3`，只允许产生 `per_seed_passed`，不能产生
+正式 `passed=true`。新增多 run 聚合入口，只有三个不同训练 seed、相同不可变配置、互斥
+训练/留出种子和三份逐 seed 通过结果同时成立时，才写出正式通过。
+
 run manifest 升为 `hwr.foundation-online-run/v4` 并记录实际设备、nice 和 MPS 水位。正式
 验收默认每任务 40 个未见 seed，成功率用 95% Wilson 下界、单臂消融用 Wilson 上界判定；
 候选配置需要至少 3 个独立训练 seed，单 seed 结果只用于校准。

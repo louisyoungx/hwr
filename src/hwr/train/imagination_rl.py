@@ -132,6 +132,8 @@ class ImaginationActorCritic(nn.Module):
                 trajectory.severe_collision_probabilities.mean()
             ),
             "imagined_uncertainty": trajectory.uncertainties.mean(),
+            "motion_entropy": trajectory.motion_entropies.mean(),
+            "gripper_entropy": trajectory.gripper_entropies.mean(),
             "td_error": (value_predictions - returns.detach()).abs().mean(),
         }
         return losses, trajectory

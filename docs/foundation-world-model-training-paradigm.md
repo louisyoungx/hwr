@@ -440,6 +440,12 @@ Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默�
 为任一场景增加算法分支。训练过程可以断点续训和按可恢复 checkpoint 提交，但不因中间
 指标重新切换到手写课程或专家数据。
 
+新解锁的探索 Actor 或任务 Actor 不能用一次梯度更新直接成为采集源。正式配置至少执行
+200 次、最多 1,000 次不更新世界模型的专用 warm-up，每 50 次聚合一个窗口；最近三个窗口
+必须同时满足 Actor/Value 梯度有限且不超过上限、运动与夹爪策略熵没有坍缩、想象回报相对
+波动不超过 `0.25`。达到最低更新数并通过稳定性门后才记录为可采集；达到最大更新数仍失败
+则终止 run，完整失败检查写入 Actor readiness 状态。
+
 正式后台启动统一使用
 `scripts/start_foundation_training_tmux.sh RUN_ID [--resume] [--seed SEED]`。该入口
 固定调用唯一 foundation 训练应用、run root、readiness、模型目录和飞书机器人完成通知，
@@ -461,7 +467,12 @@ Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默�
 - 同一评测进程直接录制第三人称、头部、左腕和右腕未经剪辑的视频；
 - 数据、模型、代码提交、配置、逐 Episode 结果、视频和反作弊报告可由哈希互相追溯。
 
-最终 `hwr.foundation-evaluation-run/v2` manifest 必须直接哈希 readiness、run/latest、训练
+单个训练 seed 的评测只能写出 `per_seed_passed`，其 `formal_passed` 与兼容字段 `passed`
+必须保持 false。正式结论只能由独立聚合入口绑定至少三个不同训练 seed、三份不同 run
+manifest 和 deployment，并验证除 seed 外的不可变配置完全相同、训练/留出种子跨 run
+互不重叠、三次评测使用同一组未见种子且全部逐 seed 通过后写出。
+
+每个 `hwr.foundation-evaluation-run/v3` manifest 必须直接哈希 readiness、run/latest、训练
 Episode、训练 replay、因果留出库、动作因果报告、训练 checkpoint、部署 artifact、逐
 Episode 评测、验收结果和每路视频，不能只通过目录路径间接引用训练数据或模型。
 

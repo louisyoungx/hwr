@@ -90,7 +90,7 @@ def test_imagination_uses_actor_actions_and_world_model_outcomes() -> None:
     assert set(losses) == {
         "actor", "value", "imagined_reward", "imagined_return",
         "imagined_safety", "imagined_severe_collision", "imagined_uncertainty",
-        "td_error",
+        "motion_entropy", "gripper_entropy", "td_error",
     }
     assert all(torch.isfinite(value) for value in losses.values())
 

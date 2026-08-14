@@ -14,6 +14,11 @@ from hwr.data.foundation_loading import (
 )
 from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 from hwr.train.foundation_metrics import mean_metrics
+from hwr.train.foundation_actor_warmup import (
+    ActorWarmupCriteria,
+    FoundationActorWarmupResult,
+    assess_actor_warmup,
+)
 from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
 from hwr.train.foundation_trainer import FoundationWorldModelTrainer
 from hwr.train.foundation_update_cycle import (
@@ -76,7 +81,7 @@ def warm_start_actor(
     config: FoundationOnlineTrainingConfig,
     *,
     train_task_actor: bool,
-) -> dict[str, float]:
+) -> FoundationActorWarmupResult:
     """Train an admitted Actor before it becomes a collection source."""
     loader = FoundationSequenceBatchLoader(
         replay_path,
@@ -88,8 +93,11 @@ def warm_start_actor(
         device=str(next(trainer.actor.parameters()).device),
     )
     sampler = ShardLocalWindowSampler(loader)
-    metrics = []
-    for _ in range(config.actor_warmup_updates):
+    criteria = ActorWarmupCriteria.from_config(config)
+    metrics: list[dict[str, float]] = []
+    windows: list[dict[str, float]] = []
+    actor_kind = "task" if train_task_actor else "exploration"
+    for _ in range(criteria.maximum_updates):
         indices = sampler.sample(rng, config.batch_size)
         batch = loader.build(indices, include_visual_targets=False)
         metrics.append(
@@ -97,4 +105,16 @@ def warm_start_actor(
                 batch, train_task_actor=train_task_actor
             )
         )
-    return mean_metrics(metrics)
+        if len(metrics) % criteria.window_updates:
+            continue
+        windows.append(mean_metrics(metrics[-criteria.window_updates :]))
+        assessment = assess_actor_warmup(
+            windows, actor_kind, criteria, update_count=len(metrics)
+        )
+        if assessment["passed"] is True:
+            return FoundationActorWarmupResult(
+                len(metrics), mean_metrics(metrics), assessment
+            )
+    return FoundationActorWarmupResult(
+        len(metrics), mean_metrics(metrics), assessment
+    )

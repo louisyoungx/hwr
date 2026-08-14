@@ -435,6 +435,9 @@ def _artifact_manifest(
 ) -> dict[str, Any]:
     causality = _require_action_causality(run_path)
     run_manifest = _read_json(run_path / "run-manifest.json")
+    acceptance = _read_json(output_path / "acceptance.json")
+    if acceptance.get("schema_version") != "hwr.foundation-per-seed-acceptance/v1":
+        raise ValueError("foundation per-seed acceptance schema differs")
     readiness = _require_development_readiness(run_path, run_manifest)
     latest_path = run_path / "latest.json"
     latest = _read_json(latest_path)
@@ -477,8 +480,11 @@ def _artifact_manifest(
         }
     )
     return {
-        "schema_version": "hwr.foundation-evaluation-run/v2",
+        "schema_version": "hwr.foundation-evaluation-run/v3",
         "training_run": str(run_path),
+        "training_seed": int(run_manifest["training_config"]["seed"]),
+        "per_seed_passed": acceptance.get("per_seed_passed") is True,
+        "formal_passed": False,
         "source_commit": run_manifest["source_commit"],
         "training_run_manifest_sha256": _sha256(run_path / "run-manifest.json"),
         "development_ready_sha256": _sha256(readiness),
@@ -584,8 +590,13 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
     video_evidence = _video_acceptance(
         observer.results, tuple(sorted(tasks)), arguments.video_seed_count
     )
+    per_seed_passed = acceptance["passed"] and video_evidence["passed"]
     acceptance["video_evidence"] = video_evidence
-    acceptance["passed"] = acceptance["passed"] and video_evidence["passed"]
+    acceptance["schema_version"] = "hwr.foundation-per-seed-acceptance/v1"
+    acceptance["per_seed_passed"] = per_seed_passed
+    acceptance["formal_passed"] = False
+    acceptance["passed"] = False
+    acceptance["formal_requirement"] = "three_distinct_training_seeds"
     _write_json(output_path / "report.json", report.to_dict())
     _write_json(output_path / "acceptance.json", acceptance)
     manifest = _artifact_manifest(
@@ -594,7 +605,9 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
     _write_json(output_path / "manifest.json", manifest)
     return {
         "output_path": str(output_path),
-        "passed": acceptance["passed"],
+        "passed": False,
+        "per_seed_passed": per_seed_passed,
+        "formal_passed": False,
         "episode_count": len(report.episodes),
         "video_count": len(observer.results),
     }
@@ -603,7 +616,7 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
 def main(argv: Sequence[str] | None = None) -> int:
     result = run(build_parser().parse_args(argv))
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
-    return 0 if result["passed"] else 2
+    return 0 if result["per_seed_passed"] else 2
 
 
 if __name__ == "__main__":

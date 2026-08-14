@@ -134,6 +134,8 @@ class IntrinsicExplorationActorCritic(nn.Module):
             "state_novelty": novelty.mean(),
             "safety": trajectory.safety_probabilities.mean(),
             "severe_collision": trajectory.severe_collision_probabilities.mean(),
+            "motion_entropy": trajectory.motion_entropies.mean(),
+            "gripper_entropy": trajectory.gripper_entropies.mean(),
             "td_error": (value_predictions - returns.detach()).abs().mean(),
         }
         return losses, trajectory

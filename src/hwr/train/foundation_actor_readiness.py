@@ -8,7 +8,7 @@ from typing import Mapping
 from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
 
 
-ACTOR_READINESS_SCHEMA = "hwr.foundation-actor-readiness/v4"
+ACTOR_READINESS_SCHEMA = "hwr.foundation-actor-readiness/v5"
 
 
 EXPLORATION_CHECKS = (
@@ -134,6 +134,8 @@ class FoundationActorReadinessTracker:
         self.task_actor_unlocked = False
         self.exploration_actor_update_count = 0
         self.task_actor_update_count = 0
+        self.exploration_actor_warmup: dict[str, object] | None = None
+        self.task_actor_warmup: dict[str, object] | None = None
         self.last_assessment: dict[str, object] | None = None
 
     def assess(
@@ -236,6 +238,8 @@ class FoundationActorReadinessTracker:
             "collision_validation": dict(collision_validation),
             "exploration_actor_update_count": self.exploration_actor_update_count,
             "task_actor_update_count": self.task_actor_update_count,
+            "exploration_actor_warmup": self.exploration_actor_warmup,
+            "task_actor_warmup": self.task_actor_warmup,
             "task_semantic_fields": [],
         }
         self.last_assessment = assessment
@@ -253,6 +257,30 @@ class FoundationActorReadinessTracker:
         self.exploration_actor_update_count += count
         self._sync_update_counts()
 
+    def record_actor_warmup(
+        self,
+        actor_kind: str,
+        assessment: Mapping[str, object],
+        update_count: int,
+    ) -> None:
+        if actor_kind not in {"exploration", "task"} or update_count <= 0:
+            raise ValueError("Actor warmup result identity is invalid")
+        if (
+            assessment.get("actor_kind") != actor_kind
+            or int(assessment.get("update_count", -1)) != update_count
+        ):
+            raise ValueError("Actor warmup result differs")
+        value = dict(assessment)
+        if actor_kind == "exploration":
+            self.exploration_actor_warmup = value
+            if assessment.get("passed") is True:
+                self.record_exploration_actor_updates(update_count)
+        else:
+            self.task_actor_warmup = value
+            if assessment.get("passed") is True:
+                self.record_task_actor_updates(update_count)
+        self._sync_warmup_assessments()
+
     @property
     def exploration_ready_for_collection(self) -> bool:
         return self.exploration_unlocked and self.exploration_actor_update_count > 0
@@ -269,6 +297,14 @@ class FoundationActorReadinessTracker:
             self.last_assessment["task_actor_update_count"] = (
                 self.task_actor_update_count
             )
+            self._sync_warmup_assessments()
+
+    def _sync_warmup_assessments(self) -> None:
+        if self.last_assessment is not None:
+            self.last_assessment["exploration_actor_warmup"] = (
+                self.exploration_actor_warmup
+            )
+            self.last_assessment["task_actor_warmup"] = self.task_actor_warmup
 
     def state_dict(self) -> dict[str, object]:
         return {
@@ -280,6 +316,8 @@ class FoundationActorReadinessTracker:
             "task_actor_unlocked": self.task_actor_unlocked,
             "exploration_actor_update_count": self.exploration_actor_update_count,
             "task_actor_update_count": self.task_actor_update_count,
+            "exploration_actor_warmup": self.exploration_actor_warmup,
+            "task_actor_warmup": self.task_actor_warmup,
             "last_assessment": self.last_assessment,
         }
 
@@ -300,6 +338,16 @@ class FoundationActorReadinessTracker:
             value["exploration_actor_update_count"]
         )
         self.task_actor_update_count = int(value["task_actor_update_count"])
+        exploration_warmup = value.get("exploration_actor_warmup")
+        task_warmup = value.get("task_actor_warmup")
+        self.exploration_actor_warmup = (
+            dict(exploration_warmup)
+            if isinstance(exploration_warmup, Mapping)
+            else None
+        )
+        self.task_actor_warmup = (
+            dict(task_warmup) if isinstance(task_warmup, Mapping) else None
+        )
         last = value.get("last_assessment")
         self.last_assessment = dict(last) if isinstance(last, Mapping) else None
         if min(

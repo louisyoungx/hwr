@@ -31,7 +31,14 @@ class FoundationOnlineTrainingConfig:
     calibration_early_stop_episodes: int = 24
     collection_episodes_per_cycle: int = 3
     updates_per_cycle: int = 200
-    actor_warmup_updates: int = 1
+    actor_warmup_minimum_updates: int = 200
+    actor_warmup_maximum_updates: int = 1000
+    actor_warmup_window_updates: int = 50
+    actor_warmup_stable_windows: int = 3
+    actor_warmup_maximum_gradient_norm: float = 100.0
+    actor_warmup_maximum_return_relative_range: float = 0.25
+    actor_warmup_minimum_motion_entropy: float = 0.0
+    actor_warmup_minimum_gripper_entropy: float = -0.5
     severe_collision_batch_fraction: float = 0.25
     batch_size: int = 2
     sequence_transitions: int = 16
@@ -69,7 +76,10 @@ class FoundationOnlineTrainingConfig:
             self.calibration_early_stop_episodes,
             self.collection_episodes_per_cycle,
             self.updates_per_cycle,
-            self.actor_warmup_updates,
+            self.actor_warmup_minimum_updates,
+            self.actor_warmup_maximum_updates,
+            self.actor_warmup_window_updates,
+            self.actor_warmup_stable_windows,
             self.batch_size,
             self.sequence_transitions,
             self.camera_width,
@@ -108,6 +118,23 @@ class FoundationOnlineTrainingConfig:
             raise ValueError("Actor readiness Episodes exceed total Episodes")
         if self.calibration_early_stop_episodes > self.episodes:
             raise ValueError("calibration early stop exceeds total Episodes")
+        if not (
+            self.actor_warmup_window_updates
+            <= self.actor_warmup_minimum_updates
+            <= self.actor_warmup_maximum_updates
+        ):
+            raise ValueError("Actor warmup update bounds are invalid")
+        if (
+            self.actor_warmup_minimum_updates % self.actor_warmup_window_updates
+            or self.actor_warmup_maximum_updates % self.actor_warmup_window_updates
+            or self.actor_warmup_stable_windows
+            > self.actor_warmup_minimum_updates // self.actor_warmup_window_updates
+        ):
+            raise ValueError("Actor warmup windows are invalid")
+        if self.actor_warmup_maximum_gradient_norm <= 0.0:
+            raise ValueError("Actor warmup gradient limit must be positive")
+        if not 0.0 <= self.actor_warmup_maximum_return_relative_range <= 1.0:
+            raise ValueError("Actor warmup return stability limit is invalid")
         if not 0.0 <= self.augmentation_probability <= 1.0:
             raise ValueError("foundation augmentation probability is invalid")
         if not 0.0 <= self.severe_collision_batch_fraction <= 1.0:

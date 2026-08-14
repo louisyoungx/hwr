@@ -127,6 +127,7 @@ def _causality_run(tmp_path):
             },
             "lineage": foundation_lineage("abc123"),
             "training_config": {
+                "seed": 7,
                 "causality_audit_windows_per_task": 1,
                 "minimum_action_causality_ratio": 1.05,
                 "minimum_action_causality_horizon_fraction": 0.60,
@@ -349,11 +350,18 @@ def test_evaluation_manifest_hashes_training_data_model_and_gate_artifacts(
     output = tmp_path / "evaluation"
     output.mkdir()
     _write_json(output / "report.json", {"episodes": []})
-    _write_json(output / "acceptance.json", {"passed": True})
+    _write_json(output / "acceptance.json", {
+        "schema_version": "hwr.foundation-per-seed-acceptance/v1",
+        "passed": False,
+        "per_seed_passed": True,
+        "formal_passed": False,
+    })
 
     manifest = _artifact_manifest(output, run, (31,), ())
 
-    assert manifest["schema_version"] == "hwr.foundation-evaluation-run/v2"
+    assert manifest["schema_version"] == "hwr.foundation-evaluation-run/v3"
+    assert manifest["per_seed_passed"] is True
+    assert manifest["formal_passed"] is False
     assert {
         "training/development-ready.json",
         "training/episodes.jsonl",

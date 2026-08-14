@@ -629,15 +629,24 @@ class FoundationOnlineTrainingRunner:
             self.config,
             train_task_actor=actor_kind == "task",
         )
-        if actor_kind == "task":
-            self.actor_readiness.record_task_actor_updates(
-                self.config.actor_warmup_updates
+        self.actor_readiness.record_actor_warmup(
+            actor_kind, metrics.assessment, metrics.update_count
+        )
+        if metrics.assessment["passed"] is not True:
+            failed = [
+                name
+                for name, passed in metrics.assessment["checks"].items()
+                if passed is not True
+            ]
+            raise RuntimeError(
+                "foundation Actor warmup failed stability checks: "
+                + ", ".join(failed)
             )
-        else:
-            self.actor_readiness.record_exploration_actor_updates(
-                self.config.actor_warmup_updates
-            )
-        return {f"warmup/{name}": value for name, value in metrics.items()}
+        return {
+            **{f"warmup/{name}": value for name, value in metrics.metrics.items()},
+            "warmup/update_count": float(metrics.update_count),
+            "warmup/stability_passed": 1.0,
+        }
 
     def _raise_if_calibration_failed(self) -> None:
         if len(self.records) < self.config.calibration_early_stop_episodes:
