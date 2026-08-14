@@ -78,6 +78,7 @@ class IntrinsicRLActorActionSource(CurrentRLActorActionSource):
                 "world_model_uncertainty",
                 "latent_state_novelty",
                 "predicted_safety_cost",
+                "predicted_severe_collision",
                 "policy_entropy",
             ],
             "environment_reward": False,
@@ -177,6 +178,7 @@ class AutonomousEpisodeCollector:
             "success": bool(result and result.success),
             "result_reason": result.reason if result else "step_limit",
             "result_metrics": dict(result.metrics) if result else {},
+            "interaction_audit": _interaction_audit(backend),
         }
         return AutonomousEpisode(
             episode_id=f"episode-{uuid.uuid4().hex}",
@@ -311,3 +313,36 @@ def _safety_intervention(frame: DualArmActionFrame, info, events) -> float:
     intervention = bool(info.get("safety_intervened", False))
     rejected = any(event.event_type == "action_rejected" for event in events)
     return float(changed or intervention or rejected)
+
+
+def _interaction_audit(backend: RuntimeBackend) -> dict[str, float]:
+    """Copy a task-independent physical coverage whitelist after an Episode."""
+    audit = getattr(backend, "task_audit", None)
+    raw = audit() if callable(audit) else {}
+    if not isinstance(raw, Mapping):
+        raise TypeError("runtime interaction audit must be a mapping")
+    metrics = raw.get("metrics", {})
+    if not isinstance(metrics, Mapping):
+        raise TypeError("runtime interaction metrics must be a mapping")
+    values = {
+        "left_contact_steps": float(raw.get("left_contact_steps", 0.0)),
+        "right_contact_steps": float(raw.get("right_contact_steps", 0.0)),
+        "simultaneous_contact_steps": float(
+            raw.get("simultaneous_contact_steps", 0.0)
+        ),
+        "maximum_controlled_rigid_displacement": float(
+            metrics.get("maximum_controlled_target_progress", 0.0)
+        ),
+        "maximum_controlled_articulation_displacement": float(
+            metrics.get("maximum_controlled_articulation_progress", 0.0)
+        ),
+        "severe_collision_count": float(
+            raw.get(
+                "severe_collision_count",
+                metrics.get("severe_collisions", 0.0),
+            )
+        ),
+    }
+    if not all(np.isfinite(value) and value >= 0.0 for value in values.values()):
+        raise ValueError("runtime interaction audit contains invalid values")
+    return values

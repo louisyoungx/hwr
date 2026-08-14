@@ -184,6 +184,7 @@ class FoundationWorldModelTrainer:
             batch.rewards,
             batch.continues,
             batch.safety_interventions,
+            batch.severe_collisions,
         )
         world_losses = self.world_objective(world_output, world_targets)
         self.world_optimizer.zero_grad(set_to_none=True)
@@ -228,6 +229,57 @@ class FoundationWorldModelTrainer:
             "trainer/update_count": float(self.update_count),
         }
         return metrics
+
+    def actor_warmup_step(
+        self,
+        batch: FoundationTrainingBatch,
+        *,
+        train_task_actor: bool,
+    ) -> dict[str, float]:
+        """Update one newly admitted Actor without changing the audited world model."""
+        self._check_batch_dimensions(batch)
+        self.visual_student.eval()
+        self.world_model.eval()
+        with torch.no_grad():
+            visual = encode_visual_student_bounded(
+                self.visual_student,
+                batch,
+                microbatch_observations=(
+                    self.config.visual_inference_microbatch_observations
+                ),
+            )
+            sequence = visual.pooled_state.reshape(
+                batch.sequence_batch_size,
+                batch.observation_count,
+                self.world_model.config.visual_dimension,
+            )
+            output = self.world_model.observe(
+                sequence,
+                batch.language_features,
+                batch.proprioception,
+                batch.actor_proposals,
+                batch.executed_actions,
+            )
+            initial = RSSMState(
+                output.sequence.deterministic.flatten(0, 1),
+                output.sequence.stochastic.flatten(0, 1),
+            )
+        if train_task_actor:
+            metrics = optimize_imagination_step(
+                self.imagination,
+                initial,
+                self.actor_optimizer,
+                self.value_optimizer,
+            )
+        else:
+            metrics = optimize_intrinsic_exploration_step(
+                self.intrinsic_exploration,
+                initial,
+                self.exploration_actor_optimizer,
+                self.exploration_value_optimizer,
+            )
+        prefix = "imagination" if train_task_actor else "exploration"
+        return {f"{prefix}/{name}": value for name, value in metrics.items()}
 
     @property
     def visual_update_due(self) -> bool:

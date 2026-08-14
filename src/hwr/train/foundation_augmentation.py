@@ -65,6 +65,7 @@ def transform_foundation_batch(
         batch.rewards.clone(),
         batch.continues.clone(),
         batch.safety_interventions.clone(),
+        batch.severe_collisions.clone(),
     )
 
 

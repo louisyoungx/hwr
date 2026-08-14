@@ -144,6 +144,9 @@ class FoundationSequenceBatchLoader:
             ).to(
                 self.device
             ),
+            torch.from_numpy(
+                np.stack([value["severe_collisions"] for value in sequences])
+            ).to(self.device),
         )
 
     def _sequence(
@@ -203,6 +206,12 @@ class FoundationSequenceBatchLoader:
             "reward": arrays["reward"].astype(np.float32),
             "continue": (~terminal).astype(np.float32),
             "safety_interventions": arrays["safety_intervention"].astype(np.float32),
+            "severe_collisions": (
+                arrays["terminated"].astype(np.float32)
+                if metadata.get("metadata", {}).get("result_reason")
+                == "severe_collision"
+                else np.zeros_like(arrays["reward"], dtype=np.float32)
+            ),
         }
 
     def _teacher_arrays(

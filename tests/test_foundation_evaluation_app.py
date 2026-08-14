@@ -28,7 +28,7 @@ from hwr.train.development_gate import (
 def test_foundation_evaluation_defaults_match_fixed_acceptance_protocol() -> None:
     arguments = build_parser().parse_args(["runs/example"])
 
-    assert arguments.seed_count == 20
+    assert arguments.seed_count == 40
     assert arguments.video_seed_count == 1
     assert ABLATIONS == ("none", "lock_left", "lock_right")
 
@@ -117,7 +117,7 @@ def _causality_run(tmp_path):
     _write_json(
         run / "run-manifest.json",
         {
-            "schema_version": "hwr.foundation-online-run/v3",
+            "schema_version": "hwr.foundation-online-run/v4",
             "source_commit": "abc123",
             "development_ready": {
                 "schema_version": DEVELOPMENT_READY_SCHEMA,
@@ -228,7 +228,7 @@ def _causality_run(tmp_path):
                     "transition_stop": 16,
                 }
             ],
-            "holdout_collector": "foundation-causality-holdout/v1",
+            "holdout_collector": "foundation-causality-holdout/v2",
             "source_commit": "abc123",
             "update_count": 1,
             "training_data_manifest_sha256": _digest(training_manifest),

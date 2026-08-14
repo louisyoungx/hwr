@@ -1,15 +1,25 @@
-"""Task-blind linear probe for action identifiability in autonomous replay."""
+"""Per-task, Episode-clustered probe for action identifiability."""
 
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Sequence
 
 import numpy as np
 
 
-ACTION_PROBE_SCHEMA = "hwr.foundation-data-action-probe/v1"
+ACTION_PROBE_SCHEMA = "hwr.foundation-data-action-probe/v2"
+
+
+@dataclass(frozen=True)
+class _EpisodeTransitions:
+    task_id: str
+    episode_id: str
+    state: np.ndarray
+    action: np.ndarray
+    target: np.ndarray
 
 
 def evaluate_foundation_data_action_probe(
@@ -23,7 +33,7 @@ def evaluate_foundation_data_action_probe(
     bootstrap_seed: int = 0,
     maximum_training_transitions: int = 20_000,
 ) -> dict[str, object]:
-    """Compare state-only and state+action prediction of proprioceptive deltas."""
+    """Compare state-only and state+action models independently for every task."""
     if (
         ridge <= 0.0
         or bootstrap_samples <= 0
@@ -31,15 +41,75 @@ def evaluate_foundation_data_action_probe(
         or maximum_training_transitions <= 0
     ):
         raise ValueError("foundation action probe configuration is invalid")
-    train_state, train_action, train_target = _load_transitions(
-        training_path, training_manifest, maximum_training_transitions
-    )
-    test_state, test_action, test_target = _load_transitions(
-        holdout_path, holdout_manifest, None
-    )
-    state_only = _fit_predict_ridge(
-        train_state, train_target, test_state, ridge=ridge
-    )
+    training = _load_episodes(training_path, training_manifest)
+    holdout = _load_episodes(holdout_path, holdout_manifest)
+    task_ids = tuple(sorted({item.task_id for item in training}))
+    if not task_ids or {item.task_id for item in holdout} != set(task_ids):
+        raise ValueError("foundation action probe task coverage differs")
+    quota = maximum_training_transitions // len(task_ids)
+    if quota <= 0:
+        raise ValueError("foundation action probe training limit is too small")
+    partitions: dict[str, dict[str, object]] = {}
+    bootstrap_by_task: list[np.ndarray] = []
+    for task_index, task_id in enumerate(task_ids):
+        train_task = _limit_episodes(
+            [item for item in training if item.task_id == task_id], quota
+        )
+        holdout_task = [item for item in holdout if item.task_id == task_id]
+        report, ratios = _evaluate_partition(
+            train_task,
+            holdout_task,
+            ridge=ridge,
+            bootstrap_samples=bootstrap_samples,
+            bootstrap_seed=bootstrap_seed + task_index * 104_729,
+        )
+        partitions[task_id] = report
+        bootstrap_by_task.append(ratios)
+    aggregate_ratios = np.stack(bootstrap_by_task).mean(axis=0)
+    state_mse = float(np.mean([value["state_only_mse"] for value in partitions.values()]))
+    action_mse = float(np.mean([value["state_action_mse"] for value in partitions.values()]))
+    return {
+        "schema_version": ACTION_PROBE_SCHEMA,
+        "partition_key": "task_id",
+        "inputs": {
+            "state_only": ["proprioception"],
+            "state_action": ["proprioception", "actual_executed_action"],
+            "target": "next_proprioception_delta",
+            "task_semantic_fields": [],
+        },
+        "training_transition_count": sum(
+            int(value["training_transition_count"]) for value in partitions.values()
+        ),
+        "holdout_transition_count": sum(
+            int(value["holdout_transition_count"]) for value in partitions.values()
+        ),
+        "state_only_mse": state_mse,
+        "state_action_mse": action_mse,
+        "state_only_to_state_action_ratio": state_mse / max(action_mse, 1.0e-12),
+        "bootstrap": _bootstrap_summary(
+            aggregate_ratios, bootstrap_samples, bootstrap_seed
+        ),
+        "partitions": partitions,
+    }
+
+
+def _evaluate_partition(
+    training: Sequence[_EpisodeTransitions],
+    holdout: Sequence[_EpisodeTransitions],
+    *,
+    ridge: float,
+    bootstrap_samples: int,
+    bootstrap_seed: int,
+) -> tuple[dict[str, object], np.ndarray]:
+    if not training or not holdout:
+        raise ValueError("foundation action probe partition is empty")
+    train_state = np.concatenate([item.state for item in training])
+    train_action = np.concatenate([item.action for item in training])
+    train_target = np.concatenate([item.target for item in training])
+    test_state = np.concatenate([item.state for item in holdout])
+    test_action = np.concatenate([item.action for item in holdout])
+    test_target = np.concatenate([item.target for item in holdout])
+    state_only = _fit_predict_ridge(train_state, train_target, test_state, ridge=ridge)
     state_action = _fit_predict_ridge(
         np.concatenate((train_state, train_action), axis=1),
         train_target,
@@ -48,66 +118,82 @@ def evaluate_foundation_data_action_probe(
     )
     state_errors = np.square(state_only - test_target).mean(axis=1)
     action_errors = np.square(state_action - test_target).mean(axis=1)
-    state_mse = float(state_errors.mean())
-    action_mse = float(action_errors.mean())
-    ratios = _bootstrap_ratios(
-        state_errors,
-        action_errors,
+    episode_lengths = tuple(len(item.state) for item in holdout)
+    state_episode = _episode_means(state_errors, episode_lengths)
+    action_episode = _episode_means(action_errors, episode_lengths)
+    ratios = _bootstrap_episode_ratios(
+        state_episode,
+        action_episode,
         samples=bootstrap_samples,
         seed=bootstrap_seed,
     )
+    state_mse = float(state_episode.mean())
+    action_mse = float(action_episode.mean())
     return {
-        "schema_version": ACTION_PROBE_SCHEMA,
-        "inputs": {
-            "state_only": ["proprioception"],
-            "state_action": ["proprioception", "actual_executed_action"],
-            "target": "next_proprioception_delta",
-            "task_semantic_fields": [],
-        },
-        "training_transition_count": int(len(train_state)),
-        "holdout_transition_count": int(len(test_state)),
+        "training_episode_count": len(training),
+        "training_transition_count": len(train_state),
+        "holdout_episode_count": len(holdout),
+        "holdout_transition_count": len(test_state),
+        "holdout_episode_ids": [item.episode_id for item in holdout],
+        "episode_weighting": "uniform",
         "state_only_mse": state_mse,
         "state_action_mse": action_mse,
         "state_only_to_state_action_ratio": state_mse / max(action_mse, 1.0e-12),
-        "bootstrap": {
-            "samples": bootstrap_samples,
-            "seed": bootstrap_seed,
-            "ratio_p05": float(np.quantile(ratios, 0.05)),
-            "ratio_median": float(np.median(ratios)),
-            "ratio_p95": float(np.quantile(ratios, 0.95)),
-        },
-    }
+        "bootstrap": _bootstrap_summary(ratios, bootstrap_samples, bootstrap_seed),
+    }, ratios
 
 
-def _load_transitions(
-    root: Path,
-    manifest: Mapping[str, object],
-    maximum: int | None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    states = []
-    actions = []
-    targets = []
-    for shard in manifest.get("shards", ()):
-        path = root / str(shard["path"])
-        with np.load(path, allow_pickle=False) as arrays:
+def _load_episodes(
+    root: Path, manifest: Mapping[str, object]
+) -> list[_EpisodeTransitions]:
+    result = []
+    for shard_index, shard in enumerate(manifest.get("shards", ())):
+        task_id = str(shard.get("task_id", ""))
+        episode_id = str(shard.get("episode_id", f"shard-{shard_index}"))
+        if not task_id:
+            raise ValueError("foundation action probe shard has no task identity")
+        with np.load(root / str(shard["path"]), allow_pickle=False) as arrays:
             proprioception = arrays["proprioception"].astype(np.float64)
             executed = arrays["executed_action"].astype(np.float64)
-        states.append(proprioception[:-1])
-        actions.append(executed)
-        targets.append(np.diff(proprioception, axis=0))
-    if not states:
+        item = _EpisodeTransitions(
+            task_id,
+            episode_id,
+            proprioception[:-1],
+            executed,
+            np.diff(proprioception, axis=0),
+        )
+        if len(item.state) < 2 or not all(
+            np.isfinite(value).all() for value in (item.state, item.action, item.target)
+        ):
+            raise ValueError("foundation action probe transitions are invalid")
+        result.append(item)
+    if not result:
         raise ValueError("foundation action probe replay is empty")
-    state = np.concatenate(states)
-    action = np.concatenate(actions)
-    target = np.concatenate(targets)
-    if maximum is not None and len(state) > maximum:
-        indices = np.linspace(0, len(state) - 1, maximum).round().astype(np.int64)
-        state, action, target = state[indices], action[indices], target[indices]
-    if len(state) < 2 or not all(
-        np.isfinite(value).all() for value in (state, action, target)
-    ):
-        raise ValueError("foundation action probe transitions are invalid")
-    return state, action, target
+    return result
+
+
+def _limit_episodes(
+    episodes: Sequence[_EpisodeTransitions], maximum: int
+) -> list[_EpisodeTransitions]:
+    if not episodes:
+        return []
+    quota, remainder = divmod(maximum, len(episodes))
+    result = []
+    for index, item in enumerate(episodes):
+        count = min(len(item.state), quota + int(index < remainder))
+        if count < 2:
+            raise ValueError("foundation action probe episode quota is too small")
+        indices = np.linspace(0, len(item.state) - 1, count).round().astype(np.int64)
+        result.append(
+            _EpisodeTransitions(
+                item.task_id,
+                item.episode_id,
+                item.state[indices],
+                item.action[indices],
+                item.target[indices],
+            )
+        )
+    return result
 
 
 def _fit_predict_ridge(
@@ -133,7 +219,15 @@ def _fit_predict_ridge(
     return prediction
 
 
-def _bootstrap_ratios(
+def _episode_means(errors: np.ndarray, lengths: Sequence[int]) -> np.ndarray:
+    offsets = np.cumsum((0, *lengths))
+    return np.asarray(
+        [errors[offsets[index] : offsets[index + 1]].mean() for index in range(len(lengths))],
+        np.float64,
+    )
+
+
+def _bootstrap_episode_ratios(
     state_errors: np.ndarray,
     action_errors: np.ndarray,
     *,
@@ -150,3 +244,16 @@ def _bootstrap_ratios(
     if not all(math.isfinite(value) and value >= 0.0 for value in result):
         raise ValueError("foundation action probe bootstrap is invalid")
     return result
+
+
+def _bootstrap_summary(
+    ratios: np.ndarray, samples: int, seed: int
+) -> dict[str, object]:
+    return {
+        "unit": "episode_cluster",
+        "samples": samples,
+        "seed": seed,
+        "ratio_p05": float(np.quantile(ratios, 0.05)),
+        "ratio_median": float(np.median(ratios)),
+        "ratio_p95": float(np.quantile(ratios, 0.95)),
+    }

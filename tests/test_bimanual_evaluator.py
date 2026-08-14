@@ -18,6 +18,7 @@ from hwr.eval import (
     combine_bimanual_reports,
     evaluate_bimanual_policy,
 )
+from hwr.eval.bimanual import _wilson_interval
 
 
 TASK_ID = "bimanual-eval/v1"
@@ -180,3 +181,10 @@ def test_acceptance_requires_normal_success_and_both_single_arm_ablations() -> N
         "lock_left": 1.0,
         "lock_right": 1.0,
     }
+
+
+def test_wilson_interval_does_not_treat_fourteen_of_twenty_as_seventy_percent() -> None:
+    lower, upper = _wilson_interval(14, 20, 0.95)
+
+    assert lower < 0.50
+    assert upper > 0.70

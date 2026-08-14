@@ -21,6 +21,7 @@ def run_foundation_update_cycle(
     updates: int,
     batch_size: int,
     augmentation_probability: float,
+    severe_collision_batch_fraction: float,
     train_task_actor: bool,
     train_exploration_actor: bool,
     progress_interval: int,
@@ -31,7 +32,11 @@ def run_foundation_update_cycle(
     sampler = ShardLocalWindowSampler(loader)
     metrics: list[dict[str, float]] = []
     for _ in range(updates):
-        indices = sampler.sample(rng, batch_size)
+        indices = sampler.sample(
+            rng,
+            batch_size,
+            severe_collision_fraction=severe_collision_batch_fraction,
+        )
         batch = loader.build(
             indices, include_visual_targets=trainer.visual_update_due
         )
@@ -66,15 +71,39 @@ class ShardLocalWindowSampler:
         self.indices = tuple(tuple(grouped[shard]) for shard in self.shards)
         counts = np.asarray([len(values) for values in self.indices], np.float64)
         self.probabilities = counts / counts.sum()
+        metadata = getattr(loader, "window_metadata", None)
+        self.severe_collision_indices = tuple(
+            index
+            for index in range(len(loader))
+            if callable(metadata)
+            and _is_severe_collision_window(metadata(index))
+        )
 
     def sample(
-        self, rng: np.random.Generator, batch_size: int
+        self,
+        rng: np.random.Generator,
+        batch_size: int,
+        *,
+        severe_collision_fraction: float = 0.0,
     ) -> tuple[int, ...]:
-        if batch_size <= 0:
+        if batch_size <= 0 or not 0.0 <= severe_collision_fraction <= 1.0:
             raise ValueError("foundation replay batch size must be positive")
+        if self.severe_collision_indices and rng.random() < severe_collision_fraction:
+            index = int(rng.choice(self.severe_collision_indices))
+            return (index,) * batch_size
         shard = int(rng.choice(len(self.indices), p=self.probabilities))
         values = rng.choice(self.indices[shard], size=batch_size, replace=True)
         return tuple(int(value) for value in values)
+
+
+def _is_severe_collision_window(metadata: Mapping[str, object]) -> bool:
+    episode = metadata.get("metadata", {})
+    return (
+        isinstance(episode, Mapping)
+        and episode.get("result_reason") == "severe_collision"
+        and int(metadata.get("transition_stop", -1))
+        == int(metadata.get("transition_count", -2))
+    )
 
 
 def _sample_transform(

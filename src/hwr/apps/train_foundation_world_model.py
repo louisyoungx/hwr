@@ -6,6 +6,8 @@ import argparse
 import json
 import os
 import shutil
+import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 
@@ -48,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--foundation-device", default="cpu")
+    parser.add_argument("--seed", type=int)
     parser.add_argument(
         "--development-ready",
         type=Path,
@@ -94,6 +97,8 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     config = FoundationOnlineTrainingConfig(
         **_config(root / "configs/foundation/online-training-v1.json")
     )
+    if arguments.seed is not None:
+        config = replace(config, seed=arguments.seed)
     interfaces = {
         task_id: FoundationTaskInterface(task_id, task.max_steps)
         for task_id, task in tasks.items()
@@ -155,6 +160,18 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         run_path,
         source_commit=readiness["source_commit"],
         development_ready_sha256=readiness_sha256,
+        execution={
+            "device": arguments.device,
+            "foundation_device": arguments.foundation_device,
+            "python": sys.executable,
+            "process_nice": os.getpriority(os.PRIO_PROCESS, 0),
+            "pytorch_mps_high_watermark_ratio": os.environ.get(
+                "PYTORCH_MPS_HIGH_WATERMARK_RATIO"
+            ),
+            "pytorch_mps_low_watermark_ratio": os.environ.get(
+                "PYTORCH_MPS_LOW_WATERMARK_RATIO"
+            ),
+        },
     )
     if arguments.resume:
         runner.resume_latest()

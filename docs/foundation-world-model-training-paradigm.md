@@ -144,6 +144,10 @@ Transformers 版本。缺少 torchvision、版本族不匹配或回退到不存�
 默认语言编码器为冻结的 Qwen3-Embedding-0.6B。每条自然语言指令按规范化文本计算一次
 并缓存，运行时按内容哈希读取。它只输出连续语义向量，不生成文本、计划或动作。
 
+当前每个预训练任务只有一条固定指令，因此 Qwen3 表征只能解释为连续任务上下文，不能
+据此声称语言泛化。正式家庭场景若要声明语言能力，必须另外使用未参与训练的同义改写、
+组合指令和不同意图划分，并验证物理成功率，而不是只比较 embedding 相似度。
+
 旧 `FrozenNgramLanguageEncoder` 仅保留给历史 checkpoint 和快速接口回归。正式
 `development-ready` 检查必须拒绝将其登记为当前部署语言编码器。
 
@@ -354,7 +358,8 @@ Actor 只能对潜在状态求值和采样自己的动作。禁止使用 CEM、M
 空专家/示范集合、关闭
 行为克隆/教师动作/动作搜索，并且没有旧 P 系列父 checkpoint。保存、恢复和最终评测都要
 按完整结构比较，不能只检查 `source_commit`，也不能把“字段存在”当作“字段为空”。正式
-run manifest schema 为 `hwr.foundation-online-run/v3`，旧 v1/v2 不进入新谱系。
+run manifest schema 为 `hwr.foundation-online-run/v4`，旧 v1/v2/v3 不进入新谱系；v4 还
+固化实际生效的训练设备、基础教师设备、Python 路径、进程 nice 值和 MPS 高低水位。
 
 ### 9.1 本机存储上限
 
@@ -377,14 +382,16 @@ Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默�
 - `PYTORCH_MPS_LOW_WATERMARK_RATIO=0.50`，约 18.72 GiB 后启用 allocator 回收与 adaptive commit；
 - 训练进程以 `nice 10` 运行，让交互程序优先获得 CPU；
 - 每卸载一个冻结基础模型，并且每 10 个优化 step，释放一次不再被活跃 tensor 引用的
-  MPS/CUDA allocator cache。
+  MPS/CUDA allocator cache；最终生效值写入不可变 run manifest，不能只留在启动 shell。
 - 视觉学生保持有效 batch 和完整 16-step 世界模型窗口，但按最多 4 个 observation 做梯度
   累积；相邻 observation 的四帧三相机 ConvNeXt 激活不再同时驻留统一内存。视觉更新完成
   后再把按原顺序拼接且停止梯度的连续 latent 交给世界模型和想象 RL。
 - 世界模型保持每步更新；视觉学生按固定的 4-step 全局间隔更新。非视觉更新只以最多 8 个
   observation 的无梯度微批生成 latent，不构建几何对应，也不加载 DINOv3/SigLIP teacher
   target。间隔只读取全局 update count，不读取任务或环境反馈。
-- replay window 的边际分布仍为均匀分布，但一个 batch 只从同一 Episode shard 抽样，避免
+- 普通 replay window 的边际分布仍为均匀分布，但 25% batch 为严重碰撞终止窗口保留；
+  严重碰撞头使用类别加权 BCE，避免稀有正例被大量正常 transition 淹没。一个 batch 仍
+  只从同一 Episode shard 抽样，避免
   在两个序列之间反复解压大 shard；冻结视觉特征按 source hash 在 batch 内去重，并使用
   最多 16 条只读 LRU，缓存容量不能随 replay 增长。
 
@@ -409,6 +416,17 @@ Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默�
 本机只读面板只能轮询这些 JSON 和有界的最近 Episode 记录，不得扫描 replay、特征缓存或
 模型权重。面板默认仅监听 `127.0.0.1`，是旁路观测工具，不参与采样、奖励或优化。
 
+动作可辨识 probe 必须逐任务独立拟合，不能混合任务后把任务身份差异误判为动作因果；其
+置信区间按 Episode 聚类 bootstrap，留出集每条 Episode 必须贡献同量不重叠窗口，过短轨迹
+使用确定性替代 seed 重采。Actor 解锁还要求逐任务出现外部接触、受控刚体或关节运动，以
+及严重碰撞正负 Episode；新解锁 Actor 至少完成一次不更新世界模型的专用 warm-up 后才可
+成为采集源。24 个 Episode 后仍缺动作可辨识、接触或受控运动证据的运行作为校准失败提前
+停止，不能盲跑完整预算。
+
+内在探索的新颖度是相对当前想象历史和 replay batch 状态的 kNN 距离，不再是相邻状态变化
+量；快速往复挥臂回到已见状态不会持续获得高奖励。世界模型分别预测安全层改写和真实严重
+碰撞，两个成本都进入探索 Actor 与任务 Actor 的想象回报，安全过滤本身仍独立于策略。
+
 观测体系是后续准入门禁的前提，不是补救失败训练的可视化包装。若梯度非有限、动作有效
 维度塌缩、提案持续被安全层覆盖，或动作因果长期约等于 `1`，runner 必须据此阻止升级采集
 阶段，而不是继续堆更新。
@@ -419,18 +437,23 @@ Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默�
 为任一场景增加算法分支。训练过程可以断点续训和按可恢复 checkpoint 提交，但不因中间
 指标重新切换到手写课程或专家数据。
 
-正式后台启动统一使用 `scripts/start_foundation_training_tmux.sh RUN_ID [--resume]`。该入口
+正式后台启动统一使用
+`scripts/start_foundation_training_tmux.sh RUN_ID [--resume] [--seed SEED]`。该入口
 固定调用唯一 foundation 训练应用、run root、readiness、模型目录和飞书机器人完成通知，
 并拒绝重复 tmux session 或不安全的 run id；它不提供跳过门禁参数。
 
 最终必须满足：
 
-- 收纳篮、托盘和抽屉放物三个任务分别评测至少 20 个未见随机种子；“未见”必须同时
+- 每个候选配置至少运行 3 个互不相同的训练 seed；单 seed 只能作为校准或失败分析，不能
+  单独支持正式能力结论；
+- 正式家庭场景前先报告到达、单侧接触、双侧稳定接触、受控刚体/关节运动和完整任务五级
+  物理基准；这些级别用于诊断覆盖，不向 Actor 提供任务阶段或动作答案；
+- 收纳篮、托盘和抽屉放物三个任务分别评测至少 40 个未见随机种子；“未见”必须同时
   排除训练 Episode 与动作因果留出集使用过的全部种子，即使手工指定评测起始种子也一样；
-- 每个任务成功率不低于 70%；
+- 每个任务观测成功率不低于 70%，且 95% Wilson 区间下界也不低于 70%；
 - 严重碰撞为 0；
 - 成功状态稳定至少 2 秒；
-- 分别锁定左臂或右臂后，同任务成功率低于 10%；
+- 分别锁定左臂或右臂后，同任务成功率及 95% Wilson 区间上界均低于 10%；
 - 评测仅运行重载后的确定性 Actor，关闭探索和训练写入；
 - 同一评测进程直接录制第三人称、头部、左腕和右腕未经剪辑的视频；
 - 数据、模型、代码提交、配置、逐 Episode 结果、视频和反作弊报告可由哈希互相追溯。

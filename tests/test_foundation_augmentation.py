@@ -64,6 +64,7 @@ def _batch() -> FoundationTrainingBatch:
         torch.zeros(batch, observations - 1),
         torch.ones(batch, observations - 1),
         torch.zeros(batch, observations - 1),
+        torch.zeros(batch, observations - 1),
     )
 
 

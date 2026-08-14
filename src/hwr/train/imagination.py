@@ -23,6 +23,7 @@ class ImaginedTrajectory(NamedTuple):
     rewards: torch.Tensor
     continues: torch.Tensor
     safety_probabilities: torch.Tensor
+    severe_collision_probabilities: torch.Tensor
     uncertainties: torch.Tensor
 
 
@@ -46,6 +47,7 @@ def imagine_trajectory(
     rewards: list[torch.Tensor] = []
     continues: list[torch.Tensor] = []
     safety: list[torch.Tensor] = []
+    severe_collisions: list[torch.Tensor] = []
     uncertainties: list[torch.Tensor] = []
     for _ in range(horizon):
         feature = world_model.rssm.features(state)
@@ -56,6 +58,7 @@ def imagine_trajectory(
             else sample.action
         )
         safety_logits = world_model.predict_safety_intervention(feature, action)
+        collision_logits = world_model.predict_severe_collision(feature, action)
         state, _, ensemble = world_model.rssm.step_prior(
             state, action, sample=True
         )
@@ -77,6 +80,7 @@ def imagine_trajectory(
         )
         continues.append(continue_logits.sigmoid())
         safety.append(safety_logits.sigmoid())
+        severe_collisions.append(collision_logits.sigmoid())
         uncertainties.append(
             ensemble_probability.var(dim=1, unbiased=False).mean(dim=(-1, -2))
         )
@@ -91,6 +95,7 @@ def imagine_trajectory(
             rewards,
             continues,
             safety,
+            severe_collisions,
             uncertainties,
         ))
     )

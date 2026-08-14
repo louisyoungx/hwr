@@ -34,6 +34,14 @@ def test_formal_training_cli_has_no_gate_bypass_option() -> None:
     assert "demonstration" not in destinations
 
 
+def test_formal_training_cli_accepts_an_audited_independent_seed() -> None:
+    arguments = build_parser().parse_args(
+        ["--run-id", "replicate-a", "--seed", "20260815"]
+    )
+
+    assert arguments.seed == 20260815
+
+
 def test_development_gate_requires_the_full_named_evidence_set() -> None:
     assert REQUIRED_DEVELOPMENT_CHECKS == {
         "protected_tree",

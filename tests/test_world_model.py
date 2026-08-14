@@ -77,6 +77,7 @@ def test_world_model_losses_train_dynamics_and_outcome_heads() -> None:
         reward=torch.randn(2, 4),
         continues=torch.ones(2, 4),
         safety_interventions=torch.zeros(2, 4),
+        severe_collisions=torch.zeros(2, 4),
     )
     objective = WorldModelLoss(config, WorldModelLossConfig())
 
@@ -85,12 +86,14 @@ def test_world_model_losses_train_dynamics_and_outcome_heads() -> None:
 
     assert set(losses) == {
         "visual", "proprioception", "reward", "continue", "safety",
+        "severe_collision",
         "dynamics", "representation", "ensemble", "total",
     }
     assert all(torch.isfinite(value) for value in losses.values())
     assert model.rssm.recurrent.weight_hh.grad is not None
     assert model.reward_head[-1].weight.grad is not None
     assert model.safety_head[-1].weight.grad is not None
+    assert model.severe_collision_head[-1].weight.grad is not None
 
 
 def test_actor_proposals_affect_safety_head_but_not_executed_dynamics() -> None:

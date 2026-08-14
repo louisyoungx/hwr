@@ -11,7 +11,7 @@ from hwr.train.development_gate import DEVELOPMENT_READY_SCHEMA
 from hwr.train.foundation_registry import foundation_lineage
 
 
-FOUNDATION_RUN_SCHEMA = "hwr.foundation-online-run/v3"
+FOUNDATION_RUN_SCHEMA = "hwr.foundation-online-run/v4"
 
 
 def write_or_verify_foundation_run_manifest(
@@ -22,6 +22,7 @@ def write_or_verify_foundation_run_manifest(
     training_config: Mapping[str, object],
     tasks: Sequence[Mapping[str, object]],
     preprocessing: Mapping[str, object],
+    execution: Mapping[str, object],
 ) -> dict[str, object]:
     """Create one manifest, or require an exact match before resuming."""
     manifest: dict[str, object] = {
@@ -35,6 +36,7 @@ def write_or_verify_foundation_run_manifest(
         "training_config": dict(training_config),
         "tasks": [dict(task) for task in tasks],
         "preprocessing": dict(preprocessing),
+        "execution": dict(execution),
         "lineage": foundation_lineage(source_commit),
     }
     path = run_path / "run-manifest.json"

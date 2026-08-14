@@ -24,6 +24,7 @@ class FoundationTrainingBatch:
     rewards: torch.Tensor
     continues: torch.Tensor
     safety_interventions: torch.Tensor
+    severe_collisions: torch.Tensor
 
     def __post_init__(self) -> None:
         if frozenset(self.student_inputs) != VISUAL_STUDENT_INPUT_FIELDS:
@@ -50,6 +51,10 @@ class FoundationTrainingBatch:
                 self.sequence_batch_size,
                 self.observation_count - 1,
             ),
+            "severe_collisions": (
+                self.sequence_batch_size,
+                self.observation_count - 1,
+            ),
         }
         values = {
             "language_features": self.language_features,
@@ -59,6 +64,7 @@ class FoundationTrainingBatch:
             "rewards": self.rewards,
             "continues": self.continues,
             "safety_interventions": self.safety_interventions,
+            "severe_collisions": self.severe_collisions,
         }
         mismatches = {
             name: (tuple(values[name].shape), prefix)
@@ -75,6 +81,7 @@ class FoundationTrainingBatch:
             self.executed_actions,
             self.rewards,
             self.safety_interventions,
+            self.severe_collisions,
         )
         if not all(torch.isfinite(value).all() for value in floating):
             raise ValueError("foundation batch contains non-finite values")

@@ -29,6 +29,7 @@ _FORBIDDEN_DEPLOYMENT_NAMES = frozenset(
         "critic",
         "reward_head",
         "safety_head",
+        "severe_collision_head",
         "teacher",
         "value",
         "visual_head",

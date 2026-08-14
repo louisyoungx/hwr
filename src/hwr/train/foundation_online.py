@@ -18,21 +18,16 @@ from hwr.data.foundation_features import (
     LANGUAGE_PREPROCESS_SHA256,
     file_sha256,
 )
-from hwr.data.foundation_loading import (
-    FoundationPreparedFeatures,
-    FoundationSequenceBatchLoader,
-)
+from hwr.data.foundation_loading import FoundationPreparedFeatures
 from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
-from hwr.perception.language_cache import StaticLanguageFeatureResolver
 from hwr.policy.foundation_runtime import FoundationWorldModelPolicy
-from hwr.train.accelerator_memory import (
-    release_unused_accelerator_memory,
-)
-from hwr.train.foundation_action_probe import evaluate_foundation_data_action_probe
+from hwr.train.accelerator_memory import release_unused_accelerator_memory
 from hwr.train.foundation_actor_readiness import (
     FoundationActorReadinessCriteria,
     FoundationActorReadinessTracker,
+    failed_exploration_calibration_checks,
 )
+from hwr.train.foundation_admission import evaluate_foundation_actor_admission
 from hwr.train.foundation_collection import (
     AutonomousCollectionConfig,
     AutonomousEpisodeCollector,
@@ -40,28 +35,20 @@ from hwr.train.foundation_collection import (
     IntrinsicRLActorActionSource,
 )
 from hwr.train.foundation_diagnostics import (
-    evaluate_foundation_action_causality_audit,
     foundation_action_causality_qualified,
     publish_action_causality_report,
 )
-from hwr.train.foundation_holdout import (
-    causality_batches_by_task,
-    causality_window_manifest,
-    collect_causality_holdout,
-    select_causality_windows,
-)
+from hwr.train.foundation_holdout import collect_causality_holdout
 from hwr.train.foundation_learning_signals import (
     EpisodeLearningEvidence,
-    evaluate_episode_learning_evidence,
+    evaluate_replay_episode_learning_evidence,
 )
 from hwr.train.foundation_frontier import FoundationLearningFrontierController
 from hwr.train.foundation_materialization import materialize_foundation_replay_features
 from hwr.train.foundation_metrics import (
     FoundationMetricsStore,
     build_foundation_cycle_metrics,
-    mean_metrics,
     publish_foundation_progress,
-    summarize_replay_action_coverage,
 )
 from hwr.train.foundation_exploration import (
     RandomRLActionSource,
@@ -99,12 +86,10 @@ from hwr.train.foundation_replay_features import (
     language_resolver_from_replay,
 )
 from hwr.train.foundation_setup import FoundationLearningStack
-from hwr.train.foundation_update_cycle import run_foundation_update_cycle
+from hwr.train.foundation_cycle_updates import run_replay_updates, warm_start_actor
 from hwr.train.learning_frontier import LearningFrontierConfig
 from hwr.train.task_sampling import OutcomeAdaptiveTaskSampler
 from hwr.world_model.deploy import DeployableWorldModelStateFilter
-from hwr.world_model.evaluation import ActionCausalityCriteria
-
 class FoundationOnlineTrainingRunner:
     """All tasks share the same models, optimizer, replay, and update code."""
 
@@ -120,6 +105,7 @@ class FoundationOnlineTrainingRunner:
         *,
         source_commit: str,
         development_ready_sha256: str,
+        execution: Mapping[str, object],
     ) -> None:
         if len(tasks) != 3 or set(tasks) != {item.task_id for item in tasks.values()}:
             raise ValueError("foundation training requires exactly three task interfaces")
@@ -154,6 +140,10 @@ class FoundationOnlineTrainingRunner:
         self.task_sampler = OutcomeAdaptiveTaskSampler(self.task_ids)
         self.rng = np.random.default_rng(config.seed)
         self.records: list[FoundationEpisodeRecord] = []
+        self.random_exploration = RandomRLExplorationConfig(
+            config.random_exploration_motion_correlation,
+            config.random_exploration_gripper_flip_probability,
+        )
         self.latest_checkpoint: Path | None = None
         self.latest_deployment: Path | None = None
         self.latest_action_causality: dict[str, object] | None = None
@@ -167,6 +157,10 @@ class FoundationOnlineTrainingRunner:
                 config.minimum_action_effective_rank,
                 config.minimum_data_action_probe_ratio,
                 config.minimum_data_action_probe_ratio_p05,
+                config.minimum_contact_episodes_per_task,
+                config.minimum_controlled_motion_episodes_per_task,
+                config.minimum_collision_positive_episodes_per_task,
+                config.minimum_collision_negative_episodes_per_task,
             )
         )
         self.frontier = FoundationLearningFrontierController(
@@ -202,6 +196,7 @@ class FoundationOnlineTrainingRunner:
                 "fingerprint": self.preprocessor.fingerprint,
                 "config": asdict(self.preprocessor.config),
             },
+            execution=execution,
         )
 
     def train(self) -> FoundationOnlineTrainingResult:
@@ -233,7 +228,14 @@ class FoundationOnlineTrainingRunner:
                 started = time.perf_counter()
                 self._publish_progress("evaluating", next_cycle, metrics)
                 evidence = self._episode_learning_signals(prepared, collected)
-                self._evaluate_action_causality(causality_prepared, metrics)
+                newly_unlocked = self._evaluate_action_causality(
+                    causality_prepared, metrics
+                )
+                if newly_unlocked is not None:
+                    warmup = self._warm_start_actor(
+                        prepared, next_cycle, newly_unlocked
+                    )
+                    metrics.update(warmup)
                 self._record_learning_outcomes(collected, evidence)
                 timings["evaluation_seconds"] = time.perf_counter() - started
                 cycle = next_cycle
@@ -261,6 +263,8 @@ class FoundationOnlineTrainingRunner:
                         learning_frontier=self.frontier.audit(),
                     ),
                 )
+                if cycle % self.config.checkpoint_interval_cycles == 0:
+                    self._raise_if_calibration_failed()
         finally:
             for environment in environments.values():
                 environment.close()
@@ -400,9 +404,9 @@ class FoundationOnlineTrainingRunner:
             task_id, _ = self.task_sampler.sample(self.rng)
             task = self.tasks[task_id]
             seed = self.config.seed + episode_index * 104729
-            if self.actor_readiness.task_actor_unlocked:
+            if self.actor_readiness.task_actor_ready_for_collection:
                 source = CurrentRLActorActionSource(self._collection_policy())
-            elif self.actor_readiness.exploration_unlocked:
+            elif self.actor_readiness.exploration_ready_for_collection:
                 source = IntrinsicRLActorActionSource(
                     self._collection_policy(exploration=True)
                 )
@@ -421,7 +425,7 @@ class FoundationOnlineTrainingRunner:
                 task_id=task_id,
                 episode_index=episode_index,
                 episode_seed=seed,
-                resets_enabled=self.actor_readiness.exploration_unlocked,
+                resets_enabled=self.actor_readiness.exploration_ready_for_collection,
             )
             episode = collector.collect(
                 environments[task_id],
@@ -441,7 +445,11 @@ class FoundationOnlineTrainingRunner:
     def _collection_policy(
         self, *, exploration: bool = False
     ) -> FoundationWorldModelPolicy:
-        resolver = self._language_resolver()
+        resolver = language_resolver_from_replay(
+            self.store.manifest["shards"],
+            self.cache,
+            self.run_path / "features/language.json",
+        )
         trainer = self.stack.trainer
         device = str(next(trainer.actor.parameters()).device)
         return FoundationWorldModelPolicy(
@@ -469,29 +477,24 @@ class FoundationOnlineTrainingRunner:
             {task_id: task.maximum_steps for task_id, task in self.tasks.items()},
             self.preprocessor,
             self.stack.action_scaling,
-            exploration_config=self._random_exploration_config(),
+            exploration_config=self.random_exploration,
             episodes_per_task=self.config.causality_holdout_episodes_per_task,
+            windows_per_episode=(
+                self.config.causality_audit_windows_per_task
+                // self.config.causality_holdout_episodes_per_task
+            ),
+            sequence_transitions=self.config.sequence_transitions,
+            maximum_attempts_per_episode=(
+                self.config.causality_holdout_maximum_attempts_per_episode
+            ),
             base_seed=self.config.seed,
             source_commit=self.source_commit,
-        )
-
-    def _random_exploration_config(self) -> RandomRLExplorationConfig:
-        return RandomRLExplorationConfig(
-            self.config.random_exploration_motion_correlation,
-            self.config.random_exploration_gripper_flip_probability,
         )
 
     def _random_action_source(self) -> RandomRLActionSource:
         return RandomRLActionSource(
             self.stack.action_scaling,
-            self._random_exploration_config(),
-        )
-
-    def _language_resolver(self) -> StaticLanguageFeatureResolver:
-        return language_resolver_from_replay(
-            self.store.manifest["shards"],
-            self.cache,
-            self.run_path / "features/language.json",
+            self.random_exploration,
         )
 
     def _materialize_features(
@@ -537,37 +540,33 @@ class FoundationOnlineTrainingRunner:
     def _update_cycle(
         self, prepared: FoundationPreparedFeatures, cycle: int
     ) -> dict[str, float]:
-        loader = FoundationSequenceBatchLoader(
+        result = run_replay_updates(
+            self.stack.trainer,
             self.store.path,
             self.cache,
             self.preprocessor,
-            self.stack.trainer.visual_student.config,
             prepared,
-            transitions=self.config.sequence_transitions,
-            device=str(next(self.stack.trainer.actor.parameters()).device),
-        )
-        result = run_foundation_update_cycle(
-            self.stack.trainer,
-            loader,
             self.rng,
+            self.config,
             updates=self.config.updates_per_cycle,
-            batch_size=self.config.batch_size,
-            augmentation_probability=self.config.augmentation_probability,
-            train_task_actor=self.actor_readiness.task_actor_unlocked,
+            train_task_actor=self.actor_readiness.task_actor_ready_for_collection,
             train_exploration_actor=(
-                self.actor_readiness.exploration_unlocked
-                and not self.actor_readiness.task_actor_unlocked
+                self.actor_readiness.exploration_ready_for_collection
+                and not self.actor_readiness.task_actor_ready_for_collection
             ),
-            progress_interval=self.config.metrics_publish_interval_updates,
-            progress=lambda values: self._publish_progress(
+            progress=lambda values, completed: self._publish_progress(
                 "updating",
                 cycle,
-                mean_metrics(values),
-                completed_updates=len(values),
+                values,
+                completed_updates=completed,
             ),
         )
-        if self.actor_readiness.task_actor_unlocked:
+        if self.actor_readiness.task_actor_ready_for_collection:
             self.actor_readiness.record_task_actor_updates(
+                self.config.updates_per_cycle
+            )
+        elif self.actor_readiness.exploration_ready_for_collection:
+            self.actor_readiness.record_exploration_actor_updates(
                 self.config.updates_per_cycle
             )
         return result
@@ -595,85 +594,87 @@ class FoundationOnlineTrainingRunner:
         self,
         prepared: FoundationPreparedFeatures,
         metrics: dict[str, float],
-    ) -> None:
-        loader = FoundationSequenceBatchLoader(
-            self.causality_store.path,
+    ) -> str | None:
+        result = evaluate_foundation_actor_admission(
+            self.stack.trainer,
+            self.store,
+            self.causality_store,
             self.cache,
             self.preprocessor,
-            self.stack.trainer.visual_student.config,
             prepared,
-            transitions=self.config.sequence_transitions,
-            device=str(next(self.stack.trainer.actor.parameters()).device),
-        )
-        selected = select_causality_windows(
-            loader,
+            self.stack.action_scaling,
+            self.actor_readiness,
+            self.config,
             self.task_ids,
-            windows_per_task=self.config.causality_audit_windows_per_task,
-            selection_seed=self.config.seed,
         )
-        diagnostic = evaluate_foundation_action_causality_audit(
-            self.stack.trainer,
-            causality_batches_by_task(
-                loader,
-                selected,
-                batch_size=self.config.causality_audit_batch_size,
-            ),
-            ActionCausalityCriteria(
-                self.config.minimum_action_causality_ratio,
-                self.config.minimum_action_causality_horizon_fraction,
-            ),
-            shuffle_seed=self.config.seed,
-            shuffle_repeats=self.config.causality_shuffle_repeats,
-        )
-        diagnostic["window_selection"] = causality_window_manifest(loader, selected)
-        diagnostic["holdout_collector"] = "foundation-causality-holdout/v1"
-        self.latest_action_causality = diagnostic
-        assessment = diagnostic["assessment"]
+        self.latest_action_causality = result.diagnostic
+        assessment = result.diagnostic["assessment"]
         metrics["world/action_causality_ratio"] = float(
             assessment["shuffled_to_true_ratio"]
         )
         metrics["world/action_causality_passed"] = float(
-            foundation_action_causality_qualified(diagnostic)
+            foundation_action_causality_qualified(result.diagnostic)
         )
-        replay_coverage = summarize_replay_action_coverage(
-            self.store.path, self.store.manifest, self.stack.action_scaling
-        )
-        probe = evaluate_foundation_data_action_probe(
-            self.store.path,
-            self.store.manifest,
-            self.causality_store.path,
-            self.causality_store.manifest,
-            bootstrap_seed=self.config.seed,
-        )
-        readiness = self.actor_readiness.assess(
-            diagnostic,
-            probe,
-            replay_coverage,
-            replay_episodes=int(self.store.manifest["episode_count"]),
-        )
-        metrics["actor_readiness/unlocked"] = float(readiness["unlocked"])
+        metrics["actor_readiness/unlocked"] = float(result.readiness["unlocked"])
         metrics["actor_readiness/consecutive_passes"] = float(
-            readiness["consecutive_passes"]
+            result.readiness["consecutive_passes"]
         )
+        return result.warmup_actor
+
+    def _warm_start_actor(
+        self,
+        prepared: FoundationPreparedFeatures,
+        cycle: int,
+        actor_kind: str,
+    ) -> dict[str, float]:
+        if actor_kind not in {"exploration", "task"}:
+            raise ValueError("unknown foundation Actor warmup kind")
+        self._publish_progress("warming_actor", cycle)
+        metrics = warm_start_actor(
+            self.stack.trainer,
+            self.store.path,
+            self.cache,
+            self.preprocessor,
+            prepared,
+            self.rng,
+            self.config,
+            train_task_actor=actor_kind == "task",
+        )
+        if actor_kind == "task":
+            self.actor_readiness.record_task_actor_updates(
+                self.config.actor_warmup_updates
+            )
+        else:
+            self.actor_readiness.record_exploration_actor_updates(
+                self.config.actor_warmup_updates
+            )
+        return {f"warmup/{name}": value for name, value in metrics.items()}
+
+    def _raise_if_calibration_failed(self) -> None:
+        if len(self.records) < self.config.calibration_early_stop_episodes:
+            return
+        failed = failed_exploration_calibration_checks(
+            self.actor_readiness.last_assessment
+        )
+        if failed:
+            raise RuntimeError(
+                "foundation calibration stopped early after missing evidence: "
+                + ", ".join(failed)
+            )
 
     def _episode_learning_signals(
         self,
         prepared: FoundationPreparedFeatures,
         episodes: list[object],
     ) -> dict[str, EpisodeLearningEvidence]:
-        loader = FoundationSequenceBatchLoader(
+        return evaluate_replay_episode_learning_evidence(
+            self.stack.trainer,
             self.store.path,
             self.cache,
             self.preprocessor,
-            self.stack.trainer.visual_student.config,
             prepared,
-            transitions=self.config.sequence_transitions,
-            device=str(next(self.stack.trainer.actor.parameters()).device),
-        )
-        return evaluate_episode_learning_evidence(
-            self.stack.trainer,
-            loader,
             [episode.episode_id for episode in episodes],
+            transitions=self.config.sequence_transitions,
             maximum_windows=self.config.learning_signal_windows_per_episode,
         )
 

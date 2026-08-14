@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from hwr.train.foundation_holdout import (
     causality_batches_by_task,
     causality_window_manifest,
@@ -75,3 +77,15 @@ def test_causality_batches_are_built_lazily_per_task() -> None:
         selected["task-a/v1"][:2],
         selected["task-a/v1"][2:],
     ]
+
+
+def test_causality_window_selection_rejects_an_undercovered_episode() -> None:
+    loader = _Loader()
+
+    with pytest.raises(ValueError, match="lacks windows"):
+        select_causality_windows(
+            loader,
+            ("task-a/v1", "task-b/v1"),
+            windows_per_task=6,
+            selection_seed=7,
+        )

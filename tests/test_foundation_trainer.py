@@ -25,7 +25,10 @@ from hwr.train.foundation_trainer import (
 )
 from hwr.train.foundation_visual_update import _slice_targets
 from hwr.train.imagination_rl import ImaginationRLConfig
-from hwr.train.intrinsic_exploration import IntrinsicExplorationConfig
+from hwr.train.intrinsic_exploration import (
+    IntrinsicExplorationConfig,
+    _episodic_knn_novelty,
+)
 from hwr.world_model import (
     ActionCausalityCriteria,
     ActionConditionedWorldModel,
@@ -108,6 +111,7 @@ def _batch(visual: VisualStudentConfig) -> FoundationTrainingBatch:
         torch.randn(sequences, observations - 1, 3),
         torch.randn(sequences, observations - 1),
         torch.ones(sequences, observations - 1),
+        torch.zeros(sequences, observations - 1),
         torch.zeros(sequences, observations - 1),
     )
 
@@ -204,6 +208,37 @@ def test_intrinsic_explorer_updates_without_environment_reward_actor() -> None:
     assert metrics["trainer/task_actor_updated"] == 0.0
     assert metrics["trainer/exploration_actor_updated"] == 1.0
     assert "exploration/state_novelty" in metrics
+
+
+def test_actor_warmup_does_not_change_audited_world_model() -> None:
+    trainer = _trainer()
+    world_before = {
+        name: value.detach().clone()
+        for name, value in trainer.world_model.state_dict().items()
+    }
+    actor_before = trainer.actor.mean_head.weight.detach().clone()
+
+    metrics = trainer.actor_warmup_step(
+        _batch(_visual_config()), train_task_actor=True
+    )
+
+    assert trainer.update_count == 0
+    assert torch.any(trainer.actor.mean_head.weight != actor_before)
+    assert all(
+        torch.equal(value, world_before[name])
+        for name, value in trainer.world_model.state_dict().items()
+    )
+    assert "imagination/actor" in metrics
+
+
+def test_knn_novelty_penalizes_return_to_a_previously_seen_state() -> None:
+    features = torch.tensor([[[1.0, 0.0], [0.0, 1.0]]])
+    following = torch.tensor([[[0.0, 1.0], [1.0, 0.0]]])
+
+    novelty = _episodic_knn_novelty(features, following, neighbors=1)
+
+    assert novelty[0, 0] == pytest.approx(1.0)
+    assert novelty[0, 1] == pytest.approx(0.0)
 
 
 def test_unified_trainer_bounds_visual_activation_microbatches() -> None:

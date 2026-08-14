@@ -19,6 +19,7 @@ class WorldModelLossConfig:
     reward_weight: float = 1.0
     continue_weight: float = 1.0
     safety_weight: float = 1.0
+    severe_collision_weight: float = 2.0
     dynamics_weight: float = 0.5
     representation_weight: float = 0.1
     ensemble_weight: float = 0.5
@@ -40,6 +41,7 @@ class WorldModelTargets:
     reward: torch.Tensor
     continues: torch.Tensor
     safety_interventions: torch.Tensor
+    severe_collisions: torch.Tensor
 
 
 class WorldModelLoss(nn.Module):
@@ -78,6 +80,9 @@ class WorldModelLoss(nn.Module):
         safety = nn.functional.binary_cross_entropy_with_logits(
             output.safety_logits, targets.safety_interventions.float()
         )
+        severe_collision = _balanced_binary_cross_entropy(
+            output.severe_collision_logits, targets.severe_collisions.float()
+        )
         dynamics, representation = self._balanced_kl(output)
         ensemble = self._ensemble_kl(output)
         losses = {
@@ -86,6 +91,7 @@ class WorldModelLoss(nn.Module):
             "reward": reward,
             "continue": continues,
             "safety": safety,
+            "severe_collision": severe_collision,
             "dynamics": dynamics,
             "representation": representation,
             "ensemble": ensemble,
@@ -97,6 +103,7 @@ class WorldModelLoss(nn.Module):
             + config.reward_weight * reward
             + config.continue_weight * continues
             + config.safety_weight * safety
+            + config.severe_collision_weight * severe_collision
             + config.dynamics_weight * dynamics
             + config.representation_weight * representation
             + config.ensemble_weight * ensemble
@@ -127,6 +134,7 @@ class WorldModelLoss(nn.Module):
             "reward": (batch, observations - 1),
             "continues": (batch, observations - 1),
             "safety_interventions": (batch, observations - 1),
+            "severe_collisions": (batch, observations - 1),
         }
         actual = {name: tuple(getattr(targets, name).shape) for name in expected}
         mismatches = {
@@ -143,3 +151,18 @@ def _categorical_kl(posterior_logits: torch.Tensor, prior_logits: torch.Tensor) 
     log_posterior = posterior_logits.log_softmax(dim=-1)
     log_prior = prior_logits.log_softmax(dim=-1)
     return (posterior * (log_posterior - log_prior)).sum(dim=-1).sum(dim=-1)
+
+
+def _balanced_binary_cross_entropy(
+    logits: torch.Tensor, targets: torch.Tensor
+) -> torch.Tensor:
+    positives = targets.sum()
+    negatives = targets.numel() - positives
+    positive_weight = (
+        negatives / positives.clamp_min(1.0)
+        if bool(positives > 0.0) and bool(negatives > 0.0)
+        else logits.new_tensor(1.0)
+    )
+    return nn.functional.binary_cross_entropy_with_logits(
+        logits, targets, pos_weight=positive_weight
+    )

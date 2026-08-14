@@ -2,6 +2,24 @@
 
 本文只记录可复查的训练事实和历史调整，不替代[当前训练范式](./foundation-world-model-training-paradigm.md)与最终验收门槛。P076～P080 已冻结为失败基线；统一开发门禁完成前不再启动策略训练。
 
+## 2026-08-14 `foundation-wm-007` 校准定位与下一谱系统计修复
+
+`foundation-wm-007` 绑定 `bb8f743`，继续只作为吞吐、动作因果和自主探索校准运行；当前
+工作树的新规则不会注入已经启动的进程，也不能用当前 HEAD 直接恢复该 run。恢复或复查
+必须使用其绑定提交的隔离 worktree。它的三个 carry/hold 任务仍是双臂预训练基准，不是
+正式家庭场景能力结论。
+
+下一新 run 起，data-action probe 改为逐任务独立拟合，所有任务均须过线；bootstrap 单位
+从相关 transition 改为 Episode。动作因果留出 collector 升为 v2，每条留出 Episode 必须
+贡献相同数量的完整不重叠窗口，短轨迹用确定性替代 seed 重采。Actor 准入新增外部接触、
+受控刚体/关节运动与严重碰撞正负样本覆盖；严重碰撞拥有独立预测头、类别加权损失和终止
+窗口定额采样。新 Actor 先 warm-up 再采集，探索 novelty 改为历史状态 kNN 距离。24 个
+Episode 后仍缺动作可辨识、接触或受控运动证据则提前终止校准。
+
+run manifest 升为 `hwr.foundation-online-run/v4` 并记录实际设备、nice 和 MPS 水位。正式
+验收默认每任务 40 个未见 seed，成功率用 95% Wilson 下界、单臂消融用 Wilson 上界判定；
+候选配置需要至少 3 个独立训练 seed，单 seed 结果只用于校准。
+
 ## 2026-08-13 `foundation-wm-006` 失败基线与训练重构
 
 `foundation-wm-006` 已主动停止，不恢复、不能作为后续 checkpoint 的父级。最近完整提交点
@@ -86,7 +104,7 @@ P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为�
 - 横向反射只能由环境声明，通用增强器变换视觉、动态标定、本体、动作和连续教师特征；
 - 部署导出只含视觉学生、RSSM posterior state filter 和 Actor，不含基础教师、Critic、
   reward/continue/safety 预测头或训练优化器；
-- 评测固定为每任务至少 20 个未见种子，同时运行正常、锁左臂、锁右臂三种条件，正常
+- 评测固定为每任务至少 40 个未见种子，同时运行正常、锁左臂、锁右臂三种条件，正常
   Episode 同步录制第三人称、头部、左腕和右腕视频；每个任务至少保留一个成功 Episode，
   帧数必须严格等于控制步数加初始帧，否则整次验收不能通过。
 
@@ -122,12 +140,13 @@ P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为�
 最终评测因此无法证明模型是在通过哪次 DINOv3 权重、真实推理和全量测试门禁后启动的。
 当前训练入口会原子复制 `development-ready.json` 到新 run，manifest 记录其 schema、固定
 路径和 SHA-256；恢复要求外部报告与 run 内副本完全相同，最终评测重验副本的完整十项证据
-和隔离提交绑定，并把它纳入最终 artifact manifest。run manifest 因此继续升为
-`hwr.foundation-online-run/v3`，旧 v1/v2 均不能进入当前正式验收。
+和隔离提交绑定，并把它纳入最终 artifact manifest。该阶段 run manifest 升为
+`hwr.foundation-online-run/v3`，旧 v1/v2 不能进入该阶段的正式验收；2026-08-14 的资源
+留痕修复再升为本文开头所述 v4。
 
 readiness 追溯接入后，在线 runner 一度增至 803 行，超过项目的 800 行硬限制。run manifest
-的创建、原子发布与恢复一致性校验现已拆入 `hwr.train.foundation_run_manifest`，runner 回落
-到 782 行；这是按职责拆分，不是合并语句规避尺寸检查。
+的创建、原子发布与恢复一致性校验现已拆入 `hwr.train.foundation_run_manifest`；后续准入
+统计也拆入独立模块，runner 保持在 800 行限制内。这是按职责拆分，不是合并语句规避尺寸检查。
 
 最终证据 manifest 同期升为 `hwr.foundation-evaluation-run/v2`。它不再只哈希评测 JSON、
 动作因果报告和视频，而是直接绑定 readiness、run/latest、全部训练 Episode 记录、训练
@@ -321,7 +340,7 @@ observation 的四帧三相机历史一次性送进 ConvNeXt，并为约 408 张
 ```bash
 hwr-evaluate-foundation-world-model \
   runs/foundation-world-model/foundation-wm-004 \
-  --seed-count 20 --video-seed-count 1
+  --seed-count 40 --video-seed-count 1
 ```
 
 ## `pilot-074` 检查结论

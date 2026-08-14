@@ -25,7 +25,9 @@ class IntrinsicExplorationConfig:
     lambda_return: float = 0.95
     uncertainty_weight: float = 1.0
     state_novelty_weight: float = 0.25
+    novelty_neighbors: int = 5
     safety_weight: float = 2.0
+    severe_collision_weight: float = 4.0
     motion_entropy_weight: float = 3.0e-3
     gripper_entropy_weight: float = 3.0e-4
     slow_value_rate: float = 0.01
@@ -42,12 +44,17 @@ class IntrinsicExplorationConfig:
             self.uncertainty_weight,
             self.state_novelty_weight,
             self.safety_weight,
+            self.severe_collision_weight,
             self.motion_entropy_weight,
             self.gripper_entropy_weight,
             self.slow_value_rate,
             self.maximum_gradient_norm,
         )
-        if min(weights) < 0.0 or min(self.value_bins, self.value_symlog_limit) <= 0:
+        if (
+            min(weights) < 0.0
+            or min(self.value_bins, self.value_symlog_limit, self.novelty_neighbors)
+            <= 0
+        ):
             raise ValueError("intrinsic exploration weights are invalid")
 
     def to_dict(self) -> dict[str, object]:
@@ -85,12 +92,18 @@ class IntrinsicExplorationActorCritic(nn.Module):
             horizon=self.config.horizon,
             action_scaling=self.action_scaling,
         )
-        novelty = _cosine_state_change(
-            trajectory.features, trajectory.next_features
+        novelty = _episodic_knn_novelty(
+            trajectory.features,
+            trajectory.next_features,
+            neighbors=self.config.novelty_neighbors,
         )
         rewards = self.config.uncertainty_weight * trajectory.uncertainties
         rewards = rewards + self.config.state_novelty_weight * novelty
         rewards = rewards - self.config.safety_weight * trajectory.safety_probabilities
+        rewards = rewards - (
+            self.config.severe_collision_weight
+            * trajectory.severe_collision_probabilities
+        )
         rewards = rewards + self.config.motion_entropy_weight * trajectory.motion_entropies
         rewards = rewards + self.config.gripper_entropy_weight * trajectory.gripper_entropies
         with torch.no_grad():
@@ -120,6 +133,7 @@ class IntrinsicExplorationActorCritic(nn.Module):
             "uncertainty": trajectory.uncertainties.mean(),
             "state_novelty": novelty.mean(),
             "safety": trajectory.safety_probabilities.mean(),
+            "severe_collision": trajectory.severe_collision_probabilities.mean(),
             "td_error": (value_predictions - returns.detach()).abs().mean(),
         }
         return losses, trajectory
@@ -167,9 +181,25 @@ def optimize_intrinsic_exploration_step(
     return metrics
 
 
-def _cosine_state_change(
-    current: torch.Tensor, following: torch.Tensor
+def _episodic_knn_novelty(
+    features: torch.Tensor,
+    next_features: torch.Tensor,
+    *,
+    neighbors: int,
 ) -> torch.Tensor:
-    left = nn.functional.normalize(current, dim=-1)
-    right = nn.functional.normalize(following, dim=-1)
-    return (1.0 - (left * right).sum(dim=-1)).clamp_min(0.0)
+    """Distance to the nearest prior imagined/replay-batch states."""
+    if (
+        features.ndim != 3
+        or next_features.shape != features.shape
+        or neighbors <= 0
+    ):
+        raise ValueError("episodic kNN novelty input is invalid")
+    references = nn.functional.normalize(features, dim=-1)
+    queries = nn.functional.normalize(next_features, dim=-1)
+    values = []
+    for step in range(features.shape[1]):
+        history = references[:, : step + 1].flatten(0, 1)
+        distances = (1.0 - queries[:, step] @ history.T).clamp_min(0.0)
+        count = min(neighbors, history.shape[0])
+        values.append(distances.topk(count, largest=False, dim=-1).values.mean(-1))
+    return torch.stack(values, dim=1)

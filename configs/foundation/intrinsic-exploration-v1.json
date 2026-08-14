@@ -7,8 +7,10 @@
   "maximum_gradient_norm": 100.0,
   "motion_entropy_weight": 0.003,
   "safety_weight": 2.0,
+  "severe_collision_weight": 4.0,
   "slow_value_rate": 0.01,
   "state_novelty_weight": 0.25,
+  "novelty_neighbors": 5,
   "uncertainty_weight": 1.0,
   "value_bins": 255,
   "value_symlog_limit": 20.0

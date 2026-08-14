@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Sequence
 
 import torch
 from torch import nn
 
-from hwr.data.foundation_loading import FoundationSequenceBatchLoader
+from hwr.data.foundation_cache import FoundationFeatureCache
+from hwr.data.foundation_loading import (
+    FoundationPreparedFeatures,
+    FoundationSequenceBatchLoader,
+)
+from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 from hwr.train.foundation_trainer import FoundationWorldModelTrainer
 from hwr.world_model.distributions import reward_expectation
 
@@ -31,6 +37,31 @@ class EpisodeWindowLearningSignal:
 class EpisodeLearningEvidence:
     summary: EpisodeLearningSignals
     windows: tuple[EpisodeWindowLearningSignal, ...]
+
+
+def evaluate_replay_episode_learning_evidence(
+    trainer: FoundationWorldModelTrainer,
+    replay_path: Path,
+    cache: FoundationFeatureCache,
+    preprocessor: HighResolutionVisionPreprocessor,
+    prepared: FoundationPreparedFeatures,
+    episode_ids: Sequence[str],
+    *,
+    transitions: int,
+    maximum_windows: int,
+) -> dict[str, EpisodeLearningEvidence]:
+    loader = FoundationSequenceBatchLoader(
+        replay_path,
+        cache,
+        preprocessor,
+        trainer.visual_student.config,
+        prepared,
+        transitions=transitions,
+        device=str(next(trainer.actor.parameters()).device),
+    )
+    return evaluate_episode_learning_evidence(
+        trainer, loader, episode_ids, maximum_windows=maximum_windows
+    )
 
 
 def evaluate_episode_learning_signals(

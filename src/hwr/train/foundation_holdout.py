@@ -24,7 +24,7 @@ from hwr.train.foundation_exploration import (
 )
 
 
-HOLDOUT_COLLECTOR = "foundation-causality-holdout/v1"
+HOLDOUT_COLLECTOR = "foundation-causality-holdout/v2"
 
 
 def collect_causality_holdout(
@@ -36,28 +36,35 @@ def collect_causality_holdout(
     *,
     exploration_config: RandomRLExplorationConfig,
     episodes_per_task: int,
+    windows_per_episode: int,
+    sequence_transitions: int,
+    maximum_attempts_per_episode: int,
     base_seed: int,
     source_commit: str,
 ) -> None:
-    """Collect fixed random-RL Episodes that are never exposed to optimizers."""
+    """Collect deterministic replacement Episodes with usable balanced windows."""
     task_ids = tuple(sorted(maximum_steps))
     if (
-        episodes_per_task <= 0
+        min(
+            episodes_per_task,
+            windows_per_episode,
+            sequence_transitions,
+            maximum_attempts_per_episode,
+        )
+        <= 0
         or base_seed < 0
         or set(environments) != set(task_ids)
     ):
         raise ValueError("causality holdout collection configuration is invalid")
-    expected = {
-        (task_id, _holdout_seed(base_seed, task_index, episode_index))
+    expected_slots = {
+        (task_id, episode_index)
         for task_index, task_id in enumerate(task_ids)
         for episode_index in range(episodes_per_task)
     }
-    existing = {
-        (str(shard["task_id"]), int(shard["seed"]))
-        for shard in store.manifest["shards"]
-    }
-    if not existing <= expected:
-        raise ValueError("causality holdout contains unexpected task seeds")
+    existing = _existing_slots(store)
+    if not set(existing) <= expected_slots:
+        raise ValueError("causality holdout contains unexpected task slots")
+    minimum_transitions = windows_per_episode * sequence_transitions
     for task_index, task_id in enumerate(task_ids):
         collector = AutonomousEpisodeCollector(
             preprocessor,
@@ -68,21 +75,46 @@ def collect_causality_holdout(
             ),
         )
         for episode_index in range(episodes_per_task):
-            seed = _holdout_seed(base_seed, task_index, episode_index)
-            if (task_id, seed) in existing:
+            slot = (task_id, episode_index)
+            if slot in existing:
                 continue
-            episode = collector.collect(
-                environments[task_id],
-                RandomRLActionSource(action_scaling, exploration_config),
-                task_id=task_id,
-                seed=seed,
-            )
-            metadata = {**episode.metadata, "collector": HOLDOUT_COLLECTOR}
-            store.append(replace(episode, metadata=metadata))
-            existing.add((task_id, seed))
-    if existing != expected:
+            for attempt in range(maximum_attempts_per_episode):
+                seed = _holdout_seed(
+                    base_seed, task_index, episode_index, attempt
+                )
+                episode = collector.collect(
+                    environments[task_id],
+                    RandomRLActionSource(action_scaling, exploration_config),
+                    task_id=task_id,
+                    seed=seed,
+                )
+                transitions = len(episode.arrays["executed_action"])
+                if transitions < minimum_transitions:
+                    continue
+                metadata = {
+                    **episode.metadata,
+                    "collector": HOLDOUT_COLLECTOR,
+                    "holdout_slot": episode_index,
+                    "seed_attempt": attempt,
+                    "minimum_transitions": minimum_transitions,
+                    "windows_per_episode": windows_per_episode,
+                }
+                store.append(replace(episode, metadata=metadata))
+                existing[slot] = seed
+                break
+            if slot not in existing:
+                raise RuntimeError(
+                    f"causality holdout could not fill usable slot {slot}"
+                )
+    if set(existing) != expected_slots:
         raise RuntimeError("causality holdout collection is incomplete")
-    _verify_holdout(store, expected, source_commit)
+    _verify_holdout(
+        store,
+        expected_slots,
+        source_commit,
+        minimum_transitions=minimum_transitions,
+        windows_per_episode=windows_per_episode,
+    )
 
 
 def select_causality_windows(
@@ -92,7 +124,7 @@ def select_causality_windows(
     windows_per_task: int,
     selection_seed: int,
 ) -> dict[str, tuple[int, ...]]:
-    """Select deterministic non-overlapping windows across every Episode."""
+    """Select the same number of non-overlapping windows from every Episode."""
     if windows_per_task <= 0 or selection_seed < 0 or not task_ids:
         raise ValueError("causality window selection configuration is invalid")
     grouped: dict[str, dict[str, list[tuple[bytes, int]]]] = {
@@ -112,17 +144,19 @@ def select_causality_windows(
         grouped[task_id].setdefault(episode_id, []).append((digest, index))
     selected = {}
     for task_id, episodes in grouped.items():
-        queues = [
-            [index for _, index in sorted(values)]
-            for _, values in sorted(episodes.items())
-        ]
+        if not episodes or windows_per_task % len(episodes):
+            raise ValueError(
+                f"causality holdout cannot balance windows for {task_id}"
+            )
+        per_episode = windows_per_task // len(episodes)
         chosen = []
-        while len(chosen) < windows_per_task and any(queues):
-            for queue in queues:
-                if queue and len(chosen) < windows_per_task:
-                    chosen.append(queue.pop())
-        if len(chosen) != windows_per_task:
-            raise ValueError(f"causality holdout lacks windows for {task_id}")
+        for episode_id, values in sorted(episodes.items()):
+            queue = [index for _, index in sorted(values)]
+            if len(queue) < per_episode:
+                raise ValueError(
+                    f"causality holdout Episode {episode_id} lacks windows"
+                )
+            chosen.extend(queue[-per_episode:])
         selected[task_id] = tuple(
             sorted(
                 chosen,
@@ -172,23 +206,52 @@ def causality_batches_by_task(
     return {task_id: batches(indices) for task_id, indices in selected.items()}
 
 
-def _holdout_seed(base_seed: int, task_index: int, episode_index: int) -> int:
-    return base_seed + 500_000_003 + task_index * 104_729 + episode_index * 1_009
+def _holdout_seed(
+    base_seed: int, task_index: int, episode_index: int, attempt: int
+) -> int:
+    return (
+        base_seed
+        + 500_000_003
+        + task_index * 10_000_019
+        + episode_index * 100_003
+        + attempt * 1_009
+    )
+
+
+def _existing_slots(
+    store: AppendableAutonomousTrajectoryStore,
+) -> dict[tuple[str, int], int]:
+    result: dict[tuple[str, int], int] = {}
+    for shard in store.manifest["shards"]:
+        metadata = shard.get("metadata", {})
+        if metadata.get("collector") != HOLDOUT_COLLECTOR:
+            raise ValueError("causality holdout collector version differs")
+        slot = (str(shard["task_id"]), int(metadata.get("holdout_slot", -1)))
+        if slot in result or slot[1] < 0:
+            raise ValueError("causality holdout task slot is invalid")
+        result[slot] = int(shard["seed"])
+    return result
 
 
 def _verify_holdout(
     store: AppendableAutonomousTrajectoryStore,
-    expected: set[tuple[str, int]],
+    expected_slots: set[tuple[str, int]],
     source_commit: str,
+    *,
+    minimum_transitions: int,
+    windows_per_episode: int,
 ) -> None:
     verified = set()
     for shard in store.manifest["shards"]:
-        identity = (str(shard["task_id"]), int(shard["seed"]))
         metadata = shard.get("metadata", {})
+        identity = (str(shard["task_id"]), int(metadata.get("holdout_slot", -1)))
         if (
-            identity not in expected
+            identity not in expected_slots
             or str(shard["source_commit"]) != source_commit
             or metadata.get("collector") != HOLDOUT_COLLECTOR
+            or int(shard["transition_count"]) < minimum_transitions
+            or int(metadata.get("minimum_transitions", -1)) != minimum_transitions
+            or int(metadata.get("windows_per_episode", -1)) != windows_per_episode
             or metadata.get("action_process", {}).get("schema_version")
             != "hwr.correlated-random-rl/v1"
         ):
@@ -198,5 +261,5 @@ def _verify_holdout(
         if sources != {"random_rl_exploration"}:
             raise ValueError("causality holdout contains non-random action sources")
         verified.add(identity)
-    if verified != expected:
-        raise ValueError("causality holdout task-seed coverage differs")
+    if verified != expected_slots:
+        raise ValueError("causality holdout task-slot coverage differs")

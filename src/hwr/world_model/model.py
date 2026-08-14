@@ -19,6 +19,7 @@ class WorldModelOutput(NamedTuple):
     reward_logits: torch.Tensor
     continue_logits: torch.Tensor
     safety_logits: torch.Tensor
+    severe_collision_logits: torch.Tensor
 
 
 class WorldModelPriorRollout(NamedTuple):
@@ -29,6 +30,7 @@ class WorldModelPriorRollout(NamedTuple):
     reward_logits: torch.Tensor
     continue_logits: torch.Tensor
     safety_logits: torch.Tensor
+    severe_collision_logits: torch.Tensor
     uncertainty: torch.Tensor
 
 
@@ -68,6 +70,9 @@ class ActionConditionedWorldModel(nn.Module):
         self.safety_head = _head(
             feature + config.action_dimension, config.hidden_dimension, 1
         )
+        self.severe_collision_head = _head(
+            feature + config.action_dimension, config.hidden_dimension, 1
+        )
 
     def observe(
         self,
@@ -89,7 +94,12 @@ class ActionConditionedWorldModel(nn.Module):
         safety_logits = self.predict_safety_intervention(
             features[:, :-1], actor_proposals
         )
-        return WorldModelOutput(sequence, features, *decoded, safety_logits)
+        collision_logits = self.predict_severe_collision(
+            features[:, :-1], executed_actions
+        )
+        return WorldModelOutput(
+            sequence, features, *decoded, safety_logits, collision_logits
+        )
 
     def encode_observations(
         self,
@@ -197,10 +207,18 @@ class ActionConditionedWorldModel(nn.Module):
         safety_logits = self.predict_safety_intervention(
             torch.stack(current_features, dim=1), actor_proposals
         )
+        collision_logits = self.predict_severe_collision(
+            torch.stack(current_features, dim=1), executed_actions
+        )
         probabilities = ensemble_tensor.softmax(dim=-1)
         uncertainty = probabilities.var(dim=2, unbiased=False).mean(dim=(-1, -2))
         return WorldModelPriorRollout(
-            sequence, features, *decoded, safety_logits, uncertainty
+            sequence,
+            features,
+            *decoded,
+            safety_logits,
+            collision_logits,
+            uncertainty,
         )
 
     def _decode(
@@ -233,6 +251,20 @@ class ActionConditionedWorldModel(nn.Module):
             raise ValueError("safety intervention prediction shapes are invalid")
         return self.safety_head(
             torch.cat((features, actor_proposals), dim=-1)
+        ).squeeze(-1)
+
+    def predict_severe_collision(
+        self, features: torch.Tensor, executed_actions: torch.Tensor
+    ) -> torch.Tensor:
+        """Predict physical collision independently from safety-layer rewrites."""
+        if (
+            features.shape[:-1] != executed_actions.shape[:-1]
+            or features.shape[-1] != self.config.feature_dimension
+            or executed_actions.shape[-1] != self.config.action_dimension
+        ):
+            raise ValueError("severe collision prediction shapes are invalid")
+        return self.severe_collision_head(
+            torch.cat((features, executed_actions), dim=-1)
         ).squeeze(-1)
 
     def _check_observation_shapes(

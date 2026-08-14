@@ -18,8 +18,16 @@ class FoundationOnlineTrainingConfig:
     minimum_action_effective_rank: float = 6.0
     minimum_data_action_probe_ratio: float = 1.05
     minimum_data_action_probe_ratio_p05: float = 1.01
+    minimum_interaction_displacement: float = 0.01
+    minimum_contact_episodes_per_task: int = 1
+    minimum_controlled_motion_episodes_per_task: int = 1
+    minimum_collision_positive_episodes_per_task: int = 1
+    minimum_collision_negative_episodes_per_task: int = 1
+    calibration_early_stop_episodes: int = 24
     collection_episodes_per_cycle: int = 3
     updates_per_cycle: int = 200
+    actor_warmup_updates: int = 1
+    severe_collision_batch_fraction: float = 0.25
     batch_size: int = 2
     sequence_transitions: int = 16
     camera_width: int = 256
@@ -34,6 +42,7 @@ class FoundationOnlineTrainingConfig:
     causality_audit_windows_per_task: int = 8
     causality_audit_batch_size: int = 2
     causality_shuffle_repeats: int = 5
+    causality_holdout_maximum_attempts_per_episode: int = 8
     random_exploration_motion_correlation: float = 0.96
     random_exploration_gripper_flip_probability: float = 0.05
     learning_signal_windows_per_episode: int = 4
@@ -50,8 +59,12 @@ class FoundationOnlineTrainingConfig:
             self.episodes,
             self.minimum_actor_readiness_episodes,
             self.actor_readiness_consecutive_passes,
+            self.minimum_contact_episodes_per_task,
+            self.minimum_controlled_motion_episodes_per_task,
+            self.calibration_early_stop_episodes,
             self.collection_episodes_per_cycle,
             self.updates_per_cycle,
+            self.actor_warmup_updates,
             self.batch_size,
             self.sequence_transitions,
             self.camera_width,
@@ -63,6 +76,7 @@ class FoundationOnlineTrainingConfig:
             self.causality_audit_windows_per_task,
             self.causality_audit_batch_size,
             self.causality_shuffle_repeats,
+            self.causality_holdout_maximum_attempts_per_episode,
             self.learning_signal_windows_per_episode,
             self.learning_frontier_capacity_per_task,
             self.learning_frontier_candidates_per_episode,
@@ -71,16 +85,30 @@ class FoundationOnlineTrainingConfig:
         )
         if min(positive) <= 0 or self.seed < 0:
             raise ValueError("foundation online training dimensions are invalid")
+        if min(
+            self.minimum_collision_positive_episodes_per_task,
+            self.minimum_collision_negative_episodes_per_task,
+        ) < 0:
+            raise ValueError("collision coverage counts cannot be negative")
         if self.minimum_actor_readiness_episodes > self.episodes:
             raise ValueError("Actor readiness Episodes exceed total Episodes")
+        if self.calibration_early_stop_episodes > self.episodes:
+            raise ValueError("calibration early stop exceeds total Episodes")
         if not 0.0 <= self.augmentation_probability <= 1.0:
             raise ValueError("foundation augmentation probability is invalid")
+        if not 0.0 <= self.severe_collision_batch_fraction <= 1.0:
+            raise ValueError("severe collision batch fraction is invalid")
         if min(self.camera_width, self.camera_height) < 160:
             raise ValueError("foundation online training requires high-resolution cameras")
         if self.replay_transition_capacity < self.sequence_transitions * 3:
             raise ValueError("foundation replay capacity cannot retain one window per task")
         if self.causality_audit_windows_per_task % self.causality_audit_batch_size:
             raise ValueError("causality audit batch size must divide task window count")
+        if (
+            self.causality_audit_windows_per_task
+            % self.causality_holdout_episodes_per_task
+        ):
+            raise ValueError("causality windows must balance across holdout Episodes")
         ActionCausalityCriteria(
             self.minimum_action_causality_ratio,
             self.minimum_action_causality_horizon_fraction,
@@ -109,6 +137,8 @@ class FoundationOnlineTrainingConfig:
             self.minimum_data_action_probe_ratio_p05,
         ) <= 1.0:
             raise ValueError("data action probe ratios must exceed one")
+        if self.minimum_interaction_displacement <= 0.0:
+            raise ValueError("minimum interaction displacement must be positive")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

@@ -3,22 +3,45 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 RUN_ID [--resume]" >&2
+  echo "usage: $0 RUN_ID [--resume] [--seed SEED]" >&2
 }
 
-if [[ "$#" -lt 1 || "$#" -gt 2 ]]; then
+if [[ "$#" -lt 1 ]]; then
   usage
   exit 2
 fi
 
 run_id="$1"
+shift
 resume=false
-if [[ "$#" -eq 2 ]]; then
-  if [[ "$2" != "--resume" ]]; then
+training_seed=""
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --resume)
+      resume=true
+      ;;
+    --seed)
+      if [[ "$#" -lt 2 || ! "$2" =~ ^[0-9]+$ ]]; then
+        usage
+        exit 2
+      fi
+      training_seed="$2"
+      shift
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+  shift
+done
+if [[ "$resume" == true && -n "$training_seed" ]]; then
+  echo "--seed cannot override an immutable resumed run" >&2
+  exit 2
+fi
+if [[ -n "$training_seed" && ! "$training_seed" =~ ^[0-9]+$ ]]; then
     usage
     exit 2
-  fi
-  resume=true
 fi
 if [[ ! "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; then
   echo "foundation run id contains unsupported characters" >&2
@@ -77,6 +100,9 @@ training_command=(
 )
 if [[ "$resume" == true ]]; then
   training_command+=(--resume)
+fi
+if [[ -n "$training_seed" ]]; then
+  training_command+=(--seed "$training_seed")
 fi
 
 mkdir -p "$log_root"

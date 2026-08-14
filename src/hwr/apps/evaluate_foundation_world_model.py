@@ -44,6 +44,7 @@ from hwr.train.foundation_registry import (
     load_foundation_deployment,
     require_foundation_lineage,
 )
+from hwr.train.foundation_holdout import HOLDOUT_COLLECTOR
 from hwr.train.development_gate import (
     COMMITTED_SNAPSHOT_CHECKS,
     DEVELOPMENT_READY_SCHEMA,
@@ -61,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-root", type=Path, default=Path("runs/foundation-world-model-eval")
     )
     parser.add_argument("--evaluation-id")
-    parser.add_argument("--seed-count", type=int, default=20)
+    parser.add_argument("--seed-count", type=int, default=40)
     parser.add_argument("--seed-start", type=int)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--video-seed-count", type=int, default=1)
@@ -304,7 +305,7 @@ def _require_action_causality(run_path: Path) -> Path:
     if latest.get("schema_version") != "hwr.foundation-online-latest/v1":
         raise ValueError("training latest schema differs")
     run_manifest = _read_json(run_path / "run-manifest.json")
-    if run_manifest.get("schema_version") != "hwr.foundation-online-run/v3":
+    if run_manifest.get("schema_version") != "hwr.foundation-online-run/v4":
         raise ValueError("training run schema differs")
     _require_development_readiness(run_path, run_manifest)
     path = _run_member(run_path, latest["action_causality_report"])
@@ -421,7 +422,7 @@ def _require_causality_lineage(
         report.get("training_data_manifest_sha256") != training_sha
         or checkpoint.get("data_manifest_sha256") != training_sha
         or report.get("audit_data_manifest_sha256") != audit_sha
-        or report.get("holdout_collector") != "foundation-causality-holdout/v1"
+        or report.get("holdout_collector") != HOLDOUT_COLLECTOR
     ):
         raise ValueError("action causality data provenance differs")
 

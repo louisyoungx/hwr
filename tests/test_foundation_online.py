@@ -170,6 +170,18 @@ class _Backend:
     def result(self):
         return self._result
 
+    def task_audit(self):
+        return {
+            "left_contact_steps": 1,
+            "right_contact_steps": 1,
+            "simultaneous_contact_steps": 1,
+            "severe_collision_count": 0,
+            "metrics": {
+                "maximum_controlled_target_progress": 0.1,
+                "maximum_controlled_articulation_progress": 0.0,
+            },
+        }
+
     def legal_environment_transforms(self):
         return (LegalEnvironmentTransform("lateral_reflection"),)
 
@@ -307,7 +319,27 @@ def _passing_action_probe(*args, **kwargs):
     return {
         "state_only_to_state_action_ratio": 1.2,
         "bootstrap": {"ratio_p05": 1.1},
+        "partitions": {
+            task_id: {
+                "state_only_to_state_action_ratio": 1.2,
+                "bootstrap": {"ratio_p05": 1.1},
+            }
+            for task_id in TASK_IDS
+        },
     }
+
+
+def _deployment_failure_with_physical_causality() -> dict[str, object]:
+    diagnostic = _diagnostic(False)
+    physical = _diagnostic(True)
+    diagnostic["one_step_action_utilization"] = physical[
+        "one_step_action_utilization"
+    ]
+    for task_id in TASK_IDS:
+        diagnostic["partitions"][task_id]["one_step_action_utilization"] = (
+            physical["partitions"][task_id]["one_step_action_utilization"]
+        )
+    return diagnostic
 
 
 def _runner(tmp_path, config: FoundationOnlineTrainingConfig):
@@ -327,6 +359,7 @@ def _runner(tmp_path, config: FoundationOnlineTrainingConfig):
         tmp_path / "run",
         source_commit="abc123",
         development_ready_sha256="d" * 64,
+        execution={"device": "cpu", "foundation_device": "cpu"},
     )
 
 
@@ -337,6 +370,8 @@ def _config(*, episodes: int = 6) -> FoundationOnlineTrainingConfig:
             actor_readiness_consecutive_passes=1,
             minimum_active_action_dimension_fraction=0.01,
             minimum_action_effective_rank=0.01,
+            minimum_collision_positive_episodes_per_task=0,
+            calibration_early_stop_episodes=episodes,
             collection_episodes_per_cycle=3,
             updates_per_cycle=1,
             batch_size=1,
@@ -356,11 +391,11 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.setattr(
-        "hwr.train.foundation_online.evaluate_foundation_action_causality_audit",
+        "hwr.train.foundation_admission.evaluate_foundation_action_causality_audit",
         lambda trainer, batches, criteria, shuffle_seed, shuffle_repeats: _diagnostic(True),
     )
     monkeypatch.setattr(
-        "hwr.train.foundation_online.evaluate_foundation_data_action_probe",
+        "hwr.train.foundation_admission.evaluate_foundation_data_action_probe",
         _passing_action_probe,
     )
     config = _config()
@@ -400,7 +435,11 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert latest["action_causality_sha256"] == checkpoint[
         "training_diagnostics"
     ]["action_causality_report_sha256"]
-    assert run_manifest["schema_version"] == "hwr.foundation-online-run/v3"
+    assert run_manifest["schema_version"] == "hwr.foundation-online-run/v4"
+    assert run_manifest["execution"] == {
+        "device": "cpu",
+        "foundation_device": "cpu",
+    }
     assert run_manifest["development_ready"] == {
         "schema_version": "hwr.foundation-development-ready/v2",
         "sha256": "d" * 64,
@@ -429,7 +468,7 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert cycle_metrics["episodes"]["count"] == 3
     assert cycle_metrics["action_causality"]["passed"] is True
     assert cycle_metrics["actor_readiness"]["unlocked"] is True
-    assert checkpoint["training_diagnostics"]["task_actor_update_count"] == 1
+    assert checkpoint["training_diagnostics"]["task_actor_update_count"] == 2
     assert cycle_metrics["learning_frontier"]["task_semantic_fields"] == []
     assert all("frontier_entries_added" in record for record in records)
 
@@ -449,11 +488,13 @@ def test_online_runner_never_exports_a_failed_causality_deployment(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.setattr(
-        "hwr.train.foundation_online.evaluate_foundation_action_causality_audit",
-        lambda trainer, batches, criteria, shuffle_seed, shuffle_repeats: _diagnostic(False),
+        "hwr.train.foundation_admission.evaluate_foundation_action_causality_audit",
+        lambda trainer, batches, criteria, shuffle_seed, shuffle_repeats: (
+            _deployment_failure_with_physical_causality()
+        ),
     )
     monkeypatch.setattr(
-        "hwr.train.foundation_online.evaluate_foundation_data_action_probe",
+        "hwr.train.foundation_admission.evaluate_foundation_data_action_probe",
         _passing_action_probe,
     )
     runner = _runner(tmp_path, _config(episodes=3))
@@ -477,11 +518,11 @@ def test_resume_rolls_replay_back_to_last_atomic_checkpoint(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.setattr(
-        "hwr.train.foundation_online.evaluate_foundation_action_causality_audit",
+        "hwr.train.foundation_admission.evaluate_foundation_action_causality_audit",
         lambda trainer, batches, criteria, shuffle_seed, shuffle_repeats: _diagnostic(True),
     )
     monkeypatch.setattr(
-        "hwr.train.foundation_online.evaluate_foundation_data_action_probe",
+        "hwr.train.foundation_admission.evaluate_foundation_data_action_probe",
         _passing_action_probe,
     )
     config = _config()
@@ -523,11 +564,11 @@ def test_resume_rolls_replay_back_to_last_atomic_checkpoint(
 
 def test_resume_restores_next_torch_random_values(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "hwr.train.foundation_online.evaluate_foundation_action_causality_audit",
+        "hwr.train.foundation_admission.evaluate_foundation_action_causality_audit",
         lambda trainer, batches, criteria, shuffle_seed, shuffle_repeats: _diagnostic(True),
     )
     monkeypatch.setattr(
-        "hwr.train.foundation_online.evaluate_foundation_data_action_probe",
+        "hwr.train.foundation_admission.evaluate_foundation_data_action_probe",
         _passing_action_probe,
     )
     torch.manual_seed(101)

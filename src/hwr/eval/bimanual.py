@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from statistics import NormalDist
 from dataclasses import asdict, dataclass
 from typing import Any, Callable, Literal, Mapping, Protocol, Sequence
 
@@ -124,9 +125,10 @@ class BimanualEvaluationReport:
 
 @dataclass(frozen=True)
 class BimanualAcceptanceCriteria:
-    minimum_unseen_episodes: int = 20
+    minimum_unseen_episodes: int = 40
     minimum_success_rate: float = 0.70
     maximum_ablation_success_rate: float = 0.10
+    confidence_level: float = 0.95
     minimum_stable_seconds: float = 2.0
     minimum_concurrent_seconds: float = 0.5
 
@@ -137,9 +139,15 @@ class BimanualAcceptanceCriteria:
             or self.minimum_concurrent_seconds <= 0
         ):
             raise ValueError("acceptance episode count and stability must be positive")
-        rates = (self.minimum_success_rate, self.maximum_ablation_success_rate)
+        rates = (
+            self.minimum_success_rate,
+            self.maximum_ablation_success_rate,
+            self.confidence_level,
+        )
         if not all(0.0 <= value <= 1.0 for value in rates):
             raise ValueError("acceptance rates must be in [0, 1]")
+        if self.confidence_level <= 0.5 or self.confidence_level >= 1.0:
+            raise ValueError("acceptance confidence level must be in (0.5, 1)")
 
 
 def evaluate_bimanual_policy(
@@ -197,6 +205,11 @@ def assess_bimanual_acceptance(
             raise ValueError("evaluation control frequency must be positive")
         normal = report.group(task_id, "none")
         success_rate = _success_rate(normal)
+        success_interval = _wilson_interval(
+            sum(item.success for item in normal),
+            len(normal),
+            settings.confidence_level,
+        )
         stable_steps = math.ceil(settings.minimum_stable_seconds * control_hz)
         concurrent_steps = math.ceil(
             settings.minimum_concurrent_seconds * control_hz
@@ -204,6 +217,7 @@ def assess_bimanual_acceptance(
         normal_passed = (
             len(normal) >= settings.minimum_unseen_episodes
             and success_rate >= settings.minimum_success_rate
+            and success_interval[0] >= settings.minimum_success_rate
             and sum(item.severe_collisions for item in normal) == 0
             and all(item.stable_steps >= stable_steps for item in normal if item.success)
             and all(
@@ -213,14 +227,25 @@ def assess_bimanual_acceptance(
             )
         )
         ablations: dict[str, float] = {}
+        ablation_intervals: dict[str, dict[str, float]] = {}
         ablation_passed = True
         for mode in ("lock_left", "lock_right"):
             episodes = report.group(task_id, mode)
             rate = _success_rate(episodes)
+            interval = _wilson_interval(
+                sum(item.success for item in episodes),
+                len(episodes),
+                settings.confidence_level,
+            )
             ablations[mode] = rate
+            ablation_intervals[mode] = {
+                "lower": interval[0],
+                "upper": interval[1],
+            }
             ablation_passed &= (
                 len(episodes) >= settings.minimum_unseen_episodes
                 and rate < settings.maximum_ablation_success_rate
+                and interval[1] < settings.maximum_ablation_success_rate
                 and sum(item.severe_collisions for item in episodes) == 0
             )
         task_passed = normal_passed and ablation_passed
@@ -231,17 +256,40 @@ def assess_bimanual_acceptance(
                 "passed": task_passed,
                 "normal_episode_count": len(normal),
                 "normal_success_rate": success_rate,
+                "normal_success_interval": {
+                    "lower": success_interval[0],
+                    "upper": success_interval[1],
+                },
                 "required_stable_steps": stable_steps,
                 "required_concurrent_steps": concurrent_steps,
                 "ablation_success_rates": ablations,
+                "ablation_success_intervals": ablation_intervals,
             }
         )
     return {
-        "schema_version": "hwr.bimanual-acceptance/v1",
+        "schema_version": "hwr.bimanual-acceptance/v2",
         "passed": passed,
         "criteria": asdict(settings),
         "tasks": details,
     }
+
+
+def _wilson_interval(
+    successes: int, count: int, confidence: float
+) -> tuple[float, float]:
+    if count <= 0:
+        return 0.0, 1.0
+    if successes < 0 or successes > count or not 0.5 < confidence < 1.0:
+        raise ValueError("Wilson interval inputs are invalid")
+    probability = successes / count
+    z = NormalDist().inv_cdf(0.5 + confidence / 2.0)
+    denominator = 1.0 + z * z / count
+    center = (probability + z * z / (2.0 * count)) / denominator
+    margin = z * math.sqrt(
+        probability * (1.0 - probability) / count
+        + z * z / (4.0 * count * count)
+    ) / denominator
+    return max(0.0, center - margin), min(1.0, center + margin)
 
 
 def _evaluate_episode(
