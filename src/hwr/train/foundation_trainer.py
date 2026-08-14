@@ -316,6 +316,38 @@ class FoundationWorldModelTrainer:
             )
         return output.severe_collision_logits.sigmoid().detach().cpu()
 
+    def action_execution_validation_predictions(
+        self, batch: FoundationTrainingBatch
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Predict safety intervention and bounded executed actions on holdout data."""
+        self._check_batch_dimensions(batch)
+        self.visual_student.eval()
+        self.world_model.eval()
+        with torch.no_grad():
+            visual = encode_visual_student_bounded(
+                self.visual_student,
+                batch,
+                microbatch_observations=(
+                    self.config.visual_inference_microbatch_observations
+                ),
+            )
+            sequence = visual.pooled_state.reshape(
+                batch.sequence_batch_size,
+                batch.observation_count,
+                self.world_model.config.visual_dimension,
+            )
+            output = self.world_model.observe(
+                sequence,
+                batch.language_features,
+                batch.proprioception,
+                batch.actor_proposals,
+                batch.executed_actions,
+            )
+        return (
+            output.safety_logits.sigmoid().detach().cpu(),
+            output.executed_action_prediction.detach().cpu(),
+        )
+
     def severe_collision_counterfactual_probabilities(
         self,
         batch: FoundationTrainingBatch,

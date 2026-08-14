@@ -37,7 +37,7 @@ from hwr.train.foundation_diagnostics import (
 )
 from hwr.train.foundation_holdout_orchestration import (
     prepare_foundation_collision_holdout,
-    prepare_foundation_system_holdout,
+    prepare_foundation_startup_holdouts,
 )
 from hwr.train.foundation_learning_signals import (
     EpisodeLearningEvidence,
@@ -200,7 +200,7 @@ class FoundationOnlineTrainingRunner:
         cycle = self.completed_cycles
         try:
             self._publish_progress("preparing_causality_holdout", cycle)
-            prepare_foundation_system_holdout(
+            prepare_foundation_startup_holdouts(
                 self.causality_store,
                 environments,
                 self.tasks,

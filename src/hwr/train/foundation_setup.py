@@ -74,6 +74,15 @@ def build_foundation_learning_stack(
         imagination_config.base_angular_scale,
         imagination_config.arm_velocity_scale,
     )
+    expected_bounds = (
+        (-scaling.base_linear, -scaling.base_angular, *(-scaling.arm_velocity,) * 12, 0.0, 0.0),
+        (scaling.base_linear, scaling.base_angular, *(scaling.arm_velocity,) * 12, 1.0, 1.0),
+    )
+    if (
+        world_config.action_minimum != expected_bounds[0]
+        or world_config.action_maximum != expected_bounds[1]
+    ):
+        raise ValueError("world model action bounds differ from runtime scaling")
     student = VisualStudentModel(visual_config).to(device)
     visual_objective = VisualFoundationObjectives(visual_objective_config).to(device)
     world = ActionConditionedWorldModel(world_config).to(device)

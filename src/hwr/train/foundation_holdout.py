@@ -25,9 +25,10 @@ from hwr.train.foundation_exploration import (
 from hwr.train.foundation_sequence_reservoir import slice_episode_sequence
 
 
-HOLDOUT_COLLECTOR = "foundation-causality-holdout/v5"
+HOLDOUT_COLLECTOR = "foundation-causality-holdout/v6"
 SYSTEM_IDENTIFICATION_PHASE = "system_identification"
 COLLISION_VALIDATION_PHASE = "collision_validation"
+ACTION_EXECUTION_VALIDATION_PHASE = "action_execution_validation"
 SYSTEM_IDENTIFICATION_CORRELATIONS = (0.0, 0.50, 0.90, 0.96)
 
 
@@ -47,8 +48,8 @@ def collect_causality_holdout(
     base_seed: int,
     source_commit: str,
     holdout_phase: str = SYSTEM_IDENTIFICATION_PHASE,
-    collision_balanced: bool = False,
-    collision_positive_episodes: int | None = None,
+    balance_kind: str | None = None,
+    positive_episodes: int | None = None,
 ) -> None:
     """Collect one deterministic compact holdout phase without policy data."""
     task_ids = tuple(sorted(maximum_steps))
@@ -66,15 +67,12 @@ def collect_causality_holdout(
         or holdout_phase not in {
             SYSTEM_IDENTIFICATION_PHASE,
             COLLISION_VALIDATION_PHASE,
+            ACTION_EXECUTION_VALIDATION_PHASE,
         }
+        or balance_kind not in {None, "collision", "safety_intervention"}
         or (
-            collision_balanced
-            and collision_positive_episodes is None
-            and episodes_per_task % 2
-        )
-        or (
-            collision_positive_episodes is not None
-            and not 0 <= collision_positive_episodes <= episodes_per_task
+            positive_episodes is not None
+            and not 0 <= positive_episodes <= episodes_per_task
         )
     ):
         raise ValueError("causality holdout collection configuration is invalid")
@@ -101,15 +99,15 @@ def collect_causality_holdout(
             slot = (holdout_phase, task_id, episode_index)
             if slot in existing:
                 continue
-            collision_target = (
+            balance_target = (
                 _collision_balance_target(episode_index, episodes_per_task)
-                if collision_balanced
+                if balance_kind is not None
                 else None
             )
-            if collision_positive_episodes is not None:
-                collision_target = (
+            if positive_episodes is not None:
+                balance_target = (
                     "positive"
-                    if episode_index < collision_positive_episodes
+                    if episode_index < positive_episodes
                     else "negative"
                 )
             for attempt in range(maximum_attempts_per_episode):
@@ -138,10 +136,12 @@ def collect_causality_holdout(
                     seed=seed,
                 )
                 transitions = len(episode.arrays["executed_action"])
-                collision_class = _episode_collision_class(episode.metadata)
+                balance_class = _episode_balance_class(
+                    episode, balance_kind
+                )
                 if transitions < minimum_transitions or (
-                    collision_target is not None
-                    and collision_class != collision_target
+                    balance_target is not None
+                    and balance_class != balance_target
                 ):
                     continue
                 retained = min(retained_transitions_per_episode, transitions)
@@ -160,10 +160,10 @@ def collect_causality_holdout(
                     "seed_attempt": attempt,
                     "minimum_transitions": minimum_transitions,
                     "windows_per_episode": windows_per_episode,
-                    "collision_balance_target": (
-                        collision_target or "unconstrained"
-                    ),
-                    "collision_class": collision_class,
+                    "balance_kind": balance_kind or "none",
+                    "balance_target": balance_target or "unconstrained",
+                    "balance_class": balance_class,
+                    "collision_class": _episode_collision_class(episode.metadata),
                     "retained_transitions": retained,
                     "system_identification_excitation": {
                         "motion_correlation": (
@@ -192,8 +192,8 @@ def collect_causality_holdout(
         windows_per_episode=windows_per_episode,
         episodes_per_task=episodes_per_task,
         holdout_phase=holdout_phase,
-        collision_balanced=collision_balanced,
-        collision_positive_episodes=collision_positive_episodes,
+        balance_kind=balance_kind,
+        positive_episodes=positive_episodes,
     )
 
 
@@ -296,7 +296,11 @@ def causality_batches_by_task(
 def holdout_phase_manifest(
     manifest: Mapping[str, object], phase: str
 ) -> dict[str, object]:
-    if phase not in {SYSTEM_IDENTIFICATION_PHASE, COLLISION_VALIDATION_PHASE}:
+    if phase not in {
+        SYSTEM_IDENTIFICATION_PHASE,
+        COLLISION_VALIDATION_PHASE,
+        ACTION_EXECUTION_VALIDATION_PHASE,
+    }:
         raise ValueError("unknown foundation holdout phase")
     shards = [
         shard
@@ -319,7 +323,11 @@ def _holdout_seed(
     *,
     holdout_phase: str = SYSTEM_IDENTIFICATION_PHASE,
 ) -> int:
-    phase_offset = 0 if holdout_phase == SYSTEM_IDENTIFICATION_PHASE else 200_000_033
+    phase_offset = {
+        SYSTEM_IDENTIFICATION_PHASE: 0,
+        COLLISION_VALIDATION_PHASE: 200_000_033,
+        ACTION_EXECUTION_VALIDATION_PHASE: 400_000_063,
+    }[holdout_phase]
     return (
         base_seed
         + 500_000_003
@@ -342,6 +350,19 @@ def _episode_collision_class(metadata: Mapping[str, object]) -> str:
     return "positive" if metadata.get("result_reason") == "severe_collision" else "negative"
 
 
+def _episode_balance_class(
+    episode, balance_kind: str | None
+) -> str:
+    if balance_kind is None:
+        return "unconstrained"
+    if balance_kind == "collision":
+        return _episode_collision_class(episode.metadata)
+    intervened = bool(
+        (np.asarray(episode.arrays["safety_intervention"]) > 0.0).any()
+    )
+    return "positive" if intervened else "negative"
+
+
 def _existing_slots(
     store: AppendableAutonomousTrajectoryStore,
 ) -> dict[tuple[str, str, int], int]:
@@ -358,6 +379,7 @@ def _existing_slots(
         if slot in result or slot[0] not in {
             SYSTEM_IDENTIFICATION_PHASE,
             COLLISION_VALIDATION_PHASE,
+            ACTION_EXECUTION_VALIDATION_PHASE,
         } or slot[2] < 0:
             raise ValueError("causality holdout task slot is invalid")
         result[slot] = int(shard["seed"])
@@ -373,8 +395,8 @@ def _verify_holdout(
     windows_per_episode: int,
     episodes_per_task: int,
     holdout_phase: str,
-    collision_balanced: bool,
-    collision_positive_episodes: int | None,
+    balance_kind: str | None,
+    positive_episodes: int | None,
 ) -> None:
     verified = set()
     for shard in store.manifest["shards"]:
@@ -388,13 +410,13 @@ def _verify_holdout(
         )
         target = (
             _collision_balance_target(identity[2], episodes_per_task)
-            if collision_balanced
+            if balance_kind is not None
             else None
         )
-        if collision_positive_episodes is not None:
+        if positive_episodes is not None:
             target = (
                 "positive"
-                if identity[2] < collision_positive_episodes
+                if identity[2] < positive_episodes
                 else "negative"
             )
         if (
@@ -404,11 +426,11 @@ def _verify_holdout(
             or int(shard["transition_count"]) < minimum_transitions
             or int(metadata.get("minimum_transitions", -1)) != minimum_transitions
             or int(metadata.get("windows_per_episode", -1)) != windows_per_episode
-            or metadata.get("collision_balance_target")
+            or metadata.get("balance_kind") != (balance_kind or "none")
+            or metadata.get("balance_target")
             != (target or "unconstrained")
-            or metadata.get("collision_class")
-            != _episode_collision_class(metadata)
-            or (target is not None and metadata.get("collision_class") != target)
+            or (target is not None and metadata.get("balance_class") != target)
+            or metadata.get("collision_class") != _episode_collision_class(metadata)
             or metadata.get("action_process", {}).get("schema_version")
             != "hwr.correlated-random-rl/v1"
         ):

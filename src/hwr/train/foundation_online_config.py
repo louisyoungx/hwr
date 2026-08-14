@@ -31,6 +31,14 @@ class FoundationOnlineTrainingConfig:
     maximum_collision_validation_false_positive_rate: float = 0.05
     minimum_collision_validation_terminal_alignment: float = 0.80
     minimum_collision_validation_action_sensitivity_ratio: float = 1.02
+    minimum_action_execution_positive_episodes_per_task: int = 8
+    minimum_action_execution_negative_episodes_per_task: int = 8
+    minimum_action_execution_recall: float = 0.80
+    minimum_action_execution_pr_auc: float = 0.50
+    maximum_action_execution_brier_score: float = 0.10
+    maximum_intervention_action_normalized_rmse: float = 0.15
+    maximum_identity_action_normalized_rmse: float = 0.05
+    maximum_action_execution_out_of_bounds_rate: float = 0.0
     calibration_early_stop_episodes: int = 24
     collection_episodes_per_cycle: int = 3
     updates_per_cycle: int = 200
@@ -63,6 +71,8 @@ class FoundationOnlineTrainingConfig:
     causality_holdout_transitions_per_episode: int = 64
     collision_validation_holdout_episodes_per_task: int = 16
     collision_validation_holdout_transitions_per_episode: int = 16
+    action_execution_holdout_episodes_per_task: int = 16
+    action_execution_holdout_transitions_per_episode: int = 16
     maximum_estimated_run_storage_gib: float = 30.0
     minimum_free_storage_gib: float = 35.0
     estimated_teacher_cache_bytes_per_observation: int = 2_800_000
@@ -109,6 +119,8 @@ class FoundationOnlineTrainingConfig:
             self.causality_holdout_transitions_per_episode,
             self.collision_validation_holdout_episodes_per_task,
             self.collision_validation_holdout_transitions_per_episode,
+            self.action_execution_holdout_episodes_per_task,
+            self.action_execution_holdout_transitions_per_episode,
             self.estimated_teacher_cache_bytes_per_observation,
             self.estimated_checkpoint_bytes,
             self.learning_signal_windows_per_episode,
@@ -133,6 +145,15 @@ class FoundationOnlineTrainingConfig:
             <= 0
         ):
             raise ValueError("collision validation counts are invalid")
+        if min(
+            self.minimum_action_execution_positive_episodes_per_task,
+            self.minimum_action_execution_negative_episodes_per_task,
+        ) < 0 or (
+            self.minimum_action_execution_positive_episodes_per_task
+            + self.minimum_action_execution_negative_episodes_per_task
+            <= 0
+        ):
+            raise ValueError("action execution validation counts are invalid")
         if self.minimum_actor_readiness_episodes > self.episodes:
             raise ValueError("Actor readiness Episodes exceed total Episodes")
         if self.calibration_early_stop_episodes > self.episodes:
@@ -181,8 +202,7 @@ class FoundationOnlineTrainingConfig:
         ):
             raise ValueError("causality windows must balance across holdout Episodes")
         windows_per_holdout = (
-            self.causality_audit_windows_per_task
-            // self.causality_holdout_episodes_per_task
+            self.causality_audit_windows_per_task // self.causality_holdout_episodes_per_task
         )
         if self.causality_holdout_transitions_per_episode < (
             windows_per_holdout * self.sequence_transitions
@@ -199,6 +219,16 @@ class FoundationOnlineTrainingConfig:
             < self.sequence_transitions
         ):
             raise ValueError("collision validation holdout cannot supply its gate")
+        required_execution = (
+            self.minimum_action_execution_positive_episodes_per_task
+            + self.minimum_action_execution_negative_episodes_per_task
+        )
+        if (
+            self.action_execution_holdout_episodes_per_task < required_execution
+            or self.action_execution_holdout_transitions_per_episode
+            < self.sequence_transitions
+        ):
+            raise ValueError("action execution holdout cannot supply its gate")
         ActionCausalityCriteria(
             self.minimum_action_causality_ratio,
             self.minimum_action_causality_horizon_fraction,
@@ -240,6 +270,19 @@ class FoundationOnlineTrainingConfig:
             raise ValueError("collision validation limits are invalid")
         if self.minimum_collision_validation_action_sensitivity_ratio < 1.0:
             raise ValueError("collision validation action sensitivity is invalid")
+        execution_probabilities = (
+            self.minimum_action_execution_recall,
+            self.minimum_action_execution_pr_auc,
+            self.maximum_action_execution_brier_score,
+            self.maximum_action_execution_out_of_bounds_rate,
+        )
+        if any(not 0.0 <= value <= 1.0 for value in execution_probabilities):
+            raise ValueError("action execution validation probabilities are invalid")
+        if min(
+            self.maximum_intervention_action_normalized_rmse,
+            self.maximum_identity_action_normalized_rmse,
+        ) <= 0.0:
+            raise ValueError("action execution validation errors must be positive")
         if min(
             self.maximum_estimated_run_storage_gib,
             self.minimum_free_storage_gib,

@@ -389,6 +389,16 @@ def _config(*, episodes: int = 6) -> FoundationOnlineTrainingConfig:
             minimum_collision_validation_action_sensitivity_ratio=1.0,
             collision_validation_holdout_episodes_per_task=1,
             collision_validation_holdout_transitions_per_episode=2,
+            minimum_action_execution_positive_episodes_per_task=0,
+            minimum_action_execution_negative_episodes_per_task=1,
+            minimum_action_execution_recall=0.0,
+            minimum_action_execution_pr_auc=0.0,
+            maximum_action_execution_brier_score=1.0,
+            maximum_intervention_action_normalized_rmse=100.0,
+            maximum_identity_action_normalized_rmse=100.0,
+            maximum_action_execution_out_of_bounds_rate=1.0,
+            action_execution_holdout_episodes_per_task=1,
+            action_execution_holdout_transitions_per_episode=2,
             calibration_early_stop_episodes=episodes,
             collection_episodes_per_cycle=3,
             updates_per_cycle=1,
@@ -476,8 +486,17 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
         "training_diagnostics"
     ]
     assert runner.store.manifest["transition_count"] <= 6
-    assert runner.causality_store.manifest["episode_count"] == 6
-    assert runner.causality_store.manifest["transition_count"] == 12
+    assert runner.causality_store.manifest["episode_count"] == 9
+    phases = {
+        shard["metadata"]["holdout_phase"]
+        for shard in runner.causality_store.manifest["shards"]
+    }
+    assert phases == {
+        "system_identification",
+        "action_execution_validation",
+        "collision_validation",
+    }
+    assert runner.causality_store.manifest["transition_count"] == 18
     assert len(list((tmp_path / "run/checkpoints").glob("update-*"))) == 1
     assert len(list((tmp_path / "run/deployments").glob("update-*"))) == 1
     assert runner.task_sampler.audit()["distance_thresholds"] is False

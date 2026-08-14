@@ -112,11 +112,20 @@ def test_imagination_advances_with_predicted_safety_executed_action() -> None:
         world.rssm.initial(2, torch.device("cpu"))
     )
 
-    torch.testing.assert_close(
-        trajectory.executed_actions,
-        trajectory.actions + 0.25,
-    )
+    expected = (trajectory.actions + 0.25).clamp(-1.0, 1.0)
+    torch.testing.assert_close(trajectory.executed_actions, expected)
     assert torch.all(trajectory.action_rewrite_magnitudes > 0.0)
+
+
+def test_predicted_executed_actions_cannot_escape_runtime_contract() -> None:
+    world, _, _, _ = _models()
+    features = torch.randn(32, world.config.feature_dimension)
+    proposals = torch.randn(32, world.config.action_dimension) * 100.0
+
+    predicted = world.predict_executed_action(features, proposals)
+
+    assert torch.all(predicted >= -1.0)
+    assert torch.all(predicted <= 1.0)
 
 
 def test_slow_value_inherits_exact_value_device_and_dtype() -> None:

@@ -15,6 +15,10 @@ from hwr.data.foundation_loading import (
 from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 from hwr.policy.latent_actions import LatentActionScaling
 from hwr.train.foundation_action_probe import evaluate_foundation_data_action_probe
+from hwr.train.foundation_action_execution_validation import (
+    ActionExecutionValidationCriteria,
+    evaluate_foundation_action_execution_validation,
+)
 from hwr.train.foundation_actor_readiness import FoundationActorReadinessTracker
 from hwr.train.foundation_collision_validation import (
     CollisionValidationCriteria,
@@ -121,13 +125,31 @@ def evaluate_foundation_actor_admission(
         ),
         batch_size=config.causality_audit_batch_size,
     )
+    action_execution_validation = evaluate_foundation_action_execution_validation(
+        trainer,
+        loader,
+        task_ids,
+        ActionExecutionValidationCriteria(
+            config.minimum_action_execution_positive_episodes_per_task,
+            config.minimum_action_execution_negative_episodes_per_task,
+            config.minimum_action_execution_recall,
+            config.minimum_action_execution_pr_auc,
+            config.maximum_action_execution_brier_score,
+            config.maximum_intervention_action_normalized_rmse,
+            config.maximum_identity_action_normalized_rmse,
+            config.maximum_action_execution_out_of_bounds_rate,
+        ),
+        batch_size=config.causality_audit_batch_size,
+    )
     diagnostic["collision_validation"] = collision_validation
+    diagnostic["action_execution_validation"] = action_execution_validation
     readiness = readiness_tracker.assess(
         diagnostic,
         probe,
         action_coverage,
         interaction,
         collision_validation,
+        action_execution_validation,
         replay_episodes=count_source_episodes(replay_store.manifest),
     )
     warmup = _required_warmup(readiness_tracker)

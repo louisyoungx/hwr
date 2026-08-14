@@ -10,6 +10,7 @@ from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 from hwr.policy.latent_actions import LatentActionScaling
 from hwr.train.foundation_exploration import RandomRLExplorationConfig
 from hwr.train.foundation_holdout import (
+    ACTION_EXECUTION_VALIDATION_PHASE,
     COLLISION_VALIDATION_PHASE,
     SYSTEM_IDENTIFICATION_PHASE,
     collect_causality_holdout,
@@ -45,8 +46,28 @@ def prepare_foundation_system_holdout(
             // config.causality_holdout_episodes_per_task
         ),
         retained_transitions=config.causality_holdout_transitions_per_episode,
-        collision_balanced=False,
-        collision_positive_episodes=None,
+        balance_kind=None,
+        positive_episodes=None,
+    )
+
+
+def prepare_foundation_startup_holdouts(
+    store: AppendableAutonomousTrajectoryStore,
+    environments: Mapping[str, RuntimeBackend],
+    tasks: Mapping[str, FoundationTaskInterface],
+    preprocessor: HighResolutionVisionPreprocessor,
+    action_scaling: LatentActionScaling,
+    exploration: RandomRLExplorationConfig,
+    config: FoundationOnlineTrainingConfig,
+    *,
+    source_commit: str,
+) -> None:
+    arguments = (
+        store, environments, tasks, preprocessor, action_scaling, exploration, config
+    )
+    prepare_foundation_system_holdout(*arguments, source_commit=source_commit)
+    prepare_foundation_action_execution_holdout(
+        *arguments, source_commit=source_commit
     )
 
 
@@ -76,9 +97,40 @@ def prepare_foundation_collision_holdout(
         retained_transitions=(
             config.collision_validation_holdout_transitions_per_episode
         ),
-        collision_balanced=True,
-        collision_positive_episodes=(
+        balance_kind="collision",
+        positive_episodes=(
             config.minimum_collision_validation_positive_episodes_per_task
+        ),
+    )
+
+
+def prepare_foundation_action_execution_holdout(
+    store: AppendableAutonomousTrajectoryStore,
+    environments: Mapping[str, RuntimeBackend],
+    tasks: Mapping[str, FoundationTaskInterface],
+    preprocessor: HighResolutionVisionPreprocessor,
+    action_scaling: LatentActionScaling,
+    exploration: RandomRLExplorationConfig,
+    config: FoundationOnlineTrainingConfig,
+    *,
+    source_commit: str,
+) -> None:
+    _prepare(
+        store,
+        environments,
+        tasks,
+        preprocessor,
+        action_scaling,
+        exploration,
+        config,
+        source_commit=source_commit,
+        phase=ACTION_EXECUTION_VALIDATION_PHASE,
+        episodes_per_task=config.action_execution_holdout_episodes_per_task,
+        windows_per_episode=1,
+        retained_transitions=config.action_execution_holdout_transitions_per_episode,
+        balance_kind="safety_intervention",
+        positive_episodes=(
+            config.minimum_action_execution_positive_episodes_per_task
         ),
     )
 
@@ -97,8 +149,8 @@ def _prepare(
     episodes_per_task: int,
     windows_per_episode: int,
     retained_transitions: int,
-    collision_balanced: bool,
-    collision_positive_episodes: int | None,
+    balance_kind: str | None,
+    positive_episodes: int | None,
 ) -> None:
     collect_causality_holdout(
         store,
@@ -117,6 +169,6 @@ def _prepare(
         base_seed=config.seed,
         source_commit=source_commit,
         holdout_phase=phase,
-        collision_balanced=collision_balanced,
-        collision_positive_episodes=collision_positive_episodes,
+        balance_kind=balance_kind,
+        positive_episodes=positive_episodes,
     )

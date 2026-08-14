@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
-from hwr.core.embodied import DUAL_ARM_ACTION_DIM
+from hwr.core.embodied import (
+    DUAL_ARM_ACTION_DIM,
+    DUAL_ARM_ACTION_MAXIMUM,
+    DUAL_ARM_ACTION_MINIMUM,
+)
 
 
 @dataclass(frozen=True)
@@ -22,6 +26,8 @@ class WorldModelConfig:
     reward_bins: int = 255
     reward_symlog_limit: float = 20.0
     categorical_unimix: float = 0.01
+    action_minimum: tuple[float, ...] = ()
+    action_maximum: tuple[float, ...] = ()
     formal: bool = True
 
     def __post_init__(self) -> None:
@@ -48,6 +54,22 @@ class WorldModelConfig:
             raise ValueError("world model categorical unimix must be in [0, 1)")
         if self.formal and self.action_dimension != DUAL_ARM_ACTION_DIM:
             raise ValueError("formal world model requires the canonical 16-D action")
+        lower = tuple(float(value) for value in self.action_minimum)
+        upper = tuple(float(value) for value in self.action_maximum)
+        if not lower and not upper:
+            if self.action_dimension == DUAL_ARM_ACTION_DIM:
+                lower, upper = DUAL_ARM_ACTION_MINIMUM, DUAL_ARM_ACTION_MAXIMUM
+            else:
+                lower = (-1.0,) * self.action_dimension
+                upper = (1.0,) * self.action_dimension
+        if (
+            len(lower) != self.action_dimension
+            or len(upper) != self.action_dimension
+            or any(low >= high for low, high in zip(lower, upper, strict=True))
+        ):
+            raise ValueError("world model action bounds violate the runtime contract")
+        object.__setattr__(self, "action_minimum", lower)
+        object.__setattr__(self, "action_maximum", upper)
 
     @property
     def stochastic_dimension(self) -> int:

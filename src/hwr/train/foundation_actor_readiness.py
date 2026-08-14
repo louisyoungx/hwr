@@ -8,7 +8,7 @@ from typing import Mapping
 from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
 
 
-ACTOR_READINESS_SCHEMA = "hwr.foundation-actor-readiness/v6"
+ACTOR_READINESS_SCHEMA = "hwr.foundation-actor-readiness/v7"
 
 
 EXPLORATION_CHECKS = (
@@ -19,6 +19,7 @@ EXPLORATION_CHECKS = (
     "data_action_probe_ratio",
     "data_action_probe_bootstrap_lower_bound",
     "data_action_probe_all_tasks",
+    "action_execution_model_validation",
 )
 
 TASK_INTERACTION_CHECKS = (
@@ -27,6 +28,7 @@ TASK_INTERACTION_CHECKS = (
     "severe_collision_positive_coverage",
     "severe_collision_negative_coverage",
     "collision_model_validation",
+    "action_execution_model_validation",
 )
 
 CALIBRATION_CHECKS = EXPLORATION_CHECKS[1:]
@@ -161,6 +163,7 @@ class FoundationActorReadinessTracker:
         action_coverage: Mapping[str, object],
         interaction_coverage: Mapping[str, object],
         collision_validation: Mapping[str, object],
+        action_execution_validation: Mapping[str, object],
         *,
         replay_episodes: int,
     ) -> dict[str, object]:
@@ -211,6 +214,9 @@ class FoundationActorReadinessTracker:
             "collision_model_validation": _collision_validation_passed(
                 collision_validation, self.criteria
             ),
+            "action_execution_model_validation": (
+                action_execution_validation.get("passed") is True
+            ),
         }
         exploration_passed = _selected_checks_pass(checks, EXPLORATION_CHECKS)
         self.consecutive_passes = (
@@ -252,6 +258,7 @@ class FoundationActorReadinessTracker:
             "data_action_probe": dict(data_action_probe),
             "interaction_coverage": dict(interaction_coverage),
             "collision_validation": dict(collision_validation),
+            "action_execution_validation": dict(action_execution_validation),
             "exploration_actor_update_count": self.exploration_actor_update_count,
             "task_actor_update_count": self.task_actor_update_count,
             "exploration_actor_warmup": self.exploration_actor_warmup,

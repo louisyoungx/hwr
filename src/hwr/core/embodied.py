@@ -10,6 +10,12 @@ from hwr.core.types import CameraFrame, SafetyState
 
 
 DUAL_ARM_ACTION_DIM = 16
+DUAL_ARM_ACTION_MINIMUM = (
+    -0.18, -0.50, *(-0.35,) * 12, 0.0, 0.0
+)
+DUAL_ARM_ACTION_MAXIMUM = (
+    0.18, 0.50, *(0.35,) * 12, 1.0, 1.0
+)
 DUAL_ARM_TOOL_TWIST_FIELDS = ("vx", "vy", "vz", "wx", "wy", "wz")
 DUAL_ARM_TOOL_TWIST_REFLECTION_SIGNS = (1, -1, 1, -1, 1, -1)
 DUAL_ARM_OBSERVATION_SCHEMA = "hwr.dual-arm-observation/v1"

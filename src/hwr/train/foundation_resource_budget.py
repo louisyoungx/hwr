@@ -50,6 +50,15 @@ def foundation_storage_estimate(
     holdout_shards += collision_shards
     holdout_transitions += collision_transitions
     holdout_observations += collision_transitions + collision_shards
+    execution_shards = (
+        task_count * config.action_execution_holdout_episodes_per_task
+    )
+    execution_transitions = (
+        execution_shards * config.action_execution_holdout_transitions_per_episode
+    )
+    holdout_shards += execution_shards
+    holdout_transitions += execution_transitions
+    holdout_observations += execution_transitions + execution_shards
     raw_bytes_per_observation = (
         config.camera_width * config.camera_height * (3 * 3 + 4 + 1)
     )

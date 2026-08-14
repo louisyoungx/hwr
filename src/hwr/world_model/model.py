@@ -294,7 +294,10 @@ class ActionConditionedWorldModel(nn.Module):
         residual = self.action_execution_head(
             torch.cat((features, actor_proposals), dim=-1)
         )
-        return actor_proposals + residual
+        predicted = actor_proposals + residual
+        lower = predicted.new_tensor(self.config.action_minimum)
+        upper = predicted.new_tensor(self.config.action_maximum)
+        return torch.maximum(lower, torch.minimum(upper, predicted))
 
     def _check_observation_shapes(
         self,
