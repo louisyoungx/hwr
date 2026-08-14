@@ -1,23 +1,99 @@
-# Repository Engineering Rules
+## 目标
 
-## Architecture first
+持续提升家务场景通用具身智能能力，重点关注任务、物体、布局、语言、动力学和硬件迁移上的泛化，以及闭环成功率、安全性、数据效率和计算效率。
 
-- Define a module's responsibility and dependency direction before adding it.
-- Core schemas must not import simulation, training, evaluation, applications, or hardware adapters.
-- Third-party engines and device SDKs belong behind adapters.
-- Simulation and real hardware must share the same runtime contracts.
-- Safety filtering must remain independent from learned policies.
+当前项目以三维家庭环境、视觉/语言/本体观测、底盘与双臂联合控制、世界模型、强化学习和独立安全层为研究起点。现有代码和文档只是基线证据，不是不可修改的规范；任何架构均可被挑战，但必须通过可复现的对照实验验证。
 
-## Python size limits
+能力结论必须来自未见分布上的闭环物理结果，不能只依据 loss、训练回报、演示轨迹或主观视频。不得通过评测泄露、脚本动作、任务专属捷径或削弱安全约束制造提升。
 
-- A Python file must not exceed 800 physical lines.
-- A Python function, async function, or method must not exceed 200 physical lines.
-- Split code by responsibility before approaching either limit.
-- Run `python3 scripts/check_python_size.py` before committing.
+## Agent 配置
 
-## Verification and commits
+所有 Agent 使用 GPT-5.6 Sol，极高推理强度。在可用并发内组织：
 
-- Add or update tests for every behavior change.
-- Run the relevant tests and the Python size check before each commit.
-- Commit each independently verifiable stage separately.
+- 主 Agent，单例
+  - 维护研究循环、基线、实验设计、任务分配、Git 集成和最终决策。
+- 创新 Agents，默认 3 个
+  - 独立检查项目证据，从不同方向提出改进假设。
+  - 可以进行只读分析和小型临时验证，不修改正式实现、不启动正式训练。
+- 筛选 Agents，默认 2 个
+  - 独立评审全部提案，主动寻找反例、重复项、不可归因改动和评测漏洞。
+  - 不修改实现，提交评分后再进行汇总，避免相互锚定。
+- 实施 Agents
+  - 每个入选假设指定唯一负责人，完成实现、测试、实验配置和原子 Git 提交。
+- 清理 Agent，单例
+  - 只清理由主 Agent 确认可重建、无引用的资源，并记录清理清单。
 
+## 每轮文档
+
+每轮创建新的四位递增目录，不得覆盖已有轮次：
+
+`docs/research-loop/<NNNN>/`
+
+至少包含：
+
+- `00-context.md`：起始提交、可信基线、当前瓶颈、上一轮结论。
+- `01-proposals.md`：提案表。
+- `02-review.md`：独立评分、反驳和筛选结果。
+- `03-experiment.md`：冻结的对照实验、负责人、分支、命令、配置、种子、资源预算和判定标准。
+- `04-results.md`：完整训练与评测结果。
+- `05-summary.md`：接受、拒绝或证据不足的结论，新基线及下一轮问题。
+
+所有观点使用稳定 ID，例如 `R0001-P03`，并在实现、提交、运行和结果间保持引用。
+
+文档需要优先中文。
+
+## Research Loop
+
+1. 建立当轮上下文
+   - 确认工作区状态、起始提交、当前训练与评测入口、已有结果和可用资源。
+   - 选择一个有证据支持的主要瓶颈。
+   - 若没有可信基线，先建立最小可复现基线，不宣称改进。
+
+2. 生成提案
+   - 创新 Agents 独立提出少量高价值假设。
+   - 每项必须包含：瓶颈证据、改进假设、影响范围、最小验证、主要指标、失效条件、成本、风险和依赖。
+   - 合并重复提案，但保留不同意见和来源。
+
+3. 独立筛选
+   - 筛选 Agents 对目标价值、证据强度、可检验性、因果可归因性、通用性、实施成本和回归风险分别按 1–5 分评分。
+   - 拒绝没有明确指标、无法证伪、与现状重复、依赖评测泄露或需要同时改变过多变量的提案。
+   - 主 Agent 根据评分、依赖和资源选择候选；不得仅按总分机械选择。
+
+4. 冻结实验
+   - 原则上一个训练候选只验证一个主假设，不捆绑无法独立归因的算法改动。
+   - 在实施前冻结基线、主要指标、守护指标、评测数据、种子、预算和接受标准。
+   - 候选与基线使用相同评测和可比预算；不得看到结果后修改门槛或挑选种子。
+   - 评测修复与能力改进不得放在同一个因果对比中。
+
+5. 实施与验证
+   - 主 Agent 为各候选分配独立分支或 worktree，并明确文件所有权，避免并发覆盖。
+   - 实施 Agents 只能落实已批准范围；发现需要扩展时先记录并交主 Agent 决定。
+   - 每项行为变化必须有测试。提交应原子化并引用提案 ID。
+   - 训练只能基于干净、已提交且通过相关测试和项目门禁的提交。
+   - 未经验证的候选不得直接成为下一轮基线。
+
+6. 训练
+   - 先执行成本最低但具有判别力的验证，再进入计划内训练。
+   - 正式训练默认独占可用加速器并充分利用本机资源，确保训练任务高效执行，任务期间你独占本机所有资源，尽可能高效利用本机资源，避免其他任务干扰测量。
+   - 完整记录源码提交、命令、环境、配置、随机种子、数据与模型哈希、资源消耗和产物目录。
+   - 使用 `traex-host-exec` 启动长时训练并休眠，等待完成或超时唤起。
+   - 不得使用 Codex 目标，防止被目标自动唤起，尽量多使用 `traex-host-exec` 来替代 Codex 目标。
+   - 超时唤起后检查进程、日志和 checkpoint，检查训练进度和效果，判断训练是否已经失控；如果判断训练下去无价值就直接停止训练进入下一步；仍在正常运行则继续等待，不重复启动同一 run。
+
+7. 评测与归因
+   - 使用训练前冻结的评测方案，报告全部种子、失败和异常，不进行结果挑选。
+   - 同时比较主要指标、泛化、安全、稳定性、数据效率、计算成本和已有能力回归。
+   - 每项结论标记为：
+     - `accepted`：预设指标改善且守护指标无不可接受回归；
+     - `rejected`：假设被否定或净收益为负；
+     - `inconclusive`：证据不足或实验失效。
+   - 保存失败实验和反例，避免后续重复消耗资源。
+
+8. 收尾
+   - 将文档、实现、配置和结果索引全部提交到 Git，分支为 `feat/research-loop`，并 push 到远端。
+   - 仅将 `accepted` 候选合入新基线；其他候选保留可追溯的分支和提交引用。
+   - 主 Agent 根据下一轮预计空间决定是否唤起清理 Agent。
+   - 清理前检查引用和保留策略；不得删除当前基线、唯一原始数据、不可重建结果、最新可恢复 checkpoint、评测证据、manifest 或日志。
+   - 在 `05-summary.md` 记录删除内容及清理前后磁盘空间。
+
+9. 使用新基线和未解决问题建立下一轮目录，重新开始。
