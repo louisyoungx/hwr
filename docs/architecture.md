@@ -162,7 +162,10 @@ flowchart TB
 - `configs/tasks/formal_3d_v1.json`：项目自有的 task/scene/object/target ID、指令、重置范围、随机化和成功门槛；
 - `configs/adapters/mujoco/formal_3d_v1.json`：只在适配器侧把这些 ID 绑定到 MJCF body/joint/geom/site。
 
-`MujocoHouseholdBackend` 对上仍只实现 `RuntimeBackend`。真值实体位姿、目标 site、接触力和抽屉关节只用于 reset、自动成功判定、训练期 Critic 与只读审计，不产生动作标签，也不进入 `ObservationFrame.features`；在线观察固定为头部和左右腕部相机 payload 与双臂本体状态。
+`MujocoFormalHouseholdDualArmBackend` 对上仍只实现项目自有的双臂 `RuntimeBackend`，与未来
+真机共享 16 维动作和 `DualArmObservation`。真值实体位姿、目标 site、接触力和抽屉关节只
+用于 reset、奖励、自动成功判定与只读审计，不产生动作标签，也不进入 Actor 观察；在线
+观察固定为头部 RGB-D、左右腕部 RGB、动态标定、双臂本体状态和自然语言指令。
 
 场景的安全初始机械臂姿态属于 MuJoCo binding，而不是核心任务 schema 或 Actor 计划。适配器加载时必须验证六维关节初值；重置回归测试要求无动作情况下物体由真实家具支撑、机器人与任务物体没有初始穿模、物体速度收敛且不产生严重碰撞。该姿态只定义 Episode 的物理起点，不包含未来动作、抓取姿态序列或任务阶段。
 

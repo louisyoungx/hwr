@@ -54,9 +54,9 @@ Git，但所有开发工作共享一个总门禁：
 
 总门禁必须由单一命令检查代码、依赖、权重锁、数据 schema、反作弊规则、部署隔离、
 固定 fixture 和 Python 尺寸限制。任何一项失败，正式训练入口必须拒绝运行。
-解锁报告必须使用当前 `hwr.foundation-development-ready/v2` schema，精确包含受保护源码、
+解锁报告必须使用当前 `hwr.foundation-development-ready/v3` schema，精确包含受保护源码、
 算法谱系、正式配置、模型选择、运行依赖、权重、架构、Python 尺寸、全量测试和真实基础
-模型推理十项证据；缺少任一项、混入未知项、未显式声明解锁，或隔离提交证据与当前提交
+模型推理证据，并额外执行训练语义检查；缺少任一项、混入未知项、未显式声明解锁，或隔离提交证据与当前提交
 不一致都必须失败。正式训练入口把通过校验的 readiness 报告原样复制进 run，并把其
 SHA-256 写入 run manifest；恢复与最终评测都重新验证该副本。算法谱系扫描覆盖基础模型
 适配器、感知、数据、Actor、世界模型、训练、安全、部署和评测整条新主线，不能只扫描
@@ -78,9 +78,11 @@ Critic 可以读取这些结果；仿真真值可以用于独立评测或训练�
 Actor、部署世界模型状态或基础模型提示。
 
 环境的成功结果必须绑定可验证的物理因果，而不能只拼接互不相关的末态条件。当前三个
-双臂任务要求目标位移在连续左右臂物理接触中完成；回弹抽屉还要求开度在连续左臂接触中
-完成。到位后允许机器人释放物体，但物体离开目标容差会撤销完成证据。该状态机只核验
-已经发生的接触与运动，不向 Actor 返回抓取点、路径、动作、技能或任务阶段。
+正式任务都要求两个操作物最终进入各自目标体积并稳定 2 秒。成功 Episode 必须分别累积
+左右夹爪的真实双指接触，并出现至少 0.5 秒左右臂同时接触；厨房任务还要求抽屉由物理
+接触拉到最小开度。到位后允许机器人释放物体，但物体离开目标体积会撤销稳定证据。该
+状态机只核验已经发生的接触、关节运动和末态，不向 Actor 返回抓取点、路径、动作、技能
+或任务阶段。
 
 初始自主数据仍只能来自随机 RL，但随机不等于每个控制周期独立抖动。正式采集使用不读取
 观测、任务或对象的平稳时序相关随机过程：14 维运动量服从统一的一阶相关噪声，两个夹爪
@@ -144,9 +146,10 @@ Transformers 版本。缺少 torchvision、版本族不匹配或回退到不存�
 默认语言编码器为冻结的 Qwen3-Embedding-0.6B。每条自然语言指令按规范化文本计算一次
 并缓存，运行时按内容哈希读取。它只输出连续语义向量，不生成文本、计划或动作。
 
-当前每个预训练任务只有一条固定指令，因此 Qwen3 表征只能解释为连续任务上下文，不能
-据此声称语言泛化。正式家庭场景若要声明语言能力，必须另外使用未参与训练的同义改写、
-组合指令和不同意图划分，并验证物理成功率，而不是只比较 embedding 相似度。
+每个正式家庭任务声明 4 条训练指令改写和 3 条不重叠的评测改写；Episode 只按 seed 从对应
+集合选择原始自然语言，算法不读取对象名或任务阶段。固定未见种子评测只使用评测集合，
+因此可以检验同一任务内的指令改写鲁棒性。它仍不能证明新任务、组合指令或开放词汇泛化；
+这些能力必须用新的任务和对象分布单独验收，而不是只比较 embedding 相似度。
 
 旧 `FrozenNgramLanguageEncoder` 仅保留给历史 checkpoint 和快速接口回归。正式
 `development-ready` 检查必须拒绝将其登记为当前部署语言编码器。
@@ -184,6 +187,11 @@ RGB-D 对齐必须使用每帧动态标定，而不能假设头部 RGB 与深度
 
 训练监督只能来自无动作标签数据：教师特征蒸馏、跨视角几何对应、时序一致性、遮挡恢复、
 深度结构和合法视觉增强一致性。仿真分割可用于独立 probe 评测，不进入部署特征或策略输入。
+
+部署实际消费的 `pooled_state` 不能依赖随机且不更新的融合层。视觉目标因此包含从当前空间
+特征到融合状态的停止梯度对齐损失，反向路径必须穿过跨相机融合、时序 Transformer、时序
+位置参数和输出归一化。`development-ready/v3` 会在隔离提交上执行一次真实优化步，要求这
+四部分均有非零梯度且参数确实变化；只靠总体 loss 有限不能解锁训练。
 
 ## 5. 自主轨迹与特征缓存
 
@@ -263,6 +271,11 @@ Actor 准入拆成两级，不能再按“采集了若干 Episode”自动切换
 时序对齐和动作打乱敏感性过线。任一后续审计失败立即撤销对应准入。在探索准入前只更新视觉学生和世界
 模型；任务 Actor 尚无合格更新也不得导出 deployment。奖励、终止和碰撞等稀疏头仍是任务
 Actor 与最终部署门，不能反过来阻塞通用探索 Actor。
+
+探索 Actor 也不能在未经验证的安全动作残差模型上做想象优化。启动留出阶段另为每任务
+采集 8 个安全干预正例和 8 个未干预负例；残差模型输出先按正式 16 维动作合同逐维裁剪，
+再用独立数据检查干预召回率、PR-AUC、Brier、干预样本归一化 RMSE、未干预恒等映射 RMSE
+和越界率。当前越界率要求严格为 0；该门不通过时探索 Actor 与任务 Actor 均保持锁定。
 
 每个训练 checkpoint 都必须生成不可变的动作因果报告，报告绑定源码提交、更新次数、
 训练 replay manifest SHA-256、独立审计数据 manifest SHA-256 和确切窗口清单；报告
@@ -375,11 +388,15 @@ run manifest schema 为 `hwr.foundation-online-run/v4`，旧 v1/v2/v3 不进入�
 不查看场景对象、距离或动作内容。原始 shard 淘汰后，同时删除可重建的对应视觉特征缓存。
 
 Checkpoint 和部署导出同样采用固定保留数，只删除格式合法的旧 `update-*` 目录，始终保留
-最新版本及其哈希清单。每个自主 Episode 只进入两个连续、互不重叠的 16-transition 物理
-序列，覆盖统计按原始 Episode ID 去重；正式 120 Episode 因而最多占 3,840 个训练
-transition。系统辨识留出集每任务为 8×128 transition，延迟碰撞校准集为 16×16
-transition，且两者都不生成 DINOv3/SigLIP2 教师缓存。正式配置保留 18,000 transition
-容量和最近 3 组训练/部署产物；当前未压缩静态估算约 `20.84 GiB`，配置上限为 `30 GiB`，
+最新版本及其哈希清单。每个自主 Episode 最多保留 7 个连续、互不重叠的 16-transition
+动力学窗口：先选实际保留数据中的接触、受控运动、碰撞和动作变化显著窗口，再补边界与
+均匀覆盖；交互准入只认可这些 retained transition 重新计算出的证据，不能读取已被丢弃的
+Episode 汇总。正式 120 Episode 因而可保留 13,440 个训练 transition，其中每 Episode 仅
+2 个窗口生成昂贵的 DINOv3/SigLIP2 教师缓存，其余窗口仍训练世界模型。
+
+独立留出库包括每任务 8×128 transition 的系统辨识数据、16×16 的碰撞验证数据和
+16×16 的安全动作执行验证数据，三者都不生成教师缓存。正式配置保留 18,000 transition
+容量和最近 3 组训练/部署产物；当前未压缩静态估算约 `28.41 GiB`，配置上限为 `30 GiB`，
 启动时还要求至少 `35 GiB` 空闲空间。容量策略只管理存储，不产生动作或课程答案。
 
 ### 9.2 本机统一内存上限
@@ -465,7 +482,8 @@ Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默�
   单独支持正式能力结论；
 - 正式家庭场景前先报告到达、单侧接触、双侧稳定接触、受控刚体/关节运动和完整任务五级
   物理基准；这些级别用于诊断覆盖，不向 Actor 提供任务阶段或动作答案；
-- 收纳篮、托盘和抽屉放物三个任务分别评测至少 40 个未见随机种子；“未见”必须同时
+- 客厅双物体收纳、餐桌杯盘归位和厨房双瓶入抽屉三个正式任务分别评测至少 40 个未见随机
+  种子；“未见”必须同时
   排除训练 Episode 与动作因果留出集使用过的全部种子，即使手工指定评测起始种子也一样；
 - 每个任务观测成功率不低于 70%，且 95% Wilson 区间下界也不低于 70%；
 - 严重碰撞为 0；
@@ -489,7 +507,7 @@ Episode 评测、验收结果和每路视频，不能只通过目录路径间接
 
 ## 11. 当前实现映射
 
-截至 2026-08-12，以上设计对应的项目自有模块如下：
+截至 2026-08-14，以上设计对应的项目自有模块如下：
 
 | 责任 | 实现 |
 |---|---|
@@ -504,11 +522,12 @@ Episode 评测、验收结果和每路视频，不能只通过目录路径间接
 | 任务无关物理状态课程 | `hwr.train.foundation_frontier`、`learning_frontier`、`foundation_learning_signals` |
 | 环境声明的通用增强 | `hwr.train.foundation_augmentation` |
 | 单一在线闭环 | `hwr.train.foundation_online`、`foundation_trainer`、`foundation_holdout_orchestration`、`foundation_run_manifest` |
+| 正式家庭环境 | `hwr.adapters.mujoco.formal_household_backend`、`hwr.scenarios.formal3d`、`configs/tasks/formal_3d_v1.json` |
 | 本机资源预算 | `hwr.train.foundation_resource_budget` |
 | 指标与本机面板 | `hwr.train.foundation_metrics`、`foundation_dashboard`、`hwr.apps.serve_foundation_dashboard` |
 | 训练/部署 checkpoint | `hwr.train.foundation_registry` |
 | 剥离部署运行时 | `hwr.world_model.deploy`、`hwr.policy.foundation_runtime` |
-| 总门禁 | `scripts/verify_development_ready.py`、`hwr.train.development_gate` |
+| 总门禁 | `scripts/verify_development_ready.py`、`scripts/verify_training_semantics.py`、`hwr.train.development_gate` |
 | 固定验收与视频 | `hwr.apps.evaluate_foundation_world_model`、`hwr.eval.bimanual` |
 
 `hwr-train-foundation-world-model` 是唯一新主线正式训练入口。它不能跳过

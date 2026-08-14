@@ -13,11 +13,14 @@
 - 16 维底盘—双臂—双夹爪动作契约；
 - 可部署 VLA Actor、训练期特权双 Critic 和经验回放基础组件；
 - 1.60 m 四轮中央箱体、左右各 6-DOF 机械臂、双钳形夹爪和头部/双腕相机的 MuJoCo 模型；
-- 客厅收纳篮、餐厅托盘和厨房回弹抽屉三个必须双臂并发的物理任务；
+- 客厅双物体收纳、餐桌杯盘归位和厨房双瓶入抽屉三个正式多物体任务；
 - 无专家在线采样、仅保存自主 transition 的分层回放、自动课程、断点续训和 Actor 导出；
 - 锁定 SigLIP2、DINOv3 ViT-S/16 与 Qwen3-Embedding 的高分辨率连续感知缓存；
 - 24.4M 参数视觉学生、动作条件 categorical RSSM 与想象空间强化学习；
 - 动态腕部相机标定、自主序列 replay、统一三任务在线闭环及剥离式部署导出；
+- 每任务训练/评测指令改写隔离，以及相机、深度、执行器和延迟的分布外评测；
+- 13,440 transition 的显著交互优先 Replay，以及只依据实际 retained transition 的准入证据；
+- 部署视觉融合梯度、正式任务入口、Replay 规模和动作边界的可执行开发硬门；
 - 重载 Actor 的未见种子评测、左右单臂锁定消融及四视角同进程视频录制；
 - 带校验和的本地模型注册表；
 - 三个独立家务场景的历史二维闭环基准；
@@ -48,7 +51,12 @@ python3 scripts/verify_benchmarks.py
 hwr-train-foundation-world-model --run-id foundation-wm-001 --device cpu
 ```
 
-在门禁产生与当前提交、配置和受保护源码哈希一致的报告前，训练命令会直接拒绝运行。
+在门禁产生与当前提交、配置和受保护源码哈希一致的报告前，训练命令会直接拒绝运行。可先
+单独运行不访问基础模型权重的训练语义检查：
+
+```bash
+.venv/bin/python scripts/verify_training_semantics.py
+```
 
 三维开发环境与机器人模型验证：
 
@@ -78,6 +86,7 @@ hwr-render-benchmarks --output-path artifacts/benchmark-rollouts.mp4
 
 - [平台架构与模块边界](docs/architecture.md)
 - [基础模型感知、世界模型与想象强化学习范式](docs/foundation-world-model-training-paradigm.md)
+- [从玩具闭环到严肃研究平台的判定合同](docs/serious-platform-vnext.md)
 - [历史端到端训练范式](docs/end-to-end-training-paradigm.md)
 - [本机训练进度与阶段诊断](docs/training-progress.md)
 - [训练与拟真环境方案](docs/training-and-simulation-plan.md)
@@ -89,4 +98,7 @@ hwr-render-benchmarks --output-path artifacts/benchmark-rollouts.mp4
 
 ## 当前边界
 
-二维后端不代表家务仿真能力。三维 V1 尚在实施中；在三个带纹理家庭场景、四轮双六轴机器人、无专家的非特权视觉策略、真实双臂接触操作和隔离种子评测全部通过前，项目不会宣称完成拟真家务训练平台。
+二维后端不代表家务仿真能力。当前代码已经具备正式三维家庭环境、基础模型感知、世界模型、
+想象 RL、语言/OOD 留出和可执行训练门禁，但尚未产生新谱系的训练成功证据。在三个带纹理
+家庭场景、无专家非特权视觉策略、真实双臂接触、三个训练 seed 和隔离种子评测全部通过前，
+项目只声明“严肃实验平台已实现”，不宣称机器人已经学会家务，也不外推为开放世界通用能力。
