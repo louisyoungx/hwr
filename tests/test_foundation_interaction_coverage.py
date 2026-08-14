@@ -29,7 +29,10 @@ def test_interaction_coverage_reports_staged_physical_evidence_by_task(
             {
                 "task_id": "task-a/v1",
                 "transition_count": 16,
-                "metadata": {"interaction_audit": audit},
+                "metadata": {
+                    "interaction_audit": audit,
+                    "interaction_evidence_retained": True,
+                },
             }
             for audit in audits
         ]
@@ -57,10 +60,13 @@ def test_interaction_coverage_excludes_episodes_too_short_for_training(
         "shards": [{
             "task_id": "task-a/v1",
             "transition_count": 15,
-            "metadata": {"interaction_audit": {
-                "left_contact_steps": 1,
-                "severe_collision_count": 1,
-            }},
+            "metadata": {
+                "interaction_audit": {
+                    "left_contact_steps": 1,
+                    "severe_collision_count": 1,
+                },
+                "interaction_evidence_retained": True,
+            },
         }]
     }
 
@@ -88,6 +94,7 @@ def test_interaction_coverage_counts_sequence_windows_once_per_source(tmp_path) 
                 "transition_count": 16,
                 "metadata": {
                     "interaction_audit": audit,
+                    "interaction_evidence_retained": True,
                     "sequence_reservoir": {"source_episode_id": "source-1"},
                 },
             }
@@ -104,4 +111,5 @@ def test_interaction_coverage_counts_sequence_windows_once_per_source(tmp_path) 
 
     task = report["partitions"]["task-a/v1"]
     assert task["episode_count"] == 1
+    assert task["unilateral_contact_episode_count"] == 1
     assert task["severe_collision_negative_episode_count"] == 1

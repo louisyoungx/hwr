@@ -457,6 +457,7 @@ class FoundationOnlineTrainingRunner:
                 episode,
                 sequence_transitions=self.config.sequence_transitions,
                 windows_per_episode=self.config.replay_windows_per_episode,
+                visual_supervision_windows=self.config.visual_supervision_windows_per_episode,
             )
             collected.append(episode)
         return collected

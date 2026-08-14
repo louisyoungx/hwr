@@ -12,6 +12,7 @@ def test_formal_compact_storage_estimate_excludes_holdout_teacher_features() -> 
         causality_audit_windows_per_task=64,
         causality_holdout_transitions_per_episode=64,
         replay_windows_per_episode=2,
+        visual_supervision_windows_per_episode=1,
         minimum_collision_positive_episodes_per_task=8,
         minimum_collision_negative_episodes_per_task=8,
     )
@@ -20,6 +21,7 @@ def test_formal_compact_storage_estimate_excludes_holdout_teacher_features() -> 
 
     assert report["holdout"]["transitions"] == 3 * 16 * (64 + 16)
     assert report["holdout"]["teacher_visual_features"] is False
+    assert report["replay"]["visual_supervision_shards"] == 120
     assert report["estimated_gib"] < config.maximum_estimated_run_storage_gib
 
 

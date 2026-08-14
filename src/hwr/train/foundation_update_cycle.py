@@ -36,6 +36,7 @@ def run_foundation_update_cycle(
             rng,
             batch_size,
             severe_collision_fraction=severe_collision_batch_fraction,
+            require_visual_supervision=trainer.visual_update_due,
         )
         batch = loader.build(
             indices, include_visual_targets=trainer.visual_update_due
@@ -82,6 +83,16 @@ class ShardLocalWindowSampler:
         self.collision_indices = tuple(
             tuple(collision_groups[shard]) for shard in self.collision_shards
         )
+        visual_groups: dict[int, list[int]] = {}
+        for index in range(len(loader)):
+            window = metadata(index) if callable(metadata) else {}
+            episode = window.get("metadata", {})
+            if isinstance(episode, Mapping) and episode.get("visual_supervision") is True:
+                visual_groups.setdefault(loader.window_shard_index(index), []).append(index)
+        self.visual_shards = tuple(sorted(visual_groups))
+        self.visual_indices = tuple(
+            tuple(visual_groups[shard]) for shard in self.visual_shards
+        )
 
     def sample(
         self,
@@ -89,9 +100,18 @@ class ShardLocalWindowSampler:
         batch_size: int,
         *,
         severe_collision_fraction: float = 0.0,
+        require_visual_supervision: bool = False,
     ) -> tuple[int, ...]:
         if batch_size <= 0 or not 0.0 <= severe_collision_fraction <= 1.0:
             raise ValueError("foundation replay batch size must be positive")
+        if require_visual_supervision:
+            if not self.visual_indices:
+                raise ValueError("foundation replay has no visual supervision windows")
+            group = int(rng.choice(len(self.visual_indices)))
+            values = rng.choice(
+                self.visual_indices[group], size=batch_size, replace=True
+            )
+            return tuple(int(value) for value in values)
         if self.collision_shards and rng.random() < severe_collision_fraction:
             groups = rng.choice(
                 len(self.collision_indices),

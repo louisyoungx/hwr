@@ -32,7 +32,7 @@ from hwr.perception.foundation import (
 from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 
 
-FOUNDATION_FEATURE_INDEX_SCHEMA = "hwr.foundation-feature-index/v1"
+FOUNDATION_FEATURE_INDEX_SCHEMA = "hwr.foundation-feature-index/v2"
 LANGUAGE_PREPROCESS_SHA256 = hashlib.sha256(
     b"hwr.normalized-language-content/v1"
 ).hexdigest()
@@ -47,12 +47,17 @@ class FoundationFeatureIndex:
     preprocess_sha256: str
     output_dimension: int
     entry_count: int
+    selection: str = "all"
     schema_version: str = FOUNDATION_FEATURE_INDEX_SCHEMA
 
     def __post_init__(self) -> None:
         if self.kind not in {"visual", "language"}:
             raise ValueError("foundation feature index kind is invalid")
-        if not self.role or min(self.output_dimension, self.entry_count) <= 0:
+        if (
+            not self.role
+            or not self.selection
+            or min(self.output_dimension, self.entry_count) <= 0
+        ):
             raise ValueError("foundation feature index dimensions are invalid")
         for value in (
             self.dataset_sha256,
@@ -151,10 +156,17 @@ def materialize_visual_features(
     preprocessor: HighResolutionVisionPreprocessor,
     provider: FrozenVisionFeatureProvider,
     output_path: Path,
+    *,
+    metadata_flag: str | None = None,
 ) -> FoundationFeatureIndex:
     manifest = verify_autonomous_trajectory_dataset(dataset_path)
     entries = 0
     for shard in manifest["shards"]:
+        metadata = shard.get("metadata", {})
+        if metadata_flag is not None and (
+            not isinstance(metadata, Mapping) or metadata.get(metadata_flag) is not True
+        ):
+            continue
         with np.load(dataset_path / shard["path"], allow_pickle=False) as stored:
             arrays = {name: stored[name].copy() for name in stored.files}
         for index in range(int(shard["observation_count"])):
@@ -172,6 +184,8 @@ def materialize_visual_features(
                 )
                 cache.store_visual(key, features)
             entries += 1
+    if entries <= 0:
+        raise ValueError("visual feature selection produced no observations")
     index = FoundationFeatureIndex(
         "visual",
         provider.model_lock.role,
@@ -180,6 +194,9 @@ def materialize_visual_features(
         preprocessor.fingerprint,
         provider.model_lock.output_dimension,
         entries,
+        selection=(
+            f"metadata-flag:{metadata_flag}" if metadata_flag is not None else "all"
+        ),
     )
     _atomic_json(output_path, index.to_dict())
     return index

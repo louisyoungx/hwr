@@ -50,7 +50,22 @@ def _episode() -> AutonomousEpisode:
         "b" * 64,
         (),
         arrays,
-        {"interaction_audit": {"severe_collision_count": 0}},
+        {
+            "interaction_audit": {"severe_collision_count": 0},
+            "interaction_trace": [
+                {
+                    "left_contact_steps": float(24 <= step < 28),
+                    "right_contact_steps": float(24 <= step < 28),
+                    "simultaneous_contact_steps": float(24 <= step < 28),
+                    "maximum_controlled_rigid_displacement": (
+                        0.005 if 24 <= step < 28 else 0.0
+                    ),
+                    "maximum_controlled_articulation_displacement": 0.0,
+                    "severe_collision_count": 0.0,
+                }
+                for step in range(transitions)
+            ],
+        },
     )
 
 
@@ -75,3 +90,9 @@ def test_sequence_reservoir_retains_bounded_continuous_source_evidence(
     assert ranges[0]["transition_stop"] <= ranges[1]["transition_start"]
     assert excerpts[-1].arrays["terminated"][-1]
     assert all(len(item.arrays["proprioception"]) == 17 for item in excerpts)
+    assert any(
+        item.metadata["interaction_audit"]["simultaneous_contact_steps"] > 0
+        for item in excerpts
+    )
+    assert sum(item.metadata["visual_supervision"] for item in excerpts) == 1
+    assert all("interaction_trace" not in item.metadata for item in excerpts)

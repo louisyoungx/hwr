@@ -15,7 +15,15 @@ from hwr.data.autonomous_trajectory import (
 )
 
 
-SEQUENCE_RESERVOIR_SCHEMA = "hwr.foundation-sequence-reservoir/v1"
+SEQUENCE_RESERVOIR_SCHEMA = "hwr.foundation-sequence-reservoir/v2"
+_INTERACTION_FIELDS = (
+    "left_contact_steps",
+    "right_contact_steps",
+    "simultaneous_contact_steps",
+    "maximum_controlled_rigid_displacement",
+    "maximum_controlled_articulation_displacement",
+    "severe_collision_count",
+)
 
 
 def append_episode_sequence_evidence(
@@ -24,12 +32,26 @@ def append_episode_sequence_evidence(
     *,
     sequence_transitions: int,
     windows_per_episode: int,
+    visual_supervision_windows: int = 1,
 ) -> tuple[AutonomousEpisode, ...]:
     """Retain bounded continuous windows without inspecting task semantics."""
     starts = select_sequence_evidence_starts(
         episode.arrays,
         sequence_transitions=sequence_transitions,
         windows_per_episode=windows_per_episode,
+        interaction_trace=_interaction_trace(episode),
+    )
+    if not 0 < visual_supervision_windows <= len(starts):
+        raise ValueError("visual supervision windows must fit sequence evidence")
+    scores = _physical_salience_scores(
+        episode.arrays,
+        sequence_transitions,
+        interaction_trace=_interaction_trace(episode),
+    )
+    supervised = set(
+        sorted(starts, key=lambda start: (scores[start], start), reverse=True)[
+            :visual_supervision_windows
+        ]
     )
     excerpts = tuple(
         slice_episode_sequence(
@@ -38,6 +60,7 @@ def append_episode_sequence_evidence(
             transitions=sequence_transitions,
             slot=slot,
             slot_count=len(starts),
+            visual_supervision=start in supervised,
         )
         for slot, start in enumerate(starts)
     )
@@ -51,6 +74,7 @@ def select_sequence_evidence_starts(
     *,
     sequence_transitions: int,
     windows_per_episode: int,
+    interaction_trace: Sequence[Mapping[str, float]] = (),
 ) -> tuple[int, ...]:
     """Select spread, salient and terminal non-overlapping sequence windows."""
     count = len(arrays["executed_action"])
@@ -60,12 +84,24 @@ def select_sequence_evidence_starts(
     target = min(windows_per_episode, maximum)
     candidates = tuple(range(0, count - sequence_transitions + 1))
     terminal = count - sequence_transitions
-    preferred = [0, terminal]
-    scores = _physical_salience_scores(arrays, sequence_transitions)
+    scores = _physical_salience_scores(
+        arrays, sequence_transitions, interaction_trace=interaction_trace
+    )
     ranked = sorted(candidates, key=lambda start: (scores[start], start), reverse=True)
     spread = np.linspace(0, terminal, num=target).round().astype(int).tolist()
-    selected: list[int] = []
-    for start in (*preferred, *spread, *ranked):
+    selected: list[int] = [int(terminal)]
+    salient_count = max(1, target // 2)
+    for start in ranked:
+        if len(selected) >= target:
+            break
+        if any(abs(start - existing) < sequence_transitions for existing in selected):
+            continue
+        selected.append(int(start))
+        if len(selected) == min(target, salient_count + 1):
+            break
+    for start in (terminal, *spread, *ranked):
+        if len(selected) >= target:
+            break
         if any(abs(start - existing) < sequence_transitions for existing in selected):
             continue
         selected.append(int(start))
@@ -83,6 +119,7 @@ def slice_episode_sequence(
     transitions: int,
     slot: int,
     slot_count: int,
+    visual_supervision: bool = False,
 ) -> AutonomousEpisode:
     stop = start + transitions
     count = len(episode.arrays["executed_action"])
@@ -98,8 +135,12 @@ def slice_episode_sequence(
             for name in TRANSITION_ARRAY_FIELDS
         }
     )
-    metadata = {
-        **episode.metadata,
+    metadata = dict(episode.metadata)
+    trace = _interaction_trace(episode)
+    metadata.pop("interaction_trace", None)
+    metadata["interaction_audit"] = _aggregate_trace(trace[start:stop])
+    metadata["interaction_evidence_retained"] = bool(trace)
+    metadata.update({
         "sequence_reservoir": {
             "schema_version": SEQUENCE_RESERVOIR_SCHEMA,
             "source_episode_id": episode.episode_id,
@@ -108,9 +149,10 @@ def slice_episode_sequence(
             "transition_stop": stop,
             "slot": slot,
             "slot_count": slot_count,
-            "selector": "task-blind-physical-salience/v1",
+            "selector": "task-blind-physical-salience/v2",
         },
-    }
+        "visual_supervision": bool(visual_supervision),
+    })
     return replace(
         episode,
         episode_id=f"{episode.episode_id}--sequence-{slot:02d}-{start:06d}",
@@ -139,14 +181,31 @@ def count_source_episodes(manifest: Mapping[str, object]) -> int:
 
 
 def _physical_salience_scores(
-    arrays: Mapping[str, np.ndarray], transitions: int
+    arrays: Mapping[str, np.ndarray],
+    transitions: int,
+    *,
+    interaction_trace: Sequence[Mapping[str, float]] = (),
 ) -> np.ndarray:
     proprio = np.asarray(arrays["proprioception"], np.float64)
     actions = np.asarray(arrays["executed_action"], np.float64)
     intervention = np.asarray(arrays["safety_intervention"], np.float64)
     motion = np.linalg.norm(np.diff(proprio, axis=0), axis=1)
     innovation = np.linalg.norm(np.diff(actions, axis=0, prepend=actions[:1]), axis=1)
-    signal = _robust_unit(motion) + _robust_unit(innovation) + (intervention > 0.0)
+    interaction = np.zeros_like(motion)
+    if interaction_trace:
+        if len(interaction_trace) != len(motion):
+            raise ValueError("interaction trace length differs from Episode")
+        interaction = np.asarray(
+            [sum(float(item.get(name, 0.0)) for name in _INTERACTION_FIELDS) for item in interaction_trace],
+            np.float64,
+        )
+    signal = (
+        _robust_unit(motion)
+        + _robust_unit(innovation)
+        + (intervention > 0.0)
+        + 2.0 * (interaction > 0.0)
+        + _robust_unit(interaction)
+    )
     return np.convolve(signal, np.ones(transitions, np.float64), mode="valid")
 
 
@@ -156,3 +215,20 @@ def _robust_unit(values: Sequence[float]) -> np.ndarray:
     if scale <= 1.0e-12:
         return np.zeros_like(array)
     return np.clip(array / scale, 0.0, 1.0)
+
+
+def _interaction_trace(episode: AutonomousEpisode) -> tuple[Mapping[str, float], ...]:
+    raw = episode.metadata.get("interaction_trace", ())
+    if not isinstance(raw, (list, tuple)):
+        raise ValueError("Episode interaction trace must be a sequence")
+    trace = tuple(item for item in raw if isinstance(item, Mapping))
+    if len(trace) != len(raw):
+        raise ValueError("Episode interaction trace entries must be mappings")
+    return trace
+
+
+def _aggregate_trace(trace: Sequence[Mapping[str, float]]) -> dict[str, float]:
+    return {
+        name: sum(float(item.get(name, 0.0)) for item in trace)
+        for name in _INTERACTION_FIELDS
+    }

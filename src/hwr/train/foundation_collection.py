@@ -127,6 +127,8 @@ class AutonomousEpisodeCollector:
         terminated: list[bool] = []
         truncated: list[bool] = []
         safety_interventions: list[float] = []
+        interaction_trace: list[dict[str, float]] = []
+        previous_interaction = _interaction_audit(backend)
         for step in range(self.config.maximum_steps):
             proposal = action_source.propose(observation)
             frame = dual_arm_action_frame(
@@ -144,6 +146,11 @@ class AutonomousEpisodeCollector:
             safety_interventions.append(
                 _safety_intervention(frame, outcome.info, outcome.events)
             )
+            current_interaction = _interaction_audit(backend)
+            interaction_trace.append(
+                _interaction_transition(previous_interaction, current_interaction)
+            )
+            previous_interaction = current_interaction
             observation = outcome.observation
             observations.append(observation)
             if snapshot_sink is not None:
@@ -173,12 +180,13 @@ class AutonomousEpisodeCollector:
             )
         result = backend.result()
         metadata = {
-            "collector": "foundation-autonomous/v1",
+            "collector": "foundation-autonomous/v2",
             "action_process": dict(action_source.action_process),
             "success": bool(result and result.success),
             "result_reason": result.reason if result else "step_limit",
             "result_metrics": dict(result.metrics) if result else {},
-            "interaction_audit": _interaction_audit(backend),
+            "interaction_audit": _aggregate_interaction_trace(interaction_trace),
+            "interaction_trace": interaction_trace,
         }
         return AutonomousEpisode(
             episode_id=f"episode-{uuid.uuid4().hex}",
@@ -346,3 +354,30 @@ def _interaction_audit(backend: RuntimeBackend) -> dict[str, float]:
     if not all(np.isfinite(value) and value >= 0.0 for value in values.values()):
         raise ValueError("runtime interaction audit contains invalid values")
     return values
+
+
+def _interaction_transition(
+    previous: Mapping[str, float], current: Mapping[str, float]
+) -> dict[str, float]:
+    """Turn cumulative runtime evidence into task-blind per-transition evidence."""
+    return {
+        name: max(0.0, float(current[name]) - float(previous[name]))
+        for name in current
+    }
+
+
+def _aggregate_interaction_trace(
+    trace: list[Mapping[str, float]],
+) -> dict[str, float]:
+    names = (
+        "left_contact_steps",
+        "right_contact_steps",
+        "simultaneous_contact_steps",
+        "maximum_controlled_rigid_displacement",
+        "maximum_controlled_articulation_displacement",
+        "severe_collision_count",
+    )
+    return {
+        name: sum(float(item.get(name, 0.0)) for item in trace)
+        for name in names
+    }

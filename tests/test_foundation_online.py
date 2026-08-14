@@ -171,13 +171,14 @@ class _Backend:
         return self._result
 
     def task_audit(self):
+        interaction = int(self.sequence > 0)
         return {
-            "left_contact_steps": 1,
-            "right_contact_steps": 1,
-            "simultaneous_contact_steps": 1,
+            "left_contact_steps": interaction,
+            "right_contact_steps": interaction,
+            "simultaneous_contact_steps": interaction,
             "severe_collision_count": 0,
             "metrics": {
-                "maximum_controlled_target_progress": 0.1,
+                "maximum_controlled_target_progress": 0.1 * interaction,
                 "maximum_controlled_articulation_progress": 0.0,
             },
         }

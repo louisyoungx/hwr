@@ -164,6 +164,15 @@ def test_collector_records_raw_observations_and_actual_safety_actions() -> None:
         "observation_conditioned": False,
         "task_conditioned": False,
     }
+    assert len(episode.metadata["interaction_trace"]) == 2
+    assert episode.metadata["interaction_audit"] == {
+        "left_contact_steps": 0.0,
+        "right_contact_steps": 0.0,
+        "simultaneous_contact_steps": 0.0,
+        "maximum_controlled_rigid_displacement": 0.0,
+        "maximum_controlled_articulation_displacement": 0.0,
+        "severe_collision_count": 0.0,
+    }
 
 
 def test_random_rl_source_is_seeded_and_observation_independent() -> None:

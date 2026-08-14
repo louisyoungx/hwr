@@ -40,6 +40,7 @@ def materialize_foundation_replay_features(
         preprocessor,
         vision_language,
         output / "vision-language.json",
+        metadata_flag="visual_supervision",
     )
     del vision_language
     release_unused_accelerator_memory()
@@ -50,6 +51,7 @@ def materialize_foundation_replay_features(
         preprocessor,
         dense_vision,
         output / "dense-vision.json",
+        metadata_flag="visual_supervision",
     )
     del dense_vision
     release_unused_accelerator_memory()

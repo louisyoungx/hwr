@@ -51,6 +51,7 @@ class FoundationOnlineTrainingConfig:
     checkpoint_interval_cycles: int = 1
     replay_transition_capacity: int = 18000
     replay_windows_per_episode: int = 1
+    visual_supervision_windows_per_episode: int = 1
     published_checkpoint_retention: int = 3
     minimum_action_causality_ratio: float = 1.05
     minimum_action_causality_horizon_fraction: float = 0.60
@@ -98,6 +99,7 @@ class FoundationOnlineTrainingConfig:
             self.checkpoint_interval_cycles,
             self.replay_transition_capacity,
             self.replay_windows_per_episode,
+            self.visual_supervision_windows_per_episode,
             self.published_checkpoint_retention,
             self.causality_holdout_episodes_per_task,
             self.causality_audit_windows_per_task,
@@ -160,6 +162,8 @@ class FoundationOnlineTrainingConfig:
             raise ValueError("foundation online training requires high-resolution cameras")
         if self.replay_transition_capacity < self.sequence_transitions * 3:
             raise ValueError("foundation replay capacity cannot retain one window per task")
+        if self.visual_supervision_windows_per_episode > self.replay_windows_per_episode:
+            raise ValueError("visual supervision windows exceed replay windows")
         retained_per_source = self.sequence_transitions * self.replay_windows_per_episode
         required_sources = max(
             self.minimum_contact_episodes_per_task,

@@ -11,7 +11,7 @@ from typing import Mapping
 from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
 
 
-RESOURCE_PREFLIGHT_SCHEMA = "hwr.foundation-resource-preflight/v1"
+RESOURCE_PREFLIGHT_SCHEMA = "hwr.foundation-resource-preflight/v2"
 _GIB = 1024**3
 
 
@@ -26,6 +26,15 @@ def foundation_storage_estimate(
         replay_shards * config.sequence_transitions,
     )
     replay_observations = replay_transitions + replay_shards
+    visual_shards = min(
+        replay_shards,
+        config.episodes * config.visual_supervision_windows_per_episode,
+    )
+    visual_transitions = min(
+        replay_transitions,
+        visual_shards * config.sequence_transitions,
+    )
+    visual_observations = visual_transitions + visual_shards
     holdout_shards = task_count * config.causality_holdout_episodes_per_task
     holdout_transitions = (
         holdout_shards * config.causality_holdout_transitions_per_episode
@@ -46,7 +55,7 @@ def foundation_storage_estimate(
     )
     raw_bytes = (replay_observations + holdout_observations) * raw_bytes_per_observation
     teacher_cache_bytes = (
-        replay_observations * config.estimated_teacher_cache_bytes_per_observation
+        visual_observations * config.estimated_teacher_cache_bytes_per_observation
     )
     checkpoint_bytes = (
         config.published_checkpoint_retention
@@ -59,6 +68,8 @@ def foundation_storage_estimate(
             "shards": replay_shards,
             "transitions": replay_transitions,
             "observations": replay_observations,
+            "visual_supervision_shards": visual_shards,
+            "visual_supervision_observations": visual_observations,
         },
         "holdout": {
             "shards": holdout_shards,

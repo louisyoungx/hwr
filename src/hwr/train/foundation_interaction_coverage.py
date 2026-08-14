@@ -10,7 +10,7 @@ import numpy as np
 from hwr.train.foundation_sequence_reservoir import source_episode_id
 
 
-INTERACTION_COVERAGE_SCHEMA = "hwr.foundation-interaction-coverage/v2"
+INTERACTION_COVERAGE_SCHEMA = "hwr.foundation-interaction-coverage/v3"
 
 
 def summarize_interaction_coverage(
@@ -26,6 +26,7 @@ def summarize_interaction_coverage(
         raise ValueError("interaction coverage thresholds must be positive")
     grouped: dict[str, dict[str, Mapping[str, object]]] = {}
     excluded: dict[str, int] = {}
+    missing_evidence: dict[str, int] = {}
     for shard_index, shard in enumerate(replay_manifest.get("shards", ())):
         task_id = str(shard["task_id"])
         grouped.setdefault(task_id, {})
@@ -37,16 +38,18 @@ def summarize_interaction_coverage(
         if not isinstance(audit, Mapping):
             raise ValueError("replay interaction audit is invalid")
         source = source_episode_id(shard) or f"legacy-shard-{shard_index}"
-        previous = grouped[task_id].get(source)
-        if previous is not None and dict(previous) != dict(audit):
-            raise ValueError("sequence reservoir interaction audit differs by source")
-        grouped[task_id][source] = audit
+        if metadata.get("interaction_evidence_retained") is not True:
+            missing_evidence[task_id] = missing_evidence.get(task_id, 0) + 1
+            continue
+        previous = grouped[task_id].get(source, {})
+        grouped[task_id][source] = _merge_audits(previous, audit)
     if not grouped:
         raise ValueError("interaction coverage replay is empty")
     partitions = {
         task_id: {
             **_summarize_task(list(values.values()), minimum_displacement),
             "ineligible_short_episode_count": excluded.get(task_id, 0),
+            "missing_retained_evidence_shard_count": missing_evidence.get(task_id, 0),
         }
         for task_id, values in sorted(grouped.items())
     }
@@ -109,3 +112,11 @@ def _numeric_audit(value: Mapping[str, object]) -> dict[str, float]:
     if not all(np.isfinite(item) and item >= 0.0 for item in result.values()):
         raise ValueError("replay interaction audit contains invalid values")
     return result
+
+
+def _merge_audits(
+    first: Mapping[str, object], second: Mapping[str, object]
+) -> dict[str, float]:
+    left = _numeric_audit(first)
+    right = _numeric_audit(second)
+    return {name: left[name] + right[name] for name in left}
