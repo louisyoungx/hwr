@@ -15,13 +15,18 @@ from hwr.adapters.mujoco.evidence import (
 )
 from hwr.adapters.mujoco.expert import PrivilegedCartesianExpert
 from hwr.adapters.mujoco.formal_expert import FormalExpertOutput, PrivilegedHouseholdExpert
+from hwr.adapters.mujoco.formal_household_backend import (
+    MujocoFormalHouseholdDualArmBackend,
+)
 from hwr.adapters.mujoco.household_backend import MujocoHouseholdBackend
 from hwr.adapters.mujoco.inspection import RobotModelReport, inspect_robot_model
 from hwr.adapters.mujoco.scene_preview import ScenePreview, render_scene_preview
 from hwr.adapters.mujoco.smoke_trial import ContactGraspReport, run_contact_grasp_trial
 from hwr.adapters.mujoco.training_catalog import (
     MujocoBimanualBackendFactory,
+    MujocoFormalHouseholdBackendFactory,
     load_default_bimanual_training_catalogs,
+    load_default_formal_household_catalogs,
 )
 
 __all__ = [
@@ -31,6 +36,8 @@ __all__ = [
     "MujocoBimanualBackendFactory",
     "MujocoDualArmBackend",
     "MujocoDualArmConfig",
+    "MujocoFormalHouseholdDualArmBackend",
+    "MujocoFormalHouseholdBackendFactory",
     "MujocoBimanualEvidenceSource",
     "MujocoHouseholdBackend",
     "MujocoTaskBinding",
@@ -48,6 +55,7 @@ __all__ = [
     "load_mujoco_task_bindings",
     "load_bimanual_mujoco_bindings",
     "load_default_bimanual_training_catalogs",
+    "load_default_formal_household_catalogs",
     "render_scene_preview",
     "run_contact_grasp_trial",
 ]

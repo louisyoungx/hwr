@@ -12,8 +12,9 @@ from typing import Any, Mapping, Sequence
 from hwr.adapters.mujoco import (
     BIMANUAL_EVIDENCE_VIEWS,
     MujocoBimanualEvidenceSource,
-    MujocoBimanualTaskBackend,
-    load_default_bimanual_training_catalogs,
+    MujocoDualArmBackend,
+    MujocoFormalHouseholdDualArmBackend,
+    load_default_formal_household_catalogs,
 )
 from hwr.data.foundation_cache import FoundationCacheKey, FoundationFeatureCache
 from hwr.data.foundation_features import load_feature_index
@@ -103,7 +104,7 @@ class _VideoObserver:
             or self.success_counts.get(task_id, 0) >= self.successful_videos_per_task
         ):
             return
-        if not isinstance(backend, MujocoBimanualTaskBackend):
+        if not isinstance(backend, MujocoDualArmBackend):
             raise TypeError("foundation video observer requires a MuJoCo backend")
         basename = f"{observation.task_id.replace('/', '_')}.seed-{seed}"
         self.source = MujocoBimanualEvidenceSource(
@@ -114,7 +115,7 @@ class _VideoObserver:
             basename,
             width=self.width,
             height=self.height,
-            frames_per_second=round(backend.task.control_hz),
+            frames_per_second=round(backend.config.control_hz),
         )
         self.recorder.append(self.source.capture(observation))
 
@@ -545,7 +546,7 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
     )
     output_path = output_root / (arguments.evaluation_id or run_path.name)
     output_path.mkdir(parents=True, exist_ok=False)
-    tasks, bindings = load_default_bimanual_training_catalogs(root)
+    tasks, bindings = load_default_formal_household_catalogs(root)
     policy = _policy(run_path, device=arguments.device)
     observer = _VideoObserver(
         output_path / "videos",
@@ -561,11 +562,12 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
 
             def environment_factory(task_id=task_id):
                 training = run_manifest["training_config"]
-                return MujocoBimanualTaskBackend(
+                return MujocoFormalHouseholdDualArmBackend(
                     tasks[task_id],
                     bindings[task_id],
                     camera_width=int(training["camera_width"]),
                     camera_height=int(training["camera_height"]),
+                    evaluation_profile=True,
                 )
 
             for ablation in ABLATIONS:

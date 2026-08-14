@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Mapping
 
-from hwr.adapters.mujoco.bimanual_backend import MujocoBimanualTaskBackend
+from hwr.adapters.mujoco.dual_arm_backend import MujocoDualArmBackend
 from hwr.adapters.mujoco.rendering import MujocoCameraRenderer
 from hwr.core.embodied import DualArmObservation
 
@@ -28,7 +28,7 @@ class MujocoBimanualEvidenceSource:
 
     def __init__(
         self,
-        backend: MujocoBimanualTaskBackend,
+        backend: MujocoDualArmBackend,
         *,
         width: int = 640,
         height: int = 480,
@@ -45,7 +45,7 @@ class MujocoBimanualEvidenceSource:
     def capture(
         self, observation: DualArmObservation
     ) -> Mapping[str, bytes]:
-        if observation.task_id != self.backend.task.task_id:
+        if observation.task_id != self.backend.config.task_id:
             raise ValueError("evidence observation and backend tasks differ")
         return {
             view: self.renderer.rgb(

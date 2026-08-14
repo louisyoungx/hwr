@@ -316,11 +316,10 @@ def _applied_action(info) -> DualArmAction:
 
 def _safety_intervention(frame: DualArmActionFrame, info, events) -> float:
     """Label whether the independent safety layer altered an Actor proposal."""
-    applied = info.get("applied_action")
-    changed = isinstance(applied, DualArmActionFrame) and applied.action != frame.action
+    del frame
     intervention = bool(info.get("safety_intervened", False))
     rejected = any(event.event_type == "action_rejected" for event in events)
-    return float(changed or intervention or rejected)
+    return float(intervention or rejected)
 
 
 def _interaction_audit(backend: RuntimeBackend) -> dict[str, float]:

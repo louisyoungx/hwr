@@ -18,8 +18,8 @@ from hwr.adapters.foundation import (
     load_foundation_model_locks,
 )
 from hwr.adapters.mujoco import (
-    MujocoBimanualTaskBackend,
-    load_default_bimanual_training_catalogs,
+    MujocoFormalHouseholdDualArmBackend,
+    load_default_formal_household_catalogs,
 )
 from hwr.perception.high_resolution import (
     HighResolutionVisionConfig,
@@ -93,7 +93,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     root = Path(__file__).resolve().parents[3]
     readiness_path = arguments.development_ready.resolve()
     readiness = require_development_ready(root, readiness_path)
-    tasks, bindings = load_default_bimanual_training_catalogs(root)
+    tasks, bindings = load_default_formal_household_catalogs(root)
     config = FoundationOnlineTrainingConfig(
         **_config(root / "configs/foundation/online-training-v1.json")
     )
@@ -142,7 +142,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     )
 
     def environment_factory(task_id: str, width: int, height: int):
-        return MujocoBimanualTaskBackend(
+        return MujocoFormalHouseholdDualArmBackend(
             tasks[task_id], bindings[task_id], camera_width=width, camera_height=height
         )
 

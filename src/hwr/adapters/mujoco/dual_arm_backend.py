@@ -242,29 +242,51 @@ class MujocoDualArmBackend:
         if not predictive_events:
             for _ in range(self._substeps):
                 mujoco.mj_step(self.model, self.data)
+                self._after_physics_substep()
             mujoco.mj_forward(self.model, self.data)
         self._steps += 1
         self._sequence += 1
-        truncated = self._steps >= self.config.max_steps
+        self._after_control_step(applied)
+        task_result = self._task_result_after_step()
+        if task_result is not None:
+            self._result = task_result
+        terminated = task_result is not None
+        truncated = not terminated and self._steps >= self.config.max_steps
         if truncated:
-            self._result = EpisodeResult(
-                success=False,
-                reason="episode_timeout",
-                ended_at_ns=self._timestamp_ns(),
-                metrics={"steps": self._steps, "contacts": self.data.ncon},
-            )
+            self._result = self._timeout_result()
+        safety_intervened = applied.action != frame.action or bool(events)
         return RuntimeStepOutcome(
             observation=self._observation(),
-            reward=0.0,
-            terminated=False,
+            reward=self._step_reward(task_result),
+            terminated=terminated,
             truncated=truncated,
             events=events,
             info={
                 "applied_action": applied,
                 "physics_contacts": int(self.data.ncon),
                 "physics_advanced": not predictive_events,
-                "safety_intervened": bool(predictive_events),
+                "safety_intervened": safety_intervened,
             },
+        )
+
+    def _after_physics_substep(self) -> None:
+        """Adapter hook for physical evidence that may last one substep."""
+
+    def _after_control_step(self, action: DualArmActionFrame) -> None:
+        """Adapter hook for task-independent state accounting."""
+
+    def _task_result_after_step(self) -> EpisodeResult | None:
+        return None
+
+    def _step_reward(self, result: EpisodeResult | None) -> float:
+        return float(result is not None and result.success)
+
+    def _timeout_result(self) -> EpisodeResult:
+        return EpisodeResult(
+            success=False,
+            reason="episode_timeout",
+            ended_at_ns=self._timestamp_ns(),
+            metrics={"steps": self._steps, "contacts": self.data.ncon},
         )
 
     def _predictive_filter(

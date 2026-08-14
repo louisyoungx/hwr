@@ -2,19 +2,46 @@
   "schema_version": "hwr.formal-tasks/v1",
   "control_hz": 20.0,
   "hold_seconds": 2.0,
+  "minimum_each_arm_contact_seconds": 0.5,
   "randomization": {
     "mass_scale": [0.90, 1.10],
     "friction_scale": [0.90, 1.10],
     "light_scale": [0.85, 1.15],
     "material_tint": [0.94, 1.06],
     "rgb_noise_std": [0.0, 1.5],
-    "depth_dropout": [0.0, 0.01]
+    "depth_dropout": [0.0, 0.01],
+    "depth_noise_std_m": [0.0, 0.004],
+    "camera_translation_m": [0.0, 0.008],
+    "camera_rotation_radians": [0.0, 0.015],
+    "focal_scale": [0.98, 1.02],
+    "actuator_scale": [0.96, 1.04],
+    "action_latency_steps": [0.0, 1.0],
+    "observation_latency_steps": [0.0, 1.0]
+  },
+  "evaluation_randomization": {
+    "mass_scale": [0.80, 1.20],
+    "friction_scale": [0.75, 1.25],
+    "light_scale": [0.65, 1.35],
+    "material_tint": [0.85, 1.15],
+    "rgb_noise_std": [1.5, 4.0],
+    "depth_dropout": [0.01, 0.04],
+    "depth_noise_std_m": [0.004, 0.012],
+    "camera_translation_m": [0.008, 0.025],
+    "camera_rotation_radians": [0.015, 0.045],
+    "focal_scale": [0.93, 1.07],
+    "actuator_scale": [0.88, 1.12],
+    "action_latency_steps": [1.0, 3.0],
+    "observation_latency_steps": [1.0, 3.0]
   },
   "tasks": [
     {
       "task_id": "tidy_living_room_3d/v1",
       "scene_id": "living_room_3d/v1",
       "instruction": "绕开茶几，将橡皮鸭和迷你足球依次拾起并放入藤编收纳篮。",
+      "instruction_variants": {
+        "train": ["绕开茶几，将橡皮鸭和迷你足球依次拾起并放入藤编收纳篮。", "把地上的橡皮鸭和小足球收进客厅的藤编篮，注意避开茶几。", "整理客厅：依次捡起鸭子玩具与迷你足球，放到收纳篮里。", "请将两件玩具都收纳进沙发旁的篮子。"],
+        "evaluation": ["清理客厅地面，把鸭子和足球全部放进编织篮。", "将散落的两个玩具归置到藤篮中，移动时不要碰茶几。", "完成客厅玩具收纳：鸭子、足球都要稳稳留在篮内。"]
+      },
       "max_steps": 6000,
       "initial_base": {"x": [-0.10, 0.10], "y": [-2.15, -1.95], "z": [0.22, 0.22], "yaw": [-0.10, 0.10]},
       "objects": [
@@ -26,6 +53,10 @@
       "task_id": "clear_dining_table_3d/v1",
       "scene_id": "dining_room_3d/v1",
       "instruction": "清理餐桌，将茶杯放入蓝色杯托，将木盘放入橙色盘托。",
+      "instruction_variants": {
+        "train": ["清理餐桌，将茶杯放入蓝色杯托，将木盘放入橙色盘托。", "把杯子和木盘从餐桌上收好，分别放到蓝色杯托和橙色盘托。", "整理餐桌：茶杯归蓝色位置，木盘归橙色位置。", "请把桌上的杯盘分别放进对应颜色的托架。"],
+        "evaluation": ["收拾餐桌，让杯子落在蓝托中、盘子落在橙托中。", "将茶杯与木盘放到各自对应的彩色收纳位。", "完成杯盘归位，杯托是蓝色，盘托是橙色。"]
+      },
       "max_steps": 6000,
       "initial_base": {"x": [-1.90, -1.72], "y": [-1.45, -1.25], "z": [0.22, 0.22], "yaw": [-0.10, 0.10]},
       "objects": [
@@ -37,6 +68,10 @@
       "task_id": "store_kitchen_items_3d/v1",
       "scene_id": "kitchen_3d/v1",
       "instruction": "先拉开木质抽屉，再将黄色和粉色清洁剂分别放入抽屉左右分仓。",
+      "instruction_variants": {
+        "train": ["先拉开木质抽屉，再将黄色和粉色清洁剂分别放入抽屉左右分仓。", "打开厨房抽屉，把黄瓶和粉瓶清洁剂分别收进左右隔间。", "先把抽屉拉开，然后将两瓶不同颜色的清洁剂分仓放好。", "整理清洁用品：开抽屉，黄色放左边，粉色放右边。"],
+        "evaluation": ["收纳两瓶清洁剂，先开启抽屉，再按黄左粉右放入。", "把黄色与粉色清洁瓶分别归入抽屉的左右格。", "完成厨房清洁剂入柜：抽屉需打开，两瓶要分开放稳。"]
+      },
       "max_steps": 8000,
       "initial_base": {"x": [-0.10, 0.10], "y": [-1.80, -1.60], "z": [0.22, 0.22], "yaw": [1.47, 1.67]},
       "articulation": {"articulation_id": "drawer", "minimum_position": 0.30},
