@@ -47,6 +47,7 @@ class FoundationOnlineTrainingConfig:
     augmentation_probability: float = 0.5
     checkpoint_interval_cycles: int = 1
     replay_transition_capacity: int = 18000
+    replay_windows_per_episode: int = 1
     published_checkpoint_retention: int = 3
     minimum_action_causality_ratio: float = 1.05
     minimum_action_causality_horizon_fraction: float = 0.60
@@ -55,6 +56,11 @@ class FoundationOnlineTrainingConfig:
     causality_audit_batch_size: int = 2
     causality_shuffle_repeats: int = 5
     causality_holdout_maximum_attempts_per_episode: int = 8
+    causality_holdout_transitions_per_episode: int = 64
+    maximum_estimated_run_storage_gib: float = 30.0
+    minimum_free_storage_gib: float = 35.0
+    estimated_teacher_cache_bytes_per_observation: int = 2_800_000
+    estimated_checkpoint_bytes: int = 2_000_000_000
     random_exploration_motion_correlation: float = 0.96
     random_exploration_gripper_flip_probability: float = 0.05
     learning_signal_windows_per_episode: int = 4
@@ -86,12 +92,16 @@ class FoundationOnlineTrainingConfig:
             self.camera_height,
             self.checkpoint_interval_cycles,
             self.replay_transition_capacity,
+            self.replay_windows_per_episode,
             self.published_checkpoint_retention,
             self.causality_holdout_episodes_per_task,
             self.causality_audit_windows_per_task,
             self.causality_audit_batch_size,
             self.causality_shuffle_repeats,
             self.causality_holdout_maximum_attempts_per_episode,
+            self.causality_holdout_transitions_per_episode,
+            self.estimated_teacher_cache_bytes_per_observation,
+            self.estimated_checkpoint_bytes,
             self.learning_signal_windows_per_episode,
             self.learning_frontier_capacity_per_task,
             self.learning_frontier_candidates_per_episode,
@@ -143,6 +153,15 @@ class FoundationOnlineTrainingConfig:
             raise ValueError("foundation online training requires high-resolution cameras")
         if self.replay_transition_capacity < self.sequence_transitions * 3:
             raise ValueError("foundation replay capacity cannot retain one window per task")
+        retained_per_source = self.sequence_transitions * self.replay_windows_per_episode
+        required_sources = max(
+            self.minimum_contact_episodes_per_task,
+            self.minimum_controlled_motion_episodes_per_task,
+            self.minimum_collision_positive_episodes_per_task
+            + self.minimum_collision_negative_episodes_per_task,
+        )
+        if self.replay_transition_capacity // 3 < retained_per_source * required_sources:
+            raise ValueError("foundation replay capacity makes Actor evidence unreachable")
         if self.causality_audit_windows_per_task % self.causality_audit_batch_size:
             raise ValueError("causality audit batch size must divide task window count")
         if (
@@ -150,6 +169,14 @@ class FoundationOnlineTrainingConfig:
             % self.causality_holdout_episodes_per_task
         ):
             raise ValueError("causality windows must balance across holdout Episodes")
+        windows_per_holdout = (
+            self.causality_audit_windows_per_task
+            // self.causality_holdout_episodes_per_task
+        )
+        if self.causality_holdout_transitions_per_episode < (
+            windows_per_holdout * self.sequence_transitions
+        ):
+            raise ValueError("compact causality holdout cannot supply audit windows")
         ActionCausalityCriteria(
             self.minimum_action_causality_ratio,
             self.minimum_action_causality_horizon_fraction,
@@ -187,6 +214,11 @@ class FoundationOnlineTrainingConfig:
         )
         if any(not 0.0 <= value <= 1.0 for value in collision_limits):
             raise ValueError("collision validation limits are invalid")
+        if min(
+            self.maximum_estimated_run_storage_gib,
+            self.minimum_free_storage_gib,
+        ) <= 0.0:
+            raise ValueError("foundation storage budgets must be positive")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

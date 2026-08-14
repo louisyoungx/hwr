@@ -30,21 +30,32 @@ from hwr.train.foundation_batch import FoundationTrainingBatch
 
 @dataclass(frozen=True)
 class FoundationPreparedFeatures:
-    vision_language: FoundationFeatureIndex
-    dense_vision: FoundationFeatureIndex
+    vision_language: FoundationFeatureIndex | None
+    dense_vision: FoundationFeatureIndex | None
     language: FoundationFeatureIndex
 
     def __post_init__(self) -> None:
-        if self.vision_language.role != "vision_language":
+        if (
+            self.vision_language is not None
+            and self.vision_language.role != "vision_language"
+        ):
             raise ValueError("prepared vision-language feature role is invalid")
-        if self.dense_vision.role != "dense_vision":
+        if self.dense_vision is not None and self.dense_vision.role != "dense_vision":
             raise ValueError("prepared dense-vision feature role is invalid")
         if self.language.role != "language":
             raise ValueError("prepared language feature role is invalid")
         datasets = {
-            self.vision_language.dataset_sha256,
-            self.dense_vision.dataset_sha256,
             self.language.dataset_sha256,
+            *(
+                [self.vision_language.dataset_sha256]
+                if self.vision_language is not None
+                else []
+            ),
+            *(
+                [self.dense_vision.dataset_sha256]
+                if self.dense_vision is not None
+                else []
+            ),
         }
         if len(datasets) != 1:
             raise ValueError("prepared features refer to different trajectory datasets")
@@ -71,11 +82,17 @@ class FoundationSequenceBatchLoader:
         self.features = features
         self.device = device
         dataset_digest = file_sha256(dataset_path / "manifest.json")
-        if features.vision_language.dataset_sha256 != dataset_digest:
+        if features.language.dataset_sha256 != dataset_digest:
             raise ValueError("prepared features refer to a different trajectory manifest")
-        if features.vision_language.preprocess_sha256 != preprocessor.fingerprint:
+        if (
+            features.vision_language is not None
+            and features.vision_language.preprocess_sha256 != preprocessor.fingerprint
+        ):
             raise ValueError("vision-language feature preprocessing differs")
-        if features.dense_vision.preprocess_sha256 != preprocessor.fingerprint:
+        if (
+            features.dense_vision is not None
+            and features.dense_vision.preprocess_sha256 != preprocessor.fingerprint
+        ):
             raise ValueError("dense-vision feature preprocessing differs")
 
     def __len__(self) -> int:
@@ -252,6 +269,8 @@ class FoundationSequenceBatchLoader:
         sequences: list[dict[str, object]],
         student_inputs: dict[str, torch.Tensor],
     ) -> VisualTeacherTargets:
+        if self.features.vision_language is None or self.features.dense_vision is None:
+            raise ValueError("visual targets require materialized teacher features")
         vision_language, vision_language_valid = self._teacher_arrays(
             sequences, self.features.vision_language
         )

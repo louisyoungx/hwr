@@ -16,6 +16,7 @@ from hwr.data.foundation_loading import (
 )
 from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 from hwr.train.foundation_trainer import FoundationWorldModelTrainer
+from hwr.train.foundation_sequence_reservoir import source_episode_id
 from hwr.world_model.distributions import reward_expectation
 
 
@@ -160,7 +161,7 @@ def _episode_window_indices(
     candidates = {episode_id: [] for episode_id in episode_ids}
     for index in range(len(loader)):
         metadata = loader.window_metadata(index)
-        episode_id = str(metadata["episode_id"])
+        episode_id = source_episode_id(metadata)
         start = int(metadata["transition_start"])
         if episode_id in candidates and start % loader.windows.transitions == 0:
             candidates[episode_id].append(index)
@@ -210,7 +211,7 @@ def _evaluate_indices(
     )
     windows = tuple(
         EpisodeWindowLearningSignal(
-            int(loader.window_metadata(index)["transition_stop"]) - 1,
+            _source_step(loader.window_metadata(index)),
             tuple(float(value) for value in world.features[row, -1].cpu()),
             float(td_error[row, -1].cpu()),
         )
@@ -224,3 +225,14 @@ def _evaluate_indices(
         ),
         windows,
     )
+
+
+def _source_step(metadata: dict[str, object]) -> int:
+    episode = metadata.get("metadata", {})
+    reservoir = (
+        episode.get("sequence_reservoir", {})
+        if isinstance(episode, dict)
+        else {}
+    )
+    offset = int(reservoir.get("transition_start", 0))
+    return offset + int(metadata["transition_stop"]) - 1

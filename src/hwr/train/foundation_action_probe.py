@@ -9,6 +9,8 @@ from typing import Mapping, Sequence
 
 import numpy as np
 
+from hwr.train.foundation_sequence_reservoir import source_episode_id
+
 
 ACTION_PROBE_SCHEMA = "hwr.foundation-data-action-probe/v2"
 
@@ -146,27 +148,34 @@ def _evaluate_partition(
 def _load_episodes(
     root: Path, manifest: Mapping[str, object]
 ) -> list[_EpisodeTransitions]:
-    result = []
-    for shard_index, shard in enumerate(manifest.get("shards", ())):
+    grouped: dict[tuple[str, str], list[tuple[np.ndarray, np.ndarray, np.ndarray]]] = {}
+    for shard in manifest.get("shards", ()):
         task_id = str(shard.get("task_id", ""))
-        episode_id = str(shard.get("episode_id", f"shard-{shard_index}"))
+        episode_id = source_episode_id(shard)
         if not task_id:
             raise ValueError("foundation action probe shard has no task identity")
         with np.load(root / str(shard["path"]), allow_pickle=False) as arrays:
             proprioception = arrays["proprioception"].astype(np.float64)
             executed = arrays["executed_action"].astype(np.float64)
-        item = _EpisodeTransitions(
-            task_id,
-            episode_id,
+        item = (
             proprioception[:-1],
             executed,
             np.diff(proprioception, axis=0),
         )
+        grouped.setdefault((task_id, episode_id), []).append(item)
+    result = [
+        _EpisodeTransitions(
+            task_id,
+            episode_id,
+            *(np.concatenate([value[index] for value in values]) for index in range(3)),
+        )
+        for (task_id, episode_id), values in sorted(grouped.items())
+    ]
+    for item in result:
         if len(item.state) < 2 or not all(
             np.isfinite(value).all() for value in (item.state, item.action, item.target)
         ):
             raise ValueError("foundation action probe transitions are invalid")
-        result.append(item)
     if not result:
         raise ValueError("foundation action probe replay is empty")
     return result

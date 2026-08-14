@@ -27,6 +27,8 @@ from hwr.train.development_gate import (
     protected_tree_hashes,
 )
 from hwr.train.foundation_setup import build_foundation_learning_stack
+from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
+from hwr.train.foundation_resource_budget import foundation_storage_estimate
 
 
 FORBIDDEN_FOUNDATION_IMPORTS = (
@@ -289,6 +291,12 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
             encoding="utf-8"
         )
     )
+    online_config = FoundationOnlineTrainingConfig(
+        **{name: value for name, value in online.items() if name != "schema_version"}
+    )
+    storage = foundation_storage_estimate(online_config, task_count=len(tasks))
+    if storage["within_configured_budget"] is not True:
+        raise RuntimeError("formal foundation storage estimate exceeds its budget")
     if float(online["minimum_action_causality_ratio"]) <= 1.0:
         raise RuntimeError("formal action causality ratio is not a degradation gate")
     if float(online["minimum_action_causality_horizon_fraction"]) < 0.5:
@@ -365,6 +373,11 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
             gripper_flip_probability
         ),
         "learning_signal_windows_per_episode": learning_signal_windows,
+        "replay_windows_per_episode": online_config.replay_windows_per_episode,
+        "estimated_run_storage_gib": storage["estimated_gib"],
+        "holdout_teacher_visual_features": storage["holdout"][
+            "teacher_visual_features"
+        ],
     }
 
 

@@ -7,6 +7,8 @@ from typing import Mapping
 
 import numpy as np
 
+from hwr.train.foundation_sequence_reservoir import source_episode_id
+
 
 INTERACTION_COVERAGE_SCHEMA = "hwr.foundation-interaction-coverage/v2"
 
@@ -22,11 +24,11 @@ def summarize_interaction_coverage(
     del replay_path
     if minimum_displacement <= 0.0 or minimum_transitions <= 0:
         raise ValueError("interaction coverage thresholds must be positive")
-    grouped: dict[str, list[Mapping[str, object]]] = {}
+    grouped: dict[str, dict[str, Mapping[str, object]]] = {}
     excluded: dict[str, int] = {}
-    for shard in replay_manifest.get("shards", ()):
+    for shard_index, shard in enumerate(replay_manifest.get("shards", ())):
         task_id = str(shard["task_id"])
-        grouped.setdefault(task_id, [])
+        grouped.setdefault(task_id, {})
         if int(shard.get("transition_count", 0)) < minimum_transitions:
             excluded[task_id] = excluded.get(task_id, 0) + 1
             continue
@@ -34,12 +36,16 @@ def summarize_interaction_coverage(
         audit = metadata.get("interaction_audit", {})
         if not isinstance(audit, Mapping):
             raise ValueError("replay interaction audit is invalid")
-        grouped[task_id].append(audit)
+        source = source_episode_id(shard) or f"legacy-shard-{shard_index}"
+        previous = grouped[task_id].get(source)
+        if previous is not None and dict(previous) != dict(audit):
+            raise ValueError("sequence reservoir interaction audit differs by source")
+        grouped[task_id][source] = audit
     if not grouped:
         raise ValueError("interaction coverage replay is empty")
     partitions = {
         task_id: {
-            **_summarize_task(values, minimum_displacement),
+            **_summarize_task(list(values.values()), minimum_displacement),
             "ineligible_short_episode_count": excluded.get(task_id, 0),
         }
         for task_id, values in sorted(grouped.items())

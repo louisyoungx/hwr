@@ -76,3 +76,32 @@ def test_interaction_coverage_excludes_episodes_too_short_for_training(
     assert task["ineligible_short_episode_count"] == 1
     assert task["unilateral_contact_episode_count"] == 0
     assert task["severe_collision_positive_episode_count"] == 0
+
+
+def test_interaction_coverage_counts_sequence_windows_once_per_source(tmp_path) -> None:
+    audit = {"left_contact_steps": 1, "severe_collision_count": 0}
+    manifest = {
+        "shards": [
+            {
+                "episode_id": f"excerpt-{index}",
+                "task_id": "task-a/v1",
+                "transition_count": 16,
+                "metadata": {
+                    "interaction_audit": audit,
+                    "sequence_reservoir": {"source_episode_id": "source-1"},
+                },
+            }
+            for index in range(2)
+        ]
+    }
+
+    report = summarize_interaction_coverage(
+        tmp_path,
+        manifest,
+        minimum_displacement=0.01,
+        minimum_transitions=16,
+    )
+
+    task = report["partitions"]["task-a/v1"]
+    assert task["episode_count"] == 1
+    assert task["severe_collision_negative_episode_count"] == 1

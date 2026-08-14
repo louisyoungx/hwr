@@ -14,10 +14,7 @@ import numpy as np
 from hwr.core.runtime import RuntimeBackend
 from hwr.data.autonomous_trajectory import AppendableAutonomousTrajectoryStore
 from hwr.data.foundation_cache import FoundationFeatureCache
-from hwr.data.foundation_features import (
-    LANGUAGE_PREPROCESS_SHA256,
-    file_sha256,
-)
+from hwr.data.foundation_features import LANGUAGE_PREPROCESS_SHA256, file_sha256
 from hwr.data.foundation_loading import FoundationPreparedFeatures
 from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 from hwr.policy.foundation_runtime import FoundationWorldModelPolicy
@@ -50,10 +47,7 @@ from hwr.train.foundation_metrics import (
     build_foundation_cycle_metrics,
     publish_foundation_progress,
 )
-from hwr.train.foundation_exploration import (
-    RandomRLActionSource,
-    RandomRLExplorationConfig,
-)
+from hwr.train.foundation_exploration import RandomRLActionSource, RandomRLExplorationConfig
 from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
 from hwr.train.foundation_online_types import (
     FoundationEnvironmentFactory,
@@ -85,7 +79,9 @@ from hwr.train.foundation_replay_features import (
     discard_visual_feature_sources,
     language_resolver_from_replay,
 )
+from hwr.train.foundation_resource_budget import require_foundation_resource_budget
 from hwr.train.foundation_setup import FoundationLearningStack
+from hwr.train.foundation_sequence_reservoir import append_episode_sequence_evidence
 from hwr.train.foundation_cycle_updates import run_replay_updates, warm_start_actor
 from hwr.train.learning_frontier import LearningFrontierConfig
 from hwr.train.task_sampling import OutcomeAdaptiveTaskSampler
@@ -189,6 +185,9 @@ class FoundationOnlineTrainingRunner:
         )
 
     def train(self) -> FoundationOnlineTrainingResult:
+        require_foundation_resource_budget(
+            self.run_path, self.config, task_count=len(self.task_ids)
+        )
         environments = {
             task_id: self.environment_factory(
                 task_id, self.config.camera_width, self.config.camera_height
@@ -427,7 +426,12 @@ class FoundationOnlineTrainingRunner:
                 ),
             )
             self.frontier.remember(episode.episode_id, episode_index, prepared)
-            self.store.append(episode)
+            append_episode_sequence_evidence(
+                self.store,
+                episode,
+                sequence_transitions=self.config.sequence_transitions,
+                windows_per_episode=self.config.replay_windows_per_episode,
+            )
             collected.append(episode)
         return collected
 
@@ -473,6 +477,9 @@ class FoundationOnlineTrainingRunner:
                 // self.config.causality_holdout_episodes_per_task
             ),
             sequence_transitions=self.config.sequence_transitions,
+            retained_transitions_per_episode=(
+                self.config.causality_holdout_transitions_per_episode
+            ),
             maximum_attempts_per_episode=(
                 self.config.causality_holdout_maximum_attempts_per_episode
             ),

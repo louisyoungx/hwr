@@ -32,6 +32,7 @@ from hwr.train.foundation_holdout import (
 from hwr.train.foundation_interaction_coverage import summarize_interaction_coverage
 from hwr.train.foundation_metrics import summarize_replay_action_coverage
 from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
+from hwr.train.foundation_sequence_reservoir import count_source_episodes
 from hwr.train.foundation_trainer import FoundationWorldModelTrainer
 from hwr.world_model.evaluation import ActionCausalityCriteria
 
@@ -120,7 +121,7 @@ def evaluate_foundation_actor_admission(
         action_coverage,
         interaction,
         collision_validation,
-        replay_episodes=int(replay_store.manifest["episode_count"]),
+        replay_episodes=count_source_episodes(replay_store.manifest),
     )
     warmup = _required_warmup(readiness_tracker)
     return FoundationAdmissionResult(diagnostic, readiness, warmup)

@@ -22,9 +22,10 @@ from hwr.train.foundation_exploration import (
     RandomRLActionSource,
     RandomRLExplorationConfig,
 )
+from hwr.train.foundation_sequence_reservoir import slice_episode_sequence
 
 
-HOLDOUT_COLLECTOR = "foundation-causality-holdout/v3"
+HOLDOUT_COLLECTOR = "foundation-causality-holdout/v4"
 
 
 def collect_causality_holdout(
@@ -38,6 +39,7 @@ def collect_causality_holdout(
     episodes_per_task: int,
     windows_per_episode: int,
     sequence_transitions: int,
+    retained_transitions_per_episode: int,
     maximum_attempts_per_episode: int,
     base_seed: int,
     source_commit: str,
@@ -49,6 +51,7 @@ def collect_causality_holdout(
             episodes_per_task,
             windows_per_episode,
             sequence_transitions,
+            retained_transitions_per_episode,
             maximum_attempts_per_episode,
         )
         <= 0
@@ -99,8 +102,16 @@ def collect_causality_holdout(
                     and collision_class != collision_target
                 ):
                     continue
+                retained = min(retained_transitions_per_episode, transitions)
+                compact = slice_episode_sequence(
+                    episode,
+                    start=transitions - retained,
+                    transitions=retained,
+                    slot=0,
+                    slot_count=1,
+                )
                 metadata = {
-                    **episode.metadata,
+                    **compact.metadata,
                     "collector": HOLDOUT_COLLECTOR,
                     "holdout_slot": episode_index,
                     "seed_attempt": attempt,
@@ -110,8 +121,9 @@ def collect_causality_holdout(
                         collision_target or "unconstrained"
                     ),
                     "collision_class": collision_class,
+                    "retained_transitions": retained,
                 }
-                store.append(replace(episode, metadata=metadata))
+                store.append(replace(compact, metadata=metadata))
                 existing[slot] = seed
                 break
             if slot not in existing:

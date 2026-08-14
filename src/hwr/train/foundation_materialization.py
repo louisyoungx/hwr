@@ -41,13 +41,6 @@ def materialize_foundation_replay_features(
         vision_language,
         output / "vision-language.json",
     )
-    audit_vl = materialize_visual_features(
-        audit_replay,
-        cache,
-        preprocessor,
-        vision_language,
-        audit_output / "vision-language.json",
-    )
     del vision_language
     release_unused_accelerator_memory()
     dense_vision = dense_vision_factory()
@@ -57,13 +50,6 @@ def materialize_foundation_replay_features(
         preprocessor,
         dense_vision,
         output / "dense-vision.json",
-    )
-    audit_dense = materialize_visual_features(
-        audit_replay,
-        cache,
-        preprocessor,
-        dense_vision,
-        audit_output / "dense-vision.json",
     )
     del dense_vision
     release_unused_accelerator_memory()
@@ -78,5 +64,5 @@ def materialize_foundation_replay_features(
     release_unused_accelerator_memory()
     return (
         FoundationPreparedFeatures(training_vl, training_dense, training_language),
-        FoundationPreparedFeatures(audit_vl, audit_dense, audit_language),
+        FoundationPreparedFeatures(None, None, audit_language),
     )

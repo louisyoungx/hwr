@@ -80,3 +80,6 @@ def test_formal_causality_audit_uses_task_balanced_optimizer_disjoint_data() -> 
         % report["causality_audit_batch_size"]
         == 0
     )
+    assert report["replay_windows_per_episode"] >= 1
+    assert report["estimated_run_storage_gib"] < 30.0
+    assert report["holdout_teacher_visual_features"] is False
