@@ -166,6 +166,15 @@ def _trainer(
 def test_unified_trainer_updates_visual_world_actor_and_value_together() -> None:
     trainer = _trainer()
     visual_before = trainer.visual_student.rgb_backbone.stem[0].weight.detach().clone()
+    camera_fusion_before = {
+        name: value.detach().clone()
+        for name, value in trainer.visual_student.camera_fusion.named_parameters()
+    }
+    temporal_fusion_before = {
+        name: value.detach().clone()
+        for name, value in trainer.visual_student.temporal_fusion.named_parameters()
+    }
+    output_norm_before = trainer.visual_student.output_norm.weight.detach().clone()
     world_before = trainer.world_model.visual_head[-1].weight.detach().clone()
     actor_before = trainer.actor.mean_head.weight.detach().clone()
     value_before = trainer.value.network[-1].weight.detach().clone()
@@ -173,11 +182,31 @@ def test_unified_trainer_updates_visual_world_actor_and_value_together() -> None
     metrics = trainer.train_step(_batch(_visual_config()))
 
     assert torch.any(trainer.visual_student.rgb_backbone.stem[0].weight != visual_before)
+    assert all(
+        parameter.grad is not None
+        for parameter in trainer.visual_student.camera_fusion.parameters()
+    )
+    assert all(
+        parameter.grad is not None
+        for parameter in trainer.visual_student.temporal_fusion.parameters()
+    )
+    assert any(
+        torch.any(value != camera_fusion_before[name])
+        for name, value in trainer.visual_student.camera_fusion.named_parameters()
+    )
+    assert any(
+        torch.any(value != temporal_fusion_before[name])
+        for name, value in trainer.visual_student.temporal_fusion.named_parameters()
+    )
+    assert torch.any(trainer.visual_student.output_norm.weight != output_norm_before)
     assert torch.any(trainer.world_model.visual_head[-1].weight != world_before)
     assert torch.any(trainer.actor.mean_head.weight != actor_before)
     assert torch.any(trainer.value.network[-1].weight != value_before)
     assert metrics["trainer/update_count"] == 1.0
     assert "visual/total" in metrics and "world/total" in metrics
+    assert metrics["trainer/visual_camera_fusion_gradient_norm"] > 0.0
+    assert metrics["trainer/visual_temporal_fusion_gradient_norm"] > 0.0
+    assert metrics["trainer/visual_output_norm_gradient_norm"] > 0.0
 
 
 def test_unified_trainer_optimizer_state_round_trip() -> None:

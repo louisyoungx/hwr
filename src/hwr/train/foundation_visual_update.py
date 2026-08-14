@@ -23,6 +23,7 @@ class VisualUpdateResult:
     losses: Mapping[str, float]
     microbatch_count: int
     gradient_norm: float
+    deployment_gradient_norms: Mapping[str, float]
 
 
 def optimize_visual_student(
@@ -63,6 +64,14 @@ def optimize_visual_student(
         if stop < observation_total:
             release_unused_accelerator_memory()
     parameters = [*student.parameters(), *objective.parameters()]
+    deployment_gradient_norms = {
+        name: _module_gradient_norm(module)
+        for name, module in (
+            ("camera_fusion", student.camera_fusion),
+            ("temporal_fusion", student.temporal_fusion),
+            ("output_norm", student.output_norm),
+        )
+    }
     gradient_norm = nn.utils.clip_grad_norm_(parameters, maximum_gradient_norm)
     optimizer.step()
     return VisualUpdateResult(
@@ -70,6 +79,7 @@ def optimize_visual_student(
         aggregate,
         microbatch_count,
         float(gradient_norm.detach().cpu()),
+        deployment_gradient_norms,
     )
 
 
@@ -102,8 +112,19 @@ def encode_visual_student_bounded(
     finally:
         student.train(training)
     return VisualUpdateResult(
-        torch.cat(pooled, dim=0), {}, microbatch_count, 0.0
+        torch.cat(pooled, dim=0), {}, microbatch_count, 0.0, {}
     )
+
+
+def _module_gradient_norm(module: nn.Module) -> float:
+    squared = [
+        parameter.grad.detach().float().square().sum()
+        for parameter in module.parameters()
+        if parameter.grad is not None
+    ]
+    if not squared:
+        return 0.0
+    return float(torch.stack(squared).sum().sqrt().cpu())
 
 
 def _slice_targets(

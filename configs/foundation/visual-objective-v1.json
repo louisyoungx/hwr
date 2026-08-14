@@ -1,5 +1,6 @@
 {
   "correspondence_weight": 0.5,
+  "deployment_alignment_weight": 1.0,
   "depth_weight": 0.25,
   "dense_vision_dimension": 384,
   "dense_vision_weight": 1.0,

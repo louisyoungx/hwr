@@ -49,10 +49,11 @@ def test_action_free_visual_objectives_are_finite_and_differentiable() -> None:
 
     assert set(losses) == {
         "vision_language", "dense_vision", "depth", "reconstruction",
-        "correspondence", "total",
+        "correspondence", "deployment_alignment", "total",
     }
     assert all(torch.isfinite(value) for value in losses.values())
     assert output.spatial_features.grad is not None
+    assert output.pooled_state.grad is not None
     assert objective.vision_language_projection.weight.grad is not None
 
 
@@ -83,3 +84,4 @@ def test_empty_masks_produce_zero_auxiliary_losses() -> None:
     assert losses["depth"] == 0.0
     assert losses["reconstruction"] == 0.0
     assert losses["correspondence"] == 0.0
+    assert torch.isfinite(losses["deployment_alignment"])

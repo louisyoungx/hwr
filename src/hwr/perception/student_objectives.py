@@ -20,6 +20,7 @@ class VisualObjectiveConfig:
     depth_weight: float = 0.25
     reconstruction_weight: float = 0.25
     correspondence_weight: float = 0.5
+    deployment_alignment_weight: float = 1.0
 
     def __post_init__(self) -> None:
         dimensions = (
@@ -33,6 +34,7 @@ class VisualObjectiveConfig:
             self.depth_weight,
             self.reconstruction_weight,
             self.correspondence_weight,
+            self.deployment_alignment_weight,
         )
         if min(dimensions) <= 0 or min(weights) < 0.0:
             raise ValueError("visual objective dimensions or weights are invalid")
@@ -137,6 +139,20 @@ def _correspondence_loss(
     return (1.0 - nn.functional.cosine_similarity(first, second, dim=-1)).mean()
 
 
+def _deployment_alignment_loss(output: VisualStudentOutput) -> torch.Tensor:
+    """Train the exact fused representation consumed by world model and Actor."""
+    current_spatial = output.spatial_features[:, -1]
+    current_valid = output.spatial_validity[:, -1]
+    weights = current_valid.to(current_spatial.dtype)[..., None]
+    denominator = weights.sum(dim=(1, 2, 3)).clamp_min(1.0)
+    spatial_target = (
+        (current_spatial * weights).sum(dim=(1, 2, 3)) / denominator
+    ).detach()
+    fused = nn.functional.normalize(output.pooled_state, dim=-1)
+    target = nn.functional.normalize(spatial_target, dim=-1)
+    return (1.0 - (fused * target).sum(dim=-1)).mean()
+
+
 class VisualFoundationObjectives(nn.Module):
     """Combine continuous teacher and geometry losses without action labels."""
 
@@ -171,6 +187,7 @@ class VisualFoundationObjectives(nn.Module):
             "correspondence": _correspondence_loss(
                 output.spatial_features, targets.correspondences
             ),
+            "deployment_alignment": _deployment_alignment_loss(output),
         }
         losses["total"] = (
             self.config.vision_language_weight * losses["vision_language"]
@@ -178,5 +195,7 @@ class VisualFoundationObjectives(nn.Module):
             + self.config.depth_weight * losses["depth"]
             + self.config.reconstruction_weight * losses["reconstruction"]
             + self.config.correspondence_weight * losses["correspondence"]
+            + self.config.deployment_alignment_weight
+            * losses["deployment_alignment"]
         )
         return losses

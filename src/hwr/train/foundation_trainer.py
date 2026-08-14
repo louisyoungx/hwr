@@ -224,6 +224,10 @@ class FoundationWorldModelTrainer:
             **{f"exploration/{name}": value for name, value in exploration_metrics.items()},
             "trainer/visual_microbatch_count": float(visual_update.microbatch_count),
             "trainer/visual_gradient_norm": visual_update.gradient_norm,
+            **{
+                f"trainer/visual_{name}_gradient_norm": value
+                for name, value in visual_update.deployment_gradient_norms.items()
+            },
             "trainer/visual_updated": float(visual_updated),
             "trainer/world_gradient_norm": float(world_gradient_norm.detach().cpu()),
             "trainer/task_actor_updated": float(train_task_actor),
