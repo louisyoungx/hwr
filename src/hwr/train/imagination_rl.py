@@ -27,6 +27,7 @@ class ImaginationRLConfig:
     uncertainty_weight: float = 0.1
     safety_weight: float = 2.0
     severe_collision_weight: float = 4.0
+    action_rewrite_weight: float = 1.0
     value_bins: int = 255
     value_symlog_limit: float = 20.0
     slow_value_rate: float = 0.01
@@ -46,6 +47,7 @@ class ImaginationRLConfig:
             self.uncertainty_weight,
             self.safety_weight,
             self.severe_collision_weight,
+            self.action_rewrite_weight,
             self.slow_value_rate,
             self.maximum_gradient_norm,
             self.base_linear_scale,
@@ -101,6 +103,10 @@ class ImaginationActorCritic(nn.Module):
             self.config.severe_collision_weight
             * trajectory.severe_collision_probabilities
         )
+        rewards = rewards - (
+            self.config.action_rewrite_weight
+            * trajectory.action_rewrite_magnitudes
+        )
         rewards = rewards + (
             self.config.motion_entropy_weight * trajectory.motion_entropies
         )
@@ -131,6 +137,7 @@ class ImaginationActorCritic(nn.Module):
             "imagined_severe_collision": (
                 trajectory.severe_collision_probabilities.mean()
             ),
+            "imagined_action_rewrite": trajectory.action_rewrite_magnitudes.mean(),
             "imagined_uncertainty": trajectory.uncertainties.mean(),
             "motion_entropy": trajectory.motion_entropies.mean(),
             "gripper_entropy": trajectory.gripper_entropies.mean(),

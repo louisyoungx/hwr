@@ -187,7 +187,7 @@ def _causality_run(tmp_path):
     _write_json(
         report,
         {
-            "schema_version": "hwr.foundation-action-causality/v5",
+            "schema_version": "hwr.foundation-action-causality/v6",
             "action_source": "actual_executed_action",
             "safety_action_source": "actor_proposal",
             "counterfactual_pairing": "proposal-executed-pair/v1",

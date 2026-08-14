@@ -28,6 +28,9 @@ class FoundationOnlineTrainingConfig:
     minimum_collision_validation_recall: float = 0.80
     minimum_collision_validation_pr_auc: float = 0.50
     maximum_collision_validation_brier_score: float = 0.10
+    maximum_collision_validation_false_positive_rate: float = 0.05
+    minimum_collision_validation_terminal_alignment: float = 0.80
+    minimum_collision_validation_action_sensitivity_ratio: float = 1.02
     calibration_early_stop_episodes: int = 24
     collection_episodes_per_cycle: int = 3
     updates_per_cycle: int = 200
@@ -211,9 +214,13 @@ class FoundationOnlineTrainingConfig:
             self.minimum_collision_validation_recall,
             self.minimum_collision_validation_pr_auc,
             self.maximum_collision_validation_brier_score,
+            self.maximum_collision_validation_false_positive_rate,
+            self.minimum_collision_validation_terminal_alignment,
         )
         if any(not 0.0 <= value <= 1.0 for value in collision_limits):
             raise ValueError("collision validation limits are invalid")
+        if self.minimum_collision_validation_action_sensitivity_ratio < 1.0:
+            raise ValueError("collision validation action sensitivity is invalid")
         if min(
             self.maximum_estimated_run_storage_gib,
             self.minimum_free_storage_gib,

@@ -11,7 +11,7 @@ from hwr.data.foundation_loading import FoundationSequenceBatchLoader
 from hwr.train.foundation_trainer import FoundationWorldModelTrainer
 
 
-COLLISION_VALIDATION_SCHEMA = "hwr.foundation-collision-validation/v1"
+COLLISION_VALIDATION_SCHEMA = "hwr.foundation-collision-validation/v2"
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,9 @@ class CollisionValidationCriteria:
     minimum_recall: float = 0.80
     minimum_pr_auc: float = 0.50
     maximum_brier_score: float = 0.10
+    maximum_false_positive_rate: float = 0.05
+    minimum_terminal_alignment: float = 0.80
+    minimum_action_sensitivity_ratio: float = 1.02
 
     def __post_init__(self) -> None:
         if min(
@@ -38,6 +41,12 @@ class CollisionValidationCriteria:
             raise ValueError("collision validation PR-AUC is invalid")
         if not 0.0 <= self.maximum_brier_score <= 1.0:
             raise ValueError("collision validation Brier score is invalid")
+        if not 0.0 <= self.maximum_false_positive_rate <= 1.0:
+            raise ValueError("collision validation false-positive rate is invalid")
+        if not 0.0 <= self.minimum_terminal_alignment <= 1.0:
+            raise ValueError("collision validation alignment is invalid")
+        if self.minimum_action_sensitivity_ratio < 1.0:
+            raise ValueError("collision action sensitivity cannot be below one")
 
 
 def evaluate_foundation_collision_validation(
@@ -101,37 +110,81 @@ def _evaluate_partition(
     *,
     batch_size: int,
 ) -> dict[str, object]:
-    probabilities: list[float] = []
-    labels: list[float] = []
+    terminal_probabilities: list[float] = []
+    terminal_labels: list[float] = []
+    transition_probabilities: list[float] = []
+    transition_labels: list[float] = []
+    shuffled_probabilities: list[float] = []
+    aligned: list[float] = []
     for start in range(0, len(indices), batch_size):
         batch = loader.build(
             indices[start : start + batch_size], include_visual_targets=False
         )
-        predicted = trainer.severe_collision_probabilities(batch).numpy()
+        predicted, shuffled = trainer.severe_collision_counterfactual_probabilities(
+            batch, shuffle_seed=start + 7
+        )
+        predicted = predicted.numpy()
+        shuffled = shuffled.numpy()
         targets = batch.severe_collisions.detach().cpu().numpy()
-        if predicted.shape != targets.shape:
+        if predicted.shape != targets.shape or shuffled.shape != targets.shape:
             raise ValueError("collision validation prediction shape differs")
-        probabilities.extend(np.max(predicted, axis=1).tolist())
-        labels.extend(np.max(targets, axis=1).tolist())
-    return _binary_episode_report(probabilities, labels, criteria)
+        terminal_probabilities.extend(predicted[:, -1].tolist())
+        terminal_labels.extend(targets[:, -1].tolist())
+        transition_probabilities.extend(predicted.reshape(-1).tolist())
+        transition_labels.extend(targets.reshape(-1).tolist())
+        shuffled_probabilities.extend(shuffled.reshape(-1).tolist())
+        aligned.extend(
+            float(int(np.argmax(row)) == len(row) - 1)
+            for row, label in zip(predicted, targets[:, -1], strict=True)
+            if label == 1.0
+        )
+    return _binary_transition_report(
+        terminal_probabilities,
+        terminal_labels,
+        transition_probabilities,
+        transition_labels,
+        shuffled_probabilities,
+        aligned,
+        criteria,
+    )
 
 
-def _binary_episode_report(
-    probabilities: list[float],
-    labels: list[float],
+def _binary_transition_report(
+    terminal_probabilities: list[float],
+    terminal_labels: list[float],
+    transition_probabilities: list[float],
+    transition_labels: list[float],
+    shuffled_probabilities: list[float],
+    aligned: list[float],
     criteria: CollisionValidationCriteria,
 ) -> dict[str, object]:
-    probability = np.asarray(probabilities, np.float64)
-    target = np.asarray(labels, np.float64)
+    probability = np.asarray(terminal_probabilities, np.float64)
+    target = np.asarray(terminal_labels, np.float64)
+    transition_probability = np.asarray(transition_probabilities, np.float64)
+    transition_target = np.asarray(transition_labels, np.float64)
+    shuffled_probability = np.asarray(shuffled_probabilities, np.float64)
     if probability.shape != target.shape or not np.isin(target, (0.0, 1.0)).all():
         raise ValueError("collision validation labels are invalid")
+    if (
+        transition_probability.shape != transition_target.shape
+        or shuffled_probability.shape != transition_target.shape
+        or not np.isin(transition_target, (0.0, 1.0)).all()
+    ):
+        raise ValueError("collision transition validation labels are invalid")
     if not np.isfinite(probability).all() or np.any((probability < 0) | (probability > 1)):
         raise ValueError("collision validation probabilities are invalid")
     positives = int(target.sum())
     negatives = int(target.size - positives)
     recall = float(((probability >= 0.5) & (target == 1.0)).sum() / positives) if positives else 0.0
     pr_auc = _average_precision(probability, target)
-    brier = float(np.mean((probability - target) ** 2)) if target.size else 1.0
+    true_brier = _brier(transition_probability, transition_target)
+    shuffled_brier = _brier(shuffled_probability, transition_target)
+    action_ratio = shuffled_brier / max(true_brier, 1.0e-12)
+    negatives_mask = transition_target == 0.0
+    false_positive_rate = float(
+        np.mean(transition_probability[negatives_mask] >= 0.5)
+    ) if bool(negatives_mask.any()) else 1.0
+    terminal_alignment = float(np.mean(aligned)) if aligned else 0.0
     checks = {
         "minimum_positive_episodes": positives
         >= criteria.minimum_positive_episodes_per_task,
@@ -139,7 +192,17 @@ def _binary_episode_report(
         >= criteria.minimum_negative_episodes_per_task,
         "minimum_recall": recall >= criteria.minimum_recall,
         "minimum_pr_auc": pr_auc >= criteria.minimum_pr_auc,
-        "maximum_brier_score": brier <= criteria.maximum_brier_score,
+        "maximum_brier_score": true_brier <= criteria.maximum_brier_score,
+        "maximum_false_positive_rate": (
+            false_positive_rate <= criteria.maximum_false_positive_rate
+        ),
+        "minimum_terminal_alignment": (
+            terminal_alignment >= criteria.minimum_terminal_alignment
+        ),
+        "minimum_action_sensitivity_ratio": (
+            criteria.minimum_action_sensitivity_ratio == 1.0
+            or action_ratio >= criteria.minimum_action_sensitivity_ratio
+        ),
     }
     return {
         "passed": all(checks.values()),
@@ -148,10 +211,26 @@ def _binary_episode_report(
         "negative_episode_count": negatives,
         "recall": recall,
         "pr_auc": pr_auc,
-        "brier_score": brier,
+        "brier_score": true_brier,
+        "transition_brier_score": true_brier,
+        "shuffled_action_brier_score": shuffled_brier,
+        "shuffled_to_true_brier_ratio": action_ratio,
+        "false_positive_rate": false_positive_rate,
+        "terminal_alignment_rate": terminal_alignment,
+        "transition_count": int(transition_target.size),
         "positive_rate": float(target.mean()) if target.size else 0.0,
         "checks": checks,
     }
+
+
+def _brier(probability: np.ndarray, target: np.ndarray) -> float:
+    if (
+        probability.shape != target.shape
+        or not np.isfinite(probability).all()
+        or np.any((probability < 0.0) | (probability > 1.0))
+    ):
+        raise ValueError("collision transition probabilities are invalid")
+    return float(np.mean((probability - target) ** 2)) if target.size else 1.0
 
 
 def _average_precision(probability: np.ndarray, target: np.ndarray) -> float:

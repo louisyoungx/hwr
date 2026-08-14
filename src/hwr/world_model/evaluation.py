@@ -21,6 +21,7 @@ ACTION_CAUSALITY_COMPONENTS = (
     "continue",
     "safety",
 )
+PHYSICAL_CAUSALITY_COMPONENTS = ("visual_latent", "proprioception")
 
 
 @dataclass(frozen=True)
@@ -206,12 +207,23 @@ def assess_action_causality(
     report: CounterfactualCausalityReport,
     criteria: ActionCausalityCriteria | None = None,
 ) -> dict[str, object]:
-    """Require shuffled actions to degrade every predicted result separately."""
+    """Gate physical dynamics; report sparse outcome heads as calibration only."""
     settings = criteria or ActionCausalityCriteria()
+    missing = set(PHYSICAL_CAUSALITY_COMPONENTS) - set(report.component_reports)
+    if missing:
+        raise ValueError("action causality report lacks physical components")
+    physical_true = _sum_component_horizons(
+        report, PHYSICAL_CAUSALITY_COMPONENTS, shuffled=False
+    )
+    physical_shuffled = _sum_component_horizons(
+        report, PHYSICAL_CAUSALITY_COMPONENTS, shuffled=True
+    )
+    true_mean = sum(physical_true) / len(physical_true)
+    shuffled_mean = sum(physical_shuffled) / len(physical_shuffled)
     aggregate = _assess_error_series(
-        report.shuffled_to_true_ratio,
-        report.true_horizon_errors,
-        report.shuffled_horizon_errors,
+        shuffled_mean / max(true_mean, 1.0e-8),
+        physical_true,
+        physical_shuffled,
         settings,
     )
     components = {
@@ -223,16 +235,38 @@ def assess_action_causality(
         )
         for name, value in report.component_reports.items()
     }
-    all_components_passed = all(
-        value["passed"] is True for value in components.values()
+    required_components_passed = all(
+        components[name]["passed"] is True
+        for name in PHYSICAL_CAUSALITY_COMPONENTS
     )
     return {
         **aggregate,
-        "passed": aggregate["passed"] and all_components_passed,
+        "passed": aggregate["passed"] and required_components_passed,
         "aggregate_passed": aggregate["passed"],
-        "all_components_passed": all_components_passed,
+        "required_components_passed": required_components_passed,
+        "required_components": list(PHYSICAL_CAUSALITY_COMPONENTS),
+        "calibration_only_components": [
+            name for name in components if name not in PHYSICAL_CAUSALITY_COMPONENTS
+        ],
         "components": components,
     }
+
+
+def _sum_component_horizons(
+    report: CounterfactualCausalityReport,
+    names: tuple[str, ...],
+    *,
+    shuffled: bool,
+) -> tuple[float, ...]:
+    values = [
+        (
+            report.component_reports[name].shuffled_horizon_errors
+            if shuffled
+            else report.component_reports[name].true_horizon_errors
+        )
+        for name in names
+    ]
+    return tuple(sum(items) for items in zip(*values, strict=True))
 
 
 def _assess_error_series(

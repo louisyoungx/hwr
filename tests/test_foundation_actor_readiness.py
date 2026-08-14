@@ -79,6 +79,9 @@ def _collision_validation(passed: bool = True):
             "minimum_recall": 0.8,
             "minimum_pr_auc": 0.5,
             "maximum_brier_score": 0.1,
+            "maximum_false_positive_rate": 0.05,
+            "minimum_terminal_alignment": 0.8,
+            "minimum_action_sensitivity_ratio": 1.02,
         },
         "partitions": {"partition-a": {"passed": passed}},
     }
@@ -150,6 +153,9 @@ def test_data_action_probe_detects_action_identifiability(tmp_path) -> None:
     assert report["bootstrap"]["ratio_p05"] > 10.0
     assert report["bootstrap"]["unit"] == "episode_cluster"
     assert set(report["partitions"]) == {"fixture/v1"}
+    assert set(report["partitions"]["fixture/v1"]["horizons"]) == {
+        "1", "4", "8", "16"
+    }
 
 
 def test_physical_gate_can_unlock_explorer_without_task_actor() -> None:

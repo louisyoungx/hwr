@@ -19,6 +19,7 @@ class WorldModelLossConfig:
     reward_weight: float = 1.0
     continue_weight: float = 1.0
     safety_weight: float = 1.0
+    action_execution_weight: float = 1.0
     severe_collision_weight: float = 2.0
     dynamics_weight: float = 0.5
     representation_weight: float = 0.1
@@ -41,6 +42,7 @@ class WorldModelTargets:
     reward: torch.Tensor
     continues: torch.Tensor
     safety_interventions: torch.Tensor
+    executed_actions: torch.Tensor
     severe_collisions: torch.Tensor
 
 
@@ -80,6 +82,9 @@ class WorldModelLoss(nn.Module):
         safety = nn.functional.binary_cross_entropy_with_logits(
             output.safety_logits, targets.safety_interventions.float()
         )
+        action_execution = nn.functional.smooth_l1_loss(
+            output.executed_action_prediction, targets.executed_actions
+        )
         severe_collision = _balanced_binary_cross_entropy(
             output.severe_collision_logits, targets.severe_collisions.float()
         )
@@ -91,6 +96,7 @@ class WorldModelLoss(nn.Module):
             "reward": reward,
             "continue": continues,
             "safety": safety,
+            "action_execution": action_execution,
             "severe_collision": severe_collision,
             "dynamics": dynamics,
             "representation": representation,
@@ -103,6 +109,7 @@ class WorldModelLoss(nn.Module):
             + config.reward_weight * reward
             + config.continue_weight * continues
             + config.safety_weight * safety
+            + config.action_execution_weight * action_execution
             + config.severe_collision_weight * severe_collision
             + config.dynamics_weight * dynamics
             + config.representation_weight * representation
@@ -134,6 +141,11 @@ class WorldModelLoss(nn.Module):
             "reward": (batch, observations - 1),
             "continues": (batch, observations - 1),
             "safety_interventions": (batch, observations - 1),
+            "executed_actions": (
+                batch,
+                observations - 1,
+                self.model_config.action_dimension,
+            ),
             "severe_collisions": (batch, observations - 1),
         }
         actual = {name: tuple(getattr(targets, name).shape) for name in expected}

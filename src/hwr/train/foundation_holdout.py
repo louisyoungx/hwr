@@ -26,6 +26,7 @@ from hwr.train.foundation_sequence_reservoir import slice_episode_sequence
 
 
 HOLDOUT_COLLECTOR = "foundation-causality-holdout/v4"
+SYSTEM_IDENTIFICATION_CORRELATIONS = (0.0, 0.50, 0.90, 0.96)
 
 
 def collect_causality_holdout(
@@ -91,7 +92,18 @@ def collect_causality_holdout(
                 )
                 episode = collector.collect(
                     environments[task_id],
-                    RandomRLActionSource(action_scaling, exploration_config),
+                    RandomRLActionSource(
+                        action_scaling,
+                        replace(
+                            exploration_config,
+                            motion_correlation=(
+                                SYSTEM_IDENTIFICATION_CORRELATIONS[
+                                    episode_index
+                                    % len(SYSTEM_IDENTIFICATION_CORRELATIONS)
+                                ]
+                            ),
+                        ),
+                    ),
                     task_id=task_id,
                     seed=seed,
                 )
@@ -122,6 +134,15 @@ def collect_causality_holdout(
                     ),
                     "collision_class": collision_class,
                     "retained_transitions": retained,
+                    "system_identification_excitation": {
+                        "motion_correlation": (
+                            SYSTEM_IDENTIFICATION_CORRELATIONS[
+                                episode_index
+                                % len(SYSTEM_IDENTIFICATION_CORRELATIONS)
+                            ]
+                        ),
+                        "task_conditioned": False,
+                    },
                 }
                 store.append(replace(compact, metadata=metadata))
                 existing[slot] = seed

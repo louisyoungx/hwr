@@ -47,8 +47,9 @@ class _Loader:
 
 
 class _Trainer:
-    def severe_collision_probabilities(self, batch):
-        return batch.predicted
+    def severe_collision_counterfactual_probabilities(self, batch, *, shuffle_seed):
+        del shuffle_seed
+        return batch.predicted, 1.0 - batch.predicted
 
 
 def test_collision_validation_uses_independent_terminal_episodes() -> None:
@@ -74,6 +75,9 @@ def test_collision_validation_uses_independent_terminal_episodes() -> None:
         assert task["recall"] == 1.0
         assert task["pr_auc"] == 1.0
         assert task["brier_score"] < 0.02
+        assert task["terminal_alignment_rate"] == 1.0
+        assert task["false_positive_rate"] == 0.0
+        assert task["shuffled_to_true_brier_ratio"] > 1.0
 
 
 def test_collision_validation_fails_without_both_episode_classes() -> None:

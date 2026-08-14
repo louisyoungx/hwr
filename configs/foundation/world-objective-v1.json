@@ -7,6 +7,7 @@
   "representation_weight": 0.1,
   "reward_weight": 1.0,
   "safety_weight": 1.0,
+  "action_execution_weight": 1.0,
   "severe_collision_weight": 2.0,
   "schema_version": "hwr.world-objective-config/v1",
   "visual_weight": 1.0

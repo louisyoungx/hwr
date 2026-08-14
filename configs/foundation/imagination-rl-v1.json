@@ -7,6 +7,7 @@
   "motion_entropy_weight": 0.002,
   "safety_weight": 2.0,
   "severe_collision_weight": 4.0,
+  "action_rewrite_weight": 1.0,
   "schema_version": "hwr.imagination-rl-config/v1",
   "slow_value_rate": 0.01,
   "uncertainty_weight": 0.1,

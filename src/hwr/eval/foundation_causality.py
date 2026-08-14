@@ -56,9 +56,12 @@ def require_foundation_causality_structure(
         or not expected_tasks
         or set(partitions) != expected_tasks
         or assessment.get("aggregate_passed") is not True
-        or assessment.get("all_components_passed") is not True
+        or assessment.get("required_components_passed") is not True
         or set(component_assessments) != required_components
-        or any(value.get("passed") is not True for value in component_assessments.values())
+        or any(
+            component_assessments[name].get("passed") is not True
+            for name in physical_components
+        )
         or assessment.get("all_partitions_passed") is not True
         or not _partition_assessments_pass(
             partitions, required_components, physical_components
@@ -134,7 +137,7 @@ def _partition_assessments_pass(
 ) -> bool:
     return all(
         value.get("assessment", {}).get("passed") is True
-        and value.get("assessment", {}).get("all_components_passed") is True
+        and value.get("assessment", {}).get("required_components_passed") is True
         and set(value.get("assessment", {}).get("components", {}))
         == required_components
         and value.get("one_step_action_utilization", {})
@@ -194,7 +197,11 @@ def _require_shuffle_statistics(
     if not isinstance(value, Mapping) or expected_count <= 0:
         raise ValueError(f"action shuffle statistics are missing: {label}")
     ratios = [
-        counterfactual_report_from_dict(report).shuffled_to_true_ratio
+        float(
+            assess_action_causality(
+                counterfactual_report_from_dict(report), criteria
+            )["shuffled_to_true_ratio"]
+        )
         for report in value.get("reports", ())
     ]
     if len(ratios) != expected_count:

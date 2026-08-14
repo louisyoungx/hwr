@@ -28,6 +28,7 @@ from hwr.train.intrinsic_exploration import (
     optimize_intrinsic_exploration_step,
 )
 from hwr.world_model.model import ActionConditionedWorldModel
+from hwr.world_model.evaluation import deterministic_action_derangement
 from hwr.world_model.objectives import (
     WorldModelLoss,
     WorldModelTargets,
@@ -184,6 +185,7 @@ class FoundationWorldModelTrainer:
             batch.rewards,
             batch.continues,
             batch.safety_interventions,
+            batch.executed_actions,
             batch.severe_collisions,
         )
         world_losses = self.world_objective(world_output, world_targets)
@@ -309,6 +311,50 @@ class FoundationWorldModelTrainer:
                 batch.executed_actions,
             )
         return output.severe_collision_logits.sigmoid().detach().cpu()
+
+    def severe_collision_counterfactual_probabilities(
+        self,
+        batch: FoundationTrainingBatch,
+        *,
+        shuffle_seed: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Hold posterior states fixed while shuffling actual executed actions."""
+        if shuffle_seed < 0:
+            raise ValueError("collision counterfactual seed is invalid")
+        self._check_batch_dimensions(batch)
+        self.visual_student.eval()
+        self.world_model.eval()
+        with torch.no_grad():
+            visual = encode_visual_student_bounded(
+                self.visual_student,
+                batch,
+                microbatch_observations=(
+                    self.config.visual_inference_microbatch_observations
+                ),
+            )
+            sequence = visual.pooled_state.reshape(
+                batch.sequence_batch_size,
+                batch.observation_count,
+                self.world_model.config.visual_dimension,
+            )
+            output = self.world_model.observe(
+                sequence,
+                batch.language_features,
+                batch.proprioception,
+                batch.actor_proposals,
+                batch.executed_actions,
+            )
+            features = output.features[:, :-1]
+            shuffled = deterministic_action_derangement(
+                batch.executed_actions, seed=shuffle_seed
+            )
+            shuffled_logits = self.world_model.predict_severe_collision(
+                features, shuffled
+            )
+        return (
+            output.severe_collision_logits.sigmoid().detach().cpu(),
+            shuffled_logits.sigmoid().detach().cpu(),
+        )
 
     @property
     def visual_update_due(self) -> bool:

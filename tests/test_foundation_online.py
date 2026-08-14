@@ -283,7 +283,7 @@ def _diagnostic(passed: bool) -> dict[str, object]:
         "robust_passed": passed,
     }
     return {
-        "schema_version": "hwr.foundation-action-causality/v5",
+        "schema_version": "hwr.foundation-action-causality/v6",
         "action_source": "actual_executed_action",
         "safety_action_source": "actor_proposal",
         "counterfactual_pairing": "proposal-executed-pair/v1",
@@ -383,6 +383,9 @@ def _config(*, episodes: int = 6) -> FoundationOnlineTrainingConfig:
             minimum_collision_validation_recall=0.0,
             minimum_collision_validation_pr_auc=0.0,
             maximum_collision_validation_brier_score=1.0,
+            maximum_collision_validation_false_positive_rate=1.0,
+            minimum_collision_validation_terminal_alignment=0.0,
+            minimum_collision_validation_action_sensitivity_ratio=1.0,
             calibration_early_stop_episodes=episodes,
             collection_episodes_per_cycle=3,
             updates_per_cycle=1,

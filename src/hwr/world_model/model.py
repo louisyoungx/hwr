@@ -19,6 +19,7 @@ class WorldModelOutput(NamedTuple):
     reward_logits: torch.Tensor
     continue_logits: torch.Tensor
     safety_logits: torch.Tensor
+    executed_action_prediction: torch.Tensor
     severe_collision_logits: torch.Tensor
 
 
@@ -70,6 +71,11 @@ class ActionConditionedWorldModel(nn.Module):
         self.safety_head = _head(
             feature + config.action_dimension, config.hidden_dimension, 1
         )
+        self.action_execution_head = _head(
+            feature + config.action_dimension,
+            config.hidden_dimension,
+            config.action_dimension,
+        )
         self.severe_collision_head = _head(
             feature + config.action_dimension, config.hidden_dimension, 1
         )
@@ -94,11 +100,19 @@ class ActionConditionedWorldModel(nn.Module):
         safety_logits = self.predict_safety_intervention(
             features[:, :-1], actor_proposals
         )
+        action_prediction = self.predict_executed_action(
+            features[:, :-1], actor_proposals
+        )
         collision_logits = self.predict_severe_collision(
             features[:, :-1], executed_actions
         )
         return WorldModelOutput(
-            sequence, features, *decoded, safety_logits, collision_logits
+            sequence,
+            features,
+            *decoded,
+            safety_logits,
+            action_prediction,
+            collision_logits,
         )
 
     def encode_observations(
@@ -266,6 +280,21 @@ class ActionConditionedWorldModel(nn.Module):
         return self.severe_collision_head(
             torch.cat((features, executed_actions), dim=-1)
         ).squeeze(-1)
+
+    def predict_executed_action(
+        self, features: torch.Tensor, actor_proposals: torch.Tensor
+    ) -> torch.Tensor:
+        """Predict the independent safety layer's continuous action rewrite."""
+        if (
+            features.shape[:-1] != actor_proposals.shape[:-1]
+            or features.shape[-1] != self.config.feature_dimension
+            or actor_proposals.shape[-1] != self.config.action_dimension
+        ):
+            raise ValueError("executed action prediction shapes are invalid")
+        residual = self.action_execution_head(
+            torch.cat((features, actor_proposals), dim=-1)
+        )
+        return actor_proposals + residual
 
     def _check_observation_shapes(
         self,

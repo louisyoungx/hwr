@@ -231,7 +231,11 @@ def _shuffle_statistics(
     criteria: ActionCausalityCriteria,
 ) -> dict[str, object]:
     ratios = np.asarray(
-        [report.shuffled_to_true_ratio for report in reports], np.float64
+        [
+            float(assess_action_causality(report, criteria)["shuffled_to_true_ratio"])
+            for report in reports
+        ],
+        np.float64,
     )
     p05 = float(np.quantile(ratios, 0.05))
     report_passes = [

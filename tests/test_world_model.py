@@ -77,6 +77,7 @@ def test_world_model_losses_train_dynamics_and_outcome_heads() -> None:
         reward=torch.randn(2, 4),
         continues=torch.ones(2, 4),
         safety_interventions=torch.zeros(2, 4),
+        executed_actions=actions,
         severe_collisions=torch.zeros(2, 4),
     )
     objective = WorldModelLoss(config, WorldModelLossConfig())
@@ -86,6 +87,7 @@ def test_world_model_losses_train_dynamics_and_outcome_heads() -> None:
 
     assert set(losses) == {
         "visual", "proprioception", "reward", "continue", "safety",
+        "action_execution",
         "severe_collision",
         "dynamics", "representation", "ensemble", "total",
     }
@@ -93,6 +95,7 @@ def test_world_model_losses_train_dynamics_and_outcome_heads() -> None:
     assert model.rssm.recurrent.weight_hh.grad is not None
     assert model.reward_head[-1].weight.grad is not None
     assert model.safety_head[-1].weight.grad is not None
+    assert model.action_execution_head[-1].weight.grad is not None
     assert model.severe_collision_head[-1].weight.grad is not None
 
 
@@ -252,7 +255,7 @@ def test_action_causality_gate_requires_ratio_and_most_horizons_to_degrade() -> 
     assert failed["passed"] is False
 
 
-def test_action_causality_gate_rejects_one_action_independent_prediction_head() -> None:
+def test_action_causality_gate_reports_sparse_heads_without_binding_physics() -> None:
     passing = CounterfactualComponentReport(
         1.0, 1.2, 1.2, (1.0, 1.0), (1.2, 1.2)
     )
@@ -260,14 +263,18 @@ def test_action_causality_gate_rejects_one_action_independent_prediction_head() 
         1.0, 1.0, 1.0, (1.0, 1.0), (1.0, 1.0)
     )
     report = CounterfactualCausalityReport(
-        2.0,
-        2.2,
-        1.1,
-        (2.0, 2.0),
-        (2.2, 2.2),
+        3.0,
+        3.4,
+        3.4 / 3.0,
+        (3.0, 3.0),
+        (3.4, 3.4),
         (0.1, 0.1),
-        {"visual_latent": passing, "safety": ignored},
-        ("visual_latent", "safety"),
+        {
+            "visual_latent": passing,
+            "proprioception": passing,
+            "safety": ignored,
+        },
+        ("visual_latent", "proprioception", "safety"),
     )
 
     assessment = assess_action_causality(report)
@@ -275,7 +282,8 @@ def test_action_causality_gate_rejects_one_action_independent_prediction_head() 
     assert assessment["aggregate_passed"] is True
     assert assessment["components"]["visual_latent"]["passed"] is True
     assert assessment["components"]["safety"]["passed"] is False
-    assert assessment["passed"] is False
+    assert assessment["calibration_only_components"] == ["safety"]
+    assert assessment["passed"] is True
 
 
 def test_distributional_reward_round_trip_is_finite() -> None:

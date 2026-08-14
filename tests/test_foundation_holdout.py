@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from hwr.train.foundation_holdout import (
+    SYSTEM_IDENTIFICATION_CORRELATIONS,
     _collision_balance_target,
     causality_batches_by_task,
     causality_window_manifest,
@@ -98,3 +99,4 @@ def test_formal_holdout_slots_balance_collision_outcomes() -> None:
     assert targets.count("positive") == 8
     assert targets.count("negative") == 8
     assert _collision_balance_target(0, 1) is None
+    assert SYSTEM_IDENTIFICATION_CORRELATIONS == (0.0, 0.5, 0.9, 0.96)

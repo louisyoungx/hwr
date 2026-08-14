@@ -111,6 +111,9 @@ def evaluate_foundation_actor_admission(
             config.minimum_collision_validation_recall,
             config.minimum_collision_validation_pr_auc,
             config.maximum_collision_validation_brier_score,
+            config.maximum_collision_validation_false_positive_rate,
+            config.minimum_collision_validation_terminal_alignment,
+            config.minimum_collision_validation_action_sensitivity_ratio,
         ),
         batch_size=config.causality_audit_batch_size,
     )

@@ -28,6 +28,7 @@ class IntrinsicExplorationConfig:
     novelty_neighbors: int = 5
     safety_weight: float = 2.0
     severe_collision_weight: float = 4.0
+    action_rewrite_weight: float = 1.0
     motion_entropy_weight: float = 3.0e-3
     gripper_entropy_weight: float = 3.0e-4
     slow_value_rate: float = 0.01
@@ -45,6 +46,7 @@ class IntrinsicExplorationConfig:
             self.state_novelty_weight,
             self.safety_weight,
             self.severe_collision_weight,
+            self.action_rewrite_weight,
             self.motion_entropy_weight,
             self.gripper_entropy_weight,
             self.slow_value_rate,
@@ -104,6 +106,10 @@ class IntrinsicExplorationActorCritic(nn.Module):
             self.config.severe_collision_weight
             * trajectory.severe_collision_probabilities
         )
+        rewards = rewards - (
+            self.config.action_rewrite_weight
+            * trajectory.action_rewrite_magnitudes
+        )
         rewards = rewards + self.config.motion_entropy_weight * trajectory.motion_entropies
         rewards = rewards + self.config.gripper_entropy_weight * trajectory.gripper_entropies
         with torch.no_grad():
@@ -134,6 +140,7 @@ class IntrinsicExplorationActorCritic(nn.Module):
             "state_novelty": novelty.mean(),
             "safety": trajectory.safety_probabilities.mean(),
             "severe_collision": trajectory.severe_collision_probabilities.mean(),
+            "action_rewrite": trajectory.action_rewrite_magnitudes.mean(),
             "motion_entropy": trajectory.motion_entropies.mean(),
             "gripper_entropy": trajectory.gripper_entropies.mean(),
             "td_error": (value_predictions - returns.detach()).abs().mean(),

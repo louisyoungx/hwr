@@ -8,7 +8,7 @@ from typing import Mapping
 from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
 
 
-ACTOR_READINESS_SCHEMA = "hwr.foundation-actor-readiness/v5"
+ACTOR_READINESS_SCHEMA = "hwr.foundation-actor-readiness/v6"
 
 
 EXPLORATION_CHECKS = (
@@ -49,6 +49,9 @@ class FoundationActorReadinessCriteria:
     minimum_collision_validation_recall: float = 0.80
     minimum_collision_validation_pr_auc: float = 0.50
     maximum_collision_validation_brier_score: float = 0.10
+    maximum_collision_validation_false_positive_rate: float = 0.05
+    minimum_collision_validation_terminal_alignment: float = 0.80
+    minimum_collision_validation_action_sensitivity_ratio: float = 1.02
 
     def __post_init__(self) -> None:
         counts = (
@@ -78,9 +81,13 @@ class FoundationActorReadinessCriteria:
             self.minimum_collision_validation_recall,
             self.minimum_collision_validation_pr_auc,
             self.maximum_collision_validation_brier_score,
+            self.maximum_collision_validation_false_positive_rate,
+            self.minimum_collision_validation_terminal_alignment,
         )
         if any(not 0.0 <= value <= 1.0 for value in probabilities):
             raise ValueError("Actor readiness collision validation limits are invalid")
+        if self.minimum_collision_validation_action_sensitivity_ratio < 1.0:
+            raise ValueError("Actor readiness collision action sensitivity is invalid")
 
 
 def actor_readiness_criteria_from_config(
@@ -119,6 +126,15 @@ def actor_readiness_criteria_from_config(
         ),
         maximum_collision_validation_brier_score=(
             config.maximum_collision_validation_brier_score
+        ),
+        maximum_collision_validation_false_positive_rate=(
+            config.maximum_collision_validation_false_positive_rate
+        ),
+        minimum_collision_validation_terminal_alignment=(
+            config.minimum_collision_validation_terminal_alignment
+        ),
+        minimum_collision_validation_action_sensitivity_ratio=(
+            config.minimum_collision_validation_action_sensitivity_ratio
         ),
     )
 
@@ -449,6 +465,15 @@ def _collision_validation_passed(
         "minimum_recall": criteria.minimum_collision_validation_recall,
         "minimum_pr_auc": criteria.minimum_collision_validation_pr_auc,
         "maximum_brier_score": criteria.maximum_collision_validation_brier_score,
+        "maximum_false_positive_rate": (
+            criteria.maximum_collision_validation_false_positive_rate
+        ),
+        "minimum_terminal_alignment": (
+            criteria.minimum_collision_validation_terminal_alignment
+        ),
+        "minimum_action_sensitivity_ratio": (
+            criteria.minimum_collision_validation_action_sensitivity_ratio
+        ),
     }
     return report.get("passed") is True and report.get("criteria") == expected
 

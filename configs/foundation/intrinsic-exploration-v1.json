@@ -8,6 +8,7 @@
   "motion_entropy_weight": 0.003,
   "safety_weight": 2.0,
   "severe_collision_weight": 4.0,
+  "action_rewrite_weight": 1.0,
   "slow_value_rate": 0.01,
   "state_novelty_weight": 0.25,
   "novelty_neighbors": 5,

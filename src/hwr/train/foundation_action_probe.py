@@ -12,7 +12,8 @@ import numpy as np
 from hwr.train.foundation_sequence_reservoir import source_episode_id
 
 
-ACTION_PROBE_SCHEMA = "hwr.foundation-data-action-probe/v2"
+ACTION_PROBE_SCHEMA = "hwr.foundation-data-action-probe/v3"
+ACTION_PROBE_HORIZONS = (1, 4, 8, 16)
 
 
 @dataclass(frozen=True)
@@ -43,8 +44,16 @@ def evaluate_foundation_data_action_probe(
         or maximum_training_transitions <= 0
     ):
         raise ValueError("foundation action probe configuration is invalid")
-    training = _load_episodes(training_path, training_manifest)
-    holdout = _load_episodes(holdout_path, holdout_manifest)
+    training_by_horizon = {
+        horizon: _load_episodes(training_path, training_manifest, horizon=horizon)
+        for horizon in ACTION_PROBE_HORIZONS
+    }
+    holdout_by_horizon = {
+        horizon: _load_episodes(holdout_path, holdout_manifest, horizon=horizon)
+        for horizon in ACTION_PROBE_HORIZONS
+    }
+    training = training_by_horizon[1]
+    holdout = holdout_by_horizon[1]
     task_ids = tuple(sorted({item.task_id for item in training}))
     if not task_ids or {item.task_id for item in holdout} != set(task_ids):
         raise ValueError("foundation action probe task coverage differs")
@@ -54,20 +63,42 @@ def evaluate_foundation_data_action_probe(
     partitions: dict[str, dict[str, object]] = {}
     bootstrap_by_task: list[np.ndarray] = []
     for task_index, task_id in enumerate(task_ids):
-        train_task = _limit_episodes(
-            [item for item in training if item.task_id == task_id], quota
-        )
-        holdout_task = [item for item in holdout if item.task_id == task_id]
-        report, ratios = _evaluate_partition(
-            train_task,
-            holdout_task,
-            ridge=ridge,
-            bootstrap_samples=bootstrap_samples,
-            bootstrap_seed=bootstrap_seed + task_index * 104_729,
-        )
-        partitions[task_id] = report
-        bootstrap_by_task.append(ratios)
-    aggregate_ratios = np.stack(bootstrap_by_task).mean(axis=0)
+        horizon_reports = {}
+        horizon_ratios = []
+        for horizon in ACTION_PROBE_HORIZONS:
+            train_horizon = training_by_horizon[horizon]
+            holdout_horizon = holdout_by_horizon[horizon]
+            report, ratios = _evaluate_partition(
+                _limit_episodes(
+                    [item for item in train_horizon if item.task_id == task_id],
+                    quota,
+                ),
+                [item for item in holdout_horizon if item.task_id == task_id],
+                ridge=ridge,
+                bootstrap_samples=bootstrap_samples,
+                bootstrap_seed=(
+                    bootstrap_seed + task_index * 104_729 + horizon * 1_009
+                ),
+            )
+            horizon_reports[str(horizon)] = report
+            horizon_ratios.append(ratios)
+        conservative = np.stack(horizon_ratios).min(axis=0)
+        one_step = horizon_reports["1"]
+        partitions[task_id] = {
+            **one_step,
+            "state_only_to_state_action_ratio": float(
+                min(
+                    value["state_only_to_state_action_ratio"]
+                    for value in horizon_reports.values()
+                )
+            ),
+            "bootstrap": _bootstrap_summary(
+                conservative, bootstrap_samples, bootstrap_seed
+            ),
+            "horizons": horizon_reports,
+        }
+        bootstrap_by_task.append(conservative)
+    aggregate_ratios = np.stack(bootstrap_by_task).min(axis=0)
     state_mse = float(np.mean([value["state_only_mse"] for value in partitions.values()]))
     action_mse = float(np.mean([value["state_action_mse"] for value in partitions.values()]))
     return {
@@ -76,7 +107,13 @@ def evaluate_foundation_data_action_probe(
         "inputs": {
             "state_only": ["proprioception"],
             "state_action": ["proprioception", "actual_executed_action"],
-            "target": "next_proprioception_delta",
+            "target": "controllable_state_change",
+            "controllable_state": [
+                "joint_velocity",
+                "gripper_position",
+                "base_twist",
+            ],
+            "horizons": list(ACTION_PROBE_HORIZONS),
             "task_semantic_fields": [],
         },
         "training_transition_count": sum(
@@ -146,8 +183,10 @@ def _evaluate_partition(
 
 
 def _load_episodes(
-    root: Path, manifest: Mapping[str, object]
+    root: Path, manifest: Mapping[str, object], *, horizon: int
 ) -> list[_EpisodeTransitions]:
+    if horizon <= 0:
+        raise ValueError("foundation action probe horizon is invalid")
     grouped: dict[tuple[str, str], list[tuple[np.ndarray, np.ndarray, np.ndarray]]] = {}
     for shard in manifest.get("shards", ()):
         task_id = str(shard.get("task_id", ""))
@@ -157,10 +196,16 @@ def _load_episodes(
         with np.load(root / str(shard["path"]), allow_pickle=False) as arrays:
             proprioception = arrays["proprioception"].astype(np.float64)
             executed = arrays["executed_action"].astype(np.float64)
+        if len(executed) < horizon:
+            continue
+        controllable = _controllable_state(proprioception)
         item = (
-            proprioception[:-1],
-            executed,
-            np.diff(proprioception, axis=0),
+            proprioception[:-horizon],
+            np.stack(
+                [executed[index : index + horizon].mean(axis=0)
+                 for index in range(len(executed) - horizon + 1)]
+            ),
+            controllable[horizon:] - controllable[:-horizon],
         )
         grouped.setdefault((task_id, episode_id), []).append(item)
     result = [
@@ -179,6 +224,13 @@ def _load_episodes(
     if not result:
         raise ValueError("foundation action probe replay is empty")
     return result
+
+
+def _controllable_state(proprioception: np.ndarray) -> np.ndarray:
+    if proprioception.shape[1] < 31:
+        return proprioception
+    indices = (*range(6, 12), *range(18, 26), *range(29, 31))
+    return proprioception[:, indices]
 
 
 def _limit_episodes(

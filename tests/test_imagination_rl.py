@@ -86,13 +86,37 @@ def test_imagination_uses_actor_actions_and_world_model_outcomes() -> None:
     losses, trajectory = algorithm.losses(initial)
 
     assert trajectory.actions.shape == (3, 5, 3)
+    assert trajectory.executed_actions.shape == trajectory.actions.shape
     assert trajectory.next_features.shape == (3, 5, world.config.feature_dimension)
     assert set(losses) == {
         "actor", "value", "imagined_reward", "imagined_return",
         "imagined_safety", "imagined_severe_collision", "imagined_uncertainty",
+        "imagined_action_rewrite",
         "motion_entropy", "gripper_entropy", "td_error",
     }
     assert all(torch.isfinite(value) for value in losses.values())
+
+
+def test_imagination_advances_with_predicted_safety_executed_action() -> None:
+    world, actor, value, config = _models()
+    world.action_execution_head = torch.nn.Linear(
+        world.config.feature_dimension + world.config.action_dimension,
+        world.config.action_dimension,
+    )
+    with torch.no_grad():
+        world.action_execution_head.weight.zero_()
+        world.action_execution_head.bias.fill_(0.25)
+    algorithm = ImaginationActorCritic(world, actor, value, config)
+
+    _, trajectory = algorithm.losses(
+        world.rssm.initial(2, torch.device("cpu"))
+    )
+
+    torch.testing.assert_close(
+        trajectory.executed_actions,
+        trajectory.actions + 0.25,
+    )
+    assert torch.all(trajectory.action_rewrite_magnitudes > 0.0)
 
 
 def test_slow_value_inherits_exact_value_device_and_dtype() -> None:

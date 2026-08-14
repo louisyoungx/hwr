@@ -103,6 +103,7 @@ FORBIDDEN_DEPLOYMENT_NAMES = frozenset(
         "objective",
         "optimizer",
         "augmentation",
+        "action_execution",
     }
 )
 
@@ -301,6 +302,8 @@ def _configuration_audit(root: Path) -> dict[str, Any]:
         raise RuntimeError("formal action causality ratio is not a degradation gate")
     if float(online["minimum_action_causality_horizon_fraction"]) < 0.5:
         raise RuntimeError("formal action causality horizon gate is too weak")
+    if float(online["minimum_collision_validation_action_sensitivity_ratio"]) <= 1.0:
+        raise RuntimeError("formal collision validation is not action-sensitive")
     holdout_episodes = int(online["causality_holdout_episodes_per_task"])
     audit_windows = int(online["causality_audit_windows_per_task"])
     audit_batch = int(online["causality_audit_batch_size"])
