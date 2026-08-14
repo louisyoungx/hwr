@@ -22,7 +22,7 @@ from hwr.data.autonomous_trajectory import (
 )
 
 
-RECOVERY_SCHEMA = "hwr.foundation-runner-recovery/v5"
+RECOVERY_SCHEMA = "hwr.foundation-runner-recovery/v6"
 
 
 @dataclass(frozen=True)
@@ -153,11 +153,15 @@ def restore_runner_progress(
             raise ValueError(f"foundation recovery artifact hash differs: {name}")
     replay_snapshot = _read_json(paths["replay-manifest.json"])
     causality_snapshot = _read_json(paths["causality-manifest.json"])
-    if causality_store.manifest != causality_snapshot:
-        raise ValueError("causality holdout changed after the checkpoint")
     discarded, restored_count = _restore_replay(
         replay_store, replay_snapshot, replay_archive
     )
+    discarded_holdout, _ = _restore_replay(
+        causality_store,
+        causality_snapshot,
+        run_path / "recovery/unused-holdout-archive",
+    )
+    discarded.extend(discarded_holdout)
     state = torch.load(paths["runner-state.pt"], map_location="cpu", weights_only=True)
     records = tuple(_read_records(paths["episodes.jsonl"]))
     if state.get("records") != list(records):

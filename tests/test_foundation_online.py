@@ -386,6 +386,8 @@ def _config(*, episodes: int = 6) -> FoundationOnlineTrainingConfig:
             maximum_collision_validation_false_positive_rate=1.0,
             minimum_collision_validation_terminal_alignment=0.0,
             minimum_collision_validation_action_sensitivity_ratio=1.0,
+            collision_validation_holdout_episodes_per_task=1,
+            collision_validation_holdout_transitions_per_episode=2,
             calibration_early_stop_episodes=episodes,
             collection_episodes_per_cycle=3,
             updates_per_cycle=1,
@@ -413,17 +415,20 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
         "hwr.train.foundation_admission.evaluate_foundation_data_action_probe",
         _passing_action_probe,
     )
-    config = _config()
+    config = _config(episodes=9)
     runner = _runner(tmp_path, config)
 
     result = runner.train()
 
-    assert result.update_count == 2
+    assert result.update_count == 3
     assert {record.task_id for record in result.records} == set(TASK_IDS)
     assert [record.action_source for record in result.records[:3]] == [
         "random_rl_exploration"
     ] * 3
-    assert [record.action_source for record in result.records[3:]] == [
+    assert [record.action_source for record in result.records[3:6]] == [
+        "intrinsic_rl_actor"
+    ] * 3
+    assert [record.action_source for record in result.records[6:]] == [
         "rl_actor"
     ] * 3
     assert all(record.state_novelty >= 0.0 for record in result.records)
@@ -463,20 +468,20 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
     assert run_manifest["lineage"]["expert_policies"] == []
     assert run_manifest["lineage"]["teacher_actions"] is False
     assert run_manifest["lineage"]["action_search"] is False
-    assert recovery["schema_version"] == "hwr.foundation-runner-recovery/v5"
+    assert recovery["schema_version"] == "hwr.foundation-runner-recovery/v6"
     assert all("safety_intervention_rate" in record for record in records)
     assert all("safety_cost_rate" not in record for record in records)
     assert deployment["training_diagnostics"] == checkpoint[
         "training_diagnostics"
     ]
     assert runner.store.manifest["transition_count"] <= 6
-    assert runner.causality_store.manifest["episode_count"] == 3
-    assert runner.causality_store.manifest["transition_count"] == 6
+    assert runner.causality_store.manifest["episode_count"] == 6
+    assert runner.causality_store.manifest["transition_count"] == 12
     assert len(list((tmp_path / "run/checkpoints").glob("update-*"))) == 1
     assert len(list((tmp_path / "run/deployments").glob("update-*"))) == 1
     assert runner.task_sampler.audit()["distance_thresholds"] is False
     cycle_metrics = json.loads(
-        (tmp_path / "run/metrics/cycle-000002.json").read_text()
+        (tmp_path / "run/metrics/cycle-000003.json").read_text()
     )
     assert cycle_metrics["training"]["trainer/visual_gradient_norm"] >= 0.0
     assert cycle_metrics["action_coverage"]["transition_count"] == 6
@@ -546,6 +551,9 @@ def test_resume_rolls_replay_back_to_last_atomic_checkpoint(
     snapshot = json.loads(
         (result.latest_checkpoint / "recovery/replay-manifest.json").read_text()
     )
+    holdout_snapshot = json.loads(
+        (result.latest_checkpoint / "recovery/causality-manifest.json").read_text()
+    )
     collector = AutonomousEpisodeCollector(
         runner.preprocessor,
         AutonomousCollectionConfig("fixture-env/v1", "abc123", maximum_steps=2),
@@ -557,6 +565,7 @@ def test_resume_rolls_replay_back_to_last_atomic_checkpoint(
         seed=999,
     )
     extra_path = runner.store.append(extra)
+    extra_holdout_path = runner.causality_store.append(extra)
     archive = tmp_path / "run/recovery/replay-prune-archive"
     runner.store.prune_to_task_capacities(
         {task_id: 2 for task_id in TASK_IDS}, recovery_archive=archive
@@ -566,7 +575,9 @@ def test_resume_rolls_replay_back_to_last_atomic_checkpoint(
     resumed.resume_latest()
 
     assert resumed.store.manifest == snapshot
+    assert resumed.causality_store.manifest == holdout_snapshot
     assert not extra_path.exists()
+    assert not extra_holdout_path.exists()
     assert not archive.exists()
     assert len(resumed.records) == len(result.records)
     assert resumed.completed_cycles == 2
@@ -574,7 +585,7 @@ def test_resume_rolls_replay_back_to_last_atomic_checkpoint(
         (tmp_path / "run/recovery/last-resume.json").read_text()
     )
     assert recovery["restored_archived_shards"] == 1
-    assert len(recovery["discarded_uncheckpointed_shards"]) == 1
+    assert len(recovery["discarded_uncheckpointed_shards"]) == 2
 
 
 def test_resume_restores_next_torch_random_values(tmp_path, monkeypatch) -> None:

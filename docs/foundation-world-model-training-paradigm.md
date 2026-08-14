@@ -210,6 +210,7 @@ RGB-D 对齐必须使用每帧动态标定，而不能假设头部 RGB 与深度
 - 只接收安全层实际执行动作的 action-conditioned transition；
 - 由未来 latent 预测视觉潜变量、本体、奖励和 continue/terminal；
 - 由当前 latent 与 Actor 提案共同预测安全层是否干预的独立训练头；
+- 由当前 latent 与 Actor 提案预测安全层实际执行动作的通用残差头；
 - 由当前 latent 与实际执行动作预测真实严重碰撞的独立训练头。
 
 训练目标包括潜变量重建、自由比特约束、未来本体预测、奖励分布、终止与安全干预分类。
@@ -218,12 +219,13 @@ RGB-D 对齐必须使用每帧动态标定，而不能假设头部 RGB 与深度
 这里必须区分两个因果问题：物理动力学以实际执行动作为条件；安全干预以 Actor 提案为
 条件。安全头不把碰撞终止混入标签，也不接收已经被安全层修正的动作。严重碰撞仍由环境
 奖励、终止和最终验收报告定义。安全过滤器本身独立于学习模型；训练头只估计它对提案的
-干预概率，不能替代过滤器。
+干预概率，不能替代过滤器。想象 rollout 必须使用残差头预测的实际执行动作推进 RSSM，
+不能假设可能被安全层拒绝或裁剪的提案会原样改变未来；Actor 同时承担动作改写幅度成本。
 
 世界模型必须通过三层动作因果反作弊评测。审计数据由独立的固定种子随机 RL 采集器生成，
-每个任务固定 16 个 Episode，并按环境终止结果各保留 8 个严重碰撞正例和负例；它和训练
-replay 分库存储，任何样本都不得交给视觉学生、世界模型、Actor 或 Critic 的优化器。
-每个任务确定性选择 64 个互不重叠的序列窗口，
+并与训练 Replay 分库存储，任何样本都不得交给视觉学生、世界模型、Actor 或 Critic 的
+优化器。启动时每任务采集 8 个 128-transition 系统辨识 Episode，动作相关度轮换为
+`0.0/0.5/0.9/0.96`；每个任务确定性选择 64 个互不重叠的序列窗口，
 保持观测序列不变，再将每步的“Actor 提案、实际执行动作”视为不可拆分的二元组，对所有
 任务与时间位置做无固定点全局置换，分别计算未来视觉潜变量、本体、奖励、
 continue/terminal 和安全干预的多步 open-loop 误差。成对置换既打破状态—动作对应，
@@ -234,29 +236,31 @@ continue/terminal 和安全干预的多步 open-loop 误差。成对置换既打
 三层诊断分别回答不同问题：
 
 1. 数据可辨识性 probe 用普通 replay 拟合两个任务无关的岭回归，只比较“本体状态”和
-   “本体状态 + 实际执行动作”预测下一步本体增量的独立留出误差，并对误差比做 bootstrap；
+   “本体状态 + 实际执行动作”预测关节速度、夹爪位置和底盘速度在 1/4/8/16 步后的变化，
+   并对最弱 horizon 的误差比按原始 Episode 聚类 bootstrap；
    它只判断采集数据是否含有动作效果，不进入策略或世界模型训练。
 2. 单步动作利用诊断固定每个真实后验状态，只替换下一步动作，评估视觉潜变量和本体预测；
    这隔离了开环漂移，用于判断世界模型是否真的读取动作。
-3. 原有多步 open-loop 诊断继续覆盖视觉、本体、奖励、终止和安全五个头，作为部署门禁。
+3. 多步 open-loop 诊断继续保存视觉、本体、奖励、终止和安全五个头；只有视觉与本体进入
+   动作因果门，稀疏结果头使用各自的校准指标，不能套用同一个动作打乱比率。
 
 每次审计使用五个独立无固定点置换。报告保存每次原始反事实结果，部署评测重新计算每次
 assessment、误差比的 5% 分位数和全部汇总；误差比下界必须达到 `1.05`，且每一次置换
 都须通过分量与 horizon 条件，不能依赖一次幸运置换。
 
-正式门槛要求打乱动作后的平均误差至少为真实动作误差的 `1.05` 倍，且至少 `60%` 的
-预测 horizon 逐项恶化；上述条件必须同时适用于总误差、五个预测分量、全局汇总以及按
-通用 `task_id` 划分的每个分区。任一预测头或任务失败都使 checkpoint 不可部署，不能由
-单个强预测头或强任务掩盖。最终评测从原始逐 horizon 数值重新计算所有 assessment，不能
+正式物理门槛要求打乱动作后的视觉/本体合计误差至少为真实动作误差的 `1.05` 倍，且至少
+`60%` 的预测 horizon 逐项恶化；条件同时适用于视觉、本体、全局汇总和按通用 `task_id`
+划分的每个分区。最终评测从原始逐 horizon 数值重新计算所有 assessment，不能
 信任报告中预填的 `passed`。若没有恶化，说明模型只学习了视频连续性，不能用于策略想象。
 
 Actor 准入拆成两级，不能再按“采集了若干 Episode”自动切换。探索 Actor 只在普通 replay
 至少 12 个 Episode、单步视觉/本体动作利用、逐任务数据 probe、实际 16 维动作覆盖率与
 协方差有效秩连续两次通过后解锁；外部接触、受控运动和碰撞不参与这一级，否则会要求随机
-策略先产生本应由探索 Actor 获取的证据，形成循环依赖。任务 Actor 还必须连续通过多步五头
+策略先产生本应由探索 Actor 获取的证据，形成循环依赖。任务 Actor 还必须连续通过多步物理
 因果、逐任务接触与受控运动、replay 中严重碰撞正负 Episode 覆盖，以及独立留出集上的
-碰撞头验证。碰撞验证至少包含每任务 8 个正例和 8 个负例，并同时要求召回率、PR-AUC 与
-Brier score 过线。任一后续审计失败立即撤销对应准入。在探索准入前只更新视觉学生和世界
+碰撞头验证。碰撞校准数据只在探索 Actor 解锁后采集，每任务各 8 个正例和负例，每条只
+保留末端 16 transition；验证同时要求终点召回率、PR-AUC、逐 transition Brier、误报率、
+时序对齐和动作打乱敏感性过线。任一后续审计失败立即撤销对应准入。在探索准入前只更新视觉学生和世界
 模型；任务 Actor 尚无合格更新也不得导出 deployment。奖励、终止和碰撞等稀疏头仍是任务
 Actor 与最终部署门，不能反过来阻塞通用探索 Actor。
 
@@ -371,9 +375,12 @@ run manifest schema 为 `hwr.foundation-online-run/v4`，旧 v1/v2/v3 不进入�
 不查看场景对象、距离或动作内容。原始 shard 淘汰后，同时删除可重建的对应视觉特征缓存。
 
 Checkpoint 和部署导出同样采用固定保留数，只删除格式合法的旧 `update-*` 目录，始终保留
-最新版本及其哈希清单。正式配置保留 18,000 个 transition 和最近 3 组训练/部署产物；按
-两套三视角 dense grid 的未压缩上界估算约 54 GB，连同原始 RGB-D、模型和 checkpoint
-控制在当前本机约 130 GB 可用空间以内。容量策略只管理存储，不产生动作或课程答案。
+最新版本及其哈希清单。每个自主 Episode 只进入两个连续、互不重叠的 16-transition 物理
+序列，覆盖统计按原始 Episode ID 去重；正式 120 Episode 因而最多占 3,840 个训练
+transition。系统辨识留出集每任务为 8×128 transition，延迟碰撞校准集为 16×16
+transition，且两者都不生成 DINOv3/SigLIP2 教师缓存。正式配置保留 18,000 transition
+容量和最近 3 组训练/部署产物；当前未压缩静态估算约 `20.84 GiB`，配置上限为 `30 GiB`，
+启动时还要求至少 `35 GiB` 空闲空间。容量策略只管理存储，不产生动作或课程答案。
 
 ### 9.2 本机统一内存上限
 
@@ -420,7 +427,8 @@ Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默�
 本机只读面板只能轮询这些 JSON 和有界的最近 Episode 记录，不得扫描 replay、特征缓存或
 模型权重。面板默认仅监听 `127.0.0.1`，是旁路观测工具，不参与采样、奖励或优化。
 
-动作可辨识 probe 必须逐任务独立拟合，不能混合任务后把任务身份差异误判为动作因果；其
+动作可辨识 probe 必须逐任务、逐 1/4/8/16 步 horizon 独立拟合，不能混合任务后把任务
+身份差异误判为动作因果；其
 置信区间按 Episode 聚类 bootstrap，留出集每条 Episode 必须贡献同量不重叠窗口，过短轨迹
 使用确定性替代 seed 重采。交互覆盖只统计长度足以形成完整训练窗口的 Episode；短碰撞轨迹
 不能计入准入分母。24 个 Episode 的随机校准只检查动作可辨识、动作覆盖与单步物理因果，
@@ -488,14 +496,15 @@ Episode 评测、验收结果和每路视频，不能只通过目录路径间接
 | 基础模型边界与锁 | `hwr.perception.foundation`、`hwr.adapters.foundation`、`configs/foundation/model-locks.json` |
 | 高分辨率与动态标定 | `hwr.perception.high_resolution`、`FrameCameraCalibration` |
 | 视觉学生与无动作标签目标 | `hwr.perception.student`、`student_objectives`、`geometric_correspondence` |
-| 自主序列与缓存 | `hwr.data.autonomous_trajectory`、`foundation_cache`、`foundation_features`、`foundation_loading` |
+| 自主序列、证据池与缓存 | `hwr.data.autonomous_trajectory`、`foundation_sequence_reservoir`、`foundation_cache`、`foundation_features`、`foundation_loading` |
 | 动作条件世界模型 | `hwr.world_model` |
 | 数据可辨识性与 Actor 准入 | `hwr.train.foundation_action_probe`、`foundation_actor_readiness` |
 | 想象 RL | `hwr.train.imagination`、`imagination_rl` |
 | 无环境奖励内在探索 RL | `hwr.train.intrinsic_exploration`、`intrinsic_rl_actor` |
 | 任务无关物理状态课程 | `hwr.train.foundation_frontier`、`learning_frontier`、`foundation_learning_signals` |
 | 环境声明的通用增强 | `hwr.train.foundation_augmentation` |
-| 单一在线闭环 | `hwr.train.foundation_online`、`foundation_trainer`、`foundation_run_manifest` |
+| 单一在线闭环 | `hwr.train.foundation_online`、`foundation_trainer`、`foundation_holdout_orchestration`、`foundation_run_manifest` |
+| 本机资源预算 | `hwr.train.foundation_resource_budget` |
 | 指标与本机面板 | `hwr.train.foundation_metrics`、`foundation_dashboard`、`hwr.apps.serve_foundation_dashboard` |
 | 训练/部署 checkpoint | `hwr.train.foundation_registry` |
 | 剥离部署运行时 | `hwr.world_model.deploy`、`hwr.policy.foundation_runtime` |

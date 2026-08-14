@@ -35,7 +35,10 @@ from hwr.train.foundation_diagnostics import (
     foundation_action_causality_qualified,
     publish_action_causality_report,
 )
-from hwr.train.foundation_holdout import collect_causality_holdout
+from hwr.train.foundation_holdout_orchestration import (
+    prepare_foundation_collision_holdout,
+    prepare_foundation_system_holdout,
+)
 from hwr.train.foundation_learning_signals import (
     EpisodeLearningEvidence,
     evaluate_replay_episode_learning_evidence,
@@ -197,7 +200,16 @@ class FoundationOnlineTrainingRunner:
         cycle = self.completed_cycles
         try:
             self._publish_progress("preparing_causality_holdout", cycle)
-            self._prepare_causality_holdout(environments)
+            prepare_foundation_system_holdout(
+                self.causality_store,
+                environments,
+                self.tasks,
+                self.preprocessor,
+                self.stack.action_scaling,
+                self.random_exploration,
+                self.config,
+                source_commit=self.source_commit,
+            )
             while len(self.records) < self.config.episodes:
                 next_cycle = cycle + 1
                 timings: dict[str, float] = {}
@@ -205,6 +217,20 @@ class FoundationOnlineTrainingRunner:
                 self._publish_progress("collecting", next_cycle)
                 collected = self._collect_cycle(environments)
                 self._bound_replay_storage()
+                if self.actor_readiness.exploration_ready_for_collection:
+                    self._publish_progress(
+                        "preparing_collision_holdout", next_cycle
+                    )
+                    prepare_foundation_collision_holdout(
+                        self.causality_store,
+                        environments,
+                        self.tasks,
+                        self.preprocessor,
+                        self.stack.action_scaling,
+                        self.random_exploration,
+                        self.config,
+                        source_commit=self.source_commit,
+                    )
                 timings["collection_seconds"] = time.perf_counter() - started
                 started = time.perf_counter()
                 self._publish_progress("materializing_features", next_cycle)
@@ -459,32 +485,6 @@ class FoundationOnlineTrainingRunner:
                 f"update-{trainer.update_count}"
             ),
             device=device,
-        )
-
-    def _prepare_causality_holdout(
-        self, environments: Mapping[str, RuntimeBackend]
-    ) -> None:
-        collect_causality_holdout(
-            self.causality_store,
-            environments,
-            {task_id: task.maximum_steps for task_id, task in self.tasks.items()},
-            self.preprocessor,
-            self.stack.action_scaling,
-            exploration_config=self.random_exploration,
-            episodes_per_task=self.config.causality_holdout_episodes_per_task,
-            windows_per_episode=(
-                self.config.causality_audit_windows_per_task
-                // self.config.causality_holdout_episodes_per_task
-            ),
-            sequence_transitions=self.config.sequence_transitions,
-            retained_transitions_per_episode=(
-                self.config.causality_holdout_transitions_per_episode
-            ),
-            maximum_attempts_per_episode=(
-                self.config.causality_holdout_maximum_attempts_per_episode
-            ),
-            base_seed=self.config.seed,
-            source_commit=self.source_commit,
         )
 
     def _random_action_source(self) -> RandomRLActionSource:

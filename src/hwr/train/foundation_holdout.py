@@ -25,7 +25,9 @@ from hwr.train.foundation_exploration import (
 from hwr.train.foundation_sequence_reservoir import slice_episode_sequence
 
 
-HOLDOUT_COLLECTOR = "foundation-causality-holdout/v4"
+HOLDOUT_COLLECTOR = "foundation-causality-holdout/v5"
+SYSTEM_IDENTIFICATION_PHASE = "system_identification"
+COLLISION_VALIDATION_PHASE = "collision_validation"
 SYSTEM_IDENTIFICATION_CORRELATIONS = (0.0, 0.50, 0.90, 0.96)
 
 
@@ -44,8 +46,11 @@ def collect_causality_holdout(
     maximum_attempts_per_episode: int,
     base_seed: int,
     source_commit: str,
+    holdout_phase: str = SYSTEM_IDENTIFICATION_PHASE,
+    collision_balanced: bool = False,
+    collision_positive_episodes: int | None = None,
 ) -> None:
-    """Collect deterministic replacement Episodes with usable balanced windows."""
+    """Collect one deterministic compact holdout phase without policy data."""
     task_ids = tuple(sorted(maximum_steps))
     if (
         min(
@@ -58,17 +63,30 @@ def collect_causality_holdout(
         <= 0
         or base_seed < 0
         or set(environments) != set(task_ids)
-        or (episodes_per_task > 1 and episodes_per_task % 2)
+        or holdout_phase not in {
+            SYSTEM_IDENTIFICATION_PHASE,
+            COLLISION_VALIDATION_PHASE,
+        }
+        or (
+            collision_balanced
+            and collision_positive_episodes is None
+            and episodes_per_task % 2
+        )
+        or (
+            collision_positive_episodes is not None
+            and not 0 <= collision_positive_episodes <= episodes_per_task
+        )
     ):
         raise ValueError("causality holdout collection configuration is invalid")
     expected_slots = {
-        (task_id, episode_index)
+        (holdout_phase, task_id, episode_index)
         for task_index, task_id in enumerate(task_ids)
         for episode_index in range(episodes_per_task)
     }
     existing = _existing_slots(store)
-    if not set(existing) <= expected_slots:
-        raise ValueError("causality holdout contains unexpected task slots")
+    phase_slots = {slot for slot in existing if slot[0] == holdout_phase}
+    if not phase_slots <= expected_slots:
+        raise ValueError("foundation holdout contains unexpected phase slots")
     minimum_transitions = windows_per_episode * sequence_transitions
     for task_index, task_id in enumerate(task_ids):
         collector = AutonomousEpisodeCollector(
@@ -80,15 +98,27 @@ def collect_causality_holdout(
             ),
         )
         for episode_index in range(episodes_per_task):
-            slot = (task_id, episode_index)
+            slot = (holdout_phase, task_id, episode_index)
             if slot in existing:
                 continue
-            collision_target = _collision_balance_target(
-                episode_index, episodes_per_task
+            collision_target = (
+                _collision_balance_target(episode_index, episodes_per_task)
+                if collision_balanced
+                else None
             )
+            if collision_positive_episodes is not None:
+                collision_target = (
+                    "positive"
+                    if episode_index < collision_positive_episodes
+                    else "negative"
+                )
             for attempt in range(maximum_attempts_per_episode):
                 seed = _holdout_seed(
-                    base_seed, task_index, episode_index, attempt
+                    base_seed,
+                    task_index,
+                    episode_index,
+                    attempt,
+                    holdout_phase=holdout_phase,
                 )
                 episode = collector.collect(
                     environments[task_id],
@@ -125,6 +155,7 @@ def collect_causality_holdout(
                 metadata = {
                     **compact.metadata,
                     "collector": HOLDOUT_COLLECTOR,
+                    "holdout_phase": holdout_phase,
                     "holdout_slot": episode_index,
                     "seed_attempt": attempt,
                     "minimum_transitions": minimum_transitions,
@@ -151,8 +182,8 @@ def collect_causality_holdout(
                 raise RuntimeError(
                     f"causality holdout could not fill usable slot {slot}"
                 )
-    if set(existing) != expected_slots:
-        raise RuntimeError("causality holdout collection is incomplete")
+    if {slot for slot in existing if slot[0] == holdout_phase} != expected_slots:
+        raise RuntimeError("foundation holdout phase collection is incomplete")
     _verify_holdout(
         store,
         expected_slots,
@@ -160,6 +191,9 @@ def collect_causality_holdout(
         minimum_transitions=minimum_transitions,
         windows_per_episode=windows_per_episode,
         episodes_per_task=episodes_per_task,
+        holdout_phase=holdout_phase,
+        collision_balanced=collision_balanced,
+        collision_positive_episodes=collision_positive_episodes,
     )
 
 
@@ -179,9 +213,16 @@ def select_causality_windows(
     transitions = loader.windows.transitions
     for index in range(len(loader)):
         metadata = loader.window_metadata(index)
+        episode_metadata = metadata.get("metadata", {})
         task_id = str(metadata["task_id"])
         start = int(metadata["transition_start"])
-        if task_id not in grouped or start % transitions:
+        if (
+            task_id not in grouped
+            or start % transitions
+            or not isinstance(episode_metadata, Mapping)
+            or episode_metadata.get("holdout_phase")
+            != SYSTEM_IDENTIFICATION_PHASE
+        ):
             continue
         episode_id = str(metadata["episode_id"])
         digest = hashlib.sha256(
@@ -252,15 +293,40 @@ def causality_batches_by_task(
     return {task_id: batches(indices) for task_id, indices in selected.items()}
 
 
+def holdout_phase_manifest(
+    manifest: Mapping[str, object], phase: str
+) -> dict[str, object]:
+    if phase not in {SYSTEM_IDENTIFICATION_PHASE, COLLISION_VALIDATION_PHASE}:
+        raise ValueError("unknown foundation holdout phase")
+    shards = [
+        shard
+        for shard in manifest.get("shards", ())
+        if shard.get("metadata", {}).get("holdout_phase") == phase
+    ]
+    return {
+        **manifest,
+        "shards": shards,
+        "episode_count": len(shards),
+        "transition_count": sum(int(item["transition_count"]) for item in shards),
+    }
+
+
 def _holdout_seed(
-    base_seed: int, task_index: int, episode_index: int, attempt: int
+    base_seed: int,
+    task_index: int,
+    episode_index: int,
+    attempt: int,
+    *,
+    holdout_phase: str = SYSTEM_IDENTIFICATION_PHASE,
 ) -> int:
+    phase_offset = 0 if holdout_phase == SYSTEM_IDENTIFICATION_PHASE else 200_000_033
     return (
         base_seed
         + 500_000_003
         + task_index * 10_000_019
         + episode_index * 100_003
         + attempt * 1_009
+        + phase_offset
     )
 
 
@@ -278,14 +344,21 @@ def _episode_collision_class(metadata: Mapping[str, object]) -> str:
 
 def _existing_slots(
     store: AppendableAutonomousTrajectoryStore,
-) -> dict[tuple[str, int], int]:
-    result: dict[tuple[str, int], int] = {}
+) -> dict[tuple[str, str, int], int]:
+    result: dict[tuple[str, str, int], int] = {}
     for shard in store.manifest["shards"]:
         metadata = shard.get("metadata", {})
         if metadata.get("collector") != HOLDOUT_COLLECTOR:
             raise ValueError("causality holdout collector version differs")
-        slot = (str(shard["task_id"]), int(metadata.get("holdout_slot", -1)))
-        if slot in result or slot[1] < 0:
+        slot = (
+            str(metadata.get("holdout_phase", "")),
+            str(shard["task_id"]),
+            int(metadata.get("holdout_slot", -1)),
+        )
+        if slot in result or slot[0] not in {
+            SYSTEM_IDENTIFICATION_PHASE,
+            COLLISION_VALIDATION_PHASE,
+        } or slot[2] < 0:
             raise ValueError("causality holdout task slot is invalid")
         result[slot] = int(shard["seed"])
     return result
@@ -293,18 +366,37 @@ def _existing_slots(
 
 def _verify_holdout(
     store: AppendableAutonomousTrajectoryStore,
-    expected_slots: set[tuple[str, int]],
+    expected_slots: set[tuple[str, str, int]],
     source_commit: str,
     *,
     minimum_transitions: int,
     windows_per_episode: int,
     episodes_per_task: int,
+    holdout_phase: str,
+    collision_balanced: bool,
+    collision_positive_episodes: int | None,
 ) -> None:
     verified = set()
     for shard in store.manifest["shards"]:
         metadata = shard.get("metadata", {})
-        identity = (str(shard["task_id"]), int(metadata.get("holdout_slot", -1)))
-        target = _collision_balance_target(identity[1], episodes_per_task)
+        if metadata.get("holdout_phase") != holdout_phase:
+            continue
+        identity = (
+            holdout_phase,
+            str(shard["task_id"]),
+            int(metadata.get("holdout_slot", -1)),
+        )
+        target = (
+            _collision_balance_target(identity[2], episodes_per_task)
+            if collision_balanced
+            else None
+        )
+        if collision_positive_episodes is not None:
+            target = (
+                "positive"
+                if identity[2] < collision_positive_episodes
+                else "negative"
+            )
         if (
             identity not in expected_slots
             or str(shard["source_commit"]) != source_commit

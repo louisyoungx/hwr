@@ -9,6 +9,7 @@ import numpy as np
 
 from hwr.data.foundation_loading import FoundationSequenceBatchLoader
 from hwr.train.foundation_trainer import FoundationWorldModelTrainer
+from hwr.train.foundation_holdout import COLLISION_VALIDATION_PHASE
 
 
 COLLISION_VALIDATION_SCHEMA = "hwr.foundation-collision-validation/v2"
@@ -87,8 +88,14 @@ def _terminal_windows_by_task(
     grouped: dict[str, dict[str, int]] = {task_id: {} for task_id in task_ids}
     for index in range(len(loader)):
         metadata = loader.window_metadata(index)
+        episode_metadata = metadata.get("metadata", {})
         task_id = str(metadata["task_id"])
-        if task_id not in grouped:
+        if (
+            task_id not in grouped
+            or not isinstance(episode_metadata, Mapping)
+            or episode_metadata.get("holdout_phase")
+            != COLLISION_VALIDATION_PHASE
+        ):
             continue
         if int(metadata["transition_stop"]) != int(metadata["transition_count"]):
             continue

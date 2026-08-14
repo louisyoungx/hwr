@@ -18,7 +18,7 @@ def test_formal_compact_storage_estimate_excludes_holdout_teacher_features() -> 
 
     report = foundation_storage_estimate(config, task_count=3)
 
-    assert report["holdout"]["transitions"] == 3 * 16 * 64
+    assert report["holdout"]["transitions"] == 3 * 16 * (64 + 16)
     assert report["holdout"]["teacher_visual_features"] is False
     assert report["estimated_gib"] < config.maximum_estimated_run_storage_gib
 

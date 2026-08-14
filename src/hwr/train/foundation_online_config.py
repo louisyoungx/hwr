@@ -60,6 +60,8 @@ class FoundationOnlineTrainingConfig:
     causality_shuffle_repeats: int = 5
     causality_holdout_maximum_attempts_per_episode: int = 8
     causality_holdout_transitions_per_episode: int = 64
+    collision_validation_holdout_episodes_per_task: int = 16
+    collision_validation_holdout_transitions_per_episode: int = 16
     maximum_estimated_run_storage_gib: float = 30.0
     minimum_free_storage_gib: float = 35.0
     estimated_teacher_cache_bytes_per_observation: int = 2_800_000
@@ -103,6 +105,8 @@ class FoundationOnlineTrainingConfig:
             self.causality_shuffle_repeats,
             self.causality_holdout_maximum_attempts_per_episode,
             self.causality_holdout_transitions_per_episode,
+            self.collision_validation_holdout_episodes_per_task,
+            self.collision_validation_holdout_transitions_per_episode,
             self.estimated_teacher_cache_bytes_per_observation,
             self.estimated_checkpoint_bytes,
             self.learning_signal_windows_per_episode,
@@ -180,6 +184,17 @@ class FoundationOnlineTrainingConfig:
             windows_per_holdout * self.sequence_transitions
         ):
             raise ValueError("compact causality holdout cannot supply audit windows")
+        collision_holdout = self.collision_validation_holdout_episodes_per_task
+        required_collision = (
+            self.minimum_collision_validation_positive_episodes_per_task
+            + self.minimum_collision_validation_negative_episodes_per_task
+        )
+        if (
+            collision_holdout < required_collision
+            or self.collision_validation_holdout_transitions_per_episode
+            < self.sequence_transitions
+        ):
+            raise ValueError("collision validation holdout cannot supply its gate")
         ActionCausalityCriteria(
             self.minimum_action_causality_ratio,
             self.minimum_action_causality_horizon_fraction,

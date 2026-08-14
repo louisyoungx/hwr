@@ -6,6 +6,7 @@ import pytest
 
 from hwr.train.foundation_holdout import (
     SYSTEM_IDENTIFICATION_CORRELATIONS,
+    SYSTEM_IDENTIFICATION_PHASE,
     _collision_balance_target,
     causality_batches_by_task,
     causality_window_manifest,
@@ -27,6 +28,9 @@ class _Loader:
                             "seed": 10 + episode_index,
                             "transition_start": start,
                             "transition_stop": start + 2,
+                            "metadata": {
+                                "holdout_phase": SYSTEM_IDENTIFICATION_PHASE
+                            },
                         }
                     )
 

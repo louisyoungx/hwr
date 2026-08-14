@@ -8,6 +8,7 @@ from hwr.train.foundation_collision_validation import (
     CollisionValidationCriteria,
     evaluate_foundation_collision_validation,
 )
+from hwr.train.foundation_holdout import COLLISION_VALIDATION_PHASE
 
 
 class _Loader:
@@ -23,6 +24,9 @@ class _Loader:
                     "transition_count": 4,
                     "transition_start": 2,
                     "transition_stop": 4,
+                    "metadata": {
+                        "holdout_phase": COLLISION_VALIDATION_PHASE
+                    },
                 })
                 self.values.append((collided, 0.9 if collided else 0.1))
 

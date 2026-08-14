@@ -25,9 +25,11 @@ from hwr.train.foundation_diagnostics import (
 )
 from hwr.train.foundation_holdout import (
     HOLDOUT_COLLECTOR,
+    SYSTEM_IDENTIFICATION_PHASE,
     causality_batches_by_task,
     causality_window_manifest,
     select_causality_windows,
+    holdout_phase_manifest,
 )
 from hwr.train.foundation_interaction_coverage import summarize_interaction_coverage
 from hwr.train.foundation_metrics import summarize_replay_action_coverage
@@ -92,7 +94,9 @@ def evaluate_foundation_actor_admission(
         replay_store.path,
         replay_store.manifest,
         holdout_store.path,
-        holdout_store.manifest,
+        holdout_phase_manifest(
+            holdout_store.manifest, SYSTEM_IDENTIFICATION_PHASE
+        ),
         bootstrap_seed=config.seed,
     )
     interaction = summarize_interaction_coverage(
