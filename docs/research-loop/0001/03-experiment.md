@@ -152,7 +152,7 @@ seed 分离。不得根据结果换 seed 或重跑挑选。
 - 冻结教师特征设备：`mps`。
 - `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.65`。
 - `PYTORCH_MPS_LOW_WATERMARK_RATIO=0.50`。
-- 进程 nice：`10`。
+- 进程 nice：`0`。不主动降低训练优先级；训练期间独占可用加速器。
 - 正式训练期间独占本机加速器，不并行启动其他训练 run。
 - 静态存储估算：`28.409005165100098 GiB`。
 - 配置存储上限：`30 GiB`。
@@ -175,7 +175,6 @@ r0001-p01-baseline-s20260812
 ```bash
 PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.65 \
 PYTORCH_MPS_LOW_WATERMARK_RATIO=0.50 \
-nice -n 10 \
 .venv/bin/python -m hwr.apps.train_foundation_world_model \
   --run-id r0001-p01-baseline-s20260812 \
   --output-root runs/foundation-world-model \
@@ -186,9 +185,13 @@ nice -n 10 \
   --model-root models/foundation
 ```
 
-训练使用 `traex-host-exec` 的 Host-owned 后台续接流程。超时唤起只检查同一 run 的进程、
-`metrics/latest.json`、周期指标、日志、checkpoint 和资源状态；正常则继续等待，不重复启动。
-只有已发布 `latest.json` 且恢复合同通过时才可使用同一命令加 `--resume`。
+训练使用 `traex-host-exec` 的 Host-owned 后台续接流程。监督器在门禁成功后立即串行启动
+训练，并在门禁或训练退出时即时唤起当前线程。独立看门狗从训练进程真实启动后计时：
+15 分钟执行第一次检查，之后每 60 分钟唤起一次。每次只检查同一 run 的进程、CPU/GPU/
+内存/磁盘、`metrics/latest.json`、周期指标、日志和 checkpoint；正常则继续等待，不重复
+启动。若指标、checkpoint 和日志长时间无进展，或效果已满足预注册停止条件，则主 Agent
+停止训练并进入归因。只有已发布 `latest.json` 且恢复合同通过时才可使用同一命令加
+`--resume`；看门狗不得盲目重启训练进程。
 
 ## 24 Episode 校准判定
 
