@@ -472,7 +472,7 @@ def test_online_runner_uses_one_loop_for_random_then_current_rl_actions(
         "foundation_device": "cpu",
     }
     assert run_manifest["development_ready"] == {
-        "schema_version": "hwr.foundation-development-ready/v2",
+        "schema_version": "hwr.foundation-development-ready/v3",
         "sha256": "d" * 64,
         "path": "development-ready.json",
     }

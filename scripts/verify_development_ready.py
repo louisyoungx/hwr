@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from hwr.adapters.foundation import load_foundation_model_locks
-from hwr.tasks import load_bimanual_task_specs
+from hwr.scenarios.formal3d import load_formal_3d_tasks
 from hwr.train.development_gate import (
     COMMITTED_SNAPSHOT_CHECKS,
     DEVELOPMENT_READY_SCHEMA,
@@ -71,9 +71,9 @@ FOUNDATION_ALGORITHM_PATTERNS = (
 )
 EXPECTED_TASK_IDS = frozenset(
     {
-        "carry_living_room_basket/v1",
-        "carry_dining_tray/v1",
-        "hold_drawer_place_item/v1",
+        "tidy_living_room_3d/v1",
+        "clear_dining_table_3d/v1",
+        "store_kitchen_items_3d/v1",
     }
 )
 FORBIDDEN_CONFIG_KEYS = frozenset(
@@ -273,9 +273,7 @@ def _scan_configuration_keys(
 
 
 def _configuration_audit(root: Path) -> dict[str, Any]:
-    tasks = load_bimanual_task_specs(
-        root / "configs/tasks/bimanual_household_v1.json"
-    )
+    tasks = load_formal_3d_tasks(root / "configs/tasks/formal_3d_v1.json")
     if set(tasks) != EXPECTED_TASK_IDS:
         raise RuntimeError("formal configuration does not expose the three required tasks")
     lineage_violations = _forbidden_configuration_keys(root)
@@ -549,6 +547,11 @@ def verify(
                 **snapshot_environment,
                 "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
             },
+        )
+        checks["training_semantics"] = _command(
+            snapshot,
+            (sys.executable, "scripts/verify_training_semantics.py"),
+            environment=snapshot_environment,
         )
         for name in COMMITTED_SNAPSHOT_CHECKS:
             checks[name]["source_commit"] = current_commit(snapshot)

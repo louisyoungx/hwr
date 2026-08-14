@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 
-DEVELOPMENT_READY_SCHEMA = "hwr.foundation-development-ready/v2"
+DEVELOPMENT_READY_SCHEMA = "hwr.foundation-development-ready/v3"
 REQUIRED_DEVELOPMENT_CHECKS = frozenset(
     {
         "protected_tree",
@@ -22,9 +22,12 @@ REQUIRED_DEVELOPMENT_CHECKS = frozenset(
         "python_size",
         "tests",
         "foundation_inference",
+        "training_semantics",
     }
 )
-COMMITTED_SNAPSHOT_CHECKS = frozenset({"architecture", "python_size", "tests"})
+COMMITTED_SNAPSHOT_CHECKS = frozenset(
+    {"architecture", "python_size", "tests", "training_semantics"}
+)
 FOUNDATION_CONFIG_FILES = (
     "imagination-rl-v1.json",
     "intrinsic-exploration-v1.json",
@@ -39,10 +42,13 @@ FOUNDATION_CONFIG_FILES = (
     "world-objective-v1.json",
 )
 PROTECTED_PATHS = (
+    "assets/mujoco/formal",
     "assets/mujoco/bimanual",
+    "configs/adapters/mujoco/formal_3d_v1.json",
     "configs/adapters/mujoco/bimanual_household_v1.json",
     "configs/foundation",
     "configs/tasks/bimanual_household_v1.json",
+    "configs/tasks/formal_3d_v1.json",
     "pyproject.toml",
     "scripts/check_architecture.py",
     "scripts/check_python_size.py",
@@ -52,10 +58,13 @@ PROTECTED_PATHS = (
     "scripts/start_foundation_training_tmux.sh",
     "scripts/verify_development_ready.py",
     "scripts/verify_foundation_models.py",
+    "scripts/verify_training_semantics.py",
     "src/hwr/adapters/foundation",
     "src/hwr/adapters/mujoco/bimanual_backend.py",
     "src/hwr/adapters/mujoco/bimanual_bindings.py",
     "src/hwr/adapters/mujoco/dual_arm_backend.py",
+    "src/hwr/adapters/mujoco/formal_household_backend.py",
+    "src/hwr/adapters/mujoco/training_catalog.py",
     "src/hwr/apps/evaluate_foundation_world_model.py",
     "src/hwr/apps/serve_foundation_dashboard.py",
     "src/hwr/apps/train_foundation_world_model.py",
@@ -83,6 +92,7 @@ PROTECTED_PATHS = (
     "src/hwr/tasks/bimanual.py",
     "src/hwr/train/accelerator_memory.py",
     "src/hwr/train/development_gate.py",
+    "src/hwr/train/development_semantics.py",
     "src/hwr/train/foundation_augmentation.py",
     "src/hwr/train/foundation_action_probe.py",
     "src/hwr/train/foundation_actor_readiness.py",
