@@ -63,6 +63,7 @@ def test_development_gate_protects_accelerator_memory_implementation() -> None:
     assert "src/hwr/train/foundation_visual_update.py" in PROTECTED_PATHS
     assert "src/hwr/adapters/mujoco/formal_household_backend.py" in PROTECTED_PATHS
     assert "src/hwr/train/development_semantics.py" in PROTECTED_PATHS
+    assert "scripts/verify_physics_integrity.py" in PROTECTED_PATHS
 
 
 def test_development_gate_rejects_missing_or_stale_report(tmp_path) -> None:

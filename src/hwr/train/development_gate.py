@@ -58,6 +58,7 @@ PROTECTED_PATHS = (
     "scripts/start_foundation_training_tmux.sh",
     "scripts/verify_development_ready.py",
     "scripts/verify_foundation_models.py",
+    "scripts/verify_physics_integrity.py",
     "scripts/verify_training_semantics.py",
     "src/hwr/adapters/foundation",
     "src/hwr/adapters/mujoco/bimanual_backend.py",

@@ -36,6 +36,26 @@ RESET_STATE_WRITE_ALLOWLIST = {
     ("src/hwr/adapters/mujoco/bimanual_backend.py", "_reset_base", "qvel"),
     ("src/hwr/adapters/mujoco/bimanual_backend.py", "_reset_object", "qpos"),
     ("src/hwr/adapters/mujoco/bimanual_backend.py", "_reset_object", "qvel"),
+    (
+        "src/hwr/adapters/mujoco/formal_household_backend.py",
+        "_reset_base",
+        "qpos",
+    ),
+    (
+        "src/hwr/adapters/mujoco/formal_household_backend.py",
+        "_reset_base",
+        "qvel",
+    ),
+    (
+        "src/hwr/adapters/mujoco/formal_household_backend.py",
+        "_reset_object",
+        "qpos",
+    ),
+    (
+        "src/hwr/adapters/mujoco/formal_household_backend.py",
+        "_reset_object",
+        "qvel",
+    ),
 }
 
 
