@@ -70,22 +70,40 @@ def _interaction():
     }
 
 
+def _collision_validation(passed: bool = True):
+    return {
+        "passed": passed,
+        "criteria": {
+            "minimum_positive_episodes_per_task": 8,
+            "minimum_negative_episodes_per_task": 8,
+            "minimum_recall": 0.8,
+            "minimum_pr_auc": 0.5,
+            "maximum_brier_score": 0.1,
+        },
+        "partitions": {"partition-a": {"passed": passed}},
+    }
+
+
 def test_actor_readiness_requires_repeated_physical_evidence_and_revokes() -> None:
     tracker = FoundationActorReadinessTracker(
         FoundationActorReadinessCriteria(12, consecutive_passes=2)
     )
 
     first = tracker.assess(
-        _diagnostic(), _probe(), _coverage(), _interaction(), replay_episodes=12
+        _diagnostic(), _probe(), _coverage(), _interaction(),
+        _collision_validation(), replay_episodes=12
     )
     second = tracker.assess(
-        _diagnostic(), _probe(), _coverage(), _interaction(), replay_episodes=12
+        _diagnostic(), _probe(), _coverage(), _interaction(),
+        _collision_validation(), replay_episodes=12
     )
     third = tracker.assess(
-        _diagnostic(), _probe(), _coverage(), _interaction(), replay_episodes=12
+        _diagnostic(), _probe(), _coverage(), _interaction(),
+        _collision_validation(), replay_episodes=12
     )
     failed = tracker.assess(
-        _diagnostic(False), _probe(), _coverage(), _interaction(), replay_episodes=12
+        _diagnostic(False), _probe(), _coverage(), _interaction(),
+        _collision_validation(), replay_episodes=12
     )
 
     assert first["unlocked"] is False
@@ -143,7 +161,8 @@ def test_physical_gate_can_unlock_explorer_without_task_actor() -> None:
     diagnostic["partitions"]["partition-a"]["assessment"]["passed"] = False
 
     result = tracker.assess(
-        diagnostic, _probe(), _coverage(), _interaction(), replay_episodes=3
+        diagnostic, _probe(), _coverage(), _interaction(),
+        _collision_validation(), replay_episodes=3
     )
 
     assert result["exploration_unlocked"] is True
@@ -160,12 +179,32 @@ def test_explorer_admission_does_not_require_interaction_coverage() -> None:
         partition[name] = 0
 
     result = tracker.assess(
-        _diagnostic(), _probe(), _coverage(), interaction, replay_episodes=3
+        _diagnostic(), _probe(), _coverage(), interaction,
+        _collision_validation(), replay_episodes=3
     )
 
     assert result["exploration_passed_this_cycle"] is True
     assert result["exploration_unlocked"] is True
     assert result["task_interaction_passed_this_cycle"] is False
+    assert result["task_actor_unlocked"] is False
+
+
+def test_task_actor_requires_independent_collision_validation() -> None:
+    tracker = FoundationActorReadinessTracker(
+        FoundationActorReadinessCriteria(3, consecutive_passes=1)
+    )
+
+    result = tracker.assess(
+        _diagnostic(),
+        _probe(),
+        _coverage(),
+        _interaction(),
+        _collision_validation(False),
+        replay_episodes=3,
+    )
+
+    assert result["exploration_unlocked"] is True
+    assert result["checks"]["collision_model_validation"] is False
     assert result["task_actor_unlocked"] is False
 
 
@@ -180,7 +219,8 @@ def test_actor_readiness_rejects_global_probe_pass_when_one_task_fails() -> None
     }
 
     result = tracker.assess(
-        _diagnostic(), probe, _coverage(), _interaction(), replay_episodes=3
+        _diagnostic(), probe, _coverage(), _interaction(),
+        _collision_validation(), replay_episodes=3
     )
 
     assert result["checks"]["data_action_probe_ratio"] is True

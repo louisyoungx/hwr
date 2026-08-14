@@ -16,6 +16,10 @@ from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 from hwr.policy.latent_actions import LatentActionScaling
 from hwr.train.foundation_action_probe import evaluate_foundation_data_action_probe
 from hwr.train.foundation_actor_readiness import FoundationActorReadinessTracker
+from hwr.train.foundation_collision_validation import (
+    CollisionValidationCriteria,
+    evaluate_foundation_collision_validation,
+)
 from hwr.train.foundation_diagnostics import (
     evaluate_foundation_action_causality_audit,
 )
@@ -94,12 +98,28 @@ def evaluate_foundation_actor_admission(
         replay_store.path,
         replay_store.manifest,
         minimum_displacement=config.minimum_interaction_displacement,
+        minimum_transitions=config.sequence_transitions,
     )
+    collision_validation = evaluate_foundation_collision_validation(
+        trainer,
+        loader,
+        task_ids,
+        CollisionValidationCriteria(
+            config.minimum_collision_validation_positive_episodes_per_task,
+            config.minimum_collision_validation_negative_episodes_per_task,
+            config.minimum_collision_validation_recall,
+            config.minimum_collision_validation_pr_auc,
+            config.maximum_collision_validation_brier_score,
+        ),
+        batch_size=config.causality_audit_batch_size,
+    )
+    diagnostic["collision_validation"] = collision_validation
     readiness = readiness_tracker.assess(
         diagnostic,
         probe,
         action_coverage,
         interaction,
+        collision_validation,
         replay_episodes=int(replay_store.manifest["episode_count"]),
     )
     warmup = _required_warmup(readiness_tracker)

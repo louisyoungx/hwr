@@ -23,8 +23,8 @@ from hwr.perception.high_resolution import HighResolutionVisionPreprocessor
 from hwr.policy.foundation_runtime import FoundationWorldModelPolicy
 from hwr.train.accelerator_memory import release_unused_accelerator_memory
 from hwr.train.foundation_actor_readiness import (
-    FoundationActorReadinessCriteria,
     FoundationActorReadinessTracker,
+    actor_readiness_criteria_from_config,
     failed_exploration_calibration_checks,
 )
 from hwr.train.foundation_admission import evaluate_foundation_actor_admission
@@ -150,18 +150,7 @@ class FoundationOnlineTrainingRunner:
         self.latest_action_causality_report: Path | None = None
         self.completed_cycles = 0
         self.actor_readiness = FoundationActorReadinessTracker(
-            FoundationActorReadinessCriteria(
-                config.minimum_actor_readiness_episodes,
-                config.actor_readiness_consecutive_passes,
-                config.minimum_active_action_dimension_fraction,
-                config.minimum_action_effective_rank,
-                config.minimum_data_action_probe_ratio,
-                config.minimum_data_action_probe_ratio_p05,
-                config.minimum_contact_episodes_per_task,
-                config.minimum_controlled_motion_episodes_per_task,
-                config.minimum_collision_positive_episodes_per_task,
-                config.minimum_collision_negative_episodes_per_task,
-            )
+            actor_readiness_criteria_from_config(config)
         )
         self.frontier = FoundationLearningFrontierController(
             self.task_ids,

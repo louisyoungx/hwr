@@ -26,6 +26,21 @@ class _CollisionLoader(_Loader):
         }
 
 
+class _MultiEpisodeCollisionLoader:
+    def __len__(self):
+        return 4
+
+    def window_shard_index(self, index: int) -> int:
+        return index
+
+    def window_metadata(self, index: int):
+        return {
+            "transition_stop": 4,
+            "transition_count": 4,
+            "metadata": {"result_reason": "severe_collision"},
+        }
+
+
 def test_shard_local_sampler_is_uniform_per_window_without_batch_thrashing() -> None:
     loader = _Loader()
     sampler = ShardLocalWindowSampler(loader)
@@ -47,3 +62,15 @@ def test_shard_local_sampler_reserves_collision_terminal_batches() -> None:
     )
 
     assert batch == (3, 3, 3)
+
+
+def test_collision_batch_uses_distinct_episodes_when_available() -> None:
+    loader = _MultiEpisodeCollisionLoader()
+    sampler = ShardLocalWindowSampler(loader)
+
+    batch = sampler.sample(
+        np.random.default_rng(7), 3, severe_collision_fraction=1.0
+    )
+
+    assert len(set(batch)) == 3
+    assert len({loader.window_shard_index(index) for index in batch}) == 3

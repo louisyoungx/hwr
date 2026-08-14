@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Mapping
 
+from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
 
-ACTOR_READINESS_SCHEMA = "hwr.foundation-actor-readiness/v3"
+
+ACTOR_READINESS_SCHEMA = "hwr.foundation-actor-readiness/v4"
 
 
 EXPLORATION_CHECKS = (
@@ -24,6 +26,7 @@ TASK_INTERACTION_CHECKS = (
     "controlled_physical_motion_coverage",
     "severe_collision_positive_coverage",
     "severe_collision_negative_coverage",
+    "collision_model_validation",
 )
 
 CALIBRATION_CHECKS = EXPLORATION_CHECKS[1:]
@@ -41,6 +44,11 @@ class FoundationActorReadinessCriteria:
     minimum_controlled_motion_episodes_per_task: int = 1
     minimum_collision_positive_episodes_per_task: int = 1
     minimum_collision_negative_episodes_per_task: int = 1
+    minimum_collision_validation_positive_episodes_per_task: int = 8
+    minimum_collision_validation_negative_episodes_per_task: int = 8
+    minimum_collision_validation_recall: float = 0.80
+    minimum_collision_validation_pr_auc: float = 0.50
+    maximum_collision_validation_brier_score: float = 0.10
 
     def __post_init__(self) -> None:
         counts = (
@@ -52,6 +60,8 @@ class FoundationActorReadinessCriteria:
         collision_counts = (
             self.minimum_collision_positive_episodes_per_task,
             self.minimum_collision_negative_episodes_per_task,
+            self.minimum_collision_validation_positive_episodes_per_task,
+            self.minimum_collision_validation_negative_episodes_per_task,
         )
         if min(counts) <= 0 or min(collision_counts) < 0:
             raise ValueError("Actor readiness counts must be positive")
@@ -64,6 +74,53 @@ class FoundationActorReadinessCriteria:
             self.minimum_data_action_ratio_p05,
         ) <= 1.0:
             raise ValueError("Actor readiness data action ratios must exceed one")
+        probabilities = (
+            self.minimum_collision_validation_recall,
+            self.minimum_collision_validation_pr_auc,
+            self.maximum_collision_validation_brier_score,
+        )
+        if any(not 0.0 <= value <= 1.0 for value in probabilities):
+            raise ValueError("Actor readiness collision validation limits are invalid")
+
+
+def actor_readiness_criteria_from_config(
+    config: FoundationOnlineTrainingConfig,
+) -> FoundationActorReadinessCriteria:
+    return FoundationActorReadinessCriteria(
+        minimum_replay_episodes=config.minimum_actor_readiness_episodes,
+        consecutive_passes=config.actor_readiness_consecutive_passes,
+        minimum_active_dimension_fraction=(
+            config.minimum_active_action_dimension_fraction
+        ),
+        minimum_effective_rank=config.minimum_action_effective_rank,
+        minimum_data_action_ratio=config.minimum_data_action_probe_ratio,
+        minimum_data_action_ratio_p05=config.minimum_data_action_probe_ratio_p05,
+        minimum_contact_episodes_per_task=config.minimum_contact_episodes_per_task,
+        minimum_controlled_motion_episodes_per_task=(
+            config.minimum_controlled_motion_episodes_per_task
+        ),
+        minimum_collision_positive_episodes_per_task=(
+            config.minimum_collision_positive_episodes_per_task
+        ),
+        minimum_collision_negative_episodes_per_task=(
+            config.minimum_collision_negative_episodes_per_task
+        ),
+        minimum_collision_validation_positive_episodes_per_task=(
+            config.minimum_collision_validation_positive_episodes_per_task
+        ),
+        minimum_collision_validation_negative_episodes_per_task=(
+            config.minimum_collision_validation_negative_episodes_per_task
+        ),
+        minimum_collision_validation_recall=(
+            config.minimum_collision_validation_recall
+        ),
+        minimum_collision_validation_pr_auc=(
+            config.minimum_collision_validation_pr_auc
+        ),
+        maximum_collision_validation_brier_score=(
+            config.maximum_collision_validation_brier_score
+        ),
+    )
 
 
 class FoundationActorReadinessTracker:
@@ -85,6 +142,7 @@ class FoundationActorReadinessTracker:
         data_action_probe: Mapping[str, object],
         action_coverage: Mapping[str, object],
         interaction_coverage: Mapping[str, object],
+        collision_validation: Mapping[str, object],
         *,
         replay_episodes: int,
     ) -> dict[str, object]:
@@ -132,6 +190,9 @@ class FoundationActorReadinessTracker:
                 "severe_collision_negative_episode_count",
                 self.criteria.minimum_collision_negative_episodes_per_task,
             ),
+            "collision_model_validation": _collision_validation_passed(
+                collision_validation, self.criteria
+            ),
         }
         exploration_passed = _selected_checks_pass(checks, EXPLORATION_CHECKS)
         self.consecutive_passes = (
@@ -172,6 +233,7 @@ class FoundationActorReadinessTracker:
             "action_coverage": dict(action_coverage),
             "data_action_probe": dict(data_action_probe),
             "interaction_coverage": dict(interaction_coverage),
+            "collision_validation": dict(collision_validation),
             "exploration_actor_update_count": self.exploration_actor_update_count,
             "task_actor_update_count": self.task_actor_update_count,
             "task_semantic_fields": [],
@@ -324,6 +386,23 @@ def _selected_checks_pass(
     checks: Mapping[str, bool], names: tuple[str, ...]
 ) -> bool:
     return all(checks.get(name) is True for name in names)
+
+
+def _collision_validation_passed(
+    report: Mapping[str, object], criteria: FoundationActorReadinessCriteria
+) -> bool:
+    expected = {
+        "minimum_positive_episodes_per_task": (
+            criteria.minimum_collision_validation_positive_episodes_per_task
+        ),
+        "minimum_negative_episodes_per_task": (
+            criteria.minimum_collision_validation_negative_episodes_per_task
+        ),
+        "minimum_recall": criteria.minimum_collision_validation_recall,
+        "minimum_pr_auc": criteria.minimum_collision_validation_pr_auc,
+        "maximum_brier_score": criteria.maximum_collision_validation_brier_score,
+    }
+    return report.get("passed") is True and report.get("criteria") == expected
 
 
 def failed_exploration_calibration_checks(

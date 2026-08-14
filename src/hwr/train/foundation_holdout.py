@@ -24,7 +24,7 @@ from hwr.train.foundation_exploration import (
 )
 
 
-HOLDOUT_COLLECTOR = "foundation-causality-holdout/v2"
+HOLDOUT_COLLECTOR = "foundation-causality-holdout/v3"
 
 
 def collect_causality_holdout(
@@ -54,6 +54,7 @@ def collect_causality_holdout(
         <= 0
         or base_seed < 0
         or set(environments) != set(task_ids)
+        or (episodes_per_task > 1 and episodes_per_task % 2)
     ):
         raise ValueError("causality holdout collection configuration is invalid")
     expected_slots = {
@@ -78,6 +79,9 @@ def collect_causality_holdout(
             slot = (task_id, episode_index)
             if slot in existing:
                 continue
+            collision_target = _collision_balance_target(
+                episode_index, episodes_per_task
+            )
             for attempt in range(maximum_attempts_per_episode):
                 seed = _holdout_seed(
                     base_seed, task_index, episode_index, attempt
@@ -89,7 +93,11 @@ def collect_causality_holdout(
                     seed=seed,
                 )
                 transitions = len(episode.arrays["executed_action"])
-                if transitions < minimum_transitions:
+                collision_class = _episode_collision_class(episode.metadata)
+                if transitions < minimum_transitions or (
+                    collision_target is not None
+                    and collision_class != collision_target
+                ):
                     continue
                 metadata = {
                     **episode.metadata,
@@ -98,6 +106,10 @@ def collect_causality_holdout(
                     "seed_attempt": attempt,
                     "minimum_transitions": minimum_transitions,
                     "windows_per_episode": windows_per_episode,
+                    "collision_balance_target": (
+                        collision_target or "unconstrained"
+                    ),
+                    "collision_class": collision_class,
                 }
                 store.append(replace(episode, metadata=metadata))
                 existing[slot] = seed
@@ -114,6 +126,7 @@ def collect_causality_holdout(
         source_commit,
         minimum_transitions=minimum_transitions,
         windows_per_episode=windows_per_episode,
+        episodes_per_task=episodes_per_task,
     )
 
 
@@ -218,6 +231,18 @@ def _holdout_seed(
     )
 
 
+def _collision_balance_target(
+    episode_index: int, episodes_per_task: int
+) -> str | None:
+    if episodes_per_task == 1:
+        return None
+    return "positive" if episode_index < episodes_per_task // 2 else "negative"
+
+
+def _episode_collision_class(metadata: Mapping[str, object]) -> str:
+    return "positive" if metadata.get("result_reason") == "severe_collision" else "negative"
+
+
 def _existing_slots(
     store: AppendableAutonomousTrajectoryStore,
 ) -> dict[tuple[str, int], int]:
@@ -240,11 +265,13 @@ def _verify_holdout(
     *,
     minimum_transitions: int,
     windows_per_episode: int,
+    episodes_per_task: int,
 ) -> None:
     verified = set()
     for shard in store.manifest["shards"]:
         metadata = shard.get("metadata", {})
         identity = (str(shard["task_id"]), int(metadata.get("holdout_slot", -1)))
+        target = _collision_balance_target(identity[1], episodes_per_task)
         if (
             identity not in expected_slots
             or str(shard["source_commit"]) != source_commit
@@ -252,6 +279,11 @@ def _verify_holdout(
             or int(shard["transition_count"]) < minimum_transitions
             or int(metadata.get("minimum_transitions", -1)) != minimum_transitions
             or int(metadata.get("windows_per_episode", -1)) != windows_per_episode
+            or metadata.get("collision_balance_target")
+            != (target or "unconstrained")
+            or metadata.get("collision_class")
+            != _episode_collision_class(metadata)
+            or (target is not None and metadata.get("collision_class") != target)
             or metadata.get("action_process", {}).get("schema_version")
             != "hwr.correlated-random-rl/v1"
         ):

@@ -8,7 +8,7 @@ from typing import Mapping
 import numpy as np
 
 
-INTERACTION_COVERAGE_SCHEMA = "hwr.foundation-interaction-coverage/v1"
+INTERACTION_COVERAGE_SCHEMA = "hwr.foundation-interaction-coverage/v2"
 
 
 def summarize_interaction_coverage(
@@ -16,28 +16,39 @@ def summarize_interaction_coverage(
     replay_manifest: Mapping[str, object],
     *,
     minimum_displacement: float,
+    minimum_transitions: int,
 ) -> dict[str, object]:
     """Report contact, controlled motion, and collision classes by task."""
     del replay_path
-    if minimum_displacement <= 0.0:
-        raise ValueError("interaction displacement threshold must be positive")
+    if minimum_displacement <= 0.0 or minimum_transitions <= 0:
+        raise ValueError("interaction coverage thresholds must be positive")
     grouped: dict[str, list[Mapping[str, object]]] = {}
+    excluded: dict[str, int] = {}
     for shard in replay_manifest.get("shards", ()):
+        task_id = str(shard["task_id"])
+        grouped.setdefault(task_id, [])
+        if int(shard.get("transition_count", 0)) < minimum_transitions:
+            excluded[task_id] = excluded.get(task_id, 0) + 1
+            continue
         metadata = shard.get("metadata", {})
         audit = metadata.get("interaction_audit", {})
         if not isinstance(audit, Mapping):
             raise ValueError("replay interaction audit is invalid")
-        grouped.setdefault(str(shard["task_id"]), []).append(audit)
+        grouped[task_id].append(audit)
     if not grouped:
         raise ValueError("interaction coverage replay is empty")
     partitions = {
-        task_id: _summarize_task(values, minimum_displacement)
+        task_id: {
+            **_summarize_task(values, minimum_displacement),
+            "ineligible_short_episode_count": excluded.get(task_id, 0),
+        }
         for task_id, values in sorted(grouped.items())
     }
     return {
         "schema_version": INTERACTION_COVERAGE_SCHEMA,
         "partition_key": "task_id",
         "minimum_displacement": minimum_displacement,
+        "minimum_transitions": minimum_transitions,
         "episode_count": sum(
             int(value["episode_count"]) for value in partitions.values()
         ),

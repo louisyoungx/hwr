@@ -23,6 +23,11 @@ class FoundationOnlineTrainingConfig:
     minimum_controlled_motion_episodes_per_task: int = 1
     minimum_collision_positive_episodes_per_task: int = 1
     minimum_collision_negative_episodes_per_task: int = 1
+    minimum_collision_validation_positive_episodes_per_task: int = 8
+    minimum_collision_validation_negative_episodes_per_task: int = 8
+    minimum_collision_validation_recall: float = 0.80
+    minimum_collision_validation_pr_auc: float = 0.50
+    maximum_collision_validation_brier_score: float = 0.10
     calibration_early_stop_episodes: int = 24
     collection_episodes_per_cycle: int = 3
     updates_per_cycle: int = 200
@@ -90,6 +95,15 @@ class FoundationOnlineTrainingConfig:
             self.minimum_collision_negative_episodes_per_task,
         ) < 0:
             raise ValueError("collision coverage counts cannot be negative")
+        if min(
+            self.minimum_collision_validation_positive_episodes_per_task,
+            self.minimum_collision_validation_negative_episodes_per_task,
+        ) < 0 or (
+            self.minimum_collision_validation_positive_episodes_per_task
+            + self.minimum_collision_validation_negative_episodes_per_task
+            <= 0
+        ):
+            raise ValueError("collision validation counts are invalid")
         if self.minimum_actor_readiness_episodes > self.episodes:
             raise ValueError("Actor readiness Episodes exceed total Episodes")
         if self.calibration_early_stop_episodes > self.episodes:
@@ -139,6 +153,13 @@ class FoundationOnlineTrainingConfig:
             raise ValueError("data action probe ratios must exceed one")
         if self.minimum_interaction_displacement <= 0.0:
             raise ValueError("minimum interaction displacement must be positive")
+        collision_limits = (
+            self.minimum_collision_validation_recall,
+            self.minimum_collision_validation_pr_auc,
+            self.maximum_collision_validation_brier_score,
+        )
+        if any(not 0.0 <= value <= 1.0 for value in collision_limits):
+            raise ValueError("collision validation limits are invalid")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

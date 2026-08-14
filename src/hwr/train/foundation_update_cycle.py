@@ -72,11 +72,15 @@ class ShardLocalWindowSampler:
         counts = np.asarray([len(values) for values in self.indices], np.float64)
         self.probabilities = counts / counts.sum()
         metadata = getattr(loader, "window_metadata", None)
-        self.severe_collision_indices = tuple(
-            index
-            for index in range(len(loader))
-            if callable(metadata)
-            and _is_severe_collision_window(metadata(index))
+        collision_groups: dict[int, list[int]] = {}
+        for index in range(len(loader)):
+            if callable(metadata) and _is_severe_collision_window(metadata(index)):
+                collision_groups.setdefault(
+                    loader.window_shard_index(index), []
+                ).append(index)
+        self.collision_shards = tuple(sorted(collision_groups))
+        self.collision_indices = tuple(
+            tuple(collision_groups[shard]) for shard in self.collision_shards
         )
 
     def sample(
@@ -88,9 +92,16 @@ class ShardLocalWindowSampler:
     ) -> tuple[int, ...]:
         if batch_size <= 0 or not 0.0 <= severe_collision_fraction <= 1.0:
             raise ValueError("foundation replay batch size must be positive")
-        if self.severe_collision_indices and rng.random() < severe_collision_fraction:
-            index = int(rng.choice(self.severe_collision_indices))
-            return (index,) * batch_size
+        if self.collision_shards and rng.random() < severe_collision_fraction:
+            groups = rng.choice(
+                len(self.collision_indices),
+                size=batch_size,
+                replace=len(self.collision_indices) < batch_size,
+            )
+            return tuple(
+                int(rng.choice(self.collision_indices[int(group)]))
+                for group in groups
+            )
         shard = int(rng.choice(len(self.indices), p=self.probabilities))
         values = rng.choice(self.indices[shard], size=batch_size, replace=True)
         return tuple(int(value) for value in values)

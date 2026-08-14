@@ -281,6 +281,35 @@ class FoundationWorldModelTrainer:
         prefix = "imagination" if train_task_actor else "exploration"
         return {f"{prefix}/{name}": value for name, value in metrics.items()}
 
+    def severe_collision_probabilities(
+        self, batch: FoundationTrainingBatch
+    ) -> torch.Tensor:
+        """Predict collision probabilities without updating audited models."""
+        self._check_batch_dimensions(batch)
+        self.visual_student.eval()
+        self.world_model.eval()
+        with torch.no_grad():
+            visual = encode_visual_student_bounded(
+                self.visual_student,
+                batch,
+                microbatch_observations=(
+                    self.config.visual_inference_microbatch_observations
+                ),
+            )
+            sequence = visual.pooled_state.reshape(
+                batch.sequence_batch_size,
+                batch.observation_count,
+                self.world_model.config.visual_dimension,
+            )
+            output = self.world_model.observe(
+                sequence,
+                batch.language_features,
+                batch.proprioception,
+                batch.actor_proposals,
+                batch.executed_actions,
+            )
+        return output.severe_collision_logits.sigmoid().detach().cpu()
+
     @property
     def visual_update_due(self) -> bool:
         return self.update_count % self.config.visual_update_interval == 0

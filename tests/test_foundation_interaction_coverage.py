@@ -28,6 +28,7 @@ def test_interaction_coverage_reports_staged_physical_evidence_by_task(
         "shards": [
             {
                 "task_id": "task-a/v1",
+                "transition_count": 16,
                 "metadata": {"interaction_audit": audit},
             }
             for audit in audits
@@ -35,7 +36,10 @@ def test_interaction_coverage_reports_staged_physical_evidence_by_task(
     }
 
     report = summarize_interaction_coverage(
-        tmp_path, manifest, minimum_displacement=0.01
+        tmp_path,
+        manifest,
+        minimum_displacement=0.01,
+        minimum_transitions=16,
     )
 
     task = report["partitions"]["task-a/v1"]
@@ -44,3 +48,31 @@ def test_interaction_coverage_reports_staged_physical_evidence_by_task(
     assert task["controlled_motion_episode_count"] == 1
     assert task["severe_collision_positive_episode_count"] == 1
     assert task["severe_collision_negative_episode_count"] == 1
+
+
+def test_interaction_coverage_excludes_episodes_too_short_for_training(
+    tmp_path,
+) -> None:
+    manifest = {
+        "shards": [{
+            "task_id": "task-a/v1",
+            "transition_count": 15,
+            "metadata": {"interaction_audit": {
+                "left_contact_steps": 1,
+                "severe_collision_count": 1,
+            }},
+        }]
+    }
+
+    report = summarize_interaction_coverage(
+        tmp_path,
+        manifest,
+        minimum_displacement=0.01,
+        minimum_transitions=16,
+    )
+
+    task = report["partitions"]["task-a/v1"]
+    assert task["episode_count"] == 0
+    assert task["ineligible_short_episode_count"] == 1
+    assert task["unilateral_contact_episode_count"] == 0
+    assert task["severe_collision_positive_episode_count"] == 0

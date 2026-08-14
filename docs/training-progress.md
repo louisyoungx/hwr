@@ -2,19 +2,24 @@
 
 本文只记录可复查的训练事实和历史调整，不替代[当前训练范式](./foundation-world-model-training-paradigm.md)与最终验收门槛。P076～P080 已冻结为失败基线；统一开发门禁完成前不再启动策略训练。
 
-## 2026-08-14 `foundation-wm-007` 校准定位与下一谱系统计修复
+## 2026-08-14 `foundation-wm-007` 停止、裁剪与下一谱系统计修复
 
-`foundation-wm-007` 绑定 `bb8f743`，继续只作为吞吐、动作因果和自主探索校准运行；当前
-工作树的新规则不会注入已经启动的进程，也不能用当前 HEAD 直接恢复该 run。恢复或复查
-必须使用其绑定提交的隔离 worktree。它的三个 carry/hold 任务仍是双臂预训练基准，不是
-正式家庭场景能力结论。
+`foundation-wm-007` 已在 108 个 Episode、7,200 次更新后停止：三个任务成功均为 0，动作
+probe 约 `1.002`，多步动作因果比约 `0.995`，探索 Actor 从未解锁。它绑定旧提交
+`bb8f743`，不能用当前 HEAD 恢复，也不进入后续 checkpoint 谱系。`foundation-wm-006/007`
+均无 deployment；两者的可重建特征缓存、replay、不可部署 checkpoint 与留出缓存已经删除，
+只保留 manifest、逐周期指标、因果诊断和失败说明。`runs/foundation-world-model` 因此从约
+73GB 降至 3.1MB，释放约 73GiB。
 
 下一新 run 起，data-action probe 改为逐任务独立拟合，所有任务均须过线；bootstrap 单位
-从相关 transition 改为 Episode。动作因果留出 collector 升为 v2，每条留出 Episode 必须
-贡献相同数量的完整不重叠窗口，短轨迹用确定性替代 seed 重采。Actor 准入新增外部接触、
-受控刚体/关节运动与严重碰撞正负样本覆盖；严重碰撞拥有独立预测头、类别加权损失和终止
-窗口定额采样。新 Actor 先 warm-up 再采集，探索 novelty 改为历史状态 kNN 距离。24 个
-Episode 后仍缺动作可辨识、接触或受控运动证据则提前终止校准。
+从相关 transition 改为 Episode。动作因果留出 collector 升为 v3，每任务固定 16 个独立
+Episode，并按严重碰撞结果平衡为 8 个正例、8 个负例；每任务审计 64 个窗口。碰撞 batch
+优先跨独立 Episode 采样，长度不足 16 transition 的 Episode 不再计入交互覆盖。碰撞头还需
+在独立留出集上通过召回率、PR-AUC 和 Brier score，不能只证明“见过一条正例”。
+
+Actor 准入已经拆成两级：动作覆盖、逐任务 probe 和单步物理因果只解锁通用内在探索 Actor；
+接触、受控运动、碰撞头验证和完整多步因果只约束任务 Actor。24 Episode 的随机校准停止也
+只检查第一级证据，不再要求随机策略先完成探索 Actor 应负责的接触发现。
 
 run manifest 升为 `hwr.foundation-online-run/v4` 并记录实际设备、nice 和 MPS 水位。正式
 验收默认每任务 40 个未见 seed，成功率用 95% Wilson 下界、单臂消融用 Wilson 上界判定；

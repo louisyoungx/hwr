@@ -18,6 +18,7 @@ from hwr.world_model import (
     assess_action_causality,
 )
 from hwr.train.foundation_registry import foundation_lineage
+from hwr.train.foundation_holdout import HOLDOUT_COLLECTOR
 from hwr.train.development_gate import (
     COMMITTED_SNAPSHOT_CHECKS,
     DEVELOPMENT_READY_SCHEMA,
@@ -228,7 +229,7 @@ def _causality_run(tmp_path):
                     "transition_stop": 16,
                 }
             ],
-            "holdout_collector": "foundation-causality-holdout/v2",
+            "holdout_collector": HOLDOUT_COLLECTOR,
             "source_commit": "abc123",
             "update_count": 1,
             "training_data_manifest_sha256": _digest(training_manifest),
