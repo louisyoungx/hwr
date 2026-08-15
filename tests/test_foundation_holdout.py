@@ -5,9 +5,12 @@ from types import SimpleNamespace
 import pytest
 
 from hwr.train.foundation_holdout import (
+    ACTION_EXECUTION_VALIDATION_PHASE,
     SYSTEM_IDENTIFICATION_CORRELATIONS,
     SYSTEM_IDENTIFICATION_PHASE,
     _collision_balance_target,
+    _episode_collision_class,
+    _holdout_collection_config,
     causality_batches_by_task,
     causality_window_manifest,
     select_causality_windows,
@@ -104,3 +107,49 @@ def test_formal_holdout_slots_balance_collision_outcomes() -> None:
     assert targets.count("negative") == 8
     assert _collision_balance_target(0, 1) is None
     assert SYSTEM_IDENTIFICATION_CORRELATIONS == (0.0, 0.5, 0.9, 0.96)
+
+
+def test_holdout_collection_bounds_unbalanced_and_negative_episodes() -> None:
+    system = _holdout_collection_config(
+        "abc123",
+        maximum_steps=6000,
+        minimum_transitions=128,
+        balance_kind=None,
+        balance_target=None,
+    )
+    negative = _holdout_collection_config(
+        "abc123",
+        maximum_steps=6000,
+        minimum_transitions=16,
+        balance_kind="safety_intervention",
+        balance_target="negative",
+    )
+    positive = _holdout_collection_config(
+        "abc123",
+        maximum_steps=6000,
+        minimum_transitions=16,
+        balance_kind="safety_intervention",
+        balance_target="positive",
+    )
+
+    assert system.maximum_steps == 128
+    assert negative.maximum_steps == 16
+    assert positive.maximum_steps == 6000
+    assert positive.minimum_stop_steps == 16
+    assert positive.stop_after_safety_intervention is True
+    assert positive.stop_after_severe_collision is False
+
+
+def test_collision_class_uses_retained_physical_audit() -> None:
+    metadata = {
+        "result_reason": "severe_collision_evidence",
+        "interaction_audit": {"severe_collision_count": 1.0},
+    }
+
+    assert _episode_collision_class(metadata) == "positive"
+    assert _episode_collision_class(
+        {
+            "result_reason": ACTION_EXECUTION_VALIDATION_PHASE,
+            "interaction_audit": {"severe_collision_count": 0.0},
+        }
+    ) == "negative"

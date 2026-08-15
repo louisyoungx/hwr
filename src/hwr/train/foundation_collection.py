@@ -91,11 +91,18 @@ class AutonomousCollectionConfig:
     environment_version: str
     source_commit: str
     maximum_steps: int
+    stop_after_safety_intervention: bool = False
+    stop_after_severe_collision: bool = False
+    minimum_stop_steps: int = 1
 
     def __post_init__(self) -> None:
         if not self.environment_version or not self.source_commit:
             raise ValueError("autonomous collection identities are required")
-        if self.maximum_steps <= 0:
+        if (
+            self.maximum_steps <= 0
+            or self.minimum_stop_steps <= 0
+            or self.minimum_stop_steps > self.maximum_steps
+        ):
             raise ValueError("autonomous collection maximum steps must be positive")
 
 
@@ -129,6 +136,9 @@ class AutonomousEpisodeCollector:
         safety_interventions: list[float] = []
         interaction_trace: list[dict[str, float]] = []
         previous_interaction = _interaction_audit(backend)
+        safety_intervention_seen = False
+        severe_collision_seen = False
+        collection_stop_reason: str | None = None
         for step in range(self.config.maximum_steps):
             proposal = action_source.propose(observation)
             frame = dual_arm_action_frame(
@@ -142,15 +152,41 @@ class AutonomousEpisodeCollector:
             executed.append(applied.vector())
             rewards.append(float(outcome.reward))
             terminated.append(bool(outcome.terminated))
-            truncated.append(bool(outcome.truncated or limit and not outcome.terminated))
-            safety_interventions.append(
-                _safety_intervention(frame, outcome.info, outcome.events)
+            intervention = _safety_intervention(
+                frame, outcome.info, outcome.events
             )
+            safety_interventions.append(intervention)
+            safety_intervention_seen |= intervention > 0.0
             current_interaction = _interaction_audit(backend)
+            severe_collision_seen |= (
+                current_interaction["severe_collision_count"] > 0.0
+            )
             interaction_trace.append(
                 _interaction_transition(previous_interaction, current_interaction)
             )
             previous_interaction = current_interaction
+            minimum_reached = step + 1 >= self.config.minimum_stop_steps
+            stop_for_safety = (
+                self.config.stop_after_safety_intervention
+                and safety_intervention_seen
+                and minimum_reached
+            )
+            stop_for_collision = (
+                self.config.stop_after_severe_collision
+                and severe_collision_seen
+                and minimum_reached
+            )
+            if stop_for_safety:
+                collection_stop_reason = "safety_intervention_evidence"
+            elif stop_for_collision:
+                collection_stop_reason = "severe_collision_evidence"
+            truncated.append(
+                bool(
+                    outcome.truncated
+                    or (limit or collection_stop_reason is not None)
+                    and not outcome.terminated
+                )
+            )
             observation = outcome.observation
             observations.append(observation)
             if snapshot_sink is not None:
@@ -161,7 +197,12 @@ class AutonomousEpisodeCollector:
                 if not isinstance(snapshot, PhysicalStateSnapshot):
                     raise TypeError("runtime returned an invalid physical snapshot")
                 snapshot_sink.append(snapshot)
-            if outcome.terminated or outcome.truncated or limit:
+            if (
+                outcome.terminated
+                or outcome.truncated
+                or limit
+                or collection_stop_reason is not None
+            ):
                 break
         arrays, preprocess_fingerprint = self._episode_arrays(
             observations,
@@ -180,13 +221,18 @@ class AutonomousEpisodeCollector:
             )
         result = backend.result()
         metadata = {
-            "collector": "foundation-autonomous/v2",
+            "collector": "foundation-autonomous/v3",
             "action_process": dict(action_source.action_process),
             "success": bool(result and result.success),
-            "result_reason": result.reason if result else "step_limit",
+            "result_reason": (
+                result.reason
+                if result
+                else collection_stop_reason or "step_limit"
+            ),
             "result_metrics": dict(result.metrics) if result else {},
             "interaction_audit": _aggregate_interaction_trace(interaction_trace),
             "interaction_trace": interaction_trace,
+            "collection_stop_reason": collection_stop_reason or "environment",
         }
         return AutonomousEpisode(
             episode_id=f"episode-{uuid.uuid4().hex}",

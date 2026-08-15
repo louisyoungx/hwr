@@ -6,10 +6,15 @@
 - 主 Agent：当前 TRAE 主会话
 - 分支：`feat/research-loop`
 - 训练候选：`R0001-P01`
-- 类型：无行为改动校准基线，`baseline-only`
-- 测量合同：当前未修改的 action probe 与 Actor readiness 实现
+- 类型：平台修复后的当前谱系校准基线，`baseline-only`
+- 测量合同：action probe 不变；动作执行验证使用实际 plant action；Actor readiness
+  门槛不变
 - 后续评测修复：`R0001-P04`，必须在 `P01` 旧统计基线完成后进入独立分支
 - 行为候选：本文件冻结时不实施；只按 `02-review.md` 的失败指纹路由
+
+第一次 run `r0001-p01-baseline-s20260812` 已因 `R0001-F01`～`R0001-F05`
+平台缺陷记为 `inconclusive`，详见 `04-results.md`。v2 只用于建立修复后平台的当前
+基线，不将 v1 与 v2 的差异解释为能力提升。
 
 训练源码提交为本目录 `00-context.md`～`03-experiment.md` 完成原子提交后的
 `feat/research-loop` HEAD。Git 提交身份由随后生成的
@@ -32,7 +37,7 @@
 
 | 范围 | 负责人 | 分支或运行 | 文件所有权 |
 |---|---|---|---|
-| 基线冻结、门禁、运行、结果归因 | 主 Agent | `feat/research-loop` / `r0001-p01-baseline-s20260812` | `docs/research-loop/0001/`、运行与日志索引 |
+| 基线冻结、门禁、运行、结果归因 | 主 Agent | `feat/research-loop` / `r0001-p01-baseline-v2-s20260812` | `docs/research-loop/0001/`、运行与日志索引 |
 | `R0001-P04` 统计修复 | 后续唯一实施 Agent | `eval/R0001-P04-bootstrap` | `src/hwr/train/foundation_action_probe.py` 及对应测试 |
 | 条件行为候选 | 尚未分配 | 独立 `exp/R0001-*` worktree | 只在读取 `P01` 失败指纹后分配 |
 
@@ -167,7 +172,7 @@ seed 分离。不得根据结果换 seed 或重跑挑选。
 run ID：
 
 ```text
-r0001-p01-baseline-s20260812
+r0001-p01-baseline-v2-s20260812
 ```
 
 命令：
@@ -176,7 +181,7 @@ r0001-p01-baseline-s20260812
 PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.65 \
 PYTORCH_MPS_LOW_WATERMARK_RATIO=0.50 \
 .venv/bin/python -m hwr.apps.train_foundation_world_model \
-  --run-id r0001-p01-baseline-s20260812 \
+  --run-id r0001-p01-baseline-v2-s20260812 \
   --output-root runs/foundation-world-model \
   --device mps \
   --foundation-device mps \
@@ -232,9 +237,9 @@ PYTORCH_MPS_LOW_WATERMARK_RATIO=0.50 \
 
 ```bash
 .venv/bin/python -m hwr.apps.evaluate_foundation_world_model \
-  runs/foundation-world-model/r0001-p01-baseline-s20260812 \
+  runs/foundation-world-model/r0001-p01-baseline-v2-s20260812 \
   --output-root runs/foundation-world-model-eval \
-  --evaluation-id r0001-p01-baseline-s20260812 \
+  --evaluation-id r0001-p01-baseline-v2-s20260812 \
   --seed-count 40 \
   --device mps \
   --video-seed-count 1

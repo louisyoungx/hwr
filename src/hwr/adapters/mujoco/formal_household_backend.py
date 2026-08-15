@@ -458,7 +458,40 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
                 )
             self._severe_collision_count += int(normal >= self.severe_force_threshold)
 
+    def _predictive_safety_enabled(self) -> bool:
+        return True
+
+    def _predictive_safety_violation(self) -> bool:
+        return self._current_maximum_forbidden_force() >= self.severe_force_threshold
+
+    def _predictive_horizon_control_steps(self) -> int:
+        return 2
+
+    def _current_maximum_forbidden_force(self) -> float:
+        maximum = 0.0
+        for index in range(self.data.ncon):
+            contact = self.data.contact[index]
+            first, second = int(contact.geom1), int(contact.geom2)
+            robot_first = first in self.household_ids.robot_geoms
+            robot_second = second in self.household_ids.robot_geoms
+            if robot_first == robot_second:
+                continue
+            other = second if robot_first else first
+            if other in self.household_ids.allowed_contact_geoms:
+                continue
+            force = np.zeros(6, np.float64)
+            mujoco.mj_contactForce(self.model, self.data, index, force)
+            maximum = max(maximum, abs(float(force[0])))
+        return maximum
+
     def _task_result_after_step(self) -> EpisodeResult | None:
+        if self._severe_collision_count > 0:
+            return EpisodeResult(
+                False,
+                "severe_collision",
+                self._timestamp_ns(),
+                self._metrics(),
+            )
         articulation_ok = self._articulation_satisfied()
         if not articulation_ok:
             self._placement.reset()

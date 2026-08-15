@@ -12,7 +12,7 @@ from hwr.train.foundation_holdout import ACTION_EXECUTION_VALIDATION_PHASE
 from hwr.train.foundation_trainer import FoundationWorldModelTrainer
 
 
-ACTION_EXECUTION_VALIDATION_SCHEMA = "hwr.foundation-action-execution-validation/v1"
+ACTION_EXECUTION_VALIDATION_SCHEMA = "hwr.foundation-action-execution-validation/v2"
 
 
 @dataclass(frozen=True)
@@ -160,8 +160,9 @@ def _action_execution_report(
     scale = upper - lower
     normalized_error = (predicted - executed) / scale
     intervention_rmse = _masked_rmse(normalized_error, target)
-    identity_error = (predicted - proposal) / scale
-    identity_rmse = _masked_rmse(identity_error, ~target)
+    non_intervention_rmse = _masked_rmse(normalized_error, ~target)
+    observed_identity_error = (executed - proposal) / scale
+    observed_identity_rmse = _masked_rmse(observed_identity_error, ~target)
     out_of_bounds = (predicted < lower) | (predicted > upper)
     out_of_bounds_rate = float(out_of_bounds.mean()) if predicted.size else 1.0
     flat_probability = probability.reshape(-1)
@@ -193,7 +194,7 @@ def _action_execution_report(
             intervention_rmse <= criteria.maximum_intervention_normalized_rmse
         ),
         "maximum_identity_normalized_rmse": (
-            identity_rmse <= criteria.maximum_identity_normalized_rmse
+            non_intervention_rmse <= criteria.maximum_identity_normalized_rmse
         ),
         "maximum_out_of_bounds_rate": (
             out_of_bounds_rate <= criteria.maximum_out_of_bounds_rate
@@ -210,7 +211,10 @@ def _action_execution_report(
         "pr_auc": pr_auc,
         "brier_score": brier,
         "intervention_action_normalized_rmse": intervention_rmse,
-        "identity_action_normalized_rmse": identity_rmse,
+        "identity_action_normalized_rmse": non_intervention_rmse,
+        "observed_non_intervention_rewrite_normalized_rmse": (
+            observed_identity_rmse
+        ),
         "out_of_bounds_rate": out_of_bounds_rate,
         "checks": checks,
     }

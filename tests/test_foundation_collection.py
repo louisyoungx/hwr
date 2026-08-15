@@ -83,9 +83,13 @@ def _observation(sequence: int, task_id: str = "fixture/v1") -> DualArmObservati
 
 
 class _Backend:
-    def __init__(self) -> None:
+    def __init__(
+        self, *, intervention_sequence: int = 1, terminal_sequence: int = 2
+    ) -> None:
         self.sequence = 0
         self._result = None
+        self.intervention_sequence = intervention_sequence
+        self.terminal_sequence = terminal_sequence
 
     def reset(self, *, seed: int, task_id: str):
         del seed
@@ -99,14 +103,14 @@ class _Backend:
 
     def apply(self, frame):
         self.sequence += 1
-        changed = self.sequence == 1
+        changed = self.sequence == self.intervention_sequence
         action = (
             DualArmAction(0.0, 0.0, (0.0,) * 6, (0.0,) * 6, 0.0, 0.0)
             if changed
             else frame.action
         )
         applied = replace(frame, action=action, source="safety" if changed else frame.source)
-        terminal = self.sequence == 2
+        terminal = self.sequence == self.terminal_sequence
         if terminal:
             self._result = EpisodeResult(True, "fixture_success", self.sequence)
         events = (
@@ -173,6 +177,38 @@ def test_collector_records_raw_observations_and_actual_safety_actions() -> None:
         "maximum_controlled_articulation_displacement": 0.0,
         "severe_collision_count": 0.0,
     }
+
+
+def test_collector_stops_after_retaining_safety_intervention_evidence() -> None:
+    preprocessor = HighResolutionVisionPreprocessor(
+        HighResolutionVisionConfig(), _calibrations()
+    )
+    collector = AutonomousEpisodeCollector(
+        preprocessor,
+        AutonomousCollectionConfig(
+            "fixture-env/v1",
+            "abc123",
+            maximum_steps=5,
+            stop_after_safety_intervention=True,
+            minimum_stop_steps=2,
+        ),
+    )
+    episode = collector.collect(
+        _Backend(intervention_sequence=1, terminal_sequence=4),
+        RandomRLActionSource(LatentActionScaling()),
+        task_id="fixture/v1",
+        seed=9,
+    )
+
+    assert episode.arrays["executed_action"].shape == (2, 16)
+    assert episode.arrays["safety_intervention"].tolist() == [1.0, 0.0]
+    assert episode.arrays["terminated"].tolist() == [False, False]
+    assert episode.arrays["truncated"].tolist() == [False, True]
+    assert episode.metadata["result_reason"] == "safety_intervention_evidence"
+    assert (
+        episode.metadata["collection_stop_reason"]
+        == "safety_intervention_evidence"
+    )
 
 
 def test_random_rl_source_is_seeded_and_observation_independent() -> None:

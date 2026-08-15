@@ -114,6 +114,55 @@ def test_formal_randomization_is_reproducible_for_the_same_profile_and_seed() ->
     assert first_audit["randomization"] == second_audit["randomization"]
 
 
+def test_formal_runtime_rejects_predicted_severe_collision_before_commit() -> None:
+    task_id = "clear_dining_table_3d/v1"
+    backend = _backend(task_id)
+    try:
+        observation = backend.reset(seed=43, task_id=task_id)
+        backend._predictive_safety_violation = lambda: True  # type: ignore[method-assign]  # noqa: SLF001
+        action = DualArmAction(
+            0.18,
+            0.5,
+            (0.35,) * 6,
+            (-0.35,) * 6,
+            0.0,
+            1.0,
+        )
+        outcome = backend.apply(
+            DualArmActionFrame(
+                observation.timestamp_ns,
+                observation.timestamp_ns,
+                observation.timestamp_ns + 250_000_000,
+                "test_policy",
+                action,
+            )
+        )
+    finally:
+        backend.close()
+
+    applied = outcome.info["applied_action"]
+    assert applied.source == "safety"
+    assert outcome.info["safety_intervened"] is True
+    assert outcome.info["physics_advanced"] is False
+    assert outcome.events[-1].event_type == "action_rejected"
+    assert outcome.events[-1].details["reason"] == "predicted_severe_collision"
+
+
+def test_formal_runtime_terminates_after_actual_severe_collision() -> None:
+    task_id = "clear_dining_table_3d/v1"
+    backend = _backend(task_id)
+    try:
+        observation = backend.reset(seed=47, task_id=task_id)
+        backend._severe_collision_count = 1
+        result = backend._task_result_after_step()
+    finally:
+        backend.close()
+
+    assert result is not None
+    assert result.success is False
+    assert result.reason == "severe_collision"
+
+
 def test_formal_success_requires_both_arms_and_concurrent_contact() -> None:
     task_id = "tidy_living_room_3d/v1"
     backend = _backend(task_id)

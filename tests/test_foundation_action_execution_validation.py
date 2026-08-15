@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import numpy as np
 import torch
 
 from hwr.train.foundation_action_execution_validation import (
     ActionExecutionValidationCriteria,
+    _action_execution_report,
     evaluate_foundation_action_execution_validation,
 )
 from hwr.train.foundation_holdout import ACTION_EXECUTION_VALIDATION_PHASE
@@ -119,3 +121,27 @@ def test_action_execution_validation_rejects_out_of_contract_predictions() -> No
         task["checks"]["maximum_out_of_bounds_rate"] is False
         for task in report["partitions"].values()
     )
+
+
+def test_non_intervention_error_targets_executed_plant_action() -> None:
+    probability = np.zeros((1, 2), np.float64)
+    intervention = np.zeros((1, 2), np.float64)
+    proposal = np.ones((1, 2, 2), np.float64) * 0.5
+    executed = proposal * 0.96
+    report = _action_execution_report(
+        probability,
+        intervention,
+        executed.copy(),
+        proposal,
+        executed,
+        np.asarray([False]),
+        (-1.0, -1.0),
+        (1.0, 1.0),
+        ActionExecutionValidationCriteria(
+            minimum_positive_episodes_per_task=0,
+            minimum_negative_episodes_per_task=1,
+        ),
+    )
+
+    assert report["identity_action_normalized_rmse"] == 0.0
+    assert report["observed_non_intervention_rewrite_normalized_rmse"] > 0.0

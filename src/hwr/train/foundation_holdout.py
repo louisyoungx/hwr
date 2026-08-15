@@ -25,7 +25,7 @@ from hwr.train.foundation_exploration import (
 from hwr.train.foundation_sequence_reservoir import slice_episode_sequence
 
 
-HOLDOUT_COLLECTOR = "foundation-causality-holdout/v6"
+HOLDOUT_COLLECTOR = "foundation-causality-holdout/v7"
 SYSTEM_IDENTIFICATION_PHASE = "system_identification"
 COLLISION_VALIDATION_PHASE = "collision_validation"
 ACTION_EXECUTION_VALIDATION_PHASE = "action_execution_validation"
@@ -87,14 +87,6 @@ def collect_causality_holdout(
         raise ValueError("foundation holdout contains unexpected phase slots")
     minimum_transitions = windows_per_episode * sequence_transitions
     for task_index, task_id in enumerate(task_ids):
-        collector = AutonomousEpisodeCollector(
-            preprocessor,
-            AutonomousCollectionConfig(
-                "mujoco-bimanual-runtime/v2",
-                source_commit,
-                int(maximum_steps[task_id]),
-            ),
-        )
         for episode_index in range(episodes_per_task):
             slot = (holdout_phase, task_id, episode_index)
             if slot in existing:
@@ -111,6 +103,16 @@ def collect_causality_holdout(
                     else "negative"
                 )
             for attempt in range(maximum_attempts_per_episode):
+                collector = AutonomousEpisodeCollector(
+                    preprocessor,
+                    _holdout_collection_config(
+                        source_commit,
+                        maximum_steps=int(maximum_steps[task_id]),
+                        minimum_transitions=minimum_transitions,
+                        balance_kind=balance_kind,
+                        balance_target=balance_target,
+                    ),
+                )
                 seed = _holdout_seed(
                     base_seed,
                     task_index,
@@ -347,7 +349,45 @@ def _collision_balance_target(
 
 
 def _episode_collision_class(metadata: Mapping[str, object]) -> str:
-    return "positive" if metadata.get("result_reason") == "severe_collision" else "negative"
+    audit = metadata.get("interaction_audit", {})
+    severe = (
+        float(audit.get("severe_collision_count", 0.0))
+        if isinstance(audit, Mapping)
+        else 0.0
+    )
+    return (
+        "positive"
+        if metadata.get("result_reason") == "severe_collision" or severe > 0.0
+        else "negative"
+    )
+
+
+def _holdout_collection_config(
+    source_commit: str,
+    *,
+    maximum_steps: int,
+    minimum_transitions: int,
+    balance_kind: str | None,
+    balance_target: str | None,
+) -> AutonomousCollectionConfig:
+    positive = balance_target == "positive"
+    bounded_steps = (
+        maximum_steps
+        if positive
+        else min(maximum_steps, minimum_transitions)
+    )
+    return AutonomousCollectionConfig(
+        "mujoco-bimanual-runtime/v2",
+        source_commit,
+        bounded_steps,
+        stop_after_safety_intervention=(
+            positive and balance_kind == "safety_intervention"
+        ),
+        stop_after_severe_collision=(
+            positive and balance_kind == "collision"
+        ),
+        minimum_stop_steps=minimum_transitions,
+    )
 
 
 def _episode_balance_class(
