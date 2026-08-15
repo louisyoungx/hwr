@@ -617,7 +617,7 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
 
     def _observation(self) -> DualArmObservation:
         observation = super()._observation()
-        if not self._randomization:
+        if not self._randomization or not self._camera_rendering_enabled:
             return observation
         cameras = tuple(self._sensor_noise(frame) for frame in observation.cameras)
         return replace(observation, cameras=cameras)

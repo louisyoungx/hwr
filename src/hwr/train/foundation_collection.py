@@ -94,6 +94,8 @@ class AutonomousCollectionConfig:
     stop_after_safety_intervention: bool = False
     stop_after_severe_collision: bool = False
     minimum_stop_steps: int = 1
+    retained_transition_capacity: int | None = None
+    camera_render_start_transition: int | None = None
 
     def __post_init__(self) -> None:
         if not self.environment_version or not self.source_commit:
@@ -102,6 +104,16 @@ class AutonomousCollectionConfig:
             self.maximum_steps <= 0
             or self.minimum_stop_steps <= 0
             or self.minimum_stop_steps > self.maximum_steps
+            or (
+                self.retained_transition_capacity is not None
+                and self.retained_transition_capacity <= 0
+            )
+            or (
+                self.camera_render_start_transition is not None
+                and not 0
+                <= self.camera_render_start_transition
+                <= self.maximum_steps
+            )
         ):
             raise ValueError("autonomous collection maximum steps must be positive")
 
@@ -126,6 +138,11 @@ class AutonomousEpisodeCollector:
         snapshot_sink: list[PhysicalStateSnapshot] | None = None,
     ) -> AutonomousEpisode:
         observation = initial_observation or backend.reset(seed=seed, task_id=task_id)
+        camera_control = getattr(backend, "set_camera_rendering", None)
+        if self.config.camera_render_start_transition is not None:
+            if not callable(camera_control):
+                raise TypeError("deferred camera collection requires camera control")
+            camera_control(False)
         action_source.reset(task_id=task_id, seed=seed)
         observations = [observation]
         proposals: list[tuple[float, ...]] = []
@@ -139,7 +156,14 @@ class AutonomousEpisodeCollector:
         safety_intervention_seen = False
         severe_collision_seen = False
         collection_stop_reason: str | None = None
+        collection_transition_count = 0
         for step in range(self.config.maximum_steps):
+            if (
+                self.config.camera_render_start_transition is not None
+                and step == self.config.camera_render_start_transition
+            ):
+                camera_control(True)
+                observation = backend.observe()
             proposal = action_source.propose(observation)
             frame = dual_arm_action_frame(
                 observation.timestamp_ns, proposal, source=action_source.action_source
@@ -189,6 +213,18 @@ class AutonomousEpisodeCollector:
             )
             observation = outcome.observation
             observations.append(observation)
+            collection_transition_count += 1
+            _trim_episode_buffers(
+                observations,
+                proposals,
+                executed,
+                rewards,
+                terminated,
+                truncated,
+                safety_interventions,
+                interaction_trace,
+                capacity=self.config.retained_transition_capacity,
+            )
             if snapshot_sink is not None:
                 capture = getattr(backend, "capture_state_snapshot", None)
                 if not callable(capture):
@@ -221,7 +257,7 @@ class AutonomousEpisodeCollector:
             )
         result = backend.result()
         metadata = {
-            "collector": "foundation-autonomous/v3",
+            "collector": "foundation-autonomous/v4",
             "action_process": dict(action_source.action_process),
             "success": bool(result and result.success),
             "result_reason": (
@@ -233,6 +269,11 @@ class AutonomousEpisodeCollector:
             "interaction_audit": _aggregate_interaction_trace(interaction_trace),
             "interaction_trace": interaction_trace,
             "collection_stop_reason": collection_stop_reason or "environment",
+            "collection_transition_count": collection_transition_count,
+            "retained_transition_count": len(executed),
+            "camera_render_start_transition": (
+                self.config.camera_render_start_transition
+            ),
         }
         return AutonomousEpisode(
             episode_id=f"episode-{uuid.uuid4().hex}",
@@ -366,6 +407,34 @@ def _safety_intervention(frame: DualArmActionFrame, info, events) -> float:
     intervention = bool(info.get("safety_intervened", False))
     rejected = any(event.event_type == "action_rejected" for event in events)
     return float(intervention or rejected)
+
+
+def _trim_episode_buffers(
+    observations: list[DualArmObservation],
+    proposals: list[tuple[float, ...]],
+    executed: list[tuple[float, ...]],
+    rewards: list[float],
+    terminated: list[bool],
+    truncated: list[bool],
+    safety_interventions: list[float],
+    interaction_trace: list[dict[str, float]],
+    *,
+    capacity: int | None,
+) -> None:
+    if capacity is None or len(executed) <= capacity:
+        return
+    excess = len(executed) - capacity
+    del observations[:excess]
+    for values in (
+        proposals,
+        executed,
+        rewards,
+        terminated,
+        truncated,
+        safety_interventions,
+        interaction_trace,
+    ):
+        del values[:excess]
 
 
 def _interaction_audit(backend: RuntimeBackend) -> dict[str, float]:

@@ -25,7 +25,7 @@ from hwr.train.foundation_exploration import (
 from hwr.train.foundation_sequence_reservoir import slice_episode_sequence
 
 
-HOLDOUT_COLLECTOR = "foundation-causality-holdout/v8"
+HOLDOUT_COLLECTOR = "foundation-causality-holdout/v10"
 SYSTEM_IDENTIFICATION_PHASE = "system_identification"
 COLLISION_VALIDATION_PHASE = "collision_validation"
 ACTION_EXECUTION_VALIDATION_PHASE = "action_execution_validation"
@@ -87,102 +87,28 @@ def collect_causality_holdout(
         raise ValueError("foundation holdout contains unexpected phase slots")
     minimum_transitions = windows_per_episode * sequence_transitions
     for task_index, task_id in enumerate(task_ids):
-        for episode_index in range(episodes_per_task):
-            slot = (holdout_phase, task_id, episode_index)
-            if slot in existing:
-                continue
-            balance_target = (
-                _collision_balance_target(episode_index, episodes_per_task)
-                if balance_kind is not None
-                else None
-            )
-            if positive_episodes is not None:
-                balance_target = (
-                    "positive"
-                    if episode_index < positive_episodes
-                    else "negative"
-                )
-            for attempt in range(maximum_attempts_per_episode):
-                collector = AutonomousEpisodeCollector(
-                    preprocessor,
-                    _holdout_collection_config(
-                        source_commit,
-                        maximum_steps=int(maximum_steps[task_id]),
-                        minimum_transitions=minimum_transitions,
-                        balance_kind=balance_kind,
-                        balance_target=balance_target,
-                    ),
-                )
-                seed = _holdout_seed(
-                    base_seed,
-                    task_index,
-                    episode_index,
-                    attempt,
-                    holdout_phase=holdout_phase,
-                )
-                episode = collector.collect(
-                    environments[task_id],
-                    RandomRLActionSource(
-                        action_scaling,
-                        replace(
-                            exploration_config,
-                            motion_correlation=_holdout_motion_correlation(
-                                exploration_config,
-                                holdout_phase=holdout_phase,
-                                episode_index=episode_index,
-                            ),
-                        ),
-                    ),
-                    task_id=task_id,
-                    seed=seed,
-                )
-                transitions = len(episode.arrays["executed_action"])
-                balance_class = _episode_balance_class(
-                    episode, balance_kind
-                )
-                if transitions < minimum_transitions or (
-                    balance_target is not None
-                    and balance_class != balance_target
-                ):
-                    continue
-                retained = min(retained_transitions_per_episode, transitions)
-                compact = slice_episode_sequence(
-                    episode,
-                    start=transitions - retained,
-                    transitions=retained,
-                    slot=0,
-                    slot_count=1,
-                )
-                metadata = {
-                    **compact.metadata,
-                    "collector": HOLDOUT_COLLECTOR,
-                    "holdout_phase": holdout_phase,
-                    "holdout_slot": episode_index,
-                    "seed_attempt": attempt,
-                    "minimum_transitions": minimum_transitions,
-                    "windows_per_episode": windows_per_episode,
-                    "balance_kind": balance_kind or "none",
-                    "balance_target": balance_target or "unconstrained",
-                    "balance_class": balance_class,
-                    "collision_class": _episode_collision_class(episode.metadata),
-                    "retained_transitions": retained,
-                    "holdout_excitation": {
-                        "motion_correlation": _holdout_motion_correlation(
-                            exploration_config,
-                            holdout_phase=holdout_phase,
-                            episode_index=episode_index,
-                        ),
-                        "phase": holdout_phase,
-                        "task_conditioned": False,
-                    },
-                }
-                store.append(replace(compact, metadata=metadata))
-                existing[slot] = seed
-                break
-            if slot not in existing:
-                raise RuntimeError(
-                    f"causality holdout could not fill usable slot {slot}"
-                )
+        _collect_holdout_task(
+            store,
+            environments[task_id],
+            task_id,
+            task_index,
+            existing,
+            preprocessor,
+            action_scaling,
+            exploration_config,
+            episodes_per_task=episodes_per_task,
+            windows_per_episode=windows_per_episode,
+            sequence_transitions=sequence_transitions,
+            retained_transitions_per_episode=retained_transitions_per_episode,
+            maximum_attempts_per_episode=maximum_attempts_per_episode,
+            maximum_steps=int(maximum_steps[task_id]),
+            minimum_transitions=minimum_transitions,
+            base_seed=base_seed,
+            source_commit=source_commit,
+            holdout_phase=holdout_phase,
+            balance_kind=balance_kind,
+            positive_episodes=positive_episodes,
+        )
     if {slot for slot in existing if slot[0] == holdout_phase} != expected_slots:
         raise RuntimeError("foundation holdout phase collection is incomplete")
     _verify_holdout(
@@ -195,6 +121,191 @@ def collect_causality_holdout(
         holdout_phase=holdout_phase,
         balance_kind=balance_kind,
         positive_episodes=positive_episodes,
+    )
+
+
+def _collect_holdout_task(
+    store: AppendableAutonomousTrajectoryStore,
+    environment: RuntimeBackend,
+    task_id: str,
+    task_index: int,
+    existing: dict[tuple[str, str, int], int],
+    preprocessor: HighResolutionVisionPreprocessor,
+    action_scaling: LatentActionScaling,
+    exploration_config: RandomRLExplorationConfig,
+    *,
+    episodes_per_task: int,
+    windows_per_episode: int,
+    sequence_transitions: int,
+    retained_transitions_per_episode: int,
+    maximum_attempts_per_episode: int,
+    maximum_steps: int,
+    minimum_transitions: int,
+    base_seed: int,
+    source_commit: str,
+    holdout_phase: str,
+    balance_kind: str | None,
+    positive_episodes: int | None,
+) -> None:
+    for episode_index in range(episodes_per_task):
+        slot = (holdout_phase, task_id, episode_index)
+        if slot in existing:
+            continue
+        balance_target = (
+            _collision_balance_target(episode_index, episodes_per_task)
+            if balance_kind is not None
+            else None
+        )
+        if positive_episodes is not None:
+            balance_target = (
+                "positive"
+                if episode_index < positive_episodes
+                else "negative"
+            )
+        for attempt in range(maximum_attempts_per_episode):
+            collector = AutonomousEpisodeCollector(
+                preprocessor,
+                _holdout_collection_config(
+                    source_commit,
+                    maximum_steps=maximum_steps,
+                    minimum_transitions=minimum_transitions,
+                    balance_kind=balance_kind,
+                    balance_target=balance_target,
+                ),
+            )
+            seed = _holdout_seed(
+                base_seed,
+                task_index,
+                episode_index,
+                attempt,
+                holdout_phase=holdout_phase,
+            )
+            action_config = replace(
+                exploration_config,
+                motion_correlation=_holdout_motion_correlation(
+                    exploration_config,
+                    holdout_phase=holdout_phase,
+                    episode_index=episode_index,
+                ),
+            )
+            episode = _collect_holdout_attempt(
+                collector,
+                environment,
+                preprocessor,
+                action_scaling,
+                action_config,
+                task_id=task_id,
+                seed=seed,
+                balance_kind=balance_kind,
+                balance_target=balance_target,
+                minimum_transitions=minimum_transitions,
+            )
+            transitions = len(episode.arrays["executed_action"])
+            balance_class = _episode_balance_class(episode, balance_kind)
+            if transitions < minimum_transitions or (
+                balance_target is not None
+                and balance_class != balance_target
+            ):
+                continue
+            retained = min(retained_transitions_per_episode, transitions)
+            compact = slice_episode_sequence(
+                episode,
+                start=transitions - retained,
+                transitions=retained,
+                slot=0,
+                slot_count=1,
+            )
+            metadata = {
+                **compact.metadata,
+                "collector": HOLDOUT_COLLECTOR,
+                "holdout_phase": holdout_phase,
+                "holdout_slot": episode_index,
+                "seed_attempt": attempt,
+                "minimum_transitions": minimum_transitions,
+                "windows_per_episode": windows_per_episode,
+                "balance_kind": balance_kind or "none",
+                "balance_target": balance_target or "unconstrained",
+                "balance_class": balance_class,
+                "collision_class": _episode_collision_class(episode.metadata),
+                "retained_transitions": retained,
+                "holdout_excitation": {
+                    "motion_correlation": action_config.motion_correlation,
+                    "phase": holdout_phase,
+                    "task_conditioned": False,
+                },
+            }
+            store.append(replace(compact, metadata=metadata))
+            existing[slot] = seed
+            break
+        if slot not in existing:
+            raise RuntimeError(
+                f"causality holdout could not fill usable slot {slot}"
+            )
+
+
+def _collect_holdout_attempt(
+    collector: AutonomousEpisodeCollector,
+    environment: RuntimeBackend,
+    preprocessor: HighResolutionVisionPreprocessor,
+    action_scaling: LatentActionScaling,
+    action_config: RandomRLExplorationConfig,
+    *,
+    task_id: str,
+    seed: int,
+    balance_kind: str | None,
+    balance_target: str | None,
+    minimum_transitions: int,
+):
+    positive = balance_target == "positive"
+    if not positive:
+        return collector.collect(
+            environment,
+            RandomRLActionSource(action_scaling, action_config),
+            task_id=task_id,
+            seed=seed,
+        )
+    search_config = replace(
+        collector.config,
+        retained_transition_capacity=minimum_transitions,
+        camera_render_start_transition=collector.config.maximum_steps,
+    )
+    search = AutonomousEpisodeCollector(preprocessor, search_config).collect(
+        environment,
+        RandomRLActionSource(action_scaling, action_config),
+        task_id=task_id,
+        seed=seed,
+    )
+    if _episode_balance_class(search, balance_kind) != "positive":
+        return search
+    collected = int(search.metadata["collection_transition_count"])
+    camera_warmup = min(4, max(0, collected - minimum_transitions))
+    replay_config = replace(
+        collector.config,
+        maximum_steps=collected,
+        retained_transition_capacity=minimum_transitions,
+        camera_render_start_transition=(
+            collected - minimum_transitions - camera_warmup
+        ),
+    )
+    replay = AutonomousEpisodeCollector(preprocessor, replay_config).collect(
+        environment,
+        RandomRLActionSource(action_scaling, action_config),
+        task_id=task_id,
+        seed=seed,
+    )
+    if (
+        _episode_balance_class(replay, balance_kind) != "positive"
+        or int(replay.metadata["collection_transition_count"]) != collected
+    ):
+        raise RuntimeError("holdout deterministic replay differs from search")
+    return replace(
+        replay,
+        metadata={
+            **replay.metadata,
+            "search_rendering": "deferred",
+            "search_transition_count": collected,
+            "camera_warmup_transitions": camera_warmup,
+        },
     )
 
 
@@ -399,6 +510,7 @@ def _holdout_collection_config(
             positive and balance_kind == "collision"
         ),
         minimum_stop_steps=minimum_transitions,
+        retained_transition_capacity=minimum_transitions,
     )
 
 

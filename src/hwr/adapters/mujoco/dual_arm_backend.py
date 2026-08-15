@@ -114,6 +114,8 @@ class MujocoDualArmBackend:
         self._sequence = 0
         self._steps = 0
         self._result: EpisodeResult | None = None
+        self._camera_rendering_enabled = True
+        self._cached_cameras = ()
         self._left_targets = np.asarray(config.left_arm_home, dtype=np.float64)
         self._right_targets = np.asarray(config.right_arm_home, dtype=np.float64)
         self._left_tool_site = self._site_id("left_grasp_center")
@@ -134,6 +136,8 @@ class MujocoDualArmBackend:
         self._sequence = 0
         self._steps = 0
         self._result = None
+        self._camera_rendering_enabled = True
+        self._cached_cameras = ()
         self._reset_base()
         self._reset_arms()
         self._reset_object()
@@ -146,6 +150,9 @@ class MujocoDualArmBackend:
     def observe(self) -> DualArmObservation:
         self._require_active()
         return self._observation()
+
+    def set_camera_rendering(self, enabled: bool) -> None:
+        self._camera_rendering_enabled = bool(enabled)
 
     def capture_state_snapshot(self) -> PhysicalStateSnapshot:
         """Capture physical continuation state without reward or task stage."""
@@ -540,33 +547,46 @@ class MujocoDualArmBackend:
             base_twist=base_twist,
             imu=tuple(float(value) for value in self.data.sensordata),
         )
-        cameras = (
-            self.renderer.rgb(
-                self.data,
-                "head_rgb",
-                timestamp_ns=timestamp_ns,
-                frame_index=self._sequence,
-            ),
-            self.renderer.depth(
-                self.data,
-                "head_depth",
-                timestamp_ns=timestamp_ns,
-                frame_index=self._sequence,
-            ),
-            self.renderer.rgb(
-                self.data,
-                "left_wrist_rgb",
-                timestamp_ns=timestamp_ns,
-                frame_index=self._sequence,
-            ),
-            self.renderer.rgb(
-                self.data,
-                "wrist_rgb",
-                timestamp_ns=timestamp_ns,
-                frame_index=self._sequence,
-                camera_id="right_wrist_rgb",
-            ),
-        )
+        if self._camera_rendering_enabled:
+            cameras = (
+                self.renderer.rgb(
+                    self.data,
+                    "head_rgb",
+                    timestamp_ns=timestamp_ns,
+                    frame_index=self._sequence,
+                ),
+                self.renderer.depth(
+                    self.data,
+                    "head_depth",
+                    timestamp_ns=timestamp_ns,
+                    frame_index=self._sequence,
+                ),
+                self.renderer.rgb(
+                    self.data,
+                    "left_wrist_rgb",
+                    timestamp_ns=timestamp_ns,
+                    frame_index=self._sequence,
+                ),
+                self.renderer.rgb(
+                    self.data,
+                    "wrist_rgb",
+                    timestamp_ns=timestamp_ns,
+                    frame_index=self._sequence,
+                    camera_id="right_wrist_rgb",
+                ),
+            )
+            self._cached_cameras = cameras
+        else:
+            if not self._cached_cameras:
+                raise RuntimeError("camera rendering cannot be deferred before one frame")
+            cameras = tuple(
+                replace(
+                    frame,
+                    timestamp_ns=timestamp_ns,
+                    frame_index=self._sequence,
+                )
+                for frame in self._cached_cameras
+            )
         return DualArmObservation(
             timestamp_ns=timestamp_ns,
             sequence_id=self._sequence,

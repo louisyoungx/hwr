@@ -114,6 +114,28 @@ def test_formal_randomization_is_reproducible_for_the_same_profile_and_seed() ->
     assert first_audit["randomization"] == second_audit["randomization"]
 
 
+def test_formal_runtime_can_defer_and_resume_camera_rendering() -> None:
+    task_id = "clear_dining_table_3d/v1"
+    backend = _backend(task_id)
+    try:
+        observation = backend.reset(seed=42, task_id=task_id)
+        initial_payload = observation.cameras[0].payload
+        backend.set_camera_rendering(False)
+        deferred = backend.apply(_idle(observation)).observation
+        backend.set_camera_rendering(True)
+        resumed = backend.observe()
+    finally:
+        backend.close()
+
+    assert deferred.cameras[0].payload == initial_payload
+    assert deferred.sequence_id in (
+        observation.sequence_id,
+        observation.sequence_id + 1,
+    )
+    assert resumed.sequence_id == observation.sequence_id + 1
+    assert resumed.cameras[0].timestamp_ns == resumed.timestamp_ns
+
+
 def test_formal_runtime_rejects_predicted_severe_collision_before_commit() -> None:
     task_id = "clear_dining_table_3d/v1"
     backend = _backend(task_id)

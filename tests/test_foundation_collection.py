@@ -211,6 +211,34 @@ def test_collector_stops_after_retaining_safety_intervention_evidence() -> None:
     )
 
 
+def test_collector_bounds_retained_episode_buffers() -> None:
+    preprocessor = HighResolutionVisionPreprocessor(
+        HighResolutionVisionConfig(), _calibrations()
+    )
+    collector = AutonomousEpisodeCollector(
+        preprocessor,
+        AutonomousCollectionConfig(
+            "fixture-env/v1",
+            "abc123",
+            maximum_steps=5,
+            retained_transition_capacity=2,
+        ),
+    )
+    episode = collector.collect(
+        _Backend(intervention_sequence=1, terminal_sequence=5),
+        RandomRLActionSource(LatentActionScaling()),
+        task_id="fixture/v1",
+        seed=9,
+    )
+
+    assert episode.arrays["executed_action"].shape == (2, 16)
+    assert episode.arrays["rgb_uint8"][:, 0, 0, 0, 0].tolist() == [3, 4, 5]
+    assert episode.arrays["safety_intervention"].tolist() == [0.0, 0.0]
+    assert episode.metadata["collection_transition_count"] == 5
+    assert episode.metadata["retained_transition_count"] == 2
+    assert len(episode.metadata["interaction_trace"]) == 2
+
+
 def test_random_rl_source_is_seeded_and_observation_independent() -> None:
     first = RandomRLActionSource(LatentActionScaling())
     second = RandomRLActionSource(LatentActionScaling())

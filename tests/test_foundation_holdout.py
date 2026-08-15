@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from types import SimpleNamespace
 
 import pytest
 
+import hwr.train.foundation_holdout as foundation_holdout
 from hwr.train.foundation_holdout import (
     ACTION_EXECUTION_VALIDATION_PHASE,
     COLLISION_VALIDATION_PHASE,
@@ -11,6 +13,7 @@ from hwr.train.foundation_holdout import (
     SYSTEM_IDENTIFICATION_PHASE,
     _collision_balance_target,
     _episode_collision_class,
+    _collect_holdout_attempt,
     _holdout_collection_config,
     _holdout_motion_correlation,
     causality_batches_by_task,
@@ -18,6 +21,7 @@ from hwr.train.foundation_holdout import (
     select_causality_windows,
 )
 from hwr.train.foundation_exploration import RandomRLExplorationConfig
+from hwr.train.foundation_collection import AutonomousCollectionConfig
 
 
 class _Loader:
@@ -182,3 +186,90 @@ def test_only_system_identification_cycles_excitation_correlations() -> None:
             == 0.96
             for index in range(16)
         )
+
+
+def test_positive_holdout_search_replays_deterministic_tail(monkeypatch) -> None:
+    episodes = []
+
+    @dataclass(frozen=True)
+    class Episode:
+        arrays: dict[str, list[float]]
+        metadata: dict[str, object]
+
+    class Collector:
+        def __init__(self, config):
+            self.config = config
+
+        def collect(self, environment, source, *, task_id, seed):
+            del environment, source, task_id, seed
+            positive = self.config.stop_after_safety_intervention
+            steps = 4
+            labels = [0.0, 0.0, 0.0, float(positive)]
+            episode = Episode(
+                arrays={
+                    "executed_action": [0] * min(
+                        steps, self.config.retained_transition_capacity or steps
+                    ),
+                    "safety_intervention": labels[
+                        -(self.config.retained_transition_capacity or steps) :
+                    ],
+                },
+                metadata={
+                    "collection_transition_count": steps,
+                    "collection_stop_reason": (
+                        "safety_intervention_evidence"
+                        if positive
+                        else "environment"
+                    ),
+                },
+            )
+            episodes.append((self.config, episode))
+            return episode
+
+    collector = Collector(
+        AutonomousCollectionConfig(
+            "fixture/v1",
+            "abc123",
+            maximum_steps=8,
+            stop_after_safety_intervention=True,
+            minimum_stop_steps=2,
+            retained_transition_capacity=2,
+        )
+    )
+    monkeypatch.setattr(
+        foundation_holdout,
+        "AutonomousEpisodeCollector",
+        lambda preprocessor, config: Collector(config),
+    )
+    monkeypatch.setattr(
+        foundation_holdout,
+        "_episode_balance_class",
+        lambda episode, kind: (
+            "positive"
+            if any(episode.arrays["safety_intervention"])
+            else "negative"
+        ),
+    )
+    monkeypatch.setattr(
+        foundation_holdout, "RandomRLActionSource", lambda *args: object()
+    )
+
+    episode = _collect_holdout_attempt(
+        collector,
+        object(),
+        object(),
+        object(),
+        RandomRLExplorationConfig(),
+        task_id="fixture/v1",
+        seed=1,
+        balance_kind="safety_intervention",
+        balance_target="positive",
+        minimum_transitions=2,
+    )
+
+    assert len(episodes) == 2
+    assert episodes[0][0].camera_render_start_transition == 8
+    assert episodes[1][0].camera_render_start_transition == 0
+    assert episode.metadata["search_transition_count"] == 4
+    assert episode.metadata["camera_warmup_transitions"] == 2
+    assert episode.arrays["safety_intervention"][-1] == 1.0
