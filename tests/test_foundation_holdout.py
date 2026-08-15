@@ -6,15 +6,18 @@ import pytest
 
 from hwr.train.foundation_holdout import (
     ACTION_EXECUTION_VALIDATION_PHASE,
+    COLLISION_VALIDATION_PHASE,
     SYSTEM_IDENTIFICATION_CORRELATIONS,
     SYSTEM_IDENTIFICATION_PHASE,
     _collision_balance_target,
     _episode_collision_class,
     _holdout_collection_config,
+    _holdout_motion_correlation,
     causality_batches_by_task,
     causality_window_manifest,
     select_causality_windows,
 )
+from hwr.train.foundation_exploration import RandomRLExplorationConfig
 
 
 class _Loader:
@@ -153,3 +156,29 @@ def test_collision_class_uses_retained_physical_audit() -> None:
             "interaction_audit": {"severe_collision_count": 0.0},
         }
     ) == "negative"
+
+
+def test_only_system_identification_cycles_excitation_correlations() -> None:
+    exploration = RandomRLExplorationConfig(0.96, 0.05)
+
+    assert tuple(
+        _holdout_motion_correlation(
+            exploration,
+            holdout_phase=SYSTEM_IDENTIFICATION_PHASE,
+            episode_index=index,
+        )
+        for index in range(4)
+    ) == SYSTEM_IDENTIFICATION_CORRELATIONS
+    for phase in (
+        ACTION_EXECUTION_VALIDATION_PHASE,
+        COLLISION_VALIDATION_PHASE,
+    ):
+        assert all(
+            _holdout_motion_correlation(
+                exploration,
+                holdout_phase=phase,
+                episode_index=index,
+            )
+            == 0.96
+            for index in range(16)
+        )

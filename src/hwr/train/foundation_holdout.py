@@ -25,7 +25,7 @@ from hwr.train.foundation_exploration import (
 from hwr.train.foundation_sequence_reservoir import slice_episode_sequence
 
 
-HOLDOUT_COLLECTOR = "foundation-causality-holdout/v7"
+HOLDOUT_COLLECTOR = "foundation-causality-holdout/v8"
 SYSTEM_IDENTIFICATION_PHASE = "system_identification"
 COLLISION_VALIDATION_PHASE = "collision_validation"
 ACTION_EXECUTION_VALIDATION_PHASE = "action_execution_validation"
@@ -126,11 +126,10 @@ def collect_causality_holdout(
                         action_scaling,
                         replace(
                             exploration_config,
-                            motion_correlation=(
-                                SYSTEM_IDENTIFICATION_CORRELATIONS[
-                                    episode_index
-                                    % len(SYSTEM_IDENTIFICATION_CORRELATIONS)
-                                ]
+                            motion_correlation=_holdout_motion_correlation(
+                                exploration_config,
+                                holdout_phase=holdout_phase,
+                                episode_index=episode_index,
                             ),
                         ),
                     ),
@@ -167,13 +166,13 @@ def collect_causality_holdout(
                     "balance_class": balance_class,
                     "collision_class": _episode_collision_class(episode.metadata),
                     "retained_transitions": retained,
-                    "system_identification_excitation": {
-                        "motion_correlation": (
-                            SYSTEM_IDENTIFICATION_CORRELATIONS[
-                                episode_index
-                                % len(SYSTEM_IDENTIFICATION_CORRELATIONS)
-                            ]
+                    "holdout_excitation": {
+                        "motion_correlation": _holdout_motion_correlation(
+                            exploration_config,
+                            holdout_phase=holdout_phase,
+                            episode_index=episode_index,
                         ),
+                        "phase": holdout_phase,
                         "task_conditioned": False,
                     },
                 }
@@ -346,6 +345,19 @@ def _collision_balance_target(
     if episodes_per_task == 1:
         return None
     return "positive" if episode_index < episodes_per_task // 2 else "negative"
+
+
+def _holdout_motion_correlation(
+    exploration: RandomRLExplorationConfig,
+    *,
+    holdout_phase: str,
+    episode_index: int,
+) -> float:
+    if holdout_phase == SYSTEM_IDENTIFICATION_PHASE:
+        return SYSTEM_IDENTIFICATION_CORRELATIONS[
+            episode_index % len(SYSTEM_IDENTIFICATION_CORRELATIONS)
+        ]
+    return exploration.motion_correlation
 
 
 def _episode_collision_class(metadata: Mapping[str, object]) -> str:

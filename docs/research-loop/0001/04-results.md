@@ -130,3 +130,56 @@ rewrite 的模型判错。
 ## 当前状态
 
 `R0001-P01` 仍为 `inconclusive`，等待 v2 总门禁和正式运行结果。
+
+## `R0001-P01` 第二次启动：`inconclusive`
+
+### 运行身份
+
+- run ID：`r0001-p01-baseline-v2-s20260812`
+- 源码提交：`be7ad047c2f4a1577636ade134ad5ae55e17fa9d`
+- 开始时间：2026-08-15 12:17:36 +08:00
+- 停止时间：2026-08-15 13:19:10 +08:00
+- 退出状态：143，主 Agent 主动停止
+- 运行目录：`runs/foundation-world-model/r0001-p01-baseline-v2-s20260812`
+
+v2 开发总门禁通过。修复后的有界系统辨识在约 3 分钟内完成三个任务共 24 Episode、
+3,072 transition，相比 v1 约 105 分钟的启动阶段显著消除了无效物理步。
+
+但随后动作执行留出仍未产生第一个正例。Tick 1 后继续观察约 35 分钟，进程持续执行
+MuJoCo 物理和渲染、无异常，但 holdout manifest 仍停留在系统辨识的 24 shard。
+
+### `R0001-F06`：系统辨识激励误用于所有留出阶段
+
+`collect_causality_holdout` 无条件按 Episode 循环
+`SYSTEM_IDENTIFICATION_CORRELATIONS=(0.0, 0.5, 0.9, 0.96)`。动作执行正例槽 0 因此使用
+`ρ=0.0`，而前一轮可达性验证和正式训练随机源使用 `ρ=0.96`。
+
+只读、无渲染反例验证使用完全相同的正式环境、动作执行 slot 0 seed 与 `ρ=0.0`：
+
+- 餐桌任务前 16 个预注册 attempt；
+- 每个 attempt 运行完整 6,000 步；
+- 全部以 `formal_household_timeout` 结束；
+- 没有一次 `predicted_severe_collision`。
+
+这与 v2 正式运行约 60 分钟无第一个动作执行正例一致。继续到每槽 64 attempt 只会增加
+无效计算，主 Agent 因此停止 v2。v2 同样没有训练 Episode、update 或 checkpoint，不恢复。
+
+## 第二次平台修复
+
+- 四档相关系数只用于 `system_identification`；
+- `action_execution_validation` 与 `collision_validation` 使用冻结正式随机探索参数
+  `motion_correlation=0.96`；
+- holdout provenance 升级为 `foundation-causality-holdout/v8`；
+- metadata 改为通用 `holdout_excitation` 并显式记录 phase；
+- 增加 phase 隔离回归，禁止系统辨识激励泄漏到其他留出。
+
+前一轮真实 `ρ=0.96` 诊断已经证明三任务在 attempt 2/1/3 内分别产生预测安全正例，显著低于
+64 attempt 上限。
+
+## v3 重新冻结
+
+- v1、v2 均保留为 `inconclusive` 平台失败证据；
+- v3 run ID：`r0001-p01-baseline-v3-s20260812`；
+- v3 使用相同训练 seed、模型、任务、预算、准入和最终评测；
+- v3 继续由 detached `tmux` 监督、定时看门狗和防休眠会话持有；
+- v3 通过总门禁前不启动正式训练。

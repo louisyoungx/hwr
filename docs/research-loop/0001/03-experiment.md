@@ -16,6 +16,11 @@
 平台缺陷记为 `inconclusive`，详见 `04-results.md`。v2 只用于建立修复后平台的当前
 基线，不将 v1 与 v2 的差异解释为能力提升。
 
+第二次 run `r0001-p01-baseline-v2-s20260812` 验证了有界系统辨识采集，但因
+`R0001-F06` 将系统辨识专用的 `ρ=0.0` 激励误用于动作执行正例槽而记为
+`inconclusive`。v3 将四档相关系数严格限制在系统辨识 phase；动作执行与碰撞留出使用
+冻结正式随机探索参数 `ρ=0.96`。v1、v2 均无 checkpoint，不恢复。
+
 训练源码提交为本目录 `00-context.md`～`03-experiment.md` 完成原子提交后的
 `feat/research-loop` HEAD。Git 提交身份由随后生成的
 `artifacts/development-ready.json`、run 内副本和 `run-manifest.json` 共同不可变记录；
@@ -37,7 +42,7 @@
 
 | 范围 | 负责人 | 分支或运行 | 文件所有权 |
 |---|---|---|---|
-| 基线冻结、门禁、运行、结果归因 | 主 Agent | `feat/research-loop` / `r0001-p01-baseline-v2-s20260812` | `docs/research-loop/0001/`、运行与日志索引 |
+| 基线冻结、门禁、运行、结果归因 | 主 Agent | `feat/research-loop` / `r0001-p01-baseline-v3-s20260812` | `docs/research-loop/0001/`、运行与日志索引 |
 | `R0001-P04` 统计修复 | 后续唯一实施 Agent | `eval/R0001-P04-bootstrap` | `src/hwr/train/foundation_action_probe.py` 及对应测试 |
 | 条件行为候选 | 尚未分配 | 独立 `exp/R0001-*` worktree | 只在读取 `P01` 失败指纹后分配 |
 
@@ -172,7 +177,7 @@ seed 分离。不得根据结果换 seed 或重跑挑选。
 run ID：
 
 ```text
-r0001-p01-baseline-v2-s20260812
+r0001-p01-baseline-v3-s20260812
 ```
 
 命令：
@@ -181,7 +186,7 @@ r0001-p01-baseline-v2-s20260812
 PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.65 \
 PYTORCH_MPS_LOW_WATERMARK_RATIO=0.50 \
 .venv/bin/python -m hwr.apps.train_foundation_world_model \
-  --run-id r0001-p01-baseline-v2-s20260812 \
+  --run-id r0001-p01-baseline-v3-s20260812 \
   --output-root runs/foundation-world-model \
   --device mps \
   --foundation-device mps \
@@ -237,9 +242,9 @@ PYTORCH_MPS_LOW_WATERMARK_RATIO=0.50 \
 
 ```bash
 .venv/bin/python -m hwr.apps.evaluate_foundation_world_model \
-  runs/foundation-world-model/r0001-p01-baseline-v2-s20260812 \
+  runs/foundation-world-model/r0001-p01-baseline-v3-s20260812 \
   --output-root runs/foundation-world-model-eval \
-  --evaluation-id r0001-p01-baseline-v2-s20260812 \
+  --evaluation-id r0001-p01-baseline-v3-s20260812 \
   --seed-count 40 \
   --device mps \
   --video-seed-count 1
