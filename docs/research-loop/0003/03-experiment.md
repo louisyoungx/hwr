@@ -93,13 +93,11 @@
   actual action difference 求均值。
 - 每个 Episode、每个 horizon 的 outcome：
   plus/minus 当前无延迟可控状态之差。
-- 主 estimand：4-fold、无截距、多输出 ridge 对
-  `actual action difference -> physical state difference` 的 Episode 外预测增益。
-- folds 固定为 `episode_index % 4`；ridge 固定为 `1e-3`。
-- 主统计量：
-  `1 - cross_fitted_SSE / zero_predictor_SSE`。
-- 每个 permutation 在 Episode 层打乱 first-stage 行，并重新运行完整 4-fold 拟合；
-  每分区固定 999 次 permutation。
+- 主 estimand：同状态配对后的归一化 action–state cross-moment：
+  `||X^T Y / N||_F^2 / (mean(||X||^2) * mean(||Y||^2))`。
+- `X` 为 Episode×14 的 actual first-stage，`Y` 为 Episode×16 的 physical outcome；
+  两者都不拟合 state nuisance。
+- 正式数据在 Episode 层对 `Y` 做 999 次随机 sign-flip，重算完整统计量。
 - family：三任务×四 horizon，共 12 个确认性检验。
 - 每分区 p-value：
   `(1 + permutation_stat >= observed_stat 的次数) / 1000`。
@@ -124,14 +122,15 @@
 - sham divergence 定义为 proposal、actual action、当前无延迟状态、reward、event 或最终
   runtime snapshot 任一不相等。
 - 观测 divergence 为 0/64 时，Clopper-Pearson 单侧 95% 上界必须 `<=0.05`。
-- blind injection 使用实际 preflight first-stage、相同 folds、相同 permutation/Holm
-  pipeline，运行 1,000 个 null 与 1,000 个 planted trial。
+- blind injection 使用实际 preflight first-stage和相同 cross-moment/Holm 统计，运行
+  1,000 个 null 与 1,000 个 planted trial。
 - 每个 task×horizon 的响应矩阵由 seed
   `20261017 + task_index * 104729 + horizon * 1009`
   生成，列归一化。
 - null outcome：RMS 0.5 的独立高斯噪声。
 - planted outcome：
   `0.5 * normalized_first_stage @ response_matrix + null_noise`。
+- 每分区用 1,000 个经验 null 统计校准 p-value；null trial 使用 leave-one-out 校准。
 - 全 12 分区经 Holm 通过才算 trial passed。
 - null family-wise FPR 的 Clopper-Pearson 单侧 95% 上界 `<=0.05`。
 - planted family-wise power 的 Clopper-Pearson 单侧 95% 下界 `>=0.80`。
