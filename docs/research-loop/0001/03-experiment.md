@@ -536,3 +536,118 @@ holdout:   520260901, 520365630, 520470359, 520575088,
   - 固定 bootstrap 可重现；
   - 不运动且低干预但成功率失败时仍拒绝；
   - 多 seed aggregator 拒绝旧 acceptance schema。
+
+## `R0001-P16` 冻结实验
+
+### 类型与目标
+
+- 类型：Action Probe 测量功效修复，不是能力改进。
+- 不训练模型、不采集新物理数据、不改变 `1.05/1.01` 门槛。
+- 使用 P09 正式 96 Episode 作为固定设计矩阵；其真实 target 和真实 ratio 不进入合成
+  接受判定。
+- 回答：
+
+> 在保留真实 state/action 分布、Episode 层级、自相关、窗口边界和回归维度时，当前
+> `7×16` 与候选连续证据设计，能否以不超过 5% 的假通过率检出预注册的动作效应，且
+> 检出率至少为 80%？
+
+### 设计臂
+
+对每个 rho、每个任务、每个 source Episode 固定取前 112 个评分 transition，构建：
+
+1. `fragmented_7x16`：相邻 7 个 16-transition shard，只允许 shard 内 horizon；
+2. `continuous_same_7_starts`：连续 112，但每个 horizon 只使用碎片臂对应的 7 个起点；
+3. `continuous_all_starts`：连续 112，使用全部合法 horizon 起点。
+
+三臂原始 observation、action、Episode、seed 和 112-transition 内容 SHA-256 必须相同。
+第二臂用于区分“硬边界”与“有效回归行数”；第三臂代表 `P14` 候选测量合同。
+
+### 固定合成过程
+
+- trial 数：每种效应条件 500。
+- task：三个正式任务同时进入每个 trial。
+- horizon：`1/4/8/16`。
+- ridge：`1e-3`。
+- bootstrap：P04 v4 同步 Episode 合同，每 trial 200 samples。
+- 基础 seed：`20260916`。
+- trial `i` 的系数和噪声 seed：
+  - state coefficients：`20260916 + i * 1_000_003 + 11`
+  - action coefficients：`20260916 + i * 1_000_003 + 23`
+  - training noise：`20260916 + i * 1_000_003 + 37`
+  - holdout noise：`20260916 + i * 1_000_003 + 53`
+  - bootstrap：`20260916 + i * 1_000_003 + 71`
+- state/action 输入只用 training split 的均值和标准差标准化，再应用于 holdout。
+- 每个 task 独立生成固定正态系数矩阵；每列归一化为单位 L2 norm。
+- target 维度为当前 controllable state 的 16 维。
+- state signal RMS 归一化为 `1.0`。
+- Episode 内噪声为固定 AR(1)，`rho_noise=0.8`；创新为标准正态，最终噪声 RMS 归一化为
+  `0.5`。training 与 holdout 噪声独立，Episode 之间独立。
+- `null`：
+  `target = state_signal + noise`。
+- `planted`：
+  `target = state_signal + 0.5 * action_signal + noise`，其中 action signal RMS 归一化为
+  `1.0`。
+- 不读取真实 target、probe ratio、任务奖励、安全标签或 P09 决策来生成系数或调 scale。
+- 所有归一化只用相应 trial 的 training split；holdout 不参与任何参数选择。
+
+### Trial 判定
+
+每个 trial 对三任务、四个 horizon 使用与正式 action probe 相同的 state-only 与
+state+action ridge、点估计和同步 Episode bootstrap。
+
+trial `passed` 当且仅当：
+
+- 所有任务、所有 horizon 点估计 ratio `>=1.05`；
+- 所有任务的同步 `p05>=1.01`；
+- aggregate 同步 `p05>=1.01`；
+- 所有值有限。
+
+每个设计臂分别报告：
+
+- `null_false_positive_rate`；
+- `planted_detection_power`；
+- 每任务、每 horizon 的假通过率和检出率；
+- 设计矩阵行数、列数、数值秩和 condition number；
+- 500 个 trial 的全部 pass/fail，不挑选。
+
+### 接受标准
+
+`P16 accepted as evaluation repair` 需要：
+
+1. 合成生成器确定性重现；
+2. 动作系数置零时 null 与 planted 结果完全一致；
+3. action permutation 负对照的通过率 `<=5%`；
+4. 至少一个设计臂满足：
+   - `null_false_positive_rate <= 0.05`
+   - `planted_detection_power >= 0.80`
+5. `continuous_all_starts` 若被用于 `P14`，必须自身满足上述两项，不得借其他臂功效；
+6. 不得根据结果改变 action scale、噪声、trial、seed、ridge 或门槛。
+
+各设计臂解释：
+
+- FPR `>5%`：设计无效，不能用于正结论；
+- power `<80%`：设计功效不足，失败只能记 `inconclusive`；
+- 两项均满足：允许进入 P14 新 seed 物理确认，但不代表 P14 已接受。
+
+### 实现和验证边界
+
+- 唯一实施 Agent：`eval/R0001-P16-probe-power` worktree。
+- 允许新增独立 eval module、CLI app、测试和 pyproject entry。
+- 不修改正式 action probe 数值实现、训练、Replay、模型或门槛。
+- 测试覆盖：
+  - 三臂原始 transition 哈希一致；
+  - Episode bootstrap，不使用 transition bootstrap；
+  - 固定 seed 重现；
+  - 零 action coefficient 等价；
+  - permutation 负对照；
+  - 错误 Episode/sample 数拒绝；
+  - 不读取真实 target。
+- 先运行 10-trial smoke；正式 500+500 trial 使用 `traex-host-exec`，自动唤起 prompt 必须
+  包含“阅读 AGENTS.md”，不得重复启动。
+
+## `P16` 后 `P14` 路由
+
+1. `continuous_all_starts` 功效合格：冻结 P14 新物理 seed bank，执行一次性三臂确认。
+2. 仅 fragmented 合格：拒绝 P14 的功效解释，重审机制。
+3. 所有臂功效不足：Action Probe 结论标记 `inconclusive`，不得继续 P14/P15 或改变门槛。
+4. P16 只决定测量设计是否可用，不改变 P09 的 `rejected` 结论。
