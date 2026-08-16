@@ -290,3 +290,165 @@ PYTORCH_MPS_LOW_WATERMARK_RATIO=0.50 \
 
 任何条件候选必须另建分支或 worktree、指定唯一实施负责人并补充自己的冻结合同；不得在
 `P01` run 内切换条件。
+
+## `R0001-P04` 实施后冻结证据
+
+- 实现提交：`b665c9d96049d80e1951c6a8e941af4695d23d2a`
+- 类型：隔离评测修复，不是能力候选。
+- action probe schema：`hwr.foundation-data-action-probe/v4`
+- bootstrap 合同：
+  `shared-holdout-episode-multiplicity-across-horizons/v1`
+- 同一任务四个 horizon 的每个 replicate 共用相同 holdout Episode multiplicity，再在
+  replicate 内取最弱 horizon。
+- v4 冻结数据旧/新双报告路径：
+  - `diagnostics/action-probe-p04-v3.json`
+  - `diagnostics/action-probe-p04-v4.json`
+  - `diagnostics/action-probe-p04-comparison.json`
+- 双报告必须满足点估计、绝对 MSE、训练/留出数量和 Episode 列表零差异。
+
+## `R0001-P09` 冻结实验
+
+### 类型与问题
+
+- 类型：数据/测量合同修复，`diagnostic-only -> isolated repair`。
+- 不宣称能力提升。
+- 训练模型：禁止。
+- 正式训练：只有本节判定完成后才重新路由。
+- 回答的问题：
+
+> 在显式保留 observation lag、实际 plant action 和足够前置动作且不丢弃任何预注册
+> 样本时，固定正式随机激励 `rho=0.96` 的三个任务是否已经满足全部
+> `1/4/8/16` 步动作可辨识门槛？
+
+### 唯一变量和禁止捆绑
+
+唯一比较变量是 action probe 中 observation transition 对应的物理动作索引：
+
+- 对照：旧合同，当前控制周期实际 plant action 连接相邻可见 observation；
+- 候选：按该 Episode 显式记录的 `observation_latency_steps` 回移实际 plant action。
+
+本候选不得修改：
+
+- 随机动作相关系数、幅值、夹爪翻转率或任务分配；
+- RSSM 输入、世界模型结构、loss、batch sampler 或 update；
+- 动作执行头、proposal history、安全分类或安全阈值；
+- 任务、物理随机化范围、成功条件和原 `1.05/1.01` 门槛。
+
+### 负责人和文件所有权
+
+| 范围 | 负责人 | 分支 | 文件所有权 |
+|---|---|---|---|
+| `P09` 实现、测试与短验证 | 唯一实施 Agent | `exp/R0001-P09-observation-lag` | 新诊断 app/module、必要的 trajectory provenance、对应测试 |
+| 文档、运行与归因 | 主 Agent | `feat/research-loop` | `docs/research-loop/0001/`、运行索引 |
+
+实施 Agent 若发现必须修改 RSSM、训练 batch 或执行头，应停止并报告，不得扩展范围。
+
+### 配对数据
+
+任务：
+
+1. `clear_dining_table_3d/v1`
+2. `store_kitchen_items_3d/v1`
+3. `tidy_living_room_3d/v1`
+
+每任务使用 8 个训练轨迹 seed 和 8 个 holdout seed。为隔离 latency，不从现有任务随机化
+结果挑选 seed；诊断 app 在 reset 后只把 `observation_latency_steps` 强制为预注册的
+`0,1,0,1,0,1,0,1`，其他环境随机化由同一个 seed 保持相同。训练与 holdout seed：
+
+```text
+training:  20260901, 20365630, 20470359, 20575088,
+           20679817, 20784546, 20889275, 20994004
+holdout:   520260901, 520365630, 520470359, 520575088,
+           520679817, 520784546, 520889275, 520994004
+```
+
+三个任务使用相同 seed bank，但后端任务 ID 不同；报告按任务独立，不跨任务混合拟合。
+
+每条轨迹：
+
+- 固定 128 transition；
+- 相机 reset 后关闭逐步渲染，只保留物理状态、proposal、实际 plant action、安全与碰撞；
+- 保存 `observation_latency_steps`、`action_latency_steps`、`actuator_scale`；
+- 保存完整 128 transition，不使用 16-transition Replay shard 做本次最终判定；
+- lag 对齐不得减少 source Episode 数；
+- horizon=16、lag=1 仍必须保留完整训练与 holdout Episode。
+
+### 主诊断与确认组
+
+主诊断：
+
+- `motion_correlation=0.96`
+- `gripper_flip_probability=0.05`
+
+确认组：
+
+- `motion_correlation=0.50`
+- `gripper_flip_probability=0.05`
+
+确认组只检验结论是否依赖高相关随机过程，不用于选择 lag、ridge、seed、门槛或任何参数。
+
+### 线性 probe
+
+- 输入状态：当前可见 proprioception。
+- 动作：
+  - 对照为旧索引动作窗口；
+  - 候选为按显式 observation lag 回移后的实际 plant action 窗口。
+- target：可控状态在可见 observation 上的 `1/4/8/16` 步变化。
+- ridge：`1e-3`。
+- bootstrap：`P04` v4 同步 Episode 合同，200 samples。
+- 每任务独立拟合，训练和 holdout seed 严格互斥。
+
+### 接受标准
+
+`accepted` 需要主诊断与确认组同时满足：
+
+1. 三任务每个 horizon 点估计 ratio `>=1.05`；
+2. 三任务同步 bootstrap `p05>=1.01`；
+3. 每任务每 horizon 的训练 Episode 为 8、holdout Episode 为 8；
+4. lag=0 分区的旧/新点估计和 MSE在数值容差 `1e-10` 内一致；
+5. lag=1 分区不丢 Episode，且对齐后 state-action MSE 相对未对齐至少下降 `10%`；
+6. 没有非有限值、提前终止导致的样本不足或 provenance 缺失。
+
+若 `P09 accepted`：
+
+- 结论仅为旧 action probe 时间合同无效；
+- `R0001-P02` 因触发条件消失标记 `rejected without run`；
+- 后续必须用修正测量合同重新建立无行为改动基线；
+- 不能用本次无训练结果宣称世界模型或家务能力改善。
+
+### 拒绝和实验失效
+
+`rejected`：
+
+- 任一任务或 horizon 未过线；
+- `rho=0.5` 确认组不支持；
+- lag=1 对齐不降低 state-action MSE；
+- 收益依赖丢弃 Episode 或短轨迹。
+
+`inconclusive`：
+
+- lag provenance 不完整；
+- 训练/holdout seed 交叉；
+- 强制 lag 时改变其他随机化；
+- 配对组物理步数不同；
+- 需要修改安全层、任务、随机动作或模型才能完成。
+
+### 资源与命令
+
+- CPU/MuJoCo，无模型、无教师特征、无 MPS 训练。
+- 预计 96 条 × 128 transition；关闭逐步渲染的 smoke 约为 `163 step/s`。
+- 预期小于 20 分钟；若实际超过 20 分钟，使用 `traex-host-exec` 和 tmux 续接，不重复 run。
+- 运行 ID：`r0001-p09-observation-lag-s20260901`
+- 产物目录：
+  `runs/research-loop/0001/r0001-p09-observation-lag-s20260901`
+
+冻结命令由实施后新增 app 的 `--help` 精确记录；在实现提交前不得启动正式诊断。
+
+## `P09` 后路由
+
+1. `P09 accepted`：拒绝 `P02`，重新建立修正测量合同的无行为改动基线。
+2. `P09 rejected` 且固定 `rho=0.96` 仍存在真实数据失败：执行增强 `P02` 短验证。
+3. 修正数据 probe 全过、世界模型物理动作利用仍失败：执行 `P05`。
+4. 动作执行验证仍失败：先独立验证 `P10`；只有按 latency 分层仍失败且 `P10` 无效，
+   才验证 `P11`。
+5. `P12/P13` 必须在任何新正式闭环评测前实施和冻结，不改变上述训练候选归因。

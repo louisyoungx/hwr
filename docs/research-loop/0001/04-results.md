@@ -383,3 +383,113 @@ v4 的两遍确定性留出采集完成全部 72 个留出 shard，正式训练�
 5. `R0001-P04` 可对同一冻结数据独立执行 bootstrap 统计修复，但不得与 `P02` 的行为改动
    捆绑，也不得把统计差异计为能力提升；
 6. 当前不选择 `P03/P06/P07/P08`，不在 v4 run 内切换任何条件。
+
+## `R0001-P04`：同步 Episode bootstrap，`accepted as evaluation repair`
+
+### 实现与验证
+
+- 实现提交：`b665c9d96049d80e1951c6a8e941af4695d23d2a`
+- action probe schema：`hwr.foundation-data-action-probe/v4`
+- 同一任务的 `1/4/8/16` horizon 在每个 bootstrap replicate 中使用同一组 Episode
+  multiplicity，再在 replicate 内取最弱 horizon。
+- 相关测试：
+
+```text
+.venv/bin/python -m pytest \
+  tests/test_foundation_actor_readiness.py \
+  tests/test_foundation_online.py -q
+16 passed
+```
+
+- Python 文件/函数尺寸检查通过。
+- 新测试覆盖跨 horizon 相关、零效应、动作打乱、单 horizon 失败、固定 seed 重现性和
+  多 seed 稳定性。
+
+### v4 冻结数据旧/新双报告
+
+产物：
+
+- `diagnostics/action-probe-p04-v3.json`
+- `diagnostics/action-probe-p04-v4.json`
+- `diagnostics/action-probe-p04-comparison.json`
+
+在同一 v4 Replay 和系统辨识留出上：
+
+- 所有逐任务逐 horizon 点估计零差异；
+- state-only / state-action MSE 零差异；
+- 训练/留出 Episode 数、transition 数和 Episode ID 列表零差异；
+- 只改变跨 horizon bootstrap replicate 的耦合方式。
+
+| 分区 | v3 `p05` | v4 同步 `p05` |
+|---|---:|---:|
+| aggregate | 0.917784 | 0.911595 |
+| 餐桌 | 1.007304 | 0.996411 |
+| 厨房 | 0.962667 | 0.955427 |
+| 客厅 | 0.917784 | 0.911595 |
+
+同步合同在该数据上更保守，餐桌也从仅 bootstrap 角度由接近过线变为未过线；厨房和客厅的
+点估计失败完全不变。该变化不能算能力回归或改善，只表示旧 v3 的独立 horizon 重采样不符合
+原定义。
+
+因此 `R0001-P04` 标记为 `accepted as evaluation repair`。后续新基线必须使用 v4 测量合同，
+但 `P01` 的能力结论仍是 `rejected`。
+
+## observation lag 离线强诊断
+
+### 发现
+
+二次创新审查发现正式后端存在两个独立延迟：
+
+- plant action latency：训练 `0/1` 步；
+- observation latency：训练 `0/1` 步。
+
+后端返回的 `info["applied_action"]` 是当前物理步实际 plant action，但返回 observation 可能
+来自更早的物理状态。Replay 未保存 observation lag，action probe 和 RSSM 均把当前物理步
+动作与相邻可见 observation 直接配对。
+
+主 Agent 对 v4 冻结 Replay 和系统辨识留出执行只读离线诊断：
+
+1. 用不可变任务配置、task ID 和 seed 确定性重建每条 Episode 的 observation lag；
+2. 不训练模型；
+3. 只将用于 probe 的实际 plant action 窗口按 lag 回移；
+4. 使用 `P04` v4 同步 bootstrap。
+
+48 条训练与系统辨识源 Episode 中，18 条 lag=0，30 条 lag=1。
+
+### 结果
+
+| 任务 | 原最弱位置 | 原 ratio | 对齐后 ratio | 对齐后任务 `p05` |
+|---|---|---:|---:|---:|
+| 餐桌 | 1-step | 1.079737 | 1.251437 | 1.196090 |
+| 厨房 | 1-step | 1.002280 | 1.331355 | 1.238924 |
+| 客厅 | 16-step | 1.023931 | 10.805416 | 1.286383 |
+
+对齐后所有任务的 `1/4/8/16` 点估计与同步 bootstrap 均过原门槛。尤其厨房 1-step
+state-action MSE 从 `0.010234` 降至 `0.007236`，客厅 16-step 虽 ratio 大幅上升，
+state-action MSE 从 `0.088836` 上升到 `0.315394`，同时 state-only MSE 上升到
+`3.407966`，说明长 horizon 结果对样本组成高度敏感。
+
+### 不能直接接受的原因
+
+旧训练 Replay 每个 shard 只有 16 transition。lag=1、horizon=16 需要该 shard 前一物理步
+动作，但旧 shard 没有保存。离线脚本只能删除这些无上下文 shard，导致：
+
+- 餐桌、厨房 16-step 训练 transition 从 42 降到 14；
+- 客厅 16-step 训练 transition 从 84 降到 42；
+- 可能选择性保留 lag=0 或较易样本。
+
+因此该结果是足以改变实验路由的强诊断，但不是可接受的测量修复证据。产物保存在
+`diagnostics/r0001-observation-lag-offline.json`。
+
+## 更新后的路由
+
+本节取代上一节“直接进入 `P02`”的路由：
+
+1. 冻结并实施 `R0001-P09`，用完整 128-transition 轨迹、显式 lag 和不丢 Episode 的配对
+   数据确认 observation-action 时间合同；
+2. `P09` 若在正式 `rho=0.96` 和确认 `rho=0.5` 上全部过线，则接受测量修复，并将
+   `P02` 标为 `rejected without run`；
+3. `P09` 无丢样本后仍存在真实失败，才运行增强 `P02`；
+4. 世界模型、动作执行头和安全正例采样仍是独立瓶颈，分别按 `P05/P10/P11` 路由，不与
+   `P09` 捆绑；
+5. 当前仍没有家务闭环能力提升证据。

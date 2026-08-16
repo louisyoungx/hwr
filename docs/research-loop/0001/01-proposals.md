@@ -489,3 +489,119 @@ Episode，可减少 Episode 特定状态和动作自相关捷径，提高共享 
   `src/hwr/world_model/objectives.py`、`src/hwr/world_model/evaluation.py`
 - 旧负证据：`runs/foundation-world-model/foundation-wm-006/`、
   `runs/foundation-world-model/foundation-wm-007/`
+
+## `P01` 结果后的二次提案
+
+`R0001-P01` v4 在冻结的 24 Episode 判定点形成有效负基线后，主 Agent 重新启动三名
+创新 Agent。三方独立检查 v4 Replay、逐任务逐 horizon probe、世界模型动作因果、
+动作执行验证、正式后端随机化和闭环评测入口。原 `P02/P05` 保留稳定 ID；新增候选从
+`R0001-P09` 开始编号，不覆盖本轮已有观点。
+
+### `R0001-P09`：观测转移动作的物理时间对齐
+
+#### 瓶颈证据
+
+- 正式训练随机化包含 `0/1` 步 `observation_latency_steps`，评测扩大到 `1～3` 步。
+- 后端先执行当前 plant action，再把物理 observation 放入独立延迟队列。
+- Replay 保存当前物理步实际执行的 `executed_action`，但没有保存 observation lag；
+  action probe 和 RSSM 均默认 `action[t]` 连接 `observation[t] -> observation[t+1]`。
+- 对 v4 冻结数据按 task + seed 确定性重建 observation lag，并将动作窗口回移后：
+  - 厨房 1-step ratio 从 `1.002280` 升到 `1.331355`；
+  - 客厅 16-step ratio 从 `1.023931` 升到 `10.805416`；
+  - 三任务全部 `1/4/8/16` 点估计和同步 Episode bootstrap 均超过原门槛。
+- 该离线诊断仍不构成最终证据：旧 16-transition shard 没有显式前置动作，lag=1 的
+  16-step 重算会丢弃相应 shard，可能选择性抬高结果。
+
+#### 改进假设
+
+显式保存 observation latency 与足够的前置实际动作，使 action probe 使用真正导致可见
+observation 变化的物理动作，而不是当前控制周期动作，可以在不改变随机策略、模型、任务、
+安全层或门槛的情况下消除虚假的数据不可辨识失败。
+
+#### 影响范围
+
+- 先只修复数据 provenance、短物理诊断与 action probe 时间索引。
+- 不在同一候选中修改 RSSM 训练动作、Replay sampler、动作执行头或随机激励。
+- 不使用真实延迟作为 Actor 输入，不向策略暴露仿真器状态。
+- 该项是数据/测量合同修复，不能计作能力提升。
+
+#### 最小验证
+
+1. 使用三个正式任务，每任务固定 8 个训练 seed 和 8 个互斥 holdout seed。
+2. 每条轨迹固定 128 transition，显式保存 observation lag、action lag、实际执行动作和
+   前置动作；不得通过删除 lag=1 样本获得提升。
+3. 主诊断保持正式 `rho=0.96`；独立确认组使用预注册 `rho=0.5`。
+4. 同一轨迹双报告未对齐与真实 lag 对齐结果，不训练任何模型。
+5. lag=0 分区的新旧结果必须数值一致；lag=1 的每任务、每 horizon 样本数必须达到
+   冻结下界。
+
+#### 主要指标与守护指标
+
+- 三任务每个 `1/4/8/16` ratio `>= 1.05`。
+- 同步 Episode bootstrap `p05 >= 1.01`。
+- 对齐后的 state-action MSE 相对未对齐至少下降 `10%`，且 state-only MSE 不因样本
+  选择发生不可解释变化。
+- `rho=0.5` 确认组方向一致。
+- 配对采集的动作有效秩、RMS、jerk、安全干预、严重碰撞和提前终止完整报告。
+
+#### 失效条件、成本、风险与依赖
+
+- 任一任务或 horizon 仍失败，或收益只来自丢弃 lag=1 / 短 Episode：拒绝。
+- lag=0 分区发生数值变化：实验实现失效。
+- 需要同时改变随机激励或模型才能通过：本候选失效，另立提案。
+- 成本低：不训练模型，约 96 条 128-transition 无逐步渲染短轨迹。
+- 风险：把测量修复误报为能力提升；通过双报告和固定样本数约束。
+- 依赖：`R0001-P04` 的同步 bootstrap 合同、正式后端确定性随机化和实际 plant action。
+
+### `R0001-P10`：安全干预正例窗口分层采样
+
+- 证据：v4 Replay 只有约 37/2688 个安全干预 transition、7/168 个正例窗口；独立平衡
+  留出三任务 recall 均为 0。
+- 假设：仅把普通 batch 的安全正例窗口比例固定为 `0.25`，不改模型和 loss，可避免
+  “永不干预/近似 identity”局部最优。
+- 最小验证：使用修正时间合同后的冻结 Replay，自然采样与候选各固定 400 update、三个
+  优化 seed；保持任务、source Episode、碰撞和视觉监督 strata。
+- 主要指标：三任务 recall `>=0.8`、PR-AUC `>=0.5`、干预 RMSE `<=0.15`、非干预
+  RMSE `<=0.05`、越界率 0。
+- 失效条件：只提高 recall、只在单 seed 成立、自然分布 holdout 不改善或其他世界模型
+  目标回归。
+- 与 `P05` 都修改 batch 组成，不得首次捆绑。
+
+### `R0001-P11`：动作执行头的因果 proposal 历史
+
+- 证据：plant action latency 为训练 `0/1`、评测 `1～3` 步；当前执行头只接收当前
+  proposal，v4 非干预 RMSE 为 `0.111～0.119`，干预 RMSE 为 `0.302～0.357`。
+- 假设：最近三步、只含过去和当前的 proposal FIFO 能表示未知有界 plant latency。
+- 最小验证：从与 `P10` 相同的父基线独立启动，保持自然采样，只改变等容量执行头输入；
+  在未见 action latency 2/3 上确认。
+- 失效条件：依赖未来动作或真实 latency 标签、只记忆相关随机过程相位、未见延迟失败。
+- `P10` 检验样本稀疏，`P11` 检验时序表示能力，二者必须拆分。
+
+### `R0001-P12`：未见语言的评测侧冻结物化
+
+- 证据：正式闭环使用每任务 3 条未见评测改写，但当前 resolver 只从训练 Replay 构建；
+  v4 对 9 条评测文本的可解析覆盖为 0。
+- 假设：用同一锁定 Qwen3 encoder 生成 evaluation-only、哈希绑定的 9 条语言特征，可使
+  评测可执行且不改变训练已见输入的 embedding 或动作。
+- 该项是平台修复，不是语言泛化提升；评测文本不得进入 Replay、训练 feature index、
+  optimizer 或 checkpoint。
+- 接受条件：9/9 可解析；已见 embedding 和确定性动作逐元素一致；训练 loader 无法访问
+  evaluation-only index。
+
+### `R0001-P13`：闭环安全干预负担门
+
+- 证据：评测记录安全干预次数，但当前接受合同只检查成功率、严重碰撞、稳定和双臂消融；
+  历史运行存在零严重碰撞但单 Episode 大量撞盾的反例。
+- 假设：增加按 Episode、按步数归一化的安全干预尾部约束，可拒绝依赖硬安全层持续兜底
+  的策略。
+- 该项是评测修复，阈值必须在看到任何新闭环结果前冻结。
+- 初始建议由后续冻结合同给出；不得单独用低干预率宣称能力，也不得通过不运动过门。
+
+## 二次提案合并
+
+- 三名创新 Agent 对多时间尺度激励的建议并入原 `R0001-P02`，增加未见
+  `rho=0.25/0.75` 确认集，不创建重复 ID。
+- 观测延迟对齐是 `R0001-P09`，它是 `P02` 的前置反例门。
+- 跨 source Episode batch 继续使用原 `R0001-P05`。
+- 安全正例分层与 proposal 历史分别编号 `P10/P11`，禁止捆绑。
+- `P12/P13` 均是独立平台或评测修复，不进入能力候选收益。
