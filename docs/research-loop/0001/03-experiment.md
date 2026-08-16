@@ -452,3 +452,87 @@ holdout:   520260901, 520365630, 520470359, 520575088,
 4. 动作执行验证仍失败：先独立验证 `P10`；只有按 latency 分层仍失败且 `P10` 无效，
    才验证 `P11`。
 5. `P12/P13` 必须在任何新正式闭环评测前实施和冻结，不改变上述训练候选归因。
+
+## `R0001-P12` 冻结实验
+
+### 类型与唯一变量
+
+- 类型：评测可执行性平台修复，不是能力改进。
+- 唯一变量：正式评测 resolver 是否包含用训练时同一锁定 Qwen3 encoder 预先物化的
+  9 条 evaluation instruction embedding。
+- 不修改训练 Replay、训练 feature index、模型权重、策略、任务、seed、成功条件或接受
+  门槛。
+
+### 产物隔离
+
+- evaluation embedding 只写入单次评测输出目录：
+  `evaluation-language/cache/` 与 `evaluation-language/manifest.json`。
+- manifest 必须记录 9 条文本的 locale、内容 SHA-256、cache key、encoder lock、
+  preprocessing SHA-256、输出维度和文件 SHA-256。
+- 训练 run、`features/language.json`、`feature-cache/`、Replay、checkpoint 和 deployment
+  均保持只读。
+- artifact manifest 必须哈希 evaluation-language manifest 和全部 embedding 文件。
+
+### 接受标准
+
+1. 三任务各 3 条 evaluation instruction 共 9 条，全部可解析；
+2. 不允许 training instruction 缺失或 evaluation instruction 重复；
+3. encoder lock、preprocess SHA-256 和输出维度与训练 language index 完全一致；
+4. 对训练 Replay 已有文本，用新 resolver 与旧 resolver 得到的 embedding 逐元素一致；
+5. 相同已见 observation、同一 checkpoint 和 seed 的确定性 Actor 动作逐元素一致；
+6. 训练 loader 与训练 feature index 不引用 evaluation-only manifest 或 cache；
+7. 缺少模型权重、文本、hash 或隔离证据时，评测在第一个物理 Episode 前失败。
+
+### 负责人和验证
+
+- 唯一实施 Agent：`eval/R0001-P12-language` worktree。
+- 允许修改评测 app、独立 evaluation-language 模块、对应测试和 CLI 参数。
+- 禁止修改训练 app、在线 runner、Replay materialization 或模型。
+- 相关单元测试、评测 app 测试、架构和 Python 尺寸检查必须通过。
+
+## `R0001-P13` 冻结实验
+
+### 类型与统计合同
+
+- 类型：闭环安全评测修复，不是能力改进。
+- 只对每任务正常模式 `ablation=none` 计算；左右臂消融继续使用原失败与零严重碰撞合同。
+- Episode 安全干预率：
+  `safety_interventions / max(steps, 1)`。
+- 每任务至少原冻结的 40 个未见 Episode。
+- 统计量：
+  - empirical Episode-rate `p95`；
+  - 2,000 次 Episode-cluster bootstrap 的 `p95`，固定 seed 为
+    `20260913 + sorted_task_index * 104729`；
+  - bootstrap `p95` 分布的 95% 上分位；
+  - Episode-rate 最大值。
+
+### 预注册门槛
+
+每个任务同时满足：
+
+- empirical `p95 <= 0.01`；
+- bootstrap 95% upper bound `<= 0.02`；
+- maximum Episode rate `<= 0.05`。
+
+以上门槛与原合同联合，不替代：
+
+- success rate 与 Wilson 下界；
+- 零严重碰撞；
+- 成功 Episode 稳定时间和双臂并发接触；
+- 左右臂消融；
+- 三个不同训练 seed 聚合。
+
+低干预率本身不能形成接受；成功率、物理交互或动作幅值塌缩仍按原守护指标拒绝。
+
+### 负责人和验证
+
+- 唯一实施 Agent：`eval/R0001-P13-safety-burden` worktree。
+- 只修改 engine-independent 闭环评测统计、对应测试及必要 schema 消费者。
+- 不修改安全层、策略、环境、动作或训练。
+- 测试至少覆盖：
+  - 其余门全部通过但撞盾负担高时拒绝；
+  - 零干预通过；
+  - 单个极端 Episode 被 maximum 门拒绝；
+  - 固定 bootstrap 可重现；
+  - 不运动且低干预但成功率失败时仍拒绝；
+  - 多 seed aggregator 拒绝旧 acceptance schema。
