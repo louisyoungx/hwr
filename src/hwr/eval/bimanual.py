@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
-from statistics import NormalDist
+import random
 from dataclasses import asdict, dataclass
+from statistics import NormalDist
 from typing import Any, Callable, Literal, Mapping, Protocol, Sequence
 
 from hwr.core.embodied import DualArmAction, DualArmActionFrame, DualArmObservation
@@ -12,6 +13,9 @@ from hwr.core.runtime import Policy, RuntimeBackend
 
 
 AblationMode = Literal["none", "lock_left", "lock_right"]
+_SAFETY_INTERVENTION_BOOTSTRAP_SAMPLES = 2_000
+_SAFETY_INTERVENTION_BOOTSTRAP_SEED = 20_260_913
+_SAFETY_INTERVENTION_BOOTSTRAP_SEED_STRIDE = 104_729
 
 
 class AuditedDualArmBackend(RuntimeBackend, Protocol):
@@ -131,6 +135,9 @@ class BimanualAcceptanceCriteria:
     confidence_level: float = 0.95
     minimum_stable_seconds: float = 2.0
     minimum_concurrent_seconds: float = 0.5
+    maximum_safety_intervention_rate_p95: float = 0.01
+    maximum_safety_intervention_rate_bootstrap_upper: float = 0.02
+    maximum_safety_intervention_rate: float = 0.05
 
     def __post_init__(self) -> None:
         if (
@@ -143,6 +150,9 @@ class BimanualAcceptanceCriteria:
             self.minimum_success_rate,
             self.maximum_ablation_success_rate,
             self.confidence_level,
+            self.maximum_safety_intervention_rate_p95,
+            self.maximum_safety_intervention_rate_bootstrap_upper,
+            self.maximum_safety_intervention_rate,
         )
         if not all(0.0 <= value <= 1.0 for value in rates):
             raise ValueError("acceptance rates must be in [0, 1]")
@@ -200,7 +210,9 @@ def assess_bimanual_acceptance(
     settings = criteria or BimanualAcceptanceCriteria()
     details: list[dict[str, Any]] = []
     passed = True
-    for task_id, control_hz in sorted(control_hz_by_task.items()):
+    for task_index, (task_id, control_hz) in enumerate(
+        sorted(control_hz_by_task.items())
+    ):
         if control_hz <= 0:
             raise ValueError("evaluation control frequency must be positive")
         normal = report.group(task_id, "none")
@@ -214,6 +226,27 @@ def assess_bimanual_acceptance(
         concurrent_steps = math.ceil(
             settings.minimum_concurrent_seconds * control_hz
         )
+        safety_burden = _safety_intervention_burden(
+            normal,
+            _SAFETY_INTERVENTION_BOOTSTRAP_SEED
+            + task_index * _SAFETY_INTERVENTION_BOOTSTRAP_SEED_STRIDE,
+        )
+        safety_checks = {
+            "empirical_p95": (
+                safety_burden["empirical_p95"]
+                <= settings.maximum_safety_intervention_rate_p95
+            ),
+            "bootstrap_upper": (
+                safety_burden["bootstrap"]["p95_upper"]
+                <= settings.maximum_safety_intervention_rate_bootstrap_upper
+            ),
+            "maximum": (
+                safety_burden["maximum"]
+                <= settings.maximum_safety_intervention_rate
+            ),
+        }
+        safety_burden["checks"] = safety_checks
+        safety_burden["passed"] = bool(normal) and all(safety_checks.values())
         normal_passed = (
             len(normal) >= settings.minimum_unseen_episodes
             and success_rate >= settings.minimum_success_rate
@@ -225,6 +258,7 @@ def assess_bimanual_acceptance(
                 for item in normal
                 if item.success
             )
+            and safety_burden["passed"]
         )
         ablations: dict[str, float] = {}
         ablation_intervals: dict[str, dict[str, float]] = {}
@@ -262,16 +296,78 @@ def assess_bimanual_acceptance(
                 },
                 "required_stable_steps": stable_steps,
                 "required_concurrent_steps": concurrent_steps,
+                "safety_intervention_burden": safety_burden,
                 "ablation_success_rates": ablations,
                 "ablation_success_intervals": ablation_intervals,
             }
         )
     return {
-        "schema_version": "hwr.bimanual-acceptance/v2",
+        "schema_version": "hwr.bimanual-acceptance/v3",
         "passed": passed,
         "criteria": asdict(settings),
         "tasks": details,
     }
+
+
+def _safety_intervention_burden(
+    episodes: Sequence[BimanualEpisodeEvaluation], seed: int
+) -> dict[str, Any]:
+    rates = tuple(
+        sorted(
+            episode.safety_interventions / max(episode.steps, 1)
+            for episode in episodes
+        )
+    )
+    bootstrap_p95 = _bootstrap_p95_distribution(
+        rates,
+        samples=_SAFETY_INTERVENTION_BOOTSTRAP_SAMPLES,
+        seed=seed,
+    )
+    return {
+        "episode_rate_definition": "safety_interventions/max(steps,1)",
+        "empirical_p95": _quantile(rates, 0.95),
+        "bootstrap": {
+            "unit": "episode_cluster",
+            "samples": _SAFETY_INTERVENTION_BOOTSTRAP_SAMPLES,
+            "seed": seed,
+            "statistic": "episode_rate_p95",
+            "p95_distribution": list(bootstrap_p95),
+            "p95_upper": _quantile(bootstrap_p95, 0.95),
+        },
+        "maximum": max(rates, default=0.0),
+    }
+
+
+def _bootstrap_p95_distribution(
+    rates: Sequence[float], *, samples: int, seed: int
+) -> tuple[float, ...]:
+    if not rates:
+        return ()
+    generator = random.Random(seed)
+    count = len(rates)
+    return tuple(
+        _quantile(
+            tuple(rates[generator.randrange(count)] for _ in range(count)),
+            0.95,
+        )
+        for _ in range(samples)
+    )
+
+
+def _quantile(values: Sequence[float], probability: float) -> float:
+    if not values:
+        return 0.0
+    if not 0.0 <= probability <= 1.0:
+        raise ValueError("quantile probability must be in [0, 1]")
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * probability
+    lower_index = math.floor(position)
+    upper_index = math.ceil(position)
+    if lower_index == upper_index:
+        return float(ordered[lower_index])
+    lower = float(ordered[lower_index])
+    upper = float(ordered[upper_index])
+    return lower + (upper - lower) * (position - lower_index)
 
 
 def _wilson_interval(
