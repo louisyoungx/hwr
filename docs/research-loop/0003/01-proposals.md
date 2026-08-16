@@ -55,3 +55,37 @@
 
 - 仅在 P04 后执行 RMSE 可表示、但安全 recall/PR-AUC 仍失败时触发。
 - P04 若已解决动作执行失败，则 `rejected without run`。
+
+## `R0001-P17`：同状态配对实际动作干预
+
+- 类型：训练前物理因果诊断，不是能力改进。
+- 证据：
+  - P16 证明现有 state-nuisance ridge 在高相关长 horizon 下功效不足；
+  - 三个正式任务从同 seed、同初始 `PhysicalStateSnapshot` 重置后，同动作分支在
+    proposal、实际 action、state、reward、event 和最终 snapshot 上逐元素一致；
+  - 任务盲 `+d/-d` Rademacher 运动动作经原 plant 和安全层后，实际归一化动作差 RMS
+    约 0.267、方向余弦 1.0，三个任务均无安全干预或严重碰撞，并在 1/4/8/16 步产生
+    非零物理状态差。
+- 假设：从相同初始物理状态出发，随机分配的 `+d/-d` 动作符号通过实际 plant action
+  差稳定改变后续可控状态，可直接证明动作的增量物理因果效应。
+- 最小验证：
+  - 只从 Episode 初始 reset 状态分叉，避免未保存的中途 FIFO 或安全历史；
+  - plus、minus、sham 使用相同 seed、snapshot、随机化和预算；
+  - horizon 从实际 plant action 差首次非零开始；
+  - snapshot 和物理 state 只作离线 outcome；
+  - Episode/seed 是随机化单位。
+- 主要门：
+  - snapshot/sham 逐元素重放一致；
+  - actual first-stage 非弱且方向对称；
+  - sham family-wise FPR 单侧 95% 上界 `<=5%`；
+  - blind-injection family-wise power 单侧 95% 下界 `>=80%`；
+  - 三任务×四 horizon 的确认性 family 经 Holm 后全部通过；
+  - 不删除安全改写或零响应样本。
+- 通过后只解锁可信训练前数据因果证据，再单独路由 P11/P05；不得宣称任务能力。
+
+## `R0001-P18`：动作序列编码可解码性
+
+- 从同一 snapshot 执行边际匹配、时序编码不同的动作序列并解码标签。
+- 两名筛选 Agent 认为该设计易利用时序生成器、安全裁剪和动作路径指纹，不能直接证明
+  任务价值或因果控制。
+- 状态：`rejected`，仅可作不影响决策的探索性负控。

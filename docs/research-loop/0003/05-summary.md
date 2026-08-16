@@ -29,6 +29,9 @@
 需要构建不依赖 state nuisance 拟合的训练前物理因果证据，例如同状态配对实际动作干预。
 该问题继续在 `docs/research-loop/0003/` 内推进；`0001` 和 `0002` 保持冻结只读。
 
+当前入选候选为 `R0001-P17`；先执行配对物理干预的 snapshot/sham/injection/first-stage
+预检，通过后再做正式确认。
+
 ## 清理
 
 - 未删除 P09/P16 正式报告与 trial。
