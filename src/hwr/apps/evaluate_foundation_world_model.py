@@ -9,6 +9,10 @@ import os
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from hwr.adapters.foundation import (
+    Qwen3LanguageProvider,
+    load_foundation_model_locks,
+)
 from hwr.adapters.mujoco import (
     BIMANUAL_EVIDENCE_VIEWS,
     MujocoBimanualEvidenceSource,
@@ -16,8 +20,6 @@ from hwr.adapters.mujoco import (
     MujocoFormalHouseholdDualArmBackend,
     load_default_formal_household_catalogs,
 )
-from hwr.data.foundation_cache import FoundationCacheKey, FoundationFeatureCache
-from hwr.data.foundation_features import load_feature_index
 from hwr.eval import (
     BimanualEpisodeEvaluation,
     assess_bimanual_acceptance,
@@ -25,7 +27,10 @@ from hwr.eval import (
     evaluate_bimanual_policy,
 )
 from hwr.eval.foundation_causality import require_foundation_causality_structure
-from hwr.perception.foundation import language_source_sha256
+from hwr.eval.foundation_language import (
+    evaluation_language_artifacts,
+    materialize_evaluation_language,
+)
 from hwr.perception.high_resolution import (
     HighResolutionVisionConfig,
     HighResolutionVisionPreprocessor,
@@ -57,6 +62,7 @@ ABLATIONS = ("none", "lock_left", "lock_right")
 
 
 def build_parser() -> argparse.ArgumentParser:
+    root = Path(__file__).resolve().parents[3]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_path", type=Path)
     parser.add_argument(
@@ -66,6 +72,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed-count", type=int, default=40)
     parser.add_argument("--seed-start", type=int)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--foundation-device", default="cpu")
+    parser.add_argument(
+        "--model-root", type=Path, default=root / "models/foundation"
+    )
     parser.add_argument("--video-seed-count", type=int, default=1)
     parser.add_argument("--video-width", type=int, default=640)
     parser.add_argument("--video-height", type=int, default=480)
@@ -263,26 +273,12 @@ def _preprocessor(run_manifest: Mapping[str, Any]) -> HighResolutionVisionPrepro
     return result
 
 
-def _language_resolver(run_path: Path) -> StaticLanguageFeatureResolver:
-    index = load_feature_index(run_path / "features/language.json")
-    cache = FoundationFeatureCache(run_path / "feature-cache")
-    replay = _read_json(run_path / "replay/autonomous/manifest.json")
-    values = {}
-    for shard in replay["shards"]:
-        text, locale = shard["instruction"], shard["locale"]
-        source = language_source_sha256(text, locale)
-        key = FoundationCacheKey(
-            "language", source, index.encoder_lock_sha256, index.preprocess_sha256
-        )
-        values[(locale, text)] = cache.load_language(key).values.copy()
-    return StaticLanguageFeatureResolver(
-        values,
-        encoder_lock_sha256=index.encoder_lock_sha256,
-        output_dimension=index.output_dimension,
-    )
-
-
-def _policy(run_path: Path, *, device: str) -> FoundationWorldModelPolicy:
+def _policy(
+    run_path: Path,
+    language_resolver: StaticLanguageFeatureResolver,
+    *,
+    device: str,
+) -> FoundationWorldModelPolicy:
     latest = _read_json(run_path / "latest.json")
     deployment_path = run_path / latest["deployment"]
     components = load_foundation_deployment(deployment_path, device=device)
@@ -292,7 +288,7 @@ def _policy(run_path: Path, *, device: str) -> FoundationWorldModelPolicy:
         components.state_filter,
         components.actor,
         _preprocessor(run_manifest),
-        _language_resolver(run_path),
+        language_resolver,
         components.action_scaling,
         policy_id=(
             f"{run_path.name}:{components.manifest['artifact_sha256'][:16]}"
@@ -473,6 +469,7 @@ def _artifact_manifest(
         "training/deployment-manifest.json": deployment_manifest,
         "training/deployment-artifact": deployment_artifact,
     }
+    files.update(evaluation_language_artifacts(output_path))
     files.update(
         {
             f"videos/{Path(path).name}": Path(path)
@@ -547,7 +544,19 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
     output_path = output_root / (arguments.evaluation_id or run_path.name)
     output_path.mkdir(parents=True, exist_ok=False)
     tasks, bindings = load_default_formal_household_catalogs(root)
-    policy = _policy(run_path, device=arguments.device)
+    locks = load_foundation_model_locks(
+        root / "configs/foundation/model-locks.json",
+        arguments.model_root.resolve(),
+    )
+    provider = Qwen3LanguageProvider(
+        locks["qwen3-embedding-0.6b"],
+        device=arguments.foundation_device,
+    )
+    language = materialize_evaluation_language(
+        run_path, output_path, tasks, provider
+    )
+    del provider
+    policy = _policy(run_path, language.resolver, device=arguments.device)
     observer = _VideoObserver(
         output_path / "videos",
         set(seeds),

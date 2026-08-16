@@ -1,8 +1,10 @@
 import hashlib
 import json
+from types import SimpleNamespace
 
 import pytest
 
+import hwr.apps.evaluate_foundation_world_model as evaluation_app
 from hwr.apps.evaluate_foundation_world_model import (
     ABLATIONS,
     _artifact_manifest,
@@ -11,6 +13,8 @@ from hwr.apps.evaluate_foundation_world_model import (
     _video_acceptance,
     build_parser,
 )
+from hwr.data.foundation_cache import FoundationCacheKey
+from hwr.perception.foundation import language_source_sha256
 from hwr.world_model import (
     ACTION_CAUSALITY_COMPONENTS,
     CounterfactualCausalityReport,
@@ -40,6 +44,131 @@ def test_foundation_evaluation_has_no_exploration_or_training_switch() -> None:
     assert "exploration" not in destinations
     assert "train" not in destinations
     assert "expert" not in destinations
+
+
+def _minimal_run_arguments(tmp_path, evaluation_id: str):
+    run = tmp_path / "run"
+    _write_json(
+        run / "run-manifest.json",
+        {
+            "training_config": {
+                "seed": 7,
+                "camera_width": 32,
+                "camera_height": 32,
+            }
+        },
+    )
+    arguments = build_parser().parse_args(
+        [
+            str(run),
+            "--output-root",
+            str(tmp_path / "evaluations"),
+            "--evaluation-id",
+            evaluation_id,
+            "--seed-count",
+            "1",
+        ]
+    )
+    return run, arguments
+
+
+def _patch_evaluation_preamble(monkeypatch, run, task):
+    monkeypatch.setattr(
+        evaluation_app, "_require_action_causality", lambda path: path
+    )
+    monkeypatch.setattr(
+        evaluation_app,
+        "_unseen_seeds",
+        lambda path, count, start: (31,),
+    )
+    monkeypatch.setattr(
+        evaluation_app,
+        "load_default_formal_household_catalogs",
+        lambda root: ({"task-a/v1": task}, {"task-a/v1": object()}),
+    )
+    monkeypatch.setattr(
+        evaluation_app,
+        "load_foundation_model_locks",
+        lambda lock_path, model_root: {"qwen3-embedding-0.6b": object()},
+    )
+
+
+def test_language_materialization_finishes_before_first_environment(
+    tmp_path, monkeypatch
+) -> None:
+    run, arguments = _minimal_run_arguments(tmp_path, "ordered")
+    task = SimpleNamespace(max_steps=1, control_hz=20.0)
+    _patch_evaluation_preamble(monkeypatch, run, task)
+    events = []
+    policy = SimpleNamespace(close=lambda: events.append("policy-closed"))
+    monkeypatch.setattr(
+        evaluation_app,
+        "Qwen3LanguageProvider",
+        lambda lock, device: object(),
+    )
+
+    def materialize(run_path, output_path, tasks, provider):
+        events.append("language-materialized")
+        return SimpleNamespace(resolver=object())
+
+    def build_policy(run_path, resolver, *, device):
+        assert events == ["language-materialized"]
+        events.append("policy-built")
+        return policy
+
+    def backend(*args, **kwargs):
+        assert events == ["language-materialized", "policy-built"]
+        events.append("environment-built")
+        return object()
+
+    def evaluate(task_id, max_steps, environment_factory, policy, seeds, **kwargs):
+        environment_factory()
+        raise RuntimeError("stop after first environment")
+
+    monkeypatch.setattr(
+        evaluation_app, "materialize_evaluation_language", materialize
+    )
+    monkeypatch.setattr(evaluation_app, "_policy", build_policy)
+    monkeypatch.setattr(
+        evaluation_app, "MujocoFormalHouseholdDualArmBackend", backend
+    )
+    monkeypatch.setattr(evaluation_app, "evaluate_bimanual_policy", evaluate)
+
+    with pytest.raises(RuntimeError, match="stop after first environment"):
+        evaluation_app.run(arguments)
+
+    assert events[:3] == [
+        "language-materialized",
+        "policy-built",
+        "environment-built",
+    ]
+
+
+def test_missing_language_weights_fail_before_policy_or_episode(
+    tmp_path, monkeypatch
+) -> None:
+    run, arguments = _minimal_run_arguments(tmp_path, "missing-weights")
+    task = SimpleNamespace(max_steps=1, control_hz=20.0)
+    _patch_evaluation_preamble(monkeypatch, run, task)
+
+    def missing_provider(lock, device):
+        raise FileNotFoundError("missing Qwen3 weights")
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("evaluation advanced past missing language weights")
+
+    monkeypatch.setattr(evaluation_app, "Qwen3LanguageProvider", missing_provider)
+    monkeypatch.setattr(
+        evaluation_app, "materialize_evaluation_language", unexpected
+    )
+    monkeypatch.setattr(evaluation_app, "_policy", unexpected)
+    monkeypatch.setattr(evaluation_app, "evaluate_bimanual_policy", unexpected)
+    monkeypatch.setattr(
+        evaluation_app, "MujocoFormalHouseholdDualArmBackend", unexpected
+    )
+
+    with pytest.raises(FileNotFoundError, match="missing Qwen3 weights"):
+        evaluation_app.run(arguments)
 
 
 def test_unseen_seeds_exclude_training_and_causality_holdout(tmp_path) -> None:
@@ -92,6 +221,86 @@ def _write_json(path, value) -> None:
 
 def _digest(path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _evaluation_language(output, run) -> None:
+    cache = output / "evaluation-language/cache"
+    entries = []
+    for task_index in range(3):
+        for instruction_index in range(3):
+            text = f"评测指令 {task_index}-{instruction_index}"
+            source = language_source_sha256(text, "zh-CN")
+            key = FoundationCacheKey(
+                "language", source, "e" * 64, "f" * 64
+            )
+            cache_key = key.digest
+            path = cache / "language" / cache_key[:2] / f"{cache_key}.npz"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(f"embedding-{source}".encode())
+            entries.append(
+                {
+                    "task_id": f"task-{task_index}/v1",
+                    "locale": "zh-CN",
+                    "text": text,
+                    "text_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                    "source_sha256": source,
+                    "cache_key": cache_key,
+                    "encoder_lock_sha256": "e" * 64,
+                    "preprocess_sha256": "f" * 64,
+                    "output_dimension": 6,
+                    "path": path.relative_to(output / "evaluation-language").as_posix(),
+                    "file_sha256": _digest(path),
+                    "bytes": path.stat().st_size,
+                }
+            )
+    language_index = run / "features/language.json"
+    language_index.parent.mkdir(parents=True, exist_ok=True)
+    language_index.write_bytes(b"fixture-language-index")
+    training_embedding = run / "feature-cache/language/fixture.npz"
+    training_embedding.parent.mkdir(parents=True, exist_ok=True)
+    training_embedding.write_bytes(b"fixture-training-embedding")
+    replay = run / "replay/autonomous/manifest.json"
+    training_inputs = {
+        "run_path": str(run.resolve()),
+        "language_index": {
+            "path": language_index.relative_to(run).as_posix(),
+            "sha256": _digest(language_index),
+            "bytes": language_index.stat().st_size,
+        },
+        "replay_manifest": {
+            "path": replay.relative_to(run).as_posix(),
+            "sha256": _digest(replay),
+            "bytes": replay.stat().st_size,
+        },
+        "embedding_files": [
+            {
+                "path": training_embedding.relative_to(run).as_posix(),
+                "sha256": _digest(training_embedding),
+                "bytes": training_embedding.stat().st_size,
+                "cache_key": "a" * 64,
+            }
+        ],
+    }
+    _write_json(
+        output / "evaluation-language/manifest.json",
+        {
+            "schema_version": "hwr.foundation-evaluation-language/v1",
+            "instruction_count": 9,
+            "task_count": 3,
+            "encoder": {
+                "lock_sha256": "e" * 64,
+                "output_dimension": 6,
+            },
+            "preprocess_sha256": "f" * 64,
+            "training_inputs": training_inputs,
+            "instructions": entries,
+            "isolation": {
+                "evaluation_only": True,
+                "training_artifacts_unchanged": True,
+                "training_run": str(run.resolve()),
+            },
+        },
+    )
 
 
 def _causality_run(tmp_path):
@@ -356,6 +565,7 @@ def test_evaluation_manifest_hashes_training_data_model_and_gate_artifacts(
         "per_seed_passed": True,
         "formal_passed": False,
     })
+    _evaluation_language(output, run)
 
     manifest = _artifact_manifest(output, run, (31,), ())
 
@@ -372,7 +582,15 @@ def test_evaluation_manifest_hashes_training_data_model_and_gate_artifacts(
         "training/checkpoint-artifact",
         "training/deployment-manifest.json",
         "training/deployment-artifact",
+        "evaluation-language/manifest.json",
     } <= set(manifest["artifacts"])
+    assert len(
+        [
+            name
+            for name in manifest["artifacts"]
+            if name.startswith("evaluation-language/cache/")
+        ]
+    ) == 9
     assert all(
         len(identity["sha256"]) == 64 and identity["bytes"] >= 0
         for identity in manifest["artifacts"].values()
