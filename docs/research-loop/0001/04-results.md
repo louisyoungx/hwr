@@ -493,3 +493,125 @@ state-action MSE 从 `0.088836` 上升到 `0.315394`，同时 state-only MSE 上
 4. 世界模型、动作执行头和安全正例采样仍是独立瓶颈，分别按 `P05/P10/P11` 路由，不与
    `P09` 捆绑；
 5. 当前仍没有家务闭环能力提升证据。
+
+## `R0001-P09` 正式诊断：`rejected`
+
+### 运行身份与完整性
+
+- run ID：`r0001-p09-observation-lag-s20260901`
+- 源码提交：`3d199c5bfe9ff17634ac423113e85beedc5b2be5`
+- 类型：无模型训练的物理时间对齐诊断
+- 运行目录：
+  `runs/research-loop/0001/r0001-p09-observation-lag-s20260901`
+- 报告 schema：`hwr.observation-action-alignment/v1`
+- 报告 SHA-256：
+  `21d385fe4c39072652e1571a0e1254ab029b08548ad204651a50b9981c53a8cb`
+- Episode：96/96
+- 每条 Episode：1 个前置动作、128 个评分 transition、130 个物理状态
+- artifact：97 个，逐文件 SHA-256 和字节数全部复核通过
+- 分布：
+  - 三任务各 32 Episode；
+  - `rho=0.96` 与 `rho=0.50` 各 48；
+  - lag=0 与 lag=1 各 48；
+  - training 与 holdout 各 48；
+  - 每个任务、每个 rho 均为 8 training + 8 holdout，lag 0/1 各半。
+- 所有 provenance 完整，lag=1、horizon=16 没有丢 Episode 或 transition。
+
+正式 run 的第一次执行完整发布上述产物并以状态 0 回调。macOS `launchctl submit` 随后把
+短时 runner 误判为 keepalive job，重复启动 9 次；后续启动均因不可覆盖的 run 目录已存在而
+立即失败，只覆盖了有界 supervisor 日志，没有修改任何正式产物。主 Agent 已移除该
+supervisor，并确认没有残留进程。该运行器问题不改变首次正式结果，但后续 Host runner 必须
+在一次回调后显式注销服务。
+
+### 聚合 Probe 结果
+
+完整 8+8 Episode 的主诊断和确认组中，对齐后的聚合数据均通过点估计与同步 bootstrap：
+
+| rho | 任务 | 最弱 horizon ratio | 同步 `p05` |
+|---:|---|---:|---:|
+| 0.96 | 餐桌 | 1.151361 | 1.022206 |
+| 0.96 | 厨房 | 1.337591 | 1.200115 |
+| 0.96 | 客厅 | 1.183184 | 1.050999 |
+| 0.50 | 餐桌 | 1.707457 | 1.533979 |
+| 0.50 | 厨房 | 1.510770 | 1.267329 |
+| 0.50 | 客厅 | 1.702504 | 1.480154 |
+
+lag=0 分区的旧索引与对齐索引在 `1e-10` 内完全一致。固定 `rho=0.96` 的旧索引聚合结果
+本身也全部过线，说明 `P01` 的 Replay 失败不能仅由随机过程相关系数或 observation lag
+解释；完整连续 128-transition 证据、seed、Episode 长度和 Replay 物理显著性窗口选择之间
+至少还有一个未隔离变量。
+
+### lag=1 守护指标
+
+冻结合同要求 lag=1 分区在每个 horizon 的 state-action MSE 相对旧索引至少下降 10%。
+该守护在两个 rho 均失败。
+
+`rho=0.96`：
+
+| 任务 | 1-step | 4-step | 8-step | 16-step |
+|---|---:|---:|---:|---:|
+| 餐桌 | -1.93% | +1.79% | +0.44% | +9.47% |
+| 厨房 | +11.58% | +11.41% | +4.92% | +6.08% |
+| 客厅 | -2.37% | +1.67% | +0.51% | +9.85% |
+
+`rho=0.50`：
+
+| 任务 | 1-step | 4-step | 8-step | 16-step |
+|---|---:|---:|---:|---:|
+| 餐桌 | +44.52% | +6.46% | -30.13% | -19.82% |
+| 厨房 | +46.66% | +5.40% | -34.03% | -27.29% |
+| 客厅 | +44.55% | +6.38% | -30.49% | -19.51% |
+
+正值表示对齐后 MSE 下降，负值表示恶化。低相关动作在 1-step 明显受益，但长 horizon
+动作窗口只有边界一项不同，对齐后反而恶化；高相关动作的相邻动作相似，对齐收益很小。
+因此“单一 observation lag 修复会跨全部 horizon 稳定改善”被正式否定。
+
+### 结论与路由
+
+`R0001-P09` 按预注册合同标记 `rejected`，不能将其实现作为新的能力基线。它仍提供三项
+有效诊断：
+
+1. observation lag 必须显式记录，不能依靠 seed 事后重建；
+2. 旧 16-transition shard 会使 lag=1、16-step 诊断缺少前置动作；
+3. P01 的失败与 P09 完整短轨迹的通过存在明显证据池差异。
+
+`R0001-P02` 不立即进入正式 24 Episode：P09 中固定 `rho=0.96` 的完整短轨迹已经过线，
+而 `rho=0.50` 虽有更大聚合 margin，却没有预注册的“基线失败、候选过线”因果对比。
+不得在看到结果后把 margin 提升改成新的接受标准。
+
+下一步重新筛选以下互斥解释：
+
+- 正式 Replay 的 16-transition 物理显著性窗口是否造成 horizon 证据不足或选择偏差；
+- `P05` 的单 source Episode batch 是否仍是世界模型动作利用失败的主因；
+- `P10` 的安全正例稀疏和 `P11` 的 plant proposal history 分别如何解释动作执行失败。
+
+## `R0001-P12`：未见语言评测物化，`accepted as platform repair`
+
+- 实现提交：`34a7bb0`
+- 在任何环境或物理 Episode 创建前，用训练时同一锁定 Qwen3 encoder 物化三任务各
+  3 条、共 9 条 evaluation instruction。
+- 产物严格写入单次评测目录的 `evaluation-language/cache/` 与
+  `evaluation-language/manifest.json`。
+- 最终评测 artifact manifest 直接哈希语言 manifest 和 9 个 embedding 文件。
+- 训练 run 的 Replay、language index、feature cache、checkpoint 和 deployment 保持只读。
+- fixture 验证训练已见 embedding 与确定性动作逐元素不变。
+- focused tests 18 项、架构和 Python 尺寸门通过。
+
+该项只修复正式评测在未见语言上的启动阻断，不是语言泛化提升。真实锁定 Qwen3 权重的
+9/9 物化仍需在首次闭环评测前执行一次 preflight。
+
+## `R0001-P13`：闭环安全干预负担门，`accepted as evaluation repair`
+
+- 实现提交：`aeaedd7`
+- `hwr.bimanual-acceptance/v2` 升级到 v3。
+- 正常模式每 Episode 计算
+  `safety_interventions / max(steps, 1)`。
+- 每任务固定 2,000 次 Episode-cluster bootstrap 和预注册 seed。
+- 与原接受合同联合增加：
+  - empirical `p95 <= 0.01`；
+  - bootstrap 95% upper bound `<= 0.02`；
+  - maximum Episode rate `<= 0.05`。
+- 高撞盾、零干预、单极端 Episode、bootstrap 重现和不运动负对照均有测试。
+- focused 与组合测试通过，架构和 Python 尺寸门通过。
+
+该项不修改安全层或策略，只防止把依赖硬安全层持续兜底的策略误报为安全能力提升。
