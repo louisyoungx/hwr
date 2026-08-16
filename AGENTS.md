@@ -100,5 +100,5 @@
    - 在 `05-summary.md` 记录删除内容及清理前后磁盘空间。
 
 9. 使用新基线和未解决问题建立下一轮目录，重新开始。
-   - 使用 `traex-host-exec` 启动一个新的会话，Prompt 为简单的 `你是新一轮主 Agent，阅读 AGENTS.md 并启动，建立你自己的文档目录，请勿修改现有历史文档中的其他轮次文档 docs/research-loop/NNNN`
+   - 使用 `traex-host-exec` 启动一个新的会话，Prompt 为简单的 `你是新一轮主 Agent，阅读 AGENTS.md 并启动。建立你自己的文档目录，请勿修改现有历史文档中的其他轮次文档 docs/research-loop/NNNN`
    - 本轮会话任务结束，直接停止
