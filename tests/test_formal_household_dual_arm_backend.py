@@ -114,6 +114,38 @@ def test_formal_randomization_is_reproducible_for_the_same_profile_and_seed() ->
     assert first_audit["randomization"] == second_audit["randomization"]
 
 
+def test_formal_diagnostic_override_changes_only_observation_latency() -> None:
+    task_id = "clear_dining_table_3d/v1"
+    backend = _backend(task_id)
+    try:
+        backend.reset_for_observation_latency_diagnostic(
+            seed=41, task_id=task_id, observation_latency_steps=0
+        )
+        lag_zero = backend.task_audit()
+        backend.reset_for_observation_latency_diagnostic(
+            seed=41, task_id=task_id, observation_latency_steps=1
+        )
+        lag_one = backend.task_audit()
+    finally:
+        backend.close()
+
+    zero_randomization = dict(lag_zero["randomization"])
+    one_randomization = dict(lag_one["randomization"])
+    assert zero_randomization.pop("observation_latency_steps") == 0
+    assert one_randomization.pop("observation_latency_steps") == 1
+    assert zero_randomization == one_randomization
+    zero_provenance = lag_zero["observation_latency_diagnostic"]
+    one_provenance = lag_one["observation_latency_diagnostic"]
+    assert zero_provenance["sampled_randomization_sha256"] == (
+        one_provenance["sampled_randomization_sha256"]
+    )
+    assert zero_provenance["other_randomization_sha256"] == (
+        one_provenance["other_randomization_sha256"]
+    )
+    assert zero_provenance["verified_only_observation_latency_changed"] is True
+    assert one_provenance["verified_only_observation_latency_changed"] is True
+
+
 def test_formal_runtime_can_defer_and_resume_camera_rendering() -> None:
     task_id = "clear_dining_table_3d/v1"
     backend = _backend(task_id)

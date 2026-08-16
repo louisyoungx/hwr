@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import random
 from dataclasses import dataclass, replace
@@ -133,6 +135,8 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
         self._step_right_contact = False
         self._action_queue: list[DualArmAction] = []
         self._observation_queue: list[DualArmObservation] = []
+        self._observation_latency_override: int | None = None
+        self._observation_latency_diagnostic: dict[str, object] | None = None
 
     def reset(
         self,
@@ -154,6 +158,36 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
         self._initial_target_distance = max(self._target_distance(), 1.0e-6)
         self._previous_potential = self._task_potential()
         return self._delay_observation(observation)
+
+    def reset_for_observation_latency_diagnostic(
+        self,
+        *,
+        seed: int,
+        task_id: str,
+        observation_latency_steps: int,
+    ) -> DualArmObservation:
+        """Reset after overriding only the sampled observation latency."""
+        if observation_latency_steps not in (0, 1):
+            raise ValueError("diagnostic observation latency must be zero or one")
+        if self._observation_latency_override is not None:
+            raise RuntimeError("diagnostic observation latency override is already active")
+        self._observation_latency_override = observation_latency_steps
+        try:
+            observation = self.reset(seed=seed, task_id=task_id)
+            provisional = self._observation_latency_diagnostic
+            if provisional is None:
+                raise RuntimeError("diagnostic observation latency provenance is missing")
+            effective = _json_copy(self._randomization)
+            sampled = _json_copy(effective)
+            sampled["observation_latency_steps"] = int(
+                provisional["sampled_observation_latency_steps"]
+            )
+            self._observation_latency_diagnostic = (
+                _observation_latency_override_provenance(sampled, effective)
+            )
+            return observation
+        finally:
+            self._observation_latency_override = None
 
     def apply(self, frame: DualArmActionFrame) -> RuntimeStepOutcome:
         self._step_left_contact = False
@@ -358,6 +392,13 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
                 ),
             }
         )
+        self._observation_latency_diagnostic = None
+        if self._observation_latency_override is not None:
+            sampled = _json_copy(values)
+            values["observation_latency_steps"] = self._observation_latency_override
+            self._observation_latency_diagnostic = (
+                _observation_latency_override_provenance(sampled, values)
+            )
         self._randomization = values
         mujoco.mj_setConst(self.model, self.data)
 
@@ -602,6 +643,7 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
         return {
             "task_id": self.task.task_id,
             "randomization": self._randomization,
+            "observation_latency_diagnostic": self._observation_latency_diagnostic,
             "instruction_split": "evaluation" if self.evaluation_profile else "train",
             "instruction": self._instruction.text,
             "stable_steps": self._placement.stable_steps,
@@ -646,6 +688,43 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
             dropout = self._randomization["depth_dropout"]
             payload[rng.random(payload.shape) < dropout] = 0.0
         return replace(frame, payload=np.ascontiguousarray(payload).tobytes())
+
+
+def _json_copy(value: dict[str, Any]) -> dict[str, Any]:
+    return json.loads(json.dumps(value, sort_keys=True))
+
+
+def _canonical_sha256(value: object) -> str:
+    payload = json.dumps(
+        value, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _without_observation_latency(value: dict[str, Any]) -> dict[str, Any]:
+    result = _json_copy(value)
+    result.pop("observation_latency_steps", None)
+    return result
+
+
+def _observation_latency_override_provenance(
+    sampled: dict[str, Any], effective: dict[str, Any]
+) -> dict[str, object]:
+    sampled_other = _without_observation_latency(sampled)
+    effective_other = _without_observation_latency(effective)
+    if sampled_other != effective_other:
+        raise RuntimeError("diagnostic override changed non-observation randomization")
+    sampled_lag = int(sampled["observation_latency_steps"])
+    effective_lag = int(effective["observation_latency_steps"])
+    return {
+        "schema_version": "hwr.observation-latency-only-override/v1",
+        "sampled_observation_latency_steps": sampled_lag,
+        "effective_observation_latency_steps": effective_lag,
+        "sampled_randomization_sha256": _canonical_sha256(sampled),
+        "effective_randomization_sha256": _canonical_sha256(effective),
+        "other_randomization_sha256": _canonical_sha256(sampled_other),
+        "verified_only_observation_latency_changed": True,
+    }
 
 
 
