@@ -12,8 +12,11 @@ import numpy as np
 from hwr.train.foundation_sequence_reservoir import source_episode_id
 
 
-ACTION_PROBE_SCHEMA = "hwr.foundation-data-action-probe/v3"
+ACTION_PROBE_SCHEMA = "hwr.foundation-data-action-probe/v4"
 ACTION_PROBE_HORIZONS = (1, 4, 8, 16)
+ACTION_PROBE_BOOTSTRAP_CONTRACT = (
+    "shared-holdout-episode-multiplicity-across-horizons/v1"
+)
 
 
 @dataclass(frozen=True)
@@ -63,26 +66,45 @@ def evaluate_foundation_data_action_probe(
     partitions: dict[str, dict[str, object]] = {}
     bootstrap_by_task: list[np.ndarray] = []
     for task_index, task_id in enumerate(task_ids):
-        horizon_reports = {}
-        horizon_ratios = []
+        horizon_reports: dict[str, dict[str, object]] = {}
+        horizon_episode_errors: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+        holdout_episode_ids: tuple[str, ...] | None = None
         for horizon in ACTION_PROBE_HORIZONS:
             train_horizon = training_by_horizon[horizon]
             holdout_horizon = holdout_by_horizon[horizon]
-            report, ratios = _evaluate_partition(
+            holdout_task = [
+                item for item in holdout_horizon if item.task_id == task_id
+            ]
+            episode_ids = tuple(item.episode_id for item in holdout_task)
+            if holdout_episode_ids is None:
+                holdout_episode_ids = episode_ids
+            elif episode_ids != holdout_episode_ids:
+                raise ValueError(
+                    "foundation action probe holdout Episodes differ across horizons"
+                )
+            report, state_episode, action_episode = _evaluate_partition(
                 _limit_episodes(
                     [item for item in train_horizon if item.task_id == task_id],
                     quota,
                 ),
-                [item for item in holdout_horizon if item.task_id == task_id],
+                holdout_task,
                 ridge=ridge,
-                bootstrap_samples=bootstrap_samples,
-                bootstrap_seed=(
-                    bootstrap_seed + task_index * 104_729 + horizon * 1_009
-                ),
             )
             horizon_reports[str(horizon)] = report
-            horizon_ratios.append(ratios)
-        conservative = np.stack(horizon_ratios).min(axis=0)
+            horizon_episode_errors[horizon] = (state_episode, action_episode)
+        task_bootstrap_seed = bootstrap_seed + task_index * 104_729
+        horizon_ratios, conservative = _synchronized_horizon_bootstrap(
+            horizon_episode_errors,
+            samples=bootstrap_samples,
+            seed=task_bootstrap_seed,
+        )
+        for horizon, ratios in horizon_ratios.items():
+            horizon_reports[str(horizon)]["bootstrap"] = _bootstrap_summary(
+                ratios,
+                bootstrap_samples,
+                task_bootstrap_seed,
+                reduction="none",
+            )
         one_step = horizon_reports["1"]
         partitions[task_id] = {
             **one_step,
@@ -93,7 +115,10 @@ def evaluate_foundation_data_action_probe(
                 )
             ),
             "bootstrap": _bootstrap_summary(
-                conservative, bootstrap_samples, bootstrap_seed
+                conservative,
+                bootstrap_samples,
+                task_bootstrap_seed,
+                reduction="minimum_across_horizons_within_replicate",
             ),
             "horizons": horizon_reports,
         }
@@ -126,8 +151,23 @@ def evaluate_foundation_data_action_probe(
         "state_action_mse": action_mse,
         "state_only_to_state_action_ratio": state_mse / max(action_mse, 1.0e-12),
         "bootstrap": _bootstrap_summary(
-            aggregate_ratios, bootstrap_samples, bootstrap_seed
+            aggregate_ratios,
+            bootstrap_samples,
+            bootstrap_seed,
+            reduction="minimum_across_tasks_and_horizons_within_replicate",
         ),
+        "bootstrap_provenance": {
+            "contract": ACTION_PROBE_BOOTSTRAP_CONTRACT,
+            "episode_alignment_key": ["task_id", "holdout_episode_id"],
+            "resampling_unit": "holdout_episode",
+            "within_task_horizon_coupling": (
+                "shared_episode_multiplicity_per_replicate"
+            ),
+            "within_task_reduction": "minimum_horizon_ratio_per_replicate",
+            "task_seed_derivation": "base_seed + sorted_task_index * 104729",
+            "across_task_coupling": "independent_episode_resampling",
+            "across_task_reduction": "minimum_task_ratio_per_replicate",
+        },
         "partitions": partitions,
     }
 
@@ -137,9 +177,7 @@ def _evaluate_partition(
     holdout: Sequence[_EpisodeTransitions],
     *,
     ridge: float,
-    bootstrap_samples: int,
-    bootstrap_seed: int,
-) -> tuple[dict[str, object], np.ndarray]:
+) -> tuple[dict[str, object], np.ndarray, np.ndarray]:
     if not training or not holdout:
         raise ValueError("foundation action probe partition is empty")
     train_state = np.concatenate([item.state for item in training])
@@ -160,12 +198,6 @@ def _evaluate_partition(
     episode_lengths = tuple(len(item.state) for item in holdout)
     state_episode = _episode_means(state_errors, episode_lengths)
     action_episode = _episode_means(action_errors, episode_lengths)
-    ratios = _bootstrap_episode_ratios(
-        state_episode,
-        action_episode,
-        samples=bootstrap_samples,
-        seed=bootstrap_seed,
-    )
     state_mse = float(state_episode.mean())
     action_mse = float(action_episode.mean())
     return {
@@ -178,8 +210,7 @@ def _evaluate_partition(
         "state_only_mse": state_mse,
         "state_action_mse": action_mse,
         "state_only_to_state_action_ratio": state_mse / max(action_mse, 1.0e-12),
-        "bootstrap": _bootstrap_summary(ratios, bootstrap_samples, bootstrap_seed),
-    }, ratios
+    }, state_episode, action_episode
 
 
 def _load_episodes(
@@ -292,28 +323,66 @@ def _bootstrap_episode_ratios(
     state_errors: np.ndarray,
     action_errors: np.ndarray,
     *,
-    samples: int,
-    seed: int,
+    selected: np.ndarray,
 ) -> np.ndarray:
-    rng = np.random.default_rng(seed)
-    result = np.empty(samples, np.float64)
-    for index in range(samples):
-        selected = rng.integers(0, len(state_errors), len(state_errors))
-        numerator = float(state_errors[selected].mean())
-        denominator = float(action_errors[selected].mean())
-        result[index] = numerator / max(denominator, 1.0e-12)
+    if (
+        state_errors.shape != action_errors.shape
+        or state_errors.ndim != 1
+        or selected.ndim != 2
+        or selected.shape[1] != len(state_errors)
+    ):
+        raise ValueError("foundation action probe bootstrap inputs are invalid")
+    numerator = state_errors[selected].mean(axis=1)
+    denominator = action_errors[selected].mean(axis=1)
+    result = numerator / np.maximum(denominator, 1.0e-12)
     if not all(math.isfinite(value) and value >= 0.0 for value in result):
         raise ValueError("foundation action probe bootstrap is invalid")
     return result
 
 
+def _synchronized_horizon_bootstrap(
+    episode_errors: Mapping[int, tuple[np.ndarray, np.ndarray]],
+    *,
+    samples: int,
+    seed: int,
+) -> tuple[dict[int, np.ndarray], np.ndarray]:
+    if not episode_errors or samples <= 0 or seed < 0:
+        raise ValueError("foundation action probe bootstrap configuration is invalid")
+    episode_counts = {
+        len(state_errors) for state_errors, _ in episode_errors.values()
+    }
+    if len(episode_counts) != 1 or not episode_counts or min(episode_counts) <= 0:
+        raise ValueError(
+            "foundation action probe bootstrap Episodes differ across horizons"
+        )
+    episode_count = episode_counts.pop()
+    rng = np.random.default_rng(seed)
+    selected = rng.integers(0, episode_count, size=(samples, episode_count))
+    ratios = {
+        horizon: _bootstrap_episode_ratios(
+            state_errors,
+            action_errors,
+            selected=selected,
+        )
+        for horizon, (state_errors, action_errors) in episode_errors.items()
+    }
+    conservative = np.stack(tuple(ratios.values())).min(axis=0)
+    return ratios, conservative
+
+
 def _bootstrap_summary(
-    ratios: np.ndarray, samples: int, seed: int
+    ratios: np.ndarray,
+    samples: int,
+    seed: int,
+    *,
+    reduction: str,
 ) -> dict[str, object]:
     return {
         "unit": "episode_cluster",
         "samples": samples,
         "seed": seed,
+        "resampling_contract": ACTION_PROBE_BOOTSTRAP_CONTRACT,
+        "replicate_reduction": reduction,
         "ratio_p05": float(np.quantile(ratios, 0.05)),
         "ratio_median": float(np.median(ratios)),
         "ratio_p95": float(np.quantile(ratios, 0.95)),
