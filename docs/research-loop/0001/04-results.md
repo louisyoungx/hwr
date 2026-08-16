@@ -264,3 +264,122 @@ MuJoCo renderer 在 macOS 上争用全局 `CGL` context mutex：
 - autonomous collector provenance 升级到 v4；
 - v4 使用相同训练 seed、模型、任务、预算、准入和最终评测；
 - v4 由 detached `tmux` 监督、定时看门狗和防休眠会话持有。
+
+## `R0001-P01` 第四次启动：有效负基线，`rejected`
+
+### 运行身份与退出归因
+
+- run ID：`r0001-p01-baseline-v4-s20260812`
+- 源码提交：`d6d9a43b187591c43262efe1938130b358d63799`
+- 正式训练开始时间：2026-08-15 16:25:00 +08:00
+- 停止时间：2026-08-15 20:04:53 +08:00
+- 最终规模：24 Episode、1,600 update、约 4.7 GiB
+- 最终 checkpoint：`checkpoints/update-000001600`
+- 最新指针：`latest.json` 已发布并指向 update 1,600
+- 运行目录：`runs/foundation-world-model/r0001-p01-baseline-v4-s20260812`
+- 监督日志：`logs/research-loop/0001/p01-v4-supervisor.raw.log`
+- 最后看门狗快照：`logs/research-loop/0001/p01-v4-watchdog-latest.log`
+
+开发总门禁以状态 0 通过，留出、Replay、指标、因果报告、恢复快照和最终 checkpoint 均完整，
+源码提交与运行 manifest 一致。训练进程随后以状态 1 退出，错误为：
+
+```text
+foundation calibration stopped early after missing evidence:
+one_step_physical_action_utilization,
+data_action_probe_bootstrap_lower_bound,
+data_action_probe_all_tasks,
+action_execution_model_validation
+```
+
+该退出发生在冻结的 24 Episode/1,600 update 判定点，符合 `03-experiment.md` 的“未通过”
+合同。因此它不是开发门禁失败、OOM、进程异常或 checkpoint 失败，而是具有完整负证据的
+校准停止。监督器、周期看门狗和防休眠进程均已退出；不得恢复或重复启动此 run。
+
+### 数据动作可辨识性
+
+整体 action probe 点估计为 `1.0647199774736131`，高于 `1.05`，但整体保守
+bootstrap `p05` 只有 `0.9177844030581959`，且冻结合同要求每个任务、每个 horizon 均通过，
+不能用整体均值掩盖局部失败。
+
+| 任务 | 聚合 ratio | 聚合 `p05` | 失败位置 |
+|---|---:|---:|---|
+| `clear_dining_table_3d/v1` | 1.079737 | 1.007304 | 聚合 `p05 < 1.01` |
+| `store_kitchen_items_3d/v1` | 1.002280 | 0.962667 | 1-step ratio 与 `p05` |
+| `tidy_living_room_3d/v1` | 1.023931 | 0.917784 | 16-step ratio 与 `p05` |
+
+餐桌、厨房、客厅分别有 6、6、12 个训练 source Episode。最弱任务并不是唯一的样本最少
+任务：厨房在 1-step 失败，而样本更多的客厅在 16-step 失败，因此当前证据不支持将
+`R0001-P03` 的任务配额作为首选解释。三任务的 4-step 和 8-step 均明显过线，失败更符合
+固定高相关随机动作在短时与长时尺度上提供的激励不均衡。
+
+### 世界模型动作利用
+
+最终物理动作 shuffle 因果结果：
+
+- aggregate ratio：`1.0012791539504238`，低于 `1.05`；
+- worse-horizon fraction：`0.625`，达到 `0.60`；
+- 本体 ratio：`1.0012907760687166`，虽然 horizon fraction 为 `0.625`，ratio 仍失败；
+- 视觉潜变量 ratio：`0.9861666265301663`，horizon fraction 为 `0.0`；
+- required components、aggregate 和 partitions 均未通过。
+
+这说明打乱动作并未稳定恶化预测，世界模型基本没有利用物理动作因果。该结论来自冻结物理
+留出，不以 loss 下降或训练回报替代。
+
+### 动作执行模型
+
+三个任务均有 8 个正例和 8 个负例，验证数据数量完整，但全部失败：
+
+| 任务 | recall | PR-AUC | 干预动作 RMSE | 非干预动作 RMSE |
+|---|---:|---:|---:|---:|
+| `clear_dining_table_3d/v1` | 0.000 | 0.1938 | 0.3266 | 0.1193 |
+| `store_kitchen_items_3d/v1` | 0.000 | 0.1165 | 0.3573 | 0.1113 |
+| `tidy_living_room_3d/v1` | 0.000 | 0.1599 | 0.3016 | 0.1126 |
+
+冻结门槛分别为 recall `>= 0.8`、PR-AUC `>= 0.5`、干预 RMSE `<= 0.15`、非干预
+RMSE `<= 0.05`。所有任务的 recall 均为 0，且误差显著超限；该失败不能归因于正负例缺失。
+
+### 覆盖、准入与产物
+
+- readiness 窗口活跃动作维度比例为 `1.0`，有效秩为 `15.3401`；
+- 全 run 动作覆盖有效秩为 `15.6340`；
+- Replay Episode 数为 24，最低 Replay 数量检查通过；
+- 动作覆盖不是当前主要瓶颈；
+- exploration readiness 连续通过次数为 0；
+- 探索 Actor 未解锁、未 warm-up、update count 为 0；
+- 没有发布 causality-qualified deployment；
+- 由于校准未通过，没有进入 120 Episode，也没有运行未见分布闭环能力评测。
+
+因此本结果只能建立当前谱系的有效负基线，不能宣称任何家务能力、泛化或安全性改善。
+
+### 资源与停止决策
+
+v4 的两遍确定性留出采集完成全部 72 个留出 shard，正式训练阶段 MPS 采样曾达到约
+65%～100%，没有复现 v3 的长期单核、低 GPU 无效渲染问题。最终周期记录的主要墙钟为：
+
+- collection：495.73 秒；
+- update：758.54 秒；
+- evaluation：196.67 秒；
+- materialization：44.92 秒；
+- checkpoint：1.91 秒。
+
+在预注册停止点之后继续训练既违反冻结预算，又没有探索 Actor 新数据来源，不能修复已经
+观察到的跨任务/horizon 数据失败。按合同停止比盲目继续使用资源更有价值。
+
+### 结论与下一候选路由
+
+`R0001-P01` 已完成“建立可信当前谱系基线”的目的，但其 24 Episode 校准通过假设被否定，
+本轮结论标记为有效负基线、`rejected`。v1～v3 仍为 `inconclusive` 平台证据，只有 v4
+可作为后续候选的冻结比较基线。
+
+按预注册条件路由：
+
+1. 厨房 1-step 与客厅 16-step 的 probe 点估计失败，先进入 `R0001-P02`；
+2. `P02` 只先做不训练模型的短物理配对验证，比较固定 `ρ=0.96` 与冻结多时间尺度
+   `ρ=0.0/0.5/0.9/0.96`，保持任务、seed、物理步数、动作幅值、留出和安全层不变；
+3. 只有短验证使最弱任务、最弱 horizon 过既有门槛，才允许另开 run 做 24 Episode
+   正式校准对照；
+4. 整体 probe 已高于 `1.05`，但世界模型 ratio 仍约为 1，因此将 `R0001-P05` 保留为
+   后续分支；只有数据 probe 全部通过后才能验证跨 source Episode mini-batch；
+5. `R0001-P04` 可对同一冻结数据独立执行 bootstrap 统计修复，但不得与 `P02` 的行为改动
+   捆绑，也不得把统计差异计为能力提升；
+6. 当前不选择 `P03/P06/P07/P08`，不在 v4 run 内切换任何条件。
