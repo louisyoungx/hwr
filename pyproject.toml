@@ -44,6 +44,7 @@ hwr-evaluate-foundation-world-model = "hwr.apps.evaluate_foundation_world_model:
 hwr-evaluate-observation-action-alignment = "hwr.apps.evaluate_observation_action_alignment:main"
 hwr-evaluate-action-probe-power = "hwr.apps.evaluate_action_probe_power:main"
 hwr-evaluate-paired-action-intervention = "hwr.apps.evaluate_paired_action_intervention:main"
+hwr-evaluate-causal-plant-estimator = "hwr.apps.evaluate_causal_plant_estimator:main"
 hwr-serve-foundation-dashboard = "hwr.apps.serve_foundation_dashboard:main"
 
 [tool.setuptools.packages.find]

@@ -135,6 +135,8 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
         self._step_right_contact = False
         self._action_queue: list[DualArmAction] = []
         self._observation_queue: list[DualArmObservation] = []
+        self._action_latency_override: int | None = None
+        self._action_latency_diagnostic: dict[str, object] | None = None
         self._observation_latency_override: int | None = None
         self._observation_latency_diagnostic: dict[str, object] | None = None
 
@@ -182,12 +184,45 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
             sampled["observation_latency_steps"] = int(
                 provisional["sampled_observation_latency_steps"]
             )
-            self._observation_latency_diagnostic = (
-                _observation_latency_override_provenance(sampled, effective)
+            self._observation_latency_diagnostic = _latency_override_provenance(
+                sampled, effective, "observation"
             )
             return observation
         finally:
             self._observation_latency_override = None
+
+    def reset_for_action_latency_diagnostic(
+        self,
+        *,
+        seed: int,
+        task_id: str,
+        action_latency_steps: int,
+    ) -> DualArmObservation:
+        """Reset after overriding only the sampled action latency."""
+        if action_latency_steps not in (0, 1, 2, 3):
+            raise ValueError("diagnostic action latency must be between zero and three")
+        if (
+            self._action_latency_override is not None
+            or self._observation_latency_override is not None
+        ):
+            raise RuntimeError("diagnostic latency override is already active")
+        self._action_latency_override = action_latency_steps
+        try:
+            observation = self.reset(seed=seed, task_id=task_id)
+            provisional = self._action_latency_diagnostic
+            if provisional is None:
+                raise RuntimeError("diagnostic action latency provenance is missing")
+            effective = _json_copy(self._randomization)
+            sampled = _json_copy(effective)
+            sampled["action_latency_steps"] = int(
+                provisional["sampled_action_latency_steps"]
+            )
+            self._action_latency_diagnostic = _latency_override_provenance(
+                sampled, effective, "action"
+            )
+            return observation
+        finally:
+            self._action_latency_override = None
 
     def apply(self, frame: DualArmActionFrame) -> RuntimeStepOutcome:
         self._step_left_contact = False
@@ -392,12 +427,19 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
                 ),
             }
         )
+        self._action_latency_diagnostic = None
         self._observation_latency_diagnostic = None
+        if self._action_latency_override is not None:
+            sampled = _json_copy(values)
+            values["action_latency_steps"] = self._action_latency_override
+            self._action_latency_diagnostic = _latency_override_provenance(
+                sampled, values, "action"
+            )
         if self._observation_latency_override is not None:
             sampled = _json_copy(values)
             values["observation_latency_steps"] = self._observation_latency_override
-            self._observation_latency_diagnostic = (
-                _observation_latency_override_provenance(sampled, values)
+            self._observation_latency_diagnostic = _latency_override_provenance(
+                sampled, values, "observation"
             )
         self._randomization = values
         mujoco.mj_setConst(self.model, self.data)
@@ -643,6 +685,7 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
         return {
             "task_id": self.task.task_id,
             "randomization": self._randomization,
+            "action_latency_diagnostic": self._action_latency_diagnostic,
             "observation_latency_diagnostic": self._observation_latency_diagnostic,
             "instruction_split": "evaluation" if self.evaluation_profile else "train",
             "instruction": self._instruction.text,
@@ -701,29 +744,30 @@ def _canonical_sha256(value: object) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _without_observation_latency(value: dict[str, Any]) -> dict[str, Any]:
+def _without_latency(value: dict[str, Any], kind: str) -> dict[str, Any]:
     result = _json_copy(value)
-    result.pop("observation_latency_steps", None)
+    result.pop(f"{kind}_latency_steps", None)
     return result
 
 
-def _observation_latency_override_provenance(
-    sampled: dict[str, Any], effective: dict[str, Any]
+def _latency_override_provenance(
+    sampled: dict[str, Any], effective: dict[str, Any], kind: str
 ) -> dict[str, object]:
-    sampled_other = _without_observation_latency(sampled)
-    effective_other = _without_observation_latency(effective)
+    sampled_other = _without_latency(sampled, kind)
+    effective_other = _without_latency(effective, kind)
     if sampled_other != effective_other:
-        raise RuntimeError("diagnostic override changed non-observation randomization")
-    sampled_lag = int(sampled["observation_latency_steps"])
-    effective_lag = int(effective["observation_latency_steps"])
+        raise RuntimeError(f"diagnostic override changed non-{kind} randomization")
+    latency_key = f"{kind}_latency_steps"
+    sampled_lag = int(sampled[latency_key])
+    effective_lag = int(effective[latency_key])
     return {
-        "schema_version": "hwr.observation-latency-only-override/v1",
-        "sampled_observation_latency_steps": sampled_lag,
-        "effective_observation_latency_steps": effective_lag,
+        "schema_version": f"hwr.{kind}-latency-only-override/v1",
+        f"sampled_{kind}_latency_steps": sampled_lag,
+        f"effective_{kind}_latency_steps": effective_lag,
         "sampled_randomization_sha256": _canonical_sha256(sampled),
         "effective_randomization_sha256": _canonical_sha256(effective),
         "other_randomization_sha256": _canonical_sha256(sampled_other),
-        "verified_only_observation_latency_changed": True,
+        f"verified_only_{kind}_latency_changed": True,
     }
 
 

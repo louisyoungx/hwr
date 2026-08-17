@@ -146,6 +146,38 @@ def test_formal_diagnostic_override_changes_only_observation_latency() -> None:
     assert one_provenance["verified_only_observation_latency_changed"] is True
 
 
+def test_formal_diagnostic_override_changes_only_action_latency() -> None:
+    task_id = "clear_dining_table_3d/v1"
+    backend = _backend(task_id, evaluation=True)
+    try:
+        backend.reset_for_action_latency_diagnostic(
+            seed=41, task_id=task_id, action_latency_steps=1
+        )
+        lag_one = backend.task_audit()
+        backend.reset_for_action_latency_diagnostic(
+            seed=41, task_id=task_id, action_latency_steps=3
+        )
+        lag_three = backend.task_audit()
+    finally:
+        backend.close()
+
+    one_randomization = dict(lag_one["randomization"])
+    three_randomization = dict(lag_three["randomization"])
+    assert one_randomization.pop("action_latency_steps") == 1
+    assert three_randomization.pop("action_latency_steps") == 3
+    assert one_randomization == three_randomization
+    one_provenance = lag_one["action_latency_diagnostic"]
+    three_provenance = lag_three["action_latency_diagnostic"]
+    assert one_provenance["sampled_randomization_sha256"] == (
+        three_provenance["sampled_randomization_sha256"]
+    )
+    assert one_provenance["other_randomization_sha256"] == (
+        three_provenance["other_randomization_sha256"]
+    )
+    assert one_provenance["verified_only_action_latency_changed"] is True
+    assert three_provenance["verified_only_action_latency_changed"] is True
+
+
 def test_formal_runtime_can_defer_and_resume_camera_rendering() -> None:
     task_id = "clear_dining_table_3d/v1"
     backend = _backend(task_id)
