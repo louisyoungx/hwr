@@ -86,3 +86,15 @@
 2. P11 通过后实施正式 plant/safety 分解；
 3. 若世界模型 action-shuffle 仍失败，执行 P05 三臂；
 4. 若仅安全 recall/PR-AUC 失败，执行 P10。
+
+## P11 正式确认后决策
+
+- 144 Episode、18 分区和所有 artifact 完整，实验没有缺失或 lineage 漂移。
+- 36 个 Episode 因 evaluation observation latency=3，从 step 3 起连续 61 次触发
+  `outside_validity_window` 安全拒绝，没有 16 条共同非干预 feedback，按冻结合同导致
+  18 个分区均失败。
+- 不允许删除这 36 个 Episode、修改稳定阶段定义或延长 action validity 后重算 P11。
+- 其余 108 Episode 的 4,860 个稳定 transition 对 lag1/2/3 全部识别正确，
+  stable RMSE 最大 0.004865；这是机制子集证据，不能覆盖正式拒绝。
+- 主 Agent 将 P11 标记为 `rejected`，按预注册路由选择 P05 三臂。
+- stale-frame 是独立运行时问题；后续可单独提案，但不能与 P05 首次捆绑。

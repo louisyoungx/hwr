@@ -231,6 +231,95 @@
 - lag2/3 不通过或 lag0 回归：P11 `rejected`，转 P05。
 - 不得根据确认结果修改 history、warmup、gain、lag 候选或门槛。
 
+## `R0001-P05` 冻结 Replay 三臂
+
+### 问题
+
+> 在完全相同的冻结 Replay、初始化、更新预算和留出上，把 batch 的第二个样本从重复
+> anchor 改为同 source 不同窗口或跨 source 窗口，是否能因果改善世界模型对实际动作的
+> 利用？
+
+### 固定输入
+
+- 训练 Replay：
+  `runs/foundation-world-model/r0001-p01-baseline-v4-s20260812/replay/autonomous`
+- 因果留出：
+  `runs/foundation-world-model/r0001-p01-baseline-v4-s20260812/causality-holdout`
+- Replay manifest SHA-256：
+  `c7f7a50925b581307dc95787078c1fc2ee520f8b210e61fd91e1007db21a1985`
+- audit manifest SHA-256：
+  `8e1f0b521aac0c6a5b2f65cf7031fefd693890eb0ae37928fd5881ffc11b9907`
+- 24 个 source Episode，每 source 7 个 16-transition 窗口。
+- 不采集新 Episode，不修改 Replay、留出、模型、损失、学习率、batch size 或门槛。
+- 三个模型初始化/schedule seed：
+  `20261205, 202716734, 202821463`。
+
+### 三臂 schedule
+
+- 每个 seed 先固定生成 1,600 个 anchor window。
+- 非 visual update 的 anchor 按全部合格 Replay 窗口均匀抽样。
+- 每第 4 次 visual update 的 anchor 只从 `visual_supervision=true` 的合格窗口均匀抽样，
+  与现有 frozen teacher cache 合同一致。
+- 三臂共享完全相同的 anchor 顺序、visual-update 位置、augmentation 决策和 shuffle
+  seed。
+- batch size 固定为 2：
+  - A `duplicate`：第二个样本与 anchor 是同一窗口；
+  - B `same_source`：第二个样本来自同一 source Episode 的另一个窗口；
+  - C `cross_source`：第二个样本来自不同 source Episode。
+- B/C 的第二样本必须与 anchor 保持：
+  - 同任务；
+  - 同 `result_reason`；
+  - 同 `visual_supervision`；
+  - severe-collision terminal strata 一致。
+- 若某 anchor strata 不存在跨 source 候选，则该 anchor 在 schedule 生成前被排除；三个
+  arm 同步排除，不允许只替换 C。
+- 候选选择使用 seed 派生的固定循环，不根据 loss 或正式留出结果改变。
+
+### 训练与评测
+
+- 每 arm×seed 从同一随机初始化开始，固定 1,600 次 world/visual update。
+- Actor、value、exploration Actor/value 均不更新；不采集 Actor 数据。
+- visual update interval、augmentation probability 和梯度门保持正式配置。
+- 每 200 update 用同一冻结 audit 发布：
+  - action causality aggregate 与三任务分区；
+  - one-step visual latent/proprioception action utilization；
+  - 五个 action derangement seed 的全部结果；
+  - 真实动作绝对误差；
+  - action execution 与 collision validation。
+- A/B/C 均跑满 1,600 update，不因某臂提前过门而停止。
+
+### 主要判定
+
+- 主要比较是 C 对 B；A 只量化重复窗口基线。
+- 三个 seed 均要求：
+  - 1,600 update 时 aggregate 与三任务的 visual latent、proprioception
+    shuffled/true ratio 均 `>=1.05`；
+  - 五个 shuffle 全部通过，ratio p05 `>=1.05`；
+  - C 的最弱任务/模态 ratio 高于 B；
+  - C 的真实动作绝对误差不高于 B。
+- 跨三个 seed，C-B 的最弱任务/模态 ratio 差必须全部为正，中位数至少 `0.02`。
+
+### 守护与成本
+
+- 数据 probe 输入和报告必须与冻结基线一致。
+- action execution、collision validation、真实动作绝对误差不得相对 B 回归。
+- `source_episodes_per_batch`：
+  - A/B 必须等于 1；
+  - C 必须等于 2。
+- `unique_windows_per_batch`：
+  - A 必须等于 1；
+  - B/C 必须等于 2。
+- 记录每 update I/O、墙钟、峰值内存；C 相对 B 墙钟增幅 `<=20%`。
+- 先生成 schedule audit 并运行每臂 2 update smoke；只有三臂 batch 身份、梯度和指标均
+  合法才启动 9 个正式重放。
+- 任一输入 hash、checkpoint、schedule、update 或评测不完整：`inconclusive`。
+- C 未稳定优于 B：P05 `rejected`，再重审 P06，不降低现有因果门。
+
+### run
+
+- smoke：`r0003-p05-batch-arms-s20261205-smoke`
+- 正式前缀：`r0003-p05-batch-arms-s20261205`
+
 ## P17 路由
 
 - 预检失败：P17 `inconclusive`，不运行正式确认。

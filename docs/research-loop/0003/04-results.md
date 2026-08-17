@@ -130,3 +130,41 @@ horizon 上，实际 plant action 对后续可控状态具有稳定、可重复�
 - 结论：采集和分析链路通过 smoke；单 Episode 不进入正式结论。
 
 正式 144 Episode 确认只能在实现提交后从干净源码运行。
+
+### 正式确认：`rejected`
+
+- 源码提交：`ef86971ecd9528c00022e3f944e7878f66665f4a`
+- run：
+  `runs/research-loop/0003/r0003-p11-causal-plant-s20261101`
+- report SHA-256：
+  `79195b94f48e8b59ce04bb7a9a3a680f8717f6484da69b2f28d54b3a9b842cda`
+- manifest SHA-256：
+  `509f1b7f11caa2aa0dced3324bcc6ea9af9b045071c85b1f6a2bc66a7160da3a`
+- 144 Episode、18 个任务×rho×latency 分区、9,216 transition。
+- 145 个 manifest artifact 的 SHA-256 与字节数全部通过。
+- 无严重碰撞、提前终止、越界、缺失 artifact 或 provenance 漂移。
+
+正式结果有 2,196 次安全改写，全部集中在 seed `720365830`、`720784746`：
+
+- 两个 seed 的 evaluation observation latency 都为 3；
+- 三任务、两个 rho、三个 action latency 共 36 Episode；
+- 每个 Episode 从 step 3 到 63 连续 61 次安全改写；
+- 动作 frame 使用延迟 observation timestamp，100ms validity window 小于 3 step
+  observation latency 的 150ms；
+- 安全层因此以 `outside_validity_window` 拒绝动作，proposal 与 applied action 的 motion
+  和 gripper 都被改写；
+- 这 36 个 Episode 没有任何稳定非干预 transition，所有分区因此含非有限聚合值并失败。
+
+按照冻结合同，不能删除这些 Episode、放宽稳定定义或事后延长 validity 后改判，P11 正式
+结论为 `rejected`。
+
+机制子集仍保留以下反例信息，但不覆盖正式拒绝：
+
+- 其余 108 Episode 共 4,860 个稳定 transition；
+- lag1/2/3 的 selected lag 全部正确；
+- stable normalized RMSE 为 `3.29e-17～0.004865`；
+- current baseline RMSE 为 `0.09409～0.43491`；
+- derangement RMSE 为 `0.33859～0.43071`。
+
+该指纹同时暴露独立 stale-frame 运行时问题；它需要另立评测/运行时修复，不能与下一候选
+P05 首次捆绑。按预注册路由，下一步执行 P05 冻结 Replay 三臂。

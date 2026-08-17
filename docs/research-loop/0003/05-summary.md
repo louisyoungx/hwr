@@ -8,8 +8,8 @@
 | `R0001-P17` | `accepted as training-data causality evidence` |
 | `R0001-P14` | `blocked` |
 | `R0001-P15` | `blocked` |
-| `R0001-P11` | `head-only formal pending` |
-| `R0001-P05` | `deferred` |
+| `R0001-P11` | `rejected` |
+| `R0001-P05` | `selected` |
 | `R0001-P10` | `deferred` |
 
 ## 关键发现
@@ -19,6 +19,8 @@
 3. rho=0.50 近满功效，rho=0.96 长时病态是核心失败指纹。
 4. 当前 Action Probe 不能作为可靠训练准入证据。
 5. 同状态配对物理干预已证明实际 plant action 在三任务、1/4/8/16 步均有稳定因果效应。
+6. P11 对非 stale-frame 子集能精确识别 lag1/2/3，但 observation latency=3 会使
+   100ms action validity 窗口过期，正式 144 Episode 合同因此拒绝。
 
 ## 新基线
 
@@ -32,8 +34,8 @@
 需要构建不依赖 state nuisance 拟合的训练前物理因果证据，例如同状态配对实际动作干预。
 该问题继续在 `docs/research-loop/0003/` 内推进；`0001` 和 `0002` 保持冻结只读。
 
-P17 已接受。P11 head-only 开发集和 MuJoCo smoke 已通过，等待冻结的 144 Episode
-正式确认；P05、P10 不得与 P11 首次捆绑。
+P17 已接受，P11 已拒绝。下一候选为 P05 冻结 Replay 三臂；先完成 schedule audit 和
+2-update smoke，再决定是否启动 9 个固定预算正式重放。P10 不与 P05 首次捆绑。
 
 ## 清理
 

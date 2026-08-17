@@ -8,8 +8,8 @@
 | `R0001-P15` | 结果盲的 Replay 起点选择 | 数据保留修复 | 阻断 |
 | `R0001-P16` | Action Probe 设计功效门 | 测量修复 | 拒绝 |
 | `R0001-P17` | 同状态配对实际动作干预 | 物理因果诊断 | 接受 |
-| `R0001-P11` | 因果 latent proposal-history gate | 训练候选 | 正式确认待运行 |
-| `R0001-P05` | 跨 source batch 三臂归因 | 训练候选 | 条件 |
+| `R0001-P11` | 因果 latent proposal-history gate | 训练候选 | 拒绝 |
+| `R0001-P05` | 跨 source batch 三臂归因 | 训练候选 | 入选 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 
 ## `R0001-P14`：等预算连续 Probe
@@ -112,9 +112,15 @@
 
 ### `R0001-P05`：跨 source batch 三臂归因
 
-- 次选。A 为重复同一窗口，B 为同 source 不同窗口，C 为跨 source 不同窗口。
-- 只有 C 稳定优于 B 才支持跨 Episode 假设。
-- P11 被否定或世界模型 action-shuffle 仍失败时启动。
+- P11 正式确认已按预注册门槛拒绝，因此触发本候选。
+- 冻结 Replay 有 24 个 source Episode、每 source 7 个窗口；当前常规 sampler 的 batch
+  size 为 2，通常重复同一 shard/window。
+- A 为重复同一窗口，B 为同 source 不同窗口，C 为跨 source 不同窗口。
+- 三臂共享相同 anchor schedule、模型初始化、更新数和留出，只替换 batch 的第二个样本。
+- B/C 保持 anchor 的任务、结果类别和视觉监督 strata；只有至少有两个 source Episode 的
+  strata 才进入三臂对照，全部排除项在训练前发布。
+- 只有 C 在三个初始化 seed 上稳定优于 B，且真实动作绝对误差、action execution、
+  collision 和数据 probe 不回归，才支持跨 Episode 假设。
 
 ### `R0001-P10`：安全正例分层
 
