@@ -4,10 +4,11 @@
 
 | 稳定 ID | 名称 | 类型 | 状态 |
 |---|---|---|---|
-| `R0001-P14` | 等 transition 预算的连续 Probe 证据合同 | 测量修复 | 条件 |
-| `R0001-P15` | 结果盲的 Replay 起点选择 | 数据保留修复 | 延后 |
-| `R0001-P16` | Action Probe 设计功效门 | 测量修复 | 入选 |
-| `R0001-P11` | 因果 latent proposal-history gate | 训练候选 | 延后 |
+| `R0001-P14` | 等 transition 预算的连续 Probe 证据合同 | 测量修复 | 阻断 |
+| `R0001-P15` | 结果盲的 Replay 起点选择 | 数据保留修复 | 阻断 |
+| `R0001-P16` | Action Probe 设计功效门 | 测量修复 | 拒绝 |
+| `R0001-P17` | 同状态配对实际动作干预 | 物理因果诊断 | 接受 |
+| `R0001-P11` | 因果 latent proposal-history gate | 训练候选 | 正式确认待运行 |
 | `R0001-P05` | 跨 source batch 三臂归因 | 训练候选 | 条件 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 
@@ -89,3 +90,33 @@
 - 两名筛选 Agent 认为该设计易利用时序生成器、安全裁剪和动作路径指纹，不能直接证明
   任务价值或因果控制。
 - 状态：`rejected`，仅可作不影响决策的探索性负控。
+
+## P17 后候选路由
+
+### `R0001-P11`：因果 plant FIFO 与安全 rewrite 分解
+
+- P17 已证明实际 plant action 对三任务、四个 horizon 都有稳定物理因果效应。
+- P09 显示 action latency=1 时，当前 proposal 无法表示当前 actual action；使用前一
+  proposal 可把 normalized RMSE 从 0.197/0.529 降到约 0.0205/0.0157。
+- 直接拼接 proposal history 虽改善 lag1，却显著伤害 lag0，说明需要显式识别 plant
+  latency，而不是一个共享线性 residual。
+- 假设：用过去 proposal 与过去 applied feedback 因果估计固定 Episode 的 actuator gain
+  和 lag，再从 proposal FIFO 产生 plant action baseline；学习头只负责安全 rewrite，可将
+  确定性 plant 变换与稀有安全事件解耦。
+- 最小验证先只评估非干预动作，不修改正式世界模型：
+  - P09 训练 latency 0/1；
+  - 独立短物理集确认 latency 1/2/3；
+  - 不把真实 latency 或 actuator scale作为输入；
+  - 报告冷启动与稳定阶段。
+- 通过后再单独实现正式模型；安全 recall/PR-AUC 仍失败时才触发 P10。
+
+### `R0001-P05`：跨 source batch 三臂归因
+
+- 次选。A 为重复同一窗口，B 为同 source 不同窗口，C 为跨 source 不同窗口。
+- 只有 C 稳定优于 B 才支持跨 Episode 假设。
+- P11 被否定或世界模型 action-shuffle 仍失败时启动。
+
+### `R0001-P10`：安全正例分层
+
+- 只在 P11 已使非干预/干预动作可表示、但自然 holdout 的安全 recall/PR-AUC 仍失败时启动。
+- 不与 P11 或 P05 首次捆绑。

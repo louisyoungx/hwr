@@ -60,3 +60,29 @@
 - `R0001-P17`：选择，先做 snapshot、sham、injection 和 first-stage 预检。
 - `R0001-P11`：等待 P17 建立稳定物理因果证据。
 - `R0001-P18`：拒绝。
+
+## P17 后主 Agent 筛选
+
+三名创新 Agent 的有效结论一致指向：
+
+1. `R0001-P11` 最便宜且机制最直接；
+2. `R0001-P05` 需要 9 次固定重放，成本更高且不能修复动作时序；
+3. `R0001-P10` 只处理安全正例稀疏，不能修复非干预 RMSE。
+
+简单历史线性 probe 的反例：
+
+| rho | 输入 | aggregate RMSE | lag0 RMSE | lag1 RMSE |
+|---:|---|---:|---:|---:|
+| 0.96 | current | 0.137 | 0.033 | 0.191 |
+| 0.96 | history | 0.108 | 0.133 | 0.074 |
+| 0.50 | current | 0.402 | 0.195 | 0.534 |
+| 0.50 | history | 0.317 | 0.383 | 0.234 |
+
+因此不选择直接拼接历史；先验证显式 causal plant FIFO estimator。
+
+### 顺序
+
+1. P11 head-only 因果 plant estimator；
+2. P11 通过后实施正式 plant/safety 分解；
+3. 若世界模型 action-shuffle 仍失败，执行 P05 三臂；
+4. 若仅安全 recall/PR-AUC 失败，执行 P10。

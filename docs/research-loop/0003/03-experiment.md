@@ -147,7 +147,91 @@
 7. 安全改写率 `<=0.05`，严重碰撞和提前终止均为 0；
 8. 无非有限值、弱 first-stage 或缺失 horizon。
 
+## `R0001-P11` head-only 冻结入口
+
+### 问题
+
+> 在不读取真实 action latency、actuator scale 或未来 action 的条件下，过去 proposal 与
+> applied-action feedback 是否足以因果识别 plant FIFO，并把非干预 actual action 的
+> normalized RMSE 降到 0.05 以下？
+
+### 唯一变量
+
+- 对照：current proposal residual。
+- 候选：因果 plant estimator：
+  - 保存最近 4 个 proposal；
+  - 用过去 16 个非干预 feedback 对每个 lag 0/1/2/3 拟合一个共享 scalar gain；
+  - 选择过去 feedback 误差最小的 lag；
+  - 当前预测为该 lag 的 proposal × gain；
+  - gripper 使用同一 lag proposal，不拟合连续 gain。
+- 不训练视觉、RSSM、Actor、安全分类或世界模型主干。
+
+### 数据
+
+- 训练/开发：P09 96 Episode，rho 0.50/0.96，latency 0/1。
+- 正式确认：新 MuJoCo evaluation-profile 短物理数据：
+  - 三个正式任务；
+  - rho 0.50/0.96；
+  - 只强制 action latency 1/2/3，其余 evaluation-profile 随机化保持原 seed 采样；
+  - 每个任务×rho×latency 使用同一组 8 seed：
+    `720261101, 720365830, 720470559, 720575288, 720680017, 720784746,
+    720889475, 720994204`；
+  - 每 Episode 64 个 proposal/feedback transition，共 144 Episode、9,216 transition；
+  - task-blind correlated random source，gripper flip probability 0.05；
+  - run ID：`r0003-p11-causal-plant-s20261101`。
+- 真实 latency/scale 只用于结果分层，不输入 estimator。
+- 确认采集必须记录 action-latency-only override provenance；不得改写 actuator scale、
+  observation latency、场景随机化或动作序列。
+
+### 固定估计器
+
+- action 维归一化使用正式上下界之差。
+- 对当前 step `t`，lag 候选都只使用过去 feedback step `s<t`，并要求 `s>=3`，
+  从而四个候选共享完全相同的可用反馈索引。
+- 从最近 16 个无安全干预的共享反馈 step，对每个 lag 0/1/2/3：
+  - 连续 14 维用无截距最小二乘拟合一个共享 scalar gain；
+  - 用该 gain 与对应 lag proposal 预测连续维；
+  - gripper 直接使用同一 lag proposal；
+  - 最终预测裁剪到正式 action bounds；
+  - 以 16 维 normalized feedback MSE 选最小候选；并列时选较小 lag。
+- 在没有 16 个共同反馈前，候选回退为裁剪后的 current proposal。
+- 因此主要稳定阶段从每 Episode 第 20 个动作开始；此前 19 步全部作为冷启动报告。
+- 固定负控：按 Episode seed
+  `11000003 + seed` 对 proposal 时间轴作无固定点确定性 derangement，再运行完全相同的
+  estimator；不得改动 applied feedback、干预标签或真实目标。
+
+### 指标
+
+- 每任务、每 rho、每 latency：
+  - normalized RMSE `<=0.05`；
+  - latency0 相对 current baseline 绝对退化 `<=0.005`；
+  - out-of-bounds rate 0。
+- 冷启动前 19 步单独报告，不进入主要接受，但不得出现非有限值或越界。
+- 每个分区必须保留全部 8 Episode；若安全干预导致任一步没有 16 条共同无干预反馈，
+  该步不进入稳定阶段并必须计数。
+- latency0 守护只在 P09 开发集判定；正式确认集不含 latency0。
+- 历史 proposal derangement 的每个正式确认分区 stable normalized RMSE 必须比候选
+  至少高 0.05。
+- 严重碰撞、提前终止、artifact 缺失、非有限值或 provenance 不完整均使实验
+  `inconclusive`，不能删除 Episode 后判定。
+
+### 命令与资源
+
+```bash
+.venv/bin/python -m hwr.apps.evaluate_causal_plant_estimator
+```
+
+- CPU/MuJoCo；不训练模型，不使用加速器。
+- 正式确认只允许从干净、已提交源码运行。
+- 保存 144 个 Episode artifact、P09 输入 manifest hash、完整 report 和 artifact hash。
+
 ### 路由
+
+- head-only 通过：实施正式 plant/safety 分解。
+- lag2/3 不通过或 lag0 回归：P11 `rejected`，转 P05。
+- 不得根据确认结果修改 history、warmup、gain、lag 候选或门槛。
+
+## P17 路由
 
 - 预检失败：P17 `inconclusive`，不运行正式确认。
 - 正式确认全部通过：P17 `accepted as training-data causality evidence`，解冻 P11。
