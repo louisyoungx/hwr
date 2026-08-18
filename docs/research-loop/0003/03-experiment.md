@@ -280,6 +280,12 @@
 - 每 arm×seed 从同一随机初始化开始，固定 1,600 次 world/visual update。
 - Actor、value、exploration Actor/value 均不更新；不采集 Actor 数据。
 - visual update interval、augmentation probability 和梯度门保持正式配置。
+- 9 个 run 串行独占 MPS，按 Latin-square 顺序执行：
+  - seed `20261205`：A、B、C；
+  - seed `202716734`：B、C、A；
+  - seed `202821463`：C、A、B。
+- 每 200 update 保存模型、optimizer、CPU/MPS RNG、schedule/input identity 和 audit，
+  允许从最后一个完整 checkpoint 恢复；恢复不得改变后续 batch 或随机采样轨迹。
 - 每 200 update 用同一冻结 audit 发布：
   - action causality aggregate 与三任务分区；
   - one-step visual latent/proprioception action utilization；

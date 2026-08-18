@@ -38,6 +38,10 @@ from hwr.train.foundation_admission import evaluate_foundation_actor_admission
 from hwr.train.foundation_batch_arms import BatchArmSchedule
 from hwr.train.foundation_metrics import mean_metrics
 from hwr.train.foundation_online_config import FoundationOnlineTrainingConfig
+from hwr.train.foundation_recovery import (
+    capture_torch_rng_state,
+    restore_torch_rng_state,
+)
 from hwr.train.foundation_trainer import FoundationWorldModelTrainer
 
 
@@ -265,6 +269,9 @@ def save_batch_replay_checkpoint(
         "visual_objective": trainer.visual_objective.state_dict(),
         "world_model": trainer.world_model.state_dict(),
         "optimizers": trainer.optimizer_state_dict(),
+        "torch_rng_state": capture_torch_rng_state(
+            next(trainer.world_model.parameters()).device
+        ),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -295,6 +302,10 @@ def load_batch_replay_checkpoint(
     trainer.visual_objective.load_state_dict(state["visual_objective"])
     trainer.world_model.load_state_dict(state["world_model"])
     trainer.load_optimizer_state_dict(state["optimizers"])
+    restore_torch_rng_state(
+        state["torch_rng_state"],
+        next(trainer.world_model.parameters()).device,
+    )
 
 
 def _source_episode(loader: FoundationSequenceBatchLoader, index: int) -> str:

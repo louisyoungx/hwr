@@ -27,6 +27,7 @@ from hwr.train.foundation_batch_replay import (
     save_batch_replay_checkpoint,
     train_frozen_batch_arm,
 )
+from hwr.train.foundation_metrics import mean_metrics
 from hwr.train.foundation_setup import build_foundation_learning_stack
 
 
@@ -88,16 +89,44 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         arm = str(arguments.arm)
         seed = int(arguments.seed)
         run_path = output_root / f"{arguments.run_prefix}-{arm}-seed-{seed}"
-        report = _run_formal(
-            root,
-            input_run,
-            run_path,
-            arm=arm,
-            seed=seed,
-            device=str(arguments.device),
-            resume=bool(arguments.resume),
-            source_commit=source_commit,
-        )
+        try:
+            report = _run_formal(
+                root,
+                input_run,
+                run_path,
+                arm=arm,
+                seed=seed,
+                device=str(arguments.device),
+                resume=bool(arguments.resume),
+                source_commit=source_commit,
+            )
+        except BaseException:
+            if run_path.exists():
+                failure = {
+                    "schema_version": "hwr.foundation-batch-arm-failure/v1",
+                    "proposal_id": "R0001-P05",
+                    "source_commit": source_commit,
+                    "arm": arm,
+                    "seed": seed,
+                    "resume": bool(arguments.resume),
+                    "progress": (
+                        json.loads(
+                            (run_path / "progress.json").read_text(encoding="utf-8")
+                        )
+                        if (run_path / "progress.json").is_file()
+                        else None
+                    ),
+                }
+                _write_json(run_path / "failure.json", failure)
+                _write_artifact_manifest(
+                    run_path,
+                    {
+                        "mode": "formal",
+                        "source_commit": source_commit,
+                    },
+                )
+            raise
+    _write_artifact_manifest(run_path, report)
     return {
         "run_path": str(run_path),
         "mode": report["mode"],
@@ -228,6 +257,7 @@ def _run_formal(
             expected_run.get("source_commit") != source_commit
             or expected_run.get("arm") != arm
             or int(expected_run.get("seed", -1)) != seed
+            or expected_run.get("device") != device
             or expected_run.get("input_identity") != identity
             or json.loads(schedule_path.read_text(encoding="utf-8"))
             != schedule.to_dict()
@@ -240,7 +270,8 @@ def _run_formal(
     trainer = stack.trainer
     frozen_initial = _frozen_hash(trainer)
     checkpoint = run_path / "checkpoint.pt"
-    if resume:
+    existing_audits = tuple((run_path / "audits").glob("update-*.json"))
+    if resume and checkpoint.is_file():
         load_batch_replay_checkpoint(
             checkpoint,
             trainer,
@@ -249,8 +280,19 @@ def _run_formal(
             schedule_sha256=schedule_sha,
             input_identity=identity,
         )
+    elif resume and existing_audits:
+        raise FileNotFoundError("batch-arm audits exist without a recovery checkpoint")
     start_update = trainer.update_count
     audits = _existing_audits(run_path)
+    prior_elapsed = (
+        float(
+            json.loads(
+                (run_path / "progress.json").read_text(encoding="utf-8")
+            ).get("elapsed_seconds", 0.0)
+        )
+        if resume and (run_path / "progress.json").is_file()
+        else 0.0
+    )
     started = time.perf_counter()
 
     def progress(update: int, metrics: Mapping[str, float], elapsed: float) -> None:
@@ -258,7 +300,7 @@ def _run_formal(
         value = {
             "update": update,
             "training_metrics": dict(metrics),
-            "elapsed_seconds": elapsed,
+            "elapsed_seconds": prior_elapsed + elapsed,
             **audit,
         }
         _write_json(run_path / f"audits/update-{update:07d}.json", value)
@@ -279,11 +321,11 @@ def _run_formal(
                 "seed": seed,
                 "update": update,
                 "target_updates": FORMAL_UPDATES,
-                "elapsed_seconds": elapsed,
+                "elapsed_seconds": prior_elapsed + elapsed,
             },
         )
 
-    metrics = train_frozen_batch_arm(
+    train_frozen_batch_arm(
         trainer,
         inputs,
         schedule,
@@ -294,6 +336,10 @@ def _run_formal(
         progress=progress,
     )
     final_audit = audits[str(FORMAL_UPDATES)]
+    interval_metrics = [
+        audits[str(update)]["training_metrics"]
+        for update in range(AUDIT_INTERVAL, FORMAL_UPDATES + 1, AUDIT_INTERVAL)
+    ]
     frozen_final = _frozen_hash(trainer)
     report = {
         "schema_version": RUN_SCHEMA,
@@ -307,8 +353,8 @@ def _run_formal(
         "input_identity": identity,
         "schedule_sha256": schedule_sha,
         "schedule_audit": schedule_audit,
-        "training_metrics": metrics,
-        "elapsed_seconds": time.perf_counter() - started,
+        "training_metrics": mean_metrics(interval_metrics),
+        "elapsed_seconds": prior_elapsed + time.perf_counter() - started,
         "frozen_hash_initial": frozen_initial,
         "frozen_hash_final": frozen_final,
         "frozen_components_unchanged": frozen_initial == frozen_final,
@@ -395,6 +441,32 @@ def _write_json(path: Path, value: Mapping[str, object]) -> None:
         encoding="utf-8",
     )
     os.replace(temporary, path)
+
+
+def _write_artifact_manifest(
+    run_path: Path, report: Mapping[str, object]
+) -> None:
+    paths = sorted(
+        path
+        for path in run_path.rglob("*")
+        if path.is_file() and path.name != "manifest.json"
+    )
+    _write_json(
+        run_path / "manifest.json",
+        {
+            "schema_version": "hwr.foundation-batch-arm-artifacts/v1",
+            "proposal_id": "R0001-P05",
+            "mode": report["mode"],
+            "source_commit": report["source_commit"],
+            "artifacts": {
+                str(path.relative_to(run_path)): {
+                    "sha256": _file_sha256(path),
+                    "bytes": path.stat().st_size,
+                }
+                for path in paths
+            },
+        },
+    )
 
 
 def _file_sha256(path: Path) -> str:

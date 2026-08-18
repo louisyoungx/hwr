@@ -168,3 +168,24 @@ horizon 上，实际 plant action 对后续可控状态具有稳定、可重复�
 
 该指纹同时暴露独立 stale-frame 运行时问题；它需要另立评测/运行时修复，不能与下一候选
 P05 首次捆绑。按预注册路由，下一步执行 P05 冻结 Replay 三臂。
+
+## `R0001-P05`：三臂 smoke
+
+- 源码提交：`9f22b638129a1e06c35da1f26cd3b189e602d771`
+- run：
+  `runs/research-loop/0003/r0003-p05-batch-arms-s20261205-smoke`
+- report SHA-256：
+  `42459d19cc74e80480a53a8d33e642453261f29b8655acb7fa3388d49c129ce8`
+- 输入 hash、168 个窗口、24 个 source Episode 均与冻结合同一致。
+- schedule audit：161 个合格窗口、7 个单 source 餐桌 timeout 窗口同步排除。
+- 三臂各完成 2 次真实 MPS update：
+  - A：`source_episodes_per_batch=1`，`unique_windows_per_batch=1`；
+  - B：`source_episodes_per_batch=1`，`unique_windows_per_batch=2`；
+  - C：`source_episodes_per_batch=2`，`unique_windows_per_batch=2`。
+- 三臂 strata 全部匹配，visual update anchor 均有 frozen teacher cache。
+- 三臂 Actor、value、exploration Actor/value 和 slow value hash 均保持不变。
+- 三臂 visual student、visual objective 和 world model hash 均发生变化。
+- 梯度与 loss 全部有限；单臂 2 update 墙钟约 9.34～10.82 秒。
+
+结论：`smoke_passed`。该结果只证明 schedule、缓存、梯度和冻结组件链路有效，不比较
+2-update loss，不形成候选优劣结论。下一步按冻结合同串行运行 9 个 1,600-update formal。
