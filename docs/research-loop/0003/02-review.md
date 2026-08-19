@@ -333,3 +333,26 @@ retention，且 tidy living room 为 0/12，因此不得用 sensitivity ratio �
 主 Agent将 P21 标记为 `diagnostic rejected`。不提出 GRU 或 prior preservation smoke；
 P22 不自动启动。按冻结路由重新审查 decoder/output 对 latent action effect 的不敏感，或
 posterior target/训练目标定义。
+
+## Decoder/output 创新提案
+
+三位创新 Agent 独立审查后形成相同的串行因果链：
+
+1. P23：先判断连续 prior probability effect 是否在 deterministic argmax one-hot 处丢失；
+2. P24：只有 hard decoder feature effect 存活时，才定位 visual/proprio decoder 逐层 gain；
+3. P25：只有 decoder output effect 存活但物理 error 仍不区分 action 时，才诊断 target
+   scale、residual 与 loss gradient 奖励。
+
+### 合并与保留意见
+
+- 两位 Agent 提议在 P23 加 coupled sampling 或 Actor JVP；主 Agent未采纳：P23 的主问题
+  是正式 `sample=False` 路径的 deterministic argmax，加入采样/Actor 会同时改变推理语义
+  和下游模块，不利于单变量归因。
+- P24 保留 actual finite effect 与 local JVP 双重校验，防止 LayerNorm 非线性让单一指标
+  误导；visual/proprio 分头判定。
+- P25 保留 raw/whitened 指标与 gradient projection，但严格依赖 P24；whitening 只作诊断，
+  不得直接改写训练 loss。
+- P22 继续延后，不与 P23 并行；P21 未支持普遍 deterministic shortcut 后，先检查正式
+  argmax 和 decoder 链条更直接。
+
+P23/P24/P25 均不得直接进入训练；先交两个新建、互不交流的筛选 Agent 独立评分。

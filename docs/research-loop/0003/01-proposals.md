@@ -15,6 +15,9 @@
 | `R0001-P20` | RSSM action 输入量级诊断 | 训练候选 | 诊断拒绝 |
 | `R0001-P21` | RSSM 逐级 action-effect 衰减定位 | 训练候选 | 诊断拒绝 |
 | `R0001-P22` | Posterior observation/deterministic 支配诊断 | 训练候选 | 延后，依赖 P21 |
+| `R0001-P23` | Prior probability 到 argmax code 离散化诊断 | 训练候选 | 待筛选 |
+| `R0001-P24` | Visual/proprio decoder 逐层 gain 诊断 | 训练候选 | 延后，依赖 P23 |
+| `R0001-P25` | Physical target scale/gradient 奖励诊断 | 训练候选 | 延后，依赖 P24 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 
 ## `R0001-P14`：等预算连续 Probe
@@ -255,6 +258,93 @@
   dominance，不能单独证明 action path 是失败根因。需与 P21 级联解释，不能直接进入训练。
 - 依赖：稳定的同任务 derangement、完整 window identity 和 posterior categorical
   divergence 实现。
+
+### `R0001-P23`：Prior probability 到 argmax code 离散化
+
+- 证据：
+  - P21 的 72/72 shift 均有 transition action effect，prior probability effect 也全部有限；
+  - 只有 23/72 shift 在 GRU/prior 相邻层出现 `<0.50` retention，不能解释 one-step
+    physical true/shuffled ratio `1.00104`；
+  - 正式 one-step 与 deployment 都使用 `sample=False`，每个 categorical variable 对 prior
+    probability 直接 `argmax` 成 one-hot stochastic code；
+  - decoder 接收 `[h_next, z_next]`，因此 probability 有 effect 不代表 hard code 有 effect。
+- 假设：action 已改变 prior probability，但多数变化没有跨越 top-1 类别边界，stochastic
+  action effect 在 deterministic argmax 处被抹除。
+- 影响范围：只诊断 `prior probability -> hard stochastic code`；固定 P21 的同一
+  `h_t/z_t/action shift`，不执行 decoder、Actor、target 或 loss。
+- 最小验证：
+  - 复用 P21 checkpoint、24 个窗口、shift `1/5/9` 和同一 true/shift prior probability；
+  - 对每个 32-variable categorical 分布记录 true/shift top-1、top-2 margin、argmax code；
+  - 比较 probability 与 hard one-hot code 的 standardized paired effect；
+  - 分栏报告 flip fraction、margin 被 counterfactual probability displacement 穿越的比例，
+    以及 hard code active 维覆盖；
+  - 不做 coupled sampling，不把 soft probability 输入 decoder，不读取 target。
+- 主要指标：
+  - prior probability standardized effect；
+  - 32 个 categorical variable 的 argmax flip fraction；
+  - hard stochastic code standardized effect；
+  - probability-to-code retention；
+  - top-1 margin / counterfactual top-1 probability displacement；
+  - 24 Episode、三任务、三个 shift 一致性。
+- 通过条件：单 shift 同时满足：
+  - probability standardized effect `>=0.05`；
+  - hard code active 维至少 25%；
+  - argmax flip fraction `<=0.10`；
+  - probability-to-code retention `<0.50`；
+  - 全部有限且 hard code 与 RSSM `sample=False` 输出逐元素一致。
+  Episode 至少 2/3 shift 通过；aggregate 至少 20/24，任务配额 `5/6、5/6、10/12`，
+  每个 shift 至少 18/24。
+- 失效条件：probability effect 已低、argmax 经常翻转、code retention 不低、active 维不足、
+  任务一致性不足或任何血缘/逐元素校验漂移。
+- 成本：一次冻结前向，无训练、decoder、backward 或采样。
+- 风险：probability 与 one-hot 坐标的自然尺度不同；必须各自按 true Episode 内逐维
+  variation 标准化，并同时报告 raw flip fraction，禁止只看 retention ratio。
+- 依赖：P21 的内部 stage helper、固定 shift、完整血缘和 MPS 入口。
+
+### `R0001-P24`：Visual/proprio decoder 逐层 gain
+
+- 证据：
+  - P21 显示 action effect 能进入 transition 且多数没有相邻层 `<0.50` 衰减；
+  - one-step decoded physical true/shuffled ratio 仍为 `1.00104`；
+  - visual/proprio head 均为 `Linear -> LayerNorm -> SiLU -> Linear`，首层 deterministic/
+    stochastic 单元素权重 RMS 也相近，参数范数不能定位低 gain。
+- 假设：P23 后 hard feature 仍有非零 action effect，但至少一个 physical decoder 在 hidden
+  映射或最终输出层系统性压低该方向。
+- 最小验证：固定 P23 true/shift hard feature，visual/proprio 分头记录 feature、Linear
+  preactivation、LayerNorm、SiLU hidden、output 的 standardized effect 与相邻 retention；
+  对相同 `delta feature` 做一次冻结 JVP，校验实际 effect 与局部线性方向，不读取 target。
+- 主要指标：分头逐层 effect/retention、normalized JVP gain、实际 effect/JVP cosine 与
+  首次低 gain 位置。
+- 通过条件：输入 feature effect `>=0.05`，某一相邻 retention 与对应 JVP gain retention
+  均 `<0.50`，实际/JVP cosine `>=0.90`；Episode 2/3 shift、aggregate 20/24 和任务配额。
+- 失效条件：feature effect 已低、两头 retention/JVP 均不低、线性校验失败或两头定位不同。
+- 成本：冻结 decoder 前向/JVP，无训练。
+- 风险：LayerNorm 使有限差分与局部 Jacobian 不一致；二者必须联合通过。visual/proprio
+  不得合并掩盖。
+- 依赖：P23 hard feature 与 P21 血缘；P23 未完成前不实施。
+
+### `R0001-P25`：Physical target scale/gradient 奖励
+
+- 证据：
+  - visual 使用原尺度 MSE+cosine，proprio 使用原尺度 MSE，没有逐维 target 标准化；
+  - posterior absolute reconstruction 可由当前 observation 主导，而 prior 仅通过 KL 间接
+    对齐 action；
+  - 若 P24 证明 decoder effect 存活但 output error 仍不区分 action，需检查 target/loss。
+- 假设：大尺度/高残差 target 维主导 loss 与梯度，或标准目标对 action-discriminative
+  output direction 的梯度份额过低。
+- 最小验证：冻结模型，逐 visual/proprio 维统计 target scale、innovation、decoder residual、
+  action effect；比较 raw 与固定 train-only scale-whitened 诊断 loss，分解 objective 对
+  decoder/latent 的梯度平方份额和 action-direction projection；不更新参数。
+- 主要指标：raw/whitened shuffle ratio、effect/target scale、effect/residual、top 10% target
+  维 loss/gradient 占比、action-aligned gradient fraction。
+- 通过条件：P24 output effect 存活；raw ratio `<1.05` 而 whitened `>=1.05`，且 top 10%
+  大尺度维贡献 `>=80%`；或 raw/whitened advantage 均 `<5%` 且 action-aligned gradient
+  fraction `<5%`。
+- 失效条件：分项不能复原原 loss、P24 effect 未到 output、scale whitening 不改变判定，
+  或 target/noise 证据不足。
+- 成本：一次冻结 forward/backward，无 optimizer。
+- 风险：whitening 只作诊断，不能直接推出应修改 loss；visual latent 坐标相关性未建模。
+- 依赖：P24 先证明 decoder output effect 的位置；P24 未完成前不实施。
 
 ### `R0001-P10`：安全正例分层
 
