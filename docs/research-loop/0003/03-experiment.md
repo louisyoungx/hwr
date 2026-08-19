@@ -483,6 +483,8 @@ P19 只有同时满足才通过诊断：
   `.venv/bin/python -m hwr.apps.evaluate_action_input_contribution --device mps --output runs/research-loop/0003/r0003-p20-action-input-contribution-s20261320-r1`。
 - Replay manifest SHA-256 冻结为
   `c7f7a50925b581307dc95787078c1fc2ee520f8b210e61fd91e1007db21a1985`；
+  24 个有序 window identity SHA-256 冻结为
+  `ecb75110942b7411de483265181fa732b1dbafccf06527d94388315fd372375f`；
   checkpoint manifest/artifact SHA-256 冻结为
   `72f9361762d7ff5086f086b9ae1db05396caa3cf91822ece20686095df4ad75b` /
   `ef24bdfcca3cc46274bdfebc1d8b1a4afc81c73abff3aa4128e393e6da2109c6`；
