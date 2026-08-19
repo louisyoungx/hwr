@@ -193,3 +193,21 @@
 - 修订仍是评测实现修复，不是能力改动；不得改 checkpoint、窗口、action、模型权重或
   原阈值。
 - 修订实现再次通过独立筛选后，才允许唯一执行 R1。
+
+### v2 最终复审
+
+修订实现提交：`5fca360`。
+
+- 判定使用每 Episode 沿时间轴去均值的 variation RMS；
+- aggregate 使用按 transition count 加权的平方池化；
+- absolute/DC、bias、stochastic/action 权重只作审计；
+- 非有限、越界、重复 source/window 均确定性失败；
+- Replay manifest 与 24-window hash 在创建 output 前硬校验；
+- 参数 norm 统一先搬到 CPU，再用 `float64` 归约。
+
+专项测试共 16 项，覆盖真实 Replay/window hash、MPS、常量 gripper、非有限、越界、
+重复 identity、血缘失败不创建 output、不等长度平方池化、`None` 传播和阈值边界。
+正确入口全量测试、354 文件尺寸门、架构门和物理完整性门均通过。
+
+两位 v2 筛选 Agent 在补齐回归测试后均给出 `approve`，共同确认阻断项清零，允许在
+干净已提交源码上唯一执行 R1；E1 不得重启，R1 不得重复。
