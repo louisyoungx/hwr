@@ -49,6 +49,7 @@ hwr-evaluate-foundation-batch-arms = "hwr.apps.evaluate_foundation_batch_arms:ma
 hwr-aggregate-foundation-batch-arms = "hwr.apps.aggregate_foundation_batch_arms:main"
 hwr-evaluate-posterior-overshooting = "hwr.apps.evaluate_posterior_overshooting:main"
 hwr-evaluate-free-nats-deadzone = "hwr.apps.evaluate_free_nats_deadzone:main"
+hwr-evaluate-action-input-contribution = "hwr.apps.evaluate_action_input_contribution:main"
 hwr-serve-foundation-dashboard = "hwr.apps.serve_foundation_dashboard:main"
 
 [tool.setuptools.packages.find]
