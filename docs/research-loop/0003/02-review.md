@@ -244,3 +244,36 @@ shortcut，不扫描 action-scale 阈值，也不按任务挑选子集。
   - P21：逐级定位 action effect 在 transition、GRU、prior 哪一级衰减；
   - P22：比较 posterior 对 observation 与 prior deterministic 的经验干预敏感度。
 - 两项都不得直接进入训练，必须先交给两个新建、互不交流的筛选 Agent独立评分。
+
+## Posterior shortcut 独立筛选
+
+两位筛选 Agent在互不交流的情况下均返回相同路由：P21 `approve/优先`，P22
+`defer/依赖 P21`。
+
+| 提案 | 筛选 | 目标价值 | 证据强度 | 可检验性 | 因果可归因性 | 通用性 | 实施成本 | 回归风险 | 结论 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| P21 | E | 5 | 4 | 5 | 4 | 4 | 2 | 1 | `approve` |
+| P21 | F | 5 | 4 | 5 | 4 | 3 | 4 | 5 | `approve` |
+| P22 | E | 4 | 3 | 5 | 4 | 3 | 2 | 1 | `defer` |
+| P22 | F | 4 | 3 | 5 | 4 | 3 | 4 | 5 | `defer` |
+
+筛选 E 的成本/风险分数越高表示越不利；筛选 F 的成本/风险分数越高表示越有利，因此这两列
+不跨筛选求和。
+
+### 共同反驳
+
+- P21 不重复 P06：P06 只证明端到端 posterior target loss 对 action 条件不敏感，P21
+  定位内部 effect 首次在哪一层衰减。
+- 原 P21 单一 derangement 可能 OOD，standardized denominator 接近零会虚高，有限差分
+  尺度也可操纵结论。
+- P22 的 obs/deterministic 置乱不一定同等 OOD；即使通过，也只证明 posterior target
+  dominance，不能单独证明 action path 根因。
+
+### 主 Agent 决策
+
+- 不按总分机械选择；P21 直接回答冻结路由中的“posterior state shortcut 在哪一级”，
+  且其结果可导向单一 GRU/transition/prior 候选，故优先。
+- P21 按筛选意见改为三组 Episode 内经验循环置换、5% 凸组合局部干预、自然 variation
+  分母保护和任务配额，不扫描 shift、epsilon 或阈值。
+- P22 延后；只有 P21 证明 transition effect 存在但下游 retention/sensitivity 系统性不足，
+  才允许继续判断 posterior observation dominance。

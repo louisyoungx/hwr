@@ -497,6 +497,106 @@ P19 只有同时满足才通过诊断：
   HEAD，并由 report 固化。执行前必须确认分支 `feat/research-loop`、工作区干净、远端
   包含实际 HEAD、E1 两个 hash 不变、R1 目录与 dispatch 标记均不存在。
 
+## `R0001-P21` RSSM 逐级 action-effect 衰减诊断
+
+### 执行元数据
+
+- 负责人：主 Agent 单一实现负责人。
+- 分支：`feat/research-loop`。
+- selection seed：`20261306`。
+- run：
+  `runs/research-loop/0003/r0003-p21-layerwise-action-effect-s20261321`。
+- 命令：
+  `.venv/bin/python -m hwr.apps.evaluate_layerwise_action_effect --device mps`。
+- 资源预算：单次冻结 checkpoint 前向，不训练、不执行 decoder；预计小于 15 分钟。
+- 执行前要求：实现、测试、文档均提交并 push，工作区干净，run 路径不存在。
+
+### 固定输入
+
+- checkpoint、训练 Replay、24 个 source Episode 窗口、selection seed 与 P20-R1 相同。
+- Replay manifest SHA-256：
+  `c7f7a50925b581307dc95787078c1fc2ee520f8b210e61fd91e1007db21a1985`。
+- 24-window identity SHA-256：
+  `ecb75110942b7411de483265181fa732b1dbafccf06527d94388315fd372375f`。
+- checkpoint manifest/artifact SHA-256：
+  `72f9361762d7ff5086f086b9ae1db05396caa3cf91822ece20686095df4ad75b` /
+  `ef24bdfcca3cc46274bdfebc1d8b1a4afc81c73abff3aa4128e393e6da2109c6`。
+- 每个窗口固定 16 个 transition；使用 observed posterior
+  `(h_t, z_t)=sequence.deterministic/stochastic[:, :-1]`。
+- action 负控只允许 Episode 内循环 shift `1/5/9`；不得使用 zero、跨 Episode、正式
+  holdout 或搜索其他 shift。
+
+### 逐级前向
+
+对每个 shift 和 transition 固定同一 `(h_t, z_t)`，分别输入 true action 与 shifted action，
+记录：
+
+1. `transition_input[0]` Linear preactivation；
+2. `transition_input[1]` LayerNorm 输出；
+3. `transition_input[2]` SiLU activation；
+4. GRU reset/update/new gate；
+5. `h_{t+1}`；
+6. prior hidden activation、prior logits 与 prior probability。
+
+手工 GRU gate 必须按 PyTorch `GRUCell` 公式复刻，并与原 `nn.GRUCell` 输出逐元素校验；
+maximum absolute difference 必须 `<=1e-5`，否则实验失效。
+
+### 标准化 effect
+
+- 对任一 true stage tensor `y[t,d]`，逐维 scale 为
+  `sqrt(mean_t((y[t,d]-mean_t(y[:,d]))^2))`。
+- active 维定义为 scale `>=1e-4`；每个用于主判定的 stage 至少 25% 维 active。
+- standardized paired effect 为 active 维上的
+  `RMS((y_shift-y_true)/scale)`；同时报告未标准化 paired RMS。
+- 相邻 retention：
+  - `activation_to_h = effect(h_next) / effect(transition_activation)`；
+  - `h_to_prior = effect(prior_probability) / effect(h_next)`。
+- effect denominator 小于 `1e-6`、非有限或 active 维不足时，该 shift 失效，不以 epsilon
+  替代真实分母。
+
+### 局部 action/deterministic sensitivity
+
+- 对相同 shift 固定 `epsilon=0.05`：
+  - `a_eps=0.95*a_true+0.05*a_shifted`，固定 true `(h,z)`；
+  - `h_eps=0.95*h_true+0.05*h_shifted`，固定 true `(z,a)`。
+- action 与 h 输入各自用其 true Episode 内逐维 natural variation scale 标准化；
+  scale `>=1e-4` 的 active 维必须至少占各自维数一半。
+- 对 `h_next` 与 prior probability，分别计算：
+  `local_gain = standardized_output_effect / standardized_input_effect`。
+- action/deterministic sensitivity ratio 为相同输出上的
+  `action_local_gain / deterministic_local_gain`；任一 gain 分母 `<1e-6` 则 shift 失效。
+- 不扫描 epsilon、方向、scale 门或输出层。
+
+### 判定
+
+单个 shift 同时满足：
+
+1. transition activation standardized effect `>=0.05`；
+2. `activation_to_h <0.50` 或 `h_to_prior <0.50`；
+3. 若首次低 retention 位于 `h_next`，则 `h_next` sensitivity ratio `<0.50`；
+   否则 prior probability sensitivity ratio `<0.50`；
+4. 所有值有限、GRU 一致性通过、active 维满足要求。
+
+单个 Episode 至少 2/3 shift 通过。Aggregate 通过还要求：
+
+- 至少 20/24 Episode 通过；
+- clear dining table 至少 `5/6`；
+- store kitchen items 至少 `5/6`；
+- tidy living room 至少 `10/12`；
+- 三个 shift 各自至少 18/24 Episode 通过。
+
+### 路由
+
+- 通过且首次低 retention 一致集中在 `activation -> h_next`：只允许提出 GRU action-input
+  preservation 单变量候选，先做 2-update smoke。
+- 通过且集中在 `h_next -> prior probability`：只允许提出 prior-head action information
+  preservation 单变量候选，先做 2-update smoke。
+- “集中”定义为至少 16 个通过 Episode 的 2/3 通过 shift 将同一位置标为首次低
+  retention；否则即使总通过数达到 20，也标记 `inconclusive`，不得进入训练。
+- 不通过：拒绝 deterministic shortcut 假设；P22 不自动启动，重新审查 decoder/output
+  insensitivity 或目标定义。
+- 不得把不同首次低 retention 的 Episode 混合成一个训练改动。
+
 ## P17 路由
 
 - 预检失败：P17 `inconclusive`，不运行正式确认。

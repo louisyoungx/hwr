@@ -13,8 +13,8 @@
 | `R0001-P06` | 真实动作多步 posterior overshooting | 训练候选 | 预检拒绝 |
 | `R0001-P19` | RSSM free-nats 梯度死区诊断 | 训练候选 | 诊断拒绝 |
 | `R0001-P20` | RSSM action 输入量级诊断 | 训练候选 | 诊断拒绝 |
-| `R0001-P21` | RSSM 逐级 action-effect 衰减定位 | 训练候选 | 待筛选 |
-| `R0001-P22` | Posterior observation/deterministic 支配诊断 | 训练候选 | 待筛选 |
+| `R0001-P21` | RSSM 逐级 action-effect 衰减定位 | 训练候选 | 诊断入选 |
+| `R0001-P22` | Posterior observation/deterministic 支配诊断 | 训练候选 | 延后，依赖 P21 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 
 ## `R0001-P14`：等预算连续 Probe
@@ -193,22 +193,32 @@
   deterministic 对下一状态的敏感度显著高于 action。
 - 最小验证：
   - 只使用 P20 相同 checkpoint、训练 Replay、24 个窗口和 selection hash；
-  - 对每个 transition 固定 `(h_t, z_t)`，比较 true 与单一确定性 deranged action；
+  - 对每个 transition 固定 `(h_t, z_t)`，比较 true 与三组 Episode 内经验 action
+    循环置换，固定 shift 为 `1/5/9`；置换保持精确经验边际分布且无位置固定点；
   - 逐级记录 transition preactivation、LayerNorm/SiLU 输出、GRU reset/update/new gate、
     `h_{t+1}`、prior logits/probability 的 paired effect；
-  - 以 Episode 内自然 variation RMS 标准化，不比较不同维度的裸 norm；
-  - 同时计算经验 action 差分方向与 previous-deterministic 差分方向到 `h_{t+1}` 和 prior
-    logits 的有限差分敏感度；不读取正式 holdout，不执行 decoder，不更新参数。
+  - 以 Episode 内逐维自然 variation RMS 标准化，只纳入 scale `>=1e-4` 的活跃维度；
+    action/h 各至少一半维度活跃，否则该 Episode 无效；
+  - 局部敏感度使用冻结的 5% 凸组合：
+    `x_eps=0.95*x_true+0.05*x_shifted`；action 始终位于经验物理 bounds 的凸包内，
+    previous deterministic 也只做局部经验方向干预；
+  - action 与 previous-deterministic 分支分别以自身标准化输入差异归一化，再比较到
+    `h_{t+1}` 和 prior probability 的标准化输出 gain；
+  - 不读取正式 holdout，不执行 decoder，不更新参数，不扫描 shift、epsilon 或阈值。
 - 主要指标：
   - 各层 standardized paired effect 及相邻层 retention；
   - GRU update gate 分布；
   - action/deterministic sensitivity ratio；
   - 24 Episode 一致性、任务分层和全部有限性。
-- 通过条件：transition action effect 有限非零，但 `h_{t+1}` 或 prior 的 standardized
-  retention `<0.50`，且 action/deterministic sensitivity ratio `<0.50`，至少 20/24
-  Episode 同时成立。
+- 通过条件：
+  - 每个 Episode 至少 2/3 shift 满足 transition activation standardized effect
+    `>=0.05`；
+  - `transition -> h_next` 或 `h_next -> prior probability` 的首次相邻 retention
+    `<0.50`；
+  - 对应输出的 action/deterministic local sensitivity ratio `<0.50`；
+  - 总计至少 20/24 Episode 通过，且 clear/store/tidy 分别至少 `5/6、5/6、10/12`。
 - 失效条件：effect 在 transition 前已近零、下游 retention 不低、action sensitivity 不弱、
-  Episode 一致性不足，或任何 pairing/hash 漂移。
+  活跃维度不足、Episode/任务一致性不足，或任何 pairing/hash 漂移。
 - 成本：一次冻结 checkpoint 前向与有限差分；不训练。
 - 风险：gate 级 hook 容易误复刻 GRU 公式；必须用 `nn.GRUCell` 原输出做逐 transition
   一致性校验。有限差分方向必须来自同一冻结窗口，不能扫描扰动幅度。
