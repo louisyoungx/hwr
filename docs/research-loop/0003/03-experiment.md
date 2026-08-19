@@ -326,6 +326,57 @@
 - smoke：`r0003-p05-batch-arms-s20261205-smoke`
 - 正式前缀：`r0003-p05-batch-arms-s20261205`
 
+## `R0001-P06` 真实动作 posterior overshooting 预检
+
+### 目标
+
+验证一个不复制正式 action-shuffle audit 的训练目标是否具备正确时间对齐和动作梯度：
+
+> 从真实 posterior 起点沿真实 executed action rollout，预测未来停止梯度 posterior latent。
+
+### 固定输入
+
+- 只使用 P05 相同冻结训练 Replay，不读取 causality holdout。
+- 模型 checkpoint：
+  `runs/foundation-world-model/r0001-p01-baseline-v4-s20260812/checkpoints/update-000001600`
+- checkpoint manifest SHA-256：
+  `72f9361762d7ff5086f086b9ae1db05396caa3cf91822ece20686095df4ad75b`
+- checkpoint artifact SHA-256：
+  `ef24bdfcca3cc46274bdfebc1d8b1a4afc81c73abff3aa4128e393e6da2109c6`
+- seed：`20261306`。
+- 从 24 个 source Episode 各选一个固定窗口，共 24 个 16-transition window。
+- 每个 source 内按
+  `SHA256("20261306:<source_episode_id>:<window_episode_id>:<transition_start>")`
+  排序，取最小者；不得按 loss、动作或任务结果挑窗口。
+- horizon：1/2/4/8。
+- posterior target：
+  - deterministic state 使用 MSE；
+  - categorical stochastic state 使用 target posterior 对 predicted prior 的 KL；
+  - future posterior 全部停止梯度。
+- 每个起点从 observed posterior state 开始，仅沿该窗口真实 executed action rollout。
+- 不使用 shuffled action、正式 audit ratio、任务分区、奖励、安全或碰撞标签。
+
+### 负控
+
+- `zero_action`：将 rollout action 全置零；
+- `shifted_action`：真实 action 在窗口内循环错位 1 step；
+- 两个负控都不参与参数更新，只比较同一 posterior target 的 loss。
+
+### 判定
+
+- 全部 horizon 的真实、zero、shifted loss 有限；
+- 真实 action loss 在至少 3/4 horizon 低于两个负控；
+- aggregate 真实 loss 分别比 zero 和 shifted 至少低 5%；
+- 对 executed action 的梯度 norm 有限且 `>1e-6`；
+- 对 posterior target 无梯度；
+- 改变未来 target 不得改变此前起点的 target 索引，防止越界/未来泄露。
+
+### 路由
+
+- 通过：再冻结唯一 overshooting 权重和正式 3-seed 训练预算。
+- 不通过：P06 `rejected without training`，不扫描权重、horizon 或负控。
+- stale-frame 修复、P10、安全采样和模型结构改动均不与本预检捆绑。
+
 ## P17 路由
 
 - 预检失败：P17 `inconclusive`，不运行正式确认。

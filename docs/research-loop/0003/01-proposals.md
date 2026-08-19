@@ -9,7 +9,8 @@
 | `R0001-P16` | Action Probe 设计功效门 | 测量修复 | 拒绝 |
 | `R0001-P17` | 同状态配对实际动作干预 | 物理因果诊断 | 接受 |
 | `R0001-P11` | 因果 latent proposal-history gate | 训练候选 | 拒绝 |
-| `R0001-P05` | 跨 source batch 三臂归因 | 训练候选 | 入选 |
+| `R0001-P05` | 跨 source batch 三臂归因 | 训练候选 | 拒绝 |
+| `R0001-P06` | 真实动作多步 posterior overshooting | 训练候选 | 预检入选 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 
 ## `R0001-P14`：等预算连续 Probe
@@ -121,6 +122,24 @@
   strata 才进入三臂对照，全部排除项在训练前发布。
 - 只有 C 在三个初始化 seed 上稳定优于 B，且真实动作绝对误差、action execution、
   collision 和数据 probe 不回归，才支持跨 Episode 假设。
+
+### `R0001-P06`：真实动作多步 posterior overshooting
+
+- P05 的跨 source batch 不能使 action-shuffle ratio 脱离约 1.0，说明 batch 内 Episode
+  多样性不是主要瓶颈。
+- 当前训练只用相邻一步 prior/posterior KL，视觉/本体重建主要解码已经看到当前
+  observation 的 posterior feature，存在状态连续性捷径。
+- 原 P06 的“真实动作与打乱动作 margin 排序”直接复刻正式 audit，存在评测目标泄露，
+  本轮不采用。
+- 改进假设：从训练 Replay 的 posterior 起点，仅用真实 executed action rollout，
+  在 1/2/4/8 步匹配停止梯度的未来 posterior latent；该目标不读取正式 audit 的
+  derangement、ratio、任务分区或阈值。
+- 最小验证先做低成本预检：
+  - 在冻结 Replay 上测量未训练 overshooting loss 的有限性、action 梯度、时间对齐；
+  - action 全零与时间错位负控必须显著恶化；
+  - 不更新正式模型，不查看正式 holdout 结果。
+- 预检通过后才冻结权重、预算和独立训练 seed；不得与 stale-frame 修复、P10 或数据改动
+  首次捆绑。
 
 ### `R0001-P10`：安全正例分层
 

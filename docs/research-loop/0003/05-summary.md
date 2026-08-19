@@ -9,7 +9,8 @@
 | `R0001-P14` | `blocked` |
 | `R0001-P15` | `blocked` |
 | `R0001-P11` | `rejected` |
-| `R0001-P05` | `selected` |
+| `R0001-P05` | `rejected` |
+| `R0001-P06` | `preflight selected` |
 | `R0001-P10` | `deferred` |
 
 ## 关键发现
@@ -21,6 +22,8 @@
 5. 同状态配对物理干预已证明实际 plant action 在三任务、1/4/8/16 步均有稳定因果效应。
 6. P11 对非 stale-frame 子集能精确识别 lag1/2/3，但 observation latency=3 会使
    100ms action validity 窗口过期，正式 144 Episode 合同因此拒绝。
+7. 跨 source batch 在三个 seed 上没有稳定优于同 source 不同窗口，action-shuffle ratio
+   仍约为 1.0，且真实误差与 action execution 守护回归。
 
 ## 新基线
 
@@ -34,8 +37,8 @@
 需要构建不依赖 state nuisance 拟合的训练前物理因果证据，例如同状态配对实际动作干预。
 该问题继续在 `docs/research-loop/0003/` 内推进；`0001` 和 `0002` 保持冻结只读。
 
-P17 已接受，P11 已拒绝。下一候选为 P05 冻结 Replay 三臂；先完成 schedule audit 和
-2-update smoke，再决定是否启动 9 个固定预算正式重放。P10 不与 P05 首次捆绑。
+P17 已接受，P11/P05 已拒绝。下一步只做 P06 真实动作 posterior overshooting 的冻结
+Replay 离线预检；不通过则不启动训练。P10 与 stale-frame 修复保持独立。
 
 ## 清理
 

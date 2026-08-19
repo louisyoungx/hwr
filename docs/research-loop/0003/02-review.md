@@ -98,3 +98,25 @@
   stable RMSE 最大 0.004865；这是机制子集证据，不能覆盖正式拒绝。
 - 主 Agent 将 P11 标记为 `rejected`，按预注册路由选择 P05 三臂。
 - stale-frame 是独立运行时问题；后续可单独提案，但不能与 P05 首次捆绑。
+
+## P05 正式结果后决策
+
+- 9 个 run、72 个 audit、9 个 checkpoint/report/manifest 与 aggregate 全部完整。
+- 三个 seed 的 C-B 最弱任务/模态 ratio 差为
+  `-0.00279, -0.00281, +0.00361`，中位数 `-0.00279`。
+- C 在任一 seed 都没有使所有任务×物理模态达到 1.05，也没有通过五次 shuffle。
+- C 相对 B 在前两个 seed 变差，第三个 seed 的微小正差也远低于预设 0.02。
+- action execution 相对 B 回归，真实动作绝对误差守护也未通过；仅 collision 和墙钟守护
+  通过。
+- 因此 P05 标记为 `rejected`；不得把单 seed 或单任务的局部方向作为接受证据。
+
+### P06 重审
+
+- 原 P06 的 shuffled-action margin 直接复刻正式 audit，评测泄露风险不可接受。
+- 保留“多步 prior 必须跟随真实动作”的机制问题，但将候选改为真实动作 posterior
+  overshooting：
+  - 只使用训练 Replay；
+  - 未来 posterior latent 停止梯度；
+  - 不生成 shuffled action，不读取正式 holdout；
+  - 正式 action-shuffle 只作为实施完成后的独立评测。
+- 主 Agent 只选择低成本离线预检；预检未证明 action 梯度与时间对齐时，不启动正式训练。

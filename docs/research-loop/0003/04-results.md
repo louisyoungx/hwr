@@ -189,3 +189,47 @@ P05 首次捆绑。按预注册路由，下一步执行 P05 冻结 Replay 三臂
 
 结论：`smoke_passed`。该结果只证明 schedule、缓存、梯度和冻结组件链路有效，不比较
 2-update loss，不形成候选优劣结论。下一步按冻结合同串行运行 9 个 1,600-update formal。
+
+### 正式三臂：`rejected`
+
+- 源码提交：`c0053872eb7887905e2c9730e1d98b466a596ea2`
+- aggregate：
+  `runs/research-loop/0003/r0003-p05-batch-arms-s20261205-aggregate.json`
+- aggregate SHA-256：
+  `8fbd004092d86da680f1a3a4359d9ab92630a9d6a9e8d79b0bdb49c3b2bed2d4`
+- 3 个 seed×3 个 arm，共 9 个 1,600-update run。
+- 每 run 8 个冻结 audit，共 72 个 audit。
+- 九份 report/manifest 各含 14 个 artifact；全部 SHA-256 与字节数验证通过。
+- 无 failure artifact；所有 run 的 Actor/value/slow-value hash 均保持不变。
+
+| seed | arm | aggregate ratio | ratio p05 | visual ratio | proprio ratio | true error | 墙钟秒 |
+|---:|---|---:|---:|---:|---:|---:|---:|
+| 20261205 | A duplicate | 0.99981 | 0.99769 | 0.99828 | 0.99981 | 1.79745 | 6472 |
+| 20261205 | B same-source | 0.99983 | 0.99772 | 0.99843 | 0.99983 | 1.50261 | 7436 |
+| 20261205 | C cross-source | 1.00059 | 0.99809 | 0.99625 | 1.00059 | 1.99741 | 5899 |
+| 202716734 | A duplicate | 1.00019 | 0.99944 | 0.99865 | 1.00019 | 1.04932 | 5864 |
+| 202716734 | B same-source | 1.00083 | 0.99974 | 0.99784 | 1.00083 | 1.36053 | 5734 |
+| 202716734 | C cross-source | 0.99990 | 0.99786 | 0.99629 | 0.99990 | 1.46467 | 5831 |
+| 202821463 | A duplicate | 1.00041 | 0.99762 | 0.99810 | 1.00041 | 1.64985 | 5776 |
+| 202821463 | B same-source | 0.99969 | 0.99606 | 0.99279 | 0.99969 | 1.97474 | 5849 |
+| 202821463 | C cross-source | 0.99946 | 0.99588 | 0.99629 | 0.99946 | 1.50649 | 5720 |
+
+C-B 的预注册最弱任务/模态 ratio 差为：
+
+- seed `20261205`：`-0.002786`；
+- seed `202716734`：`-0.002807`；
+- seed `202821463`：`+0.003612`；
+- 中位数：`-0.002786`，未达到 `+0.02`。
+
+正式判定：
+
+- `candidate_all_physical_ratios_at_least_1_05`：三个 seed 全失败；
+- `candidate_all_shuffle_families_pass`：三个 seed 全失败；
+- C 最弱 ratio 高于 B：仅一个 seed 成立；
+- 真实动作绝对误差非回归：三个 seed 全失败；
+- action execution 非回归：三个 seed 全失败；
+- collision 非回归、墙钟增幅和冻结组件守护：通过。
+
+因此跨 source batch 不是当前 action utilization 失败的有效修复，P05 为 `rejected`。
+不得从单个任务或 seed 的局部方向宣称收益。按预注册路由重审 P06，但原 shuffled-margin
+设计因评测泄露被放弃，只允许先验证真实动作 posterior overshooting 的离线预检。
