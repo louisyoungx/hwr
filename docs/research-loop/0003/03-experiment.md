@@ -414,6 +414,43 @@ P19 只有同时满足才通过诊断：
 - 不通过：拒绝 free-nats 假设，重新检查 action conditioning 或 posterior shortcut。
 - 不得扫描其他 free-nats 值或同时加入 overshooting。
 
+## `R0001-P20` RSSM action 输入贡献诊断
+
+### 固定输入
+
+- 复用 P19 相同 checkpoint、24 个 source Episode 窗口和 observed posterior stochastic。
+- RSSM transition 首层：
+  `rssm.transition_input[0]`，输入 1024 维 stochastic + 16 维 action。
+- 两个 action 条件：
+  - `raw`：Replay 中物理单位 executed action；
+  - `canonical`：逐维 `2*(a-min)/(max-min)-1`，使用正式 action bounds。
+- gripper 也由 `[0,1]` 映射到 `[-1,1]`；不改 proposal、target 或模型权重。
+- 不读取 causality holdout，不执行 optimizer。
+
+### 指标
+
+- stochastic-only preactivation RMS；
+- raw-action-only 与 canonical-action-only preactivation RMS；
+- action/stochastic RMS 比；
+- canonical/raw action contribution 增益；
+- 每 action 维 RMS、bounds 内比例和非有限值；
+- 同时报告 transition_input stochastic/action 权重的 element RMS、column norm 和 Frobenius
+  norm，避免把维数差误作单元素权重差。
+
+### 判定
+
+- raw action/stochastic contribution ratio `<0.20`；
+- canonical/raw contribution gain `>=1.50`；
+- canonical action 全部有限且位于 `[-1,1]`；
+- 24 Episode 中至少 20 个同时满足以上两个贡献条件。
+
+### 路由
+
+- 通过：冻结“仅 RSSM transition dynamics 输入 canonical action normalization”的
+  2-update 三臂 smoke；数据、loss、head 和评测不变。
+- 不通过：拒绝 action-scale 假设，继续检查 posterior state shortcut。
+- 不得同时修改 action execution head 的物理单位输出。
+
 ## P17 路由
 
 - 预检失败：P17 `inconclusive`，不运行正式确认。

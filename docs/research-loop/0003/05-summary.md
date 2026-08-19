@@ -11,7 +11,8 @@
 | `R0001-P11` | `rejected` |
 | `R0001-P05` | `rejected` |
 | `R0001-P06` | `rejected without training` |
-| `R0001-P19` | `diagnostic selected` |
+| `R0001-P19` | `diagnostic rejected` |
+| `R0001-P20` | `diagnostic selected` |
 | `R0001-P10` | `deferred` |
 
 ## 关键发现
@@ -27,6 +28,8 @@
    仍约为 1.0，且真实误差与 action execution 守护回归。
 8. 真实动作 posterior overshooting 相对 zero/shifted 只有 0.88%/0.06% 优势，不足以支持
    新训练目标。
+9. raw dynamics KL 中位数 8.05，current free-nats=1.0 仍有强 prior/action 梯度，
+   free-nats 死区假设被否定。
 
 ## 新基线
 
@@ -40,9 +43,9 @@
 需要构建不依赖 state nuisance 拟合的训练前物理因果证据，例如同状态配对实际动作干预。
 该问题继续在 `docs/research-loop/0003/` 内推进；`0001` 和 `0002` 保持冻结只读。
 
-P17 已接受，P11/P05/P06 已拒绝。下一步只做 P19 free-nats 梯度死区诊断；先证明当前
-1.0 截断确实消除 prior/action 梯度，才允许冻结 0.1 单变量训练候选。P10 与 stale-frame
-修复保持独立。
+P17 已接受，P11/P05/P06/P19 已拒绝。下一步只做 P20 RSSM action 输入贡献诊断；先证明
+物理单位 action 在 transition preactivation 中显著偏弱且 canonical normalization 能恢复
+量级，才允许单变量 smoke。P10 与 stale-frame 修复保持独立。
 
 ## 清理
 

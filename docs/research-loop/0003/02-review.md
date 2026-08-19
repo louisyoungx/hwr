@@ -138,3 +138,21 @@
   1. raw posterior-prior KL 本身没有 action 梯度；
   2. raw KL 有梯度，但被 free-nats 截断为零。
 - P19 只比较冻结的 `1.0/0.1/raw` 三个预注册门，不训练、不读取正式 holdout。
+
+## P19 诊断后决策
+
+- 384 个 transition 的 raw dynamics KL：
+  - median `8.0475`；
+  - p05 `1.1411`；
+  - 只有 3.91% 低于 1.0，0% 低于 0.1。
+- current free-nats=1.0 的 prior 参数梯度 norm `56.05`，raw 为 `56.17`；
+  current 并未处于梯度死区。
+- candidate=0.1 与 raw 完全一致只是因为所有 KL 都高于 0.1，不支持改阈值。
+- P19 标记为 `diagnostic_failed`，free-nats 0.1 不进入训练。
+
+### P20 选择
+
+- RSSM 首层输入为 1024 维 stochastic + 16 维物理单位 action。
+- action 权重单元素 RMS 不低于 stochastic，但 action 维数少 64 倍，且连续 action 未按
+  canonical bounds 归一化。
+- 先做 P20 只读 preactivation 贡献诊断；不修改 checkpoint、不读取正式 holdout。

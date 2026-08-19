@@ -11,7 +11,8 @@
 | `R0001-P11` | 因果 latent proposal-history gate | 训练候选 | 拒绝 |
 | `R0001-P05` | 跨 source batch 三臂归因 | 训练候选 | 拒绝 |
 | `R0001-P06` | 真实动作多步 posterior overshooting | 训练候选 | 预检拒绝 |
-| `R0001-P19` | RSSM free-nats 梯度死区诊断 | 训练候选 | 诊断入选 |
+| `R0001-P19` | RSSM free-nats 梯度死区诊断 | 训练候选 | 诊断拒绝 |
+| `R0001-P20` | RSSM action 输入量级诊断 | 训练候选 | 诊断入选 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 
 ## `R0001-P14`：等预算连续 Probe
@@ -156,6 +157,23 @@
   - 不更新参数、不读取正式 holdout、不扫描其他阈值。
 - 只有当前梯度近零、raw 梯度非零且 0.1 恢复有限梯度时，才允许把 free-nats 作为单变量
   训练候选。
+
+### `R0001-P20`：RSSM action 输入量级
+
+- P19 显示 raw posterior-prior KL 中位数 8.05，只有 3.9% transition 低于 1.0；
+  free-nats=1.0 没有消除 prior/action 梯度。
+- 当前 RSSM 首层直接拼接 1024 维 categorical stochastic 与 16 维物理单位 action；
+  action 没有按正式上下界归一化。
+- 冻结 Replay 连续 action RMS 约 0.12～0.35，canonical 归一化后约 0.60～0.71；
+  checkpoint 的 stochastic/action 单元素权重 RMS 相近，但 stochastic 维数大 64 倍。
+- 假设：未归一化物理单位使 action 对 transition preactivation 的贡献过小，模型更容易沿
+  stochastic state shortcut。
+- 最小验证只读比较：
+  - 当前 raw action；
+  - 按 `2*(a-min)/(max-min)-1` 映射到 `[-1,1]` 的 canonical action；
+  - 同一 posterior stochastic 对 RSSM 首层 preactivation 的 RMS 贡献。
+- 只有 raw action/stochastic 贡献比低、canonical normalization 至少提升 1.5 倍且不产生
+  非有限值时，才允许把“仅 RSSM dynamics 输入归一化”冻结为单变量 smoke。
 
 ### `R0001-P10`：安全正例分层
 

@@ -260,3 +260,37 @@ C-B 的预注册最弱任务/模态 ratio 差为：
 
 因此 P06 预检失败，不启动训练、不扫描权重或 horizon。下一步检查标准 RSSM
 dynamics KL 是否因 `free_nats=1.0` 长期处于梯度死区。
+
+## `R0001-P19`：`diagnostic_failed`
+
+- 源码提交：`d514ad8`
+- run：
+  `runs/research-loop/0003/r0003-p19-free-nats-deadzone-s20261319`
+- report SHA-256：
+  `6aa49e763fc557822fbd0aede6ef5f71aeede7e67728ae92a539b4a3c05691c6`
+- manifest SHA-256：
+  `8b0aaa2119b0cf2f2205608a2cb1d2702c9e7853039ace3e84db746020292b7a`
+- 24 Episode、384 transition、25 artifact 全部 hash 通过。
+
+raw dynamics KL 分布：
+
+- minimum `0.3379`；
+- p05 `1.1411`；
+- median `8.0475`；
+- p95 `24.2462`；
+- maximum `58.6060`；
+- `<1.0` 比例 3.91%，`<0.1` 比例 0%。
+
+梯度：
+
+| 条件 | loss | prior 参数梯度 norm | action 梯度 norm |
+|---|---:|---:|---:|
+| current clamp 1.0 | 10.4170 | 56.0456 | 0.6970 |
+| candidate clamp 0.1 | 10.4032 | 56.1668 | 0.6984 |
+| raw | 10.4032 | 56.1668 | 0.6984 |
+
+candidate 与 raw 参数梯度 cosine 为 1.0。current 梯度并未接近零，且绝大多数 KL 已高于
+1.0；因此 free-nats 不是主要梯度死区，0.1 不进入训练。
+
+下一步 P20 检查未归一化物理 action 在 1024+16 维 RSSM transition 输入中的实际
+preactivation 贡献，仍只做冻结训练 Replay 诊断。
