@@ -565,3 +565,35 @@ P24 准入守护独立通过：
   门通过；两位独立复审 Agent 均 `approve`。
 
 主 Agent批准在 R2 修复与本复审记录 push 后唯一执行 P24-R2；E1/R1 均永久保留。
+
+## P24-R2 正式诊断后决策
+
+- R2 source commit：`cc5f2dd34176a52e3d867f34871b0353336d87c8`。
+- 24 个 Episode、calibration、26 个 manifest artifact、E1+R1 recovery chain 与全部输入
+  血缘有效；aggregate 为 `diagnostic_complete`。
+- endpoint、calibration、active、retention denominator 和 path-JVP 测量已全部有效：
+  - official/direct 144/144 exact；
+  - manual/direct maximum absolute difference 最大 `3.81e-6`；
+  - visual/proprio 的 72/72 branch 全部 valid。
+- visual：
+  - head 状态 `not_localized`；
+  - output guard `24/24`，任务 `6/6、6/6、12/12`；
+  - localized branch `2/72`，Episode `1/24`，只在 `feature_to_linear`；
+  - branch 状态：66 `not_localized`、4 `feature_guard_failed`、2 `localized`。
+- proprioception：
+  - head 状态 `not_localized`；
+  - output guard `24/24`，任务 `6/6、6/6、12/12`；
+  - localized branch `5/72`，Episode `1/24`，只在 `feature_to_linear`；
+  - branch 状态：63 `not_localized`、4 `feature_guard_failed`、5 `localized`。
+
+两头均没有达到 20/24、任务、shift 和16-Episode集中度联合门槛，因此 P24 decoder
+low-gain 假设正式拒绝；不能从少量 `feature_to_linear` branch 宣称 decoder 瓶颈。
+
+按结果前冻结的五状态决策表，两头同时满足 `not_localized`：
+
+- output effect guard 24/24 与任务配额全部通过；
+- 所有 branch 测量有效；
+- 无系统低 retention。
+
+因此 P25 对 visual 与 proprio 分头获得重审资格。P25 必须固定使用全部24 Episode、P24
+calibration 和全部有效 branch，不指定有利边；visual/proprio 不得池化或捆绑成一个结论。

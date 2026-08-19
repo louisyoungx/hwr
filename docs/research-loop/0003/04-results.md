@@ -517,3 +517,89 @@ argmax flip 虽然稀少，但 one-hot jump 相对同一 probability natural sca
 
 因此 P23 阴性后，action-conditioned `[h_next,z_hard]` effect 仍稳定到达 decoder 输入，满足
 预注册的 P24 重审条件。该结果只准许重新筛选 P24，不直接证明 decoder 低 gain。
+
+## `R0001-P24-E1/R1`：`measurement invalid`
+
+E1：
+
+- source commit：`107b4c7e68fe407b79910daed3c62e0dc2ecee3e`
+- report/calibration/manifest SHA-256：
+  - `fcf1b5dad3b93316054a5c884e13c8c35d0417d83a6ae745cabe3dda988f6cb5`
+  - `16d4d6be2390415e215c5f02a61325171d38cfbebad4e0da67ab26c90b085337`
+  - `2ce984233c4ce3a3c3aa932f9e8d3f1765fe5a315c5e4e13cc0a17928a521dda`
+- 完成 24/24 Episode，但手工 LayerNorm 分段与 MPS fused head 的 float32 次序差触发过严
+  endpoint 门，不能形成机制结论。
+
+R1：
+
+- source commit：`97cbdcfef8505d8f6c8b7c24e520a281e5e7df8b`
+- report/calibration/manifest SHA-256：
+  - `619c4f2d7749555768937899e8acad6ffbc1e3f82a859bd392086a8425ea891e`
+  - `16d4d6be2390415e215c5f02a61325171d38cfbebad4e0da67ab26c90b085337`
+  - `9b285ba522a3c00a062a8927f63e10a28f6c572c2864874d49ace28c4e880723`
+- endpoint 修复成功：official/direct 144/144 exact，manual/direct 最大 `3.81e-6`；
+- 仍因 4 个低于 `0.05` 的有效 feature effect 被误分类为 `jvp_invalid`，不能归因。
+
+E1/R1 均永久保留，不重跑、不删除、不参与 P24 机制判定。
+
+## `R0001-P24-R2`：`diagnostic_complete`
+
+- 状态分类修复提交：`cf572d7`
+- source commit：`cc5f2dd34176a52e3d867f34871b0353336d87c8`
+- run：
+  `runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r2`
+- report SHA-256：
+  `45cdc4be0c2120f1ec372fb2f6b37a3ad7a61a565643b9136e95c41b367871e8`
+- calibration SHA-256：
+  `16d4d6be2390415e215c5f02a61325171d38cfbebad4e0da67ab26c90b085337`
+- manifest SHA-256：
+  `40771d46d7d2549f0d55e7bc8dd6f2421576b1fb6b1298600145d5e9d799c19b`
+- 24 Episode report、calibration、aggregate，共 26 个 manifest artifact；全部 hash/字节
+  验证通过，无 failure artifact。
+- E1+R1 recovery chain、Replay/window/checkpoint hash 与 frozen invocation 全部有效。
+
+### Visual head
+
+| 指标 | 结果 |
+|---|---:|
+| head state | `not_localized` |
+| valid branch | 72/72 |
+| output guard Episode | 24/24 |
+| output guard clear/store/tidy | 6/6、6/6、12/12 |
+| localized branch | 2/72 |
+| localized Episode | 1/24 |
+| branch state | 66 not_localized / 4 feature_guard_failed / 2 localized |
+
+描述性分布：
+
+- feature effect：`0.02421 / 0.09542 / 0.31565`（min/median/max）；
+- output effect：`0.03782 / 0.17639 / 0.31703`；
+- 两个 localized `feature_to_linear` actual retention：`0.33557 / 0.43416`；
+- path retention：`0.33557 / 0.43416`；
+- path reconstruction cosine `>=0.9999999998`，relative error `<=1.63e-5`。
+
+### Proprioception head
+
+| 指标 | 结果 |
+|---|---:|
+| head state | `not_localized` |
+| valid branch | 72/72 |
+| output guard Episode | 24/24 |
+| output guard clear/store/tidy | 6/6、6/6、12/12 |
+| localized branch | 5/72 |
+| localized Episode | 1/24 |
+| branch state | 63 not_localized / 4 feature_guard_failed / 5 localized |
+
+描述性分布：
+
+- feature effect：`0.02421 / 0.09542 / 0.31565`；
+- output effect：`0.02982 / 0.12449 / 0.23805`；
+- 五个 localized `feature_to_linear` actual retention：
+  `0.28208`～`0.48340`，中位数 `0.46190`；
+- path retention：`0.28208`～`0.48340`，中位数 `0.46190`；
+- path reconstruction cosine `>=0.9999999998`，relative error `<=1.44e-5`。
+
+结论：hard decoder feature effect 与 physical-head output effect 均稳定存活，但任一 head 都没有
+系统性的相邻层 `<0.50` retention；P24 decoder low-gain 假设拒绝。按冻结决策表，两头都
+是 `not_localized` 且 output guard 全过，因此 P25 可分头重筛 target scale/gradient 奖励；
+不得指定少量 localized branch、不得合并 visual/proprio。

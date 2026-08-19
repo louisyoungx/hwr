@@ -16,8 +16,8 @@
 | `R0001-P21` | `diagnostic rejected` |
 | `R0001-P22` | `deferred, depends on P21` |
 | `R0001-P23` | `diagnostic rejected` |
-| `R0001-P24` | `eligible for rescreening` |
-| `R0001-P25` | `deferred, depends on P24` |
+| `R0001-P24` | `diagnostic rejected, both heads not_localized` |
+| `R0001-P25` | `eligible for split rescreening` |
 | `R0001-P10` | `deferred` |
 
 ## 关键发现
@@ -44,6 +44,9 @@
 12. prior argmax flip 虽仅 0%～2.73%，hard one-hot effect 相对同一 probability scale
     通常被放大而非抹除；P23 仅 5/24 Episode 通过，argmax 瓶颈被否定。与此同时 hard
     decoder feature effect 24/24 过线，允许重筛 P24。
+13. P24-R2 中 visual/proprio 的 decoder input/output effect 都 24/24 存活，但系统性低
+    retention 均未定位；两头只各有 1/24 Episode 定位到 feature→linear，decoder low-gain
+    假设被否定。两头均按冻结决策表进入 `not_localized`，允许分头重筛 P25。
 
 ## 新基线
 
@@ -61,8 +64,9 @@ P17 已接受，P11/P05/P06/P19/P20/P21 已拒绝。P20 aggregate raw/stochastic
 canonical/raw gain 虽然过线，但仅 17/24 Episode 同时满足条件，不能用 aggregate 覆盖
 预注册一致性门槛。P21 又排除了 action effect 在 GRU/prior 相邻层普遍衰减的解释；P22
 不自动启动。P23 进一步否定正式 argmax 普遍抹除 stochastic effect，但 hard feature
-24/24 稳定到达 decoder 输入。下一步独立重筛 P24 decoder/output gain；P25、P10 与
-stale-frame 修复保持独立。
+24/24 稳定到达 decoder 输入。P24 又否定 visual/proprio decoder 的系统性逐层低 gain，
+但两头 output guard 都 24/24 通过。下一步按头独立重筛 P25 target scale/gradient 奖励；
+P10 与 stale-frame 修复保持独立。
 
 ## 清理
 
