@@ -454,3 +454,48 @@ P24 准入守护独立通过：
 
 这只证明 action-conditioned hard feature 稳定到达 decoder 输入，不证明 decoder 已经低 gain。
 按预注册路由允许重审 P24；P24 仍需独立筛选与完整冻结，不能因守护通过直接实施。
+
+## P24 独立重筛
+
+| 筛选 | 目标价值 | 证据强度 | 可检验性 | 因果可归因性 | 通用性 | 实施可行性 | 回归风险 | 结论 |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| M | 4 | 3 | 3 | 3 | 3 | 4 | 4 | `revise` |
+| N | 4 | 4 | 3 | 2 | 3 | 4 | 5 | `revise` |
+
+两份评分均以 5 为更有利。
+
+### 共同反驳
+
+- hard one-hot true→shift 是有限跳变，单点 JVP 不得作为通过门。
+- LayerNorm 需要拆分去均值/方差归一化与 affine；其抑制只能称为幅度定位，不能直接称
+  信息丢失。
+- stage/output scale 必须在比较 shift 前由冻结 true branch 全局校准，不能按 Episode
+  自适应或结果后重算。
+- 原“某一相邻层”允许结果后挑层；必须按固定顺序选择首个低 retention 边界。
+- visual/proprio 必须独立满足 Episode/任务配额，不能池化补足；定位不同形成两个结论。
+- P25 必须使用 P24 冻结的分头/分层结果，不能选择有利子集。
+
+### 主 Agent 决策
+
+- P24 保留重审资格，但当前版本不实施。
+- 修订版用 24 true branch 的 384 transition 预先冻结每个 head/stage/coordinate scale。
+- 有限跳变使用固定 16 段 midpoint path-integrated JVP 重建；单点 JVP仅作描述。
+- 按 `feature→linear preactivation→LN normalized→LN affine→SiLU hidden→output` 固定顺序
+  选择首个 actual retention `<0.50` 的边；同一边 path-JVP retention 和重建一致性必须
+  同时通过。
+- P24通过也只证明 decoder 网络链路幅度衰减，不能宣称 hard feature 已编码有效物理状态。
+
+### P24 修订复审
+
+- 两位筛选 Agent 都要求把 calibration、branch→Episode→head 聚合和 P25 路由完全机械化。
+- 主 Agent补充冻结：
+  - 384 个 true transition 的 exact mean/scale、一次性 active mask 与 calibration artifact；
+  - branch 固定为 `head × Episode × shift`；
+  - 固定顺序的首个低 retention 边不可跳过；
+  - actual/path 使用同一 mask、scale、active RMS 与分母；
+  - Episode 2/3 branch 同边，head 独立满足 20/24、任务、shift 与16-Episode集中度；
+  - P25 按 `passed(edge)/not_localized/output_guard_failed/jvp_invalid/异头` 五状态预注册。
+- 最终筛选 M/N 均 `approve`，共同确认：P24 只支持 decoder 幅度衰减位置，不支持 hard
+  feature 物理语义或能力提升结论。
+
+主 Agent批准 P24 进入实现；P25 继续 defer，等待 P24 分头状态。

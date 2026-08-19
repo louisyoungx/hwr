@@ -16,7 +16,7 @@
 | `R0001-P21` | RSSM 逐级 action-effect 衰减定位 | 训练候选 | 诊断拒绝 |
 | `R0001-P22` | Posterior observation/deterministic 支配诊断 | 训练候选 | 延后，依赖 P21 |
 | `R0001-P23` | Prior probability 到 argmax code 离散化诊断 | 训练候选 | 诊断拒绝 |
-| `R0001-P24` | Visual/proprio decoder 逐层 gain 诊断 | 训练候选 | 重审，P23 hard-feature 守护通过 |
+| `R0001-P24` | Visual/proprio decoder 逐层 gain 诊断 | 训练候选 | 诊断入选 |
 | `R0001-P25` | Physical target scale/gradient 奖励诊断 | 训练候选 | 延后，依赖 P24 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 
@@ -319,16 +319,22 @@
 - 假设：P23 后 hard feature 仍有非零 action effect，但至少一个 physical decoder 在 hidden
   映射或最终输出层系统性压低该方向。
 - 最小验证：固定 P23 true/shift hard feature，visual/proprio 分头记录 feature、Linear
-  preactivation、LayerNorm、SiLU hidden、output 的 standardized effect 与相邻 retention；
-  对相同 `delta feature` 做一次冻结 JVP，校验实际 effect 与局部线性方向，不读取 target。
-- 主要指标：分头逐层 effect/retention、normalized JVP gain、实际 effect/JVP cosine 与
-  首次低 gain 位置。
-- 通过条件：输入 feature effect `>=0.05`，某一相邻 retention 与对应 JVP gain retention
-  均 `<0.50`，实际/JVP cosine `>=0.90`；Episode 2/3 shift、aggregate 20/24 和任务配额。
+  preactivation、LayerNorm 去均值/方差归一化、LayerNorm affine、SiLU hidden、output 的
+  standardized effect 与相邻 retention；
+  - 所有 stage scale 在比较 shift 前，由 24 个 true branch、384 transition 全局冻结，
+    visual/proprio 分头分 stage/coordinate 计算，不使用 Episode 自适应 scale；
+  - 对相同 full `delta stage input` 使用固定 16 段 midpoint path-integrated JVP 重建有限
+    output jump；单点 JVP 不作判定；
+  - 不读取 target。
+- 主要指标：分头逐层 actual effect/retention、path-JVP retention、finite-jump 重建 cosine/
+  relative error、LayerNorm true mean/variance 与 gamma/beta 描述统计、首个低 gain 边界。
+- 通过条件：输入 feature effect `>=0.05`；按固定顺序找到首个 actual retention `<0.50`
+  的边界，且同一边界 path-JVP retention `<0.50`、重建 cosine `>=0.90`、relative error
+  `<=0.10`；Episode 2/3 shift 命中同一边界，aggregate 20/24 和任务配额。
 - 失效条件：feature effect 已低、两头 retention/JVP 均不低、线性校验失败或两头定位不同。
 - 成本：冻结 decoder 前向/JVP，无训练。
-- 风险：LayerNorm 使有限差分与局部 Jacobian 不一致；二者必须联合通过。visual/proprio
-  不得合并掩盖。
+- 风险：one-hot 是有限跳变、LayerNorm 耦合坐标；路径积分只作网络链路幅度定位，不代表
+  hard feature 具有物理语义。visual/proprio 不得合并掩盖或相互补足。
 - 依赖：P23 hard feature 与 P21 血缘；P23 未完成前不实施。
 
 ### `R0001-P25`：Physical target scale/gradient 奖励

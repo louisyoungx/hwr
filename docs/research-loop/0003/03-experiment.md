@@ -704,6 +704,136 @@ Episode 是独立统计单位；三个 shift 只是 Episode 内重复证据，�
   重审，否则停止 decoder 链并转查目标定义。
 - `sample=False` 一致性、低 flip 或低 retention 单项均不得替代全部联合门槛。
 
+## `R0001-P24` Visual/proprio decoder 逐层 gain 诊断
+
+### 执行元数据
+
+- 负责人：主 Agent 单一实现负责人。
+- 分支：`feat/research-loop`。
+- selection seed：`20261306`。
+- run：
+  `runs/research-loop/0003/r0003-p24-decoder-gain-s20261324`。
+- 命令：
+  `.venv/bin/python -m hwr.apps.evaluate_decoder_gain --device mps`。
+- 资源预算：冻结 decoder 前向与 16 段 path-integrated JVP，不训练、不读取 target/loss，
+  预计小于 15 分钟。
+- 执行前要求：实现、测试、文档均提交并 push，工作区干净，run 路径不存在。
+
+### 固定输入与准入
+
+- checkpoint、训练 Replay、24 个 source Episode、selection seed、window identity 与
+  P23 完全相同。
+- Replay/window/checkpoint hash 沿用 P23 冻结值。
+- true/shift hard feature 必须逐元素复现 P23：
+  `feature=[h_next,z_hard]`，shift 为 `1/5/9`。
+- P23 hard-feature guard 必须复算为 24/24 且任务 `6/6、6/6、12/12`；任何漂移使 P24
+  实验失效。
+- visual/proprio head 结构必须分别为
+  `Linear -> LayerNorm -> SiLU -> Linear`，维数与 checkpoint config 一致。
+
+### True-branch 全局 calibration
+
+- 在计算任何 shift effect 前，汇总 24 个 true branch、384 transition。
+- 对每个 head、每个 stage、每个 coordinate 冻结：
+  - `mean_d=(1/384)*sum_t y_true[t,d]`；
+  - `scale_d=sqrt((1/384)*sum_t((y_true[t,d]-mean_d)^2))`。
+- stage：
+  1. feature；
+  2. first Linear preactivation；
+  3. LayerNorm normalized（减均值、除 `sqrt(var+eps)`，不含 affine）；
+  4. LayerNorm affine；
+  5. SiLU hidden；
+  6. output。
+- `scale>=1e-4` 为 active；用于主判定的每个 stage 至少 25% 维 active。
+- visual/proprio 分头、分 stage/coordinate 校准；禁止共享 scale、按 Episode 重算、按
+  shift 选维或用 epsilon 替代 inactive 维。
+- calibration 使用的是预先冻结的全部 true branch，不读取任何 shift effect、head 判定或
+  P24 结果；每个 stage 的 mask/mean/scale 只生成一次并写入 calibration artifact，之后
+  72 个 branch 全部复用。不得按结果重新筛 coordinate。
+- 同时报告原始 stage RMS/paired RMS 和 LayerNorm true mean/variance、eps、gamma/beta
+  描述统计。
+
+### Actual effect 与 retention
+
+- 对同一 true/shift feature，逐 stage 计算：
+  `effect=sqrt(mean_active(((y_shift-y_true)/scale)^2))`。
+- 相邻边固定顺序：
+  1. feature→linear preactivation；
+  2. linear preactivation→LN normalized；
+  3. LN normalized→LN affine；
+  4. LN affine→SiLU hidden；
+  5. SiLU hidden→output。
+- retention=`effect_next/effect_previous`；分母 `<1e-6`、非有限或 active 覆盖不足时该
+  shift/head 失效。
+- 首个低 retention 为固定顺序中第一个 `<0.50` 的边；不得结果后挑层或改顺序。
+- 单个 branch 定义为一个固定的 `head × Episode × shift`。沿固定顺序遇到首个 actual
+  retention `<0.50` 的边后立即停止搜索：
+  - 若该边 path-JVP retention、cosine、relative error 全部合格，则 branch 通过并定位到该边；
+  - 若任一不合格，则 branch 失效，不得继续尝试后续边；
+  - 若五个边都没有 actual retention `<0.50`，则 branch 标记 `not_localized`。
+
+### Path-integrated JVP
+
+- one-hot hard feature 是有限跳变；禁止以单点 JVP 作为判定。
+- 对每个相邻模块 `f` 的完整输入 jump `delta=x_shift-x_true`，使用固定 16 段 midpoint：
+  `x_k=x_true+(k+0.5)/16*delta`，`k=0..15`。
+- `path_jvp=(1/16)*sum_k J_f(x_k) delta`；不扫描分段数、路径或方向。
+- path-JVP output 使用与该边 actual output 相同的冻结 scale/active mask 计算 effect。
+- path-JVP retention 与 actual retention 使用同一前一 stage actual effect 作为分母。
+- actual/path effect 都使用 calibration artifact 中同一 coordinate mask、scale 和 active
+  维 RMS；分母下限统一为 `1e-6`。
+- 重建一致性：
+  - cosine(path_jvp, actual_delta) `>=0.90`；
+  - relative error `||path_jvp-actual_delta|| / ||actual_delta|| <=0.10`；
+  - actual delta norm `<1e-6` 时该边失效，不使用 floor。
+- LayerNorm path 仅作网络幅度定位；不得解释为语义信息丢失。
+
+### 判定
+
+对 visual/proprio 每个 head、每个 shift 独立判定：
+
+1. feature standardized effect `>=0.05`；
+2. 所有主 stage active 覆盖和有限性通过；
+3. 存在固定顺序中的首个 actual retention `<0.50`；
+4. 同一边 path-JVP retention `<0.50`；
+5. 同一边重建 cosine `>=0.90`、relative error `<=0.10`；
+6. P23 hard-feature endpoint 与 decoder 原始 endpoint 逐元素校验通过。
+
+单个 head/Episode 的三个 branch 中，至少 2 个 branch 通过且定位到同一边，才记为该
+Episode/head 通过；两个通过 branch 定位不同则 Episode/head 失败，不选择多数以外的边。
+
+每个 head 独立 aggregate，所有条件取交集：
+
+- 通过 Episode 至少 20/24；
+- 通过 Episode 的 clear dining table 至少 `5/6`；
+- 通过 Episode 的 store kitchen items 至少 `5/6`；
+- 通过 Episode 的 tidy living room 至少 `10/12`；
+- 对每个固定 shift，该 head 的通过 branch 至少 18/24；
+- 在通过 Episode 中，至少 16 个 Episode 的 Episode-level 定位边相同；该边才是 head
+  的 aggregate 定位边。
+
+visual/proprio 不得池化或相互补足。
+
+### 路由与 P25 决策表
+
+- 单头通过：只接受该 head、该首个边界的 decoder low-gain 机制；不得宣称物理语义或能力
+  提升。
+- 两头通过且边界相同：仍形成 visual/proprio 两个独立结论，后续候选分别实现与评测。
+- 两头定位不同：禁止捆绑训练改动，P25 拆成两个分头实验。
+- 对每个 head 独立应用以下结果前冻结的决策表：
+
+| P24 head 状态 | P25 路由 |
+|---|---|
+| `passed(edge)`：全部配额通过并集中到一个边 | P25 禁止；只允许该 head×edge 的 decoder 候选 |
+| `not_localized`：全部有效，至少 20/24 Episode 的 output effect `>=0.05` 且任务配额通过，但无系统低 retention | P25 对该 head 允许重审，固定使用全部24 Episode，不指定有利边 |
+| `output_guard_failed`：output effect 守护未达到同一 Episode/任务配额 | P25 对该 head 拒绝 |
+| `jvp_invalid` 或其他测量失效 | P25 blocked；只能修复测量，不得改候选 |
+| visual/proprio 状态或定位边不同 | 分头处理；禁止合并、互补或选择较有利的 head |
+
+- P25 若获准，必须继承该 head 的全部 24 Episode、固定 calibration、全部有效 branch 和
+  P24 状态；不得选有利 Episode、shift、边或尺度。
+- P23/P24 的低 gain、JVP 或 LN 单项均不得替代联合门槛。
+
 ## P17 路由
 
 - 预检失败：P17 `inconclusive`，不运行正式确认。
