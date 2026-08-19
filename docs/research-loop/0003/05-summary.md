@@ -15,6 +15,9 @@
 | `R0001-P20` | `diagnostic rejected` |
 | `R0001-P21` | `diagnostic rejected` |
 | `R0001-P22` | `deferred, depends on P21` |
+| `R0001-P23` | `diagnostic rejected` |
+| `R0001-P24` | `eligible for rescreening` |
+| `R0001-P25` | `deferred, depends on P24` |
 | `R0001-P10` | `deferred` |
 
 ## 关键发现
@@ -38,6 +41,9 @@
 11. action effect 在全部 72 个 shift 都能进入 RSSM transition，但只有 23/72 出现
     `<0.50` 的相邻层 retention；P21 仅 8/24 Episode 通过，且 tidy living room 为
     0/12，deterministic shortcut 联合假设被否定。
+12. prior argmax flip 虽仅 0%～2.73%，hard one-hot effect 相对同一 probability scale
+    通常被放大而非抹除；P23 仅 5/24 Episode 通过，argmax 瓶颈被否定。与此同时 hard
+    decoder feature effect 24/24 过线，允许重筛 P24。
 
 ## 新基线
 
@@ -54,8 +60,9 @@
 P17 已接受，P11/P05/P06/P19/P20/P21 已拒绝。P20 aggregate raw/stochastic ratio 与
 canonical/raw gain 虽然过线，但仅 17/24 Episode 同时满足条件，不能用 aggregate 覆盖
 预注册一致性门槛。P21 又排除了 action effect 在 GRU/prior 相邻层普遍衰减的解释；P22
-不自动启动。下一步重新审查 decoder/output 对 latent action effect 的不敏感，或 posterior
-target/训练目标定义；P10 与 stale-frame 修复保持独立。
+不自动启动。P23 进一步否定正式 argmax 普遍抹除 stochastic effect，但 hard feature
+24/24 稳定到达 decoder 输入。下一步独立重筛 P24 decoder/output gain；P25、P10 与
+stale-frame 修复保持独立。
 
 ## 清理
 

@@ -15,8 +15,8 @@
 | `R0001-P20` | RSSM action 输入量级诊断 | 训练候选 | 诊断拒绝 |
 | `R0001-P21` | RSSM 逐级 action-effect 衰减定位 | 训练候选 | 诊断拒绝 |
 | `R0001-P22` | Posterior observation/deterministic 支配诊断 | 训练候选 | 延后，依赖 P21 |
-| `R0001-P23` | Prior probability 到 argmax code 离散化诊断 | 训练候选 | 诊断入选 |
-| `R0001-P24` | Visual/proprio decoder 逐层 gain 诊断 | 训练候选 | 延后，依赖 P23 |
+| `R0001-P23` | Prior probability 到 argmax code 离散化诊断 | 训练候选 | 诊断拒绝 |
+| `R0001-P24` | Visual/proprio decoder 逐层 gain 诊断 | 训练候选 | 重审，P23 hard-feature 守护通过 |
 | `R0001-P25` | Physical target scale/gradient 奖励诊断 | 训练候选 | 延后，依赖 P24 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 

@@ -455,3 +455,65 @@ sensitivity 很低，但大多数 shift 的 effect 并未在任一相邻层下�
 shortcut 假设只在 store kitchen items 稳定成立，在 tidy living room 完全不成立。P21
 正式拒绝，不进入 GRU/prior preservation smoke，不把 23 个通过 shift 或低 sensitivity
 ratio 单项挑选为正证据。下一步重新审查 decoder/output insensitivity 或目标定义。
+
+## `R0001-P23`：`diagnostic_failed`
+
+- 实现提交：`a009515`
+- source commit：`a2c11a17a686eb529ee22901dd7edf56d42eda5d`
+- run：
+  `runs/research-loop/0003/r0003-p23-prior-argmax-s20261323`
+- report SHA-256：
+  `eff6fbf62fe77ef956ee20a05de87115873a65c8055c9d99ed74af3ee0851fca`
+- manifest SHA-256：
+  `42c7e7cd65ab6c280ac50e3087180607253915e5d14bf97c88a4cf6b5a1a9279`
+- 24 个 Episode report 与 aggregate report，共 25 个 manifest artifact；全部 SHA-256
+  与字节数验证通过，无 `failure.json`。
+- device 为 `mps`，frozen invocation、Replay/window/checkpoint hash 与冻结值一致。
+
+### P23 机制判定
+
+| 指标 | 结果 | 门槛 | 判定 |
+|---|---:|---:|---|
+| Episode 通过 | 5/24 | `>=20/24` | 失败 |
+| shift=1 通过 | 5/24 | `>=18/24` | 失败 |
+| shift=5 通过 | 4/24 | `>=18/24` | 失败 |
+| shift=9 通过 | 7/24 | `>=18/24` | 失败 |
+| clear dining table | 4/6 | `>=5/6` | 失败 |
+| store kitchen items | 0/6 | `>=5/6` | 失败 |
+| tidy living room | 1/12 | `>=10/12` | 失败 |
+
+72 个 shift 的守护：
+
+- active probability coverage：`72/72`；
+- flip fraction `<=0.10`：`72/72`；
+- near tie count 为 0：`72/72`；
+- flip/crossing 一致：`72/72`；
+- independent hard code 与 sample=False 一致：`72/72`；
+- 全部值有限：`72/72`。
+
+主判定分歧：
+
+- probability effect `>=0.05`：`61/72`；
+- probability-to-code retention `<0.50`：`20/72`。
+
+描述性分布：
+
+| 指标 | minimum | median | maximum |
+|---|---:|---:|---:|
+| probability effect | 0.01470 | 0.13324 | 0.37282 |
+| hard code effect | 0.00000 | 1.47370 | 10.72086 |
+| probability→code retention | 0.00000 | 12.53875 | 105.04652 |
+| argmax flip fraction | 0.00000 | 0.001953 | 0.027344 |
+
+argmax flip 虽然稀少，但 one-hot jump 相对同一 probability natural scale 通常很大，并未在
+大多数 Episode 中形成 `<0.50` retention。正式 deterministic argmax 不是普遍 action-effect
+抹除点，P23 为 `diagnostic_failed`；不得从低 flip fraction 单项宣称 argmax 瓶颈。
+
+### P24 准入守护
+
+- hard feature effect Episode：`24/24`；
+- clear/store/tidy：`6/6、6/6、12/12`；
+- 72 个 shift 全部过线，effect 范围 `0.06066`～`0.42971`，中位数 `0.22209`。
+
+因此 P23 阴性后，action-conditioned `[h_next,z_hard]` effect 仍稳定到达 decoder 输入，满足
+预注册的 P24 重审条件。该结果只准许重新筛选 P24，不直接证明 decoder 低 gain。

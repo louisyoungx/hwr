@@ -425,3 +425,32 @@ P23/P24/P25 均不得直接进入训练；先交两个新建、互不交流的�
   - 两位独立实现复审 Agent 均 `approve`。
 
 主 Agent批准在实现与本复审记录均 push、工作区干净、冻结 run 路径不存在时唯一执行 P23。
+
+## P23 正式诊断后决策
+
+- source commit：`a2c11a17a686eb529ee22901dd7edf56d42eda5d`。
+- 24 个 Episode、25 个 manifest artifact、frozen invocation 与全部输入血缘有效。
+- 所有 72 个 shift：
+  - active probability 覆盖均通过，active count 为 1022～1024/1024；
+  - argmax flip fraction 均 `<=0.10`；
+  - near tie count 均为 0；
+  - flip/crossing 与 sample=False 实现一致性全部通过；
+  - 全部值有限。
+- 但 P23 联合机制只通过 `5/24` Episode：
+  - shift 通过数 `5/24、4/24、7/24`；
+  - clear dining table `4/6`；
+  - store kitchen items `0/6`；
+  - tidy living room `1/12`。
+- probability effect `>=0.05` 在 `61/72` shift 成立，但 probability-to-code retention
+  `<0.50` 仅 `20/72`；其 retention 中位数为 `12.5388`，hard one-hot effect 通常不是被
+  抹除，而是相对同一 probability natural scale 被放大。
+- P23 因此标记为 `diagnostic rejected`，不得提出 sampling/argmax 修改。
+
+P24 准入守护独立通过：
+
+- hard feature `[h_next,z_hard]` effect 的 Episode 守护 `24/24`；
+- clear/store/tidy 为 `6/6、6/6、12/12`；
+- 72 个 shift hard feature effect 全部 `>=0.05`，范围 `0.06066`～`0.42971`。
+
+这只证明 action-conditioned hard feature 稳定到达 decoder 输入，不证明 decoder 已经低 gain。
+按预注册路由允许重审 P24；P24 仍需独立筛选与完整冻结，不能因守护通过直接实施。
