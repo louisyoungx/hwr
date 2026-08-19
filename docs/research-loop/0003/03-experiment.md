@@ -649,6 +649,13 @@ maximum absolute difference 必须 `<=1e-5`，否则实验失效。
   不得使用 floor 或 epsilon 形成 ratio。
 - 同时报告未标准化 probability RMS、hard code RMS 和 flip fraction；retention 只在
   上述共同量纲下用于判定。
+- 另报告 P24 准入守护 hard feature effect：
+  - `feature_true=[h_next_true, z_hard_true]`，
+    `feature_shift=[h_next_shift, z_hard_shift]`；
+  - feature 每维 scale 只由 true feature 的 Episode natural variation 定义，
+    `scale>=1e-4` 为 active，至少 25% 维 active；
+  - hard feature standardized effect 使用自身 true feature scale/mask 计算；
+  - 该指标不参与 P23 通过判定，只决定 P23 阴性后能否重审 P24。
 
 ### Margin、crossing 与实现门
 
@@ -691,7 +698,8 @@ Episode 是独立统计单位；三个 shift 只是 Episode 内重复证据，�
 - 通过：只接受“正式 deterministic argmax 抹除 stochastic action effect”的机制结论；
   不直接修改 sampling。冻结 P24，用 hard feature 继续定位 decoder。
 - 不通过：拒绝 argmax 离散化解释；P24 仅在 hard feature effect 仍达到 `>=0.05` 且
-  至少 20/24 Episode 成立时才可重审，否则停止 decoder 链并转查目标定义。
+  每个 Episode 至少 2/3 shift 过线、aggregate 至少 20/24 且满足相同任务配额时才可
+  重审，否则停止 decoder 链并转查目标定义。
 - `sample=False` 一致性、低 flip 或低 retention 单项均不得替代全部联合门槛。
 
 ## P17 路由
