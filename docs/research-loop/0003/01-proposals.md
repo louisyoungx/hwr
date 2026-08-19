@@ -17,7 +17,9 @@
 | `R0001-P22` | Posterior observation/deterministic 支配诊断 | 训练候选 | 延后，依赖 P21 |
 | `R0001-P23` | Prior probability 到 argmax code 离散化诊断 | 训练候选 | 诊断拒绝 |
 | `R0001-P24` | Visual/proprio decoder 逐层 gain 诊断 | 训练候选 | 诊断拒绝，两头 not_localized |
-| `R0001-P25` | Physical target scale/gradient 奖励诊断 | 训练候选 | 分头重审 |
+| `R0001-P25` | Physical target scale/gradient 奖励诊断 | 训练候选 | 拆分 |
+| `R0001-P25a` | Physical target scale masking 前向诊断 | 训练候选 | 诊断入选，已筛选 |
+| `R0001-P25b` | Physical gradient reward alignment 诊断 | 训练候选 | 条件延后 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 
 ## `R0001-P14`：等预算连续 Probe
@@ -359,6 +361,39 @@
 - 成本：一次冻结 forward/backward，无 optimizer。
 - 风险：whitening 只作诊断，不能直接推出应修改 loss；visual latent 坐标相关性未建模。
 - 依赖：P24 先证明 decoder output effect 的位置；P24 未完成前不实施。
+
+### `R0001-P25a`：Physical target scale masking
+
+- P24-R2 中 visual/proprio 均为 `not_localized`，input/output effect 24/24 存活，因此符合
+  结果前冻结的 P25 重审条件。
+- 假设：原始 visual/proprio target 的尺度、相关性和高残差坐标掩盖 action-conditioned
+  output effect，使 raw true/shift error ratio 约为 1；固定 train-Replay whitening 后，
+  true action 优势恢复。
+- 最小验证：
+  - 复用 P24-R2 的 checkpoint、24 Episode、shift `1/5/9`、hard feature、output 与
+    calibration；
+  - visual/proprio 分头汇总 384 个 true successor target；
+  - 预先冻结 target mean/covariance、固定 ridge 和 Cholesky whitening；
+  - 比较 raw 与 whitened true/shift decoder error，不执行 backward、不更新参数；
+  - top 10% raw true-residual 坐标只由全部 true branch 预先选定，shift 结果不得参与。
+- 主要指标：
+  - raw/whitened shifted-to-true error ratio；
+  - whitening rescue=`whitened ratio - raw ratio`；
+  - top 10% coordinate 的 raw true-residual loss share；
+  - raw/whitened target scale dispersion与 covariance condition；
+  - Episode/任务/shift一致性和分头 bootstrap CI。
+- 成本：一次冻结前向与 293 维以内 covariance/Cholesky；不训练、不 backward。
+- 风险：whitening 只作诊断，不能直接推出应修改 loss；visual/proprio 必须独立，不能选择
+  更有利的一头。
+- 依赖：P24-R2 全部24 Episode与output guard；P24 calibration与recovery chain。
+
+### `R0001-P25b`：Physical gradient reward alignment
+
+- 只在对应 head 的 P25a 全部预注册门槛通过后启动。
+- 固定参数集合、loss分项、action-direction、bootstrap和全部24 Episode，比较 physical
+  reconstruction gradient 对 action-discriminative output direction 的投影。
+- 不与 P25a 同一次执行，不根据 P25a 结果改指标、层、head或样本。
+- P25a 未通过的 head，P25b 自动拒绝。
 
 ### `R0001-P10`：安全正例分层
 

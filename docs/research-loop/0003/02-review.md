@@ -597,3 +597,46 @@ low-gain 假设正式拒绝；不能从少量 `feature_to_linear` branch 宣称 
 
 因此 P25 对 visual 与 proprio 分头获得重审资格。P25 必须固定使用全部24 Episode、P24
 calibration 和全部有效 branch，不指定有利边；visual/proprio 不得池化或捆绑成一个结论。
+
+## P25 独立重筛
+
+两位筛选 Agent 均拒绝原 P25 一次性混合 scale、noise、gradient 与 target-reward 四种解释，
+共同要求拆分为 P25a 前向尺度诊断和 P25b 条件梯度诊断。
+
+| 筛选 | 目标价值 | 证据强度 | 可检验性 | 因果可归因性 | 通用性 | 实施成本 | 回归风险 | 原案结论 |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| U | 4 | 3 | 5 | 2 | 4 | 4 | 5 | `revise, split` |
+| V | 5 | 4 | 4 | 2 | 4 | 3 | 4 | `revise, split` |
+
+### 共同反驳
+
+- 一次运行后从 raw/whitened error、noise、gradient share 和 projection 中挑解释不可归因。
+- visual latent 坐标相关，不能用逐维独立白化替代完整 covariance；visual/proprio 仍分头。
+- whitening 参数必须在 shift 结果前从固定 true target 一次生成并写 artifact，不扫描 ridge、
+  PCA 维数、epsilon、clipping或mask。
+- P25b 只能在对应 head 的 P25a 通过后启动，且不得挑选有利 head、Episode、shift或层。
+- 当前训练 Replay 没有严格同 snapshot+同 action 的重复观测；noise 子结论证据不足，必须
+  从 P25a 移除，不能用普通近邻冒充。
+
+### 主 Agent 决策
+
+- 原 P25 标记为拆分，不直接实施。
+- 先选择 P25a，只做 target scale/covariance masking 的冻结前向诊断，不 backward。
+- P25b 条件延后；P25a 未通过的 head 自动拒绝 P25b。
+- P25a/P25b 使用稳定子 ID，仍保持 `R0001-P25` 来源链。
+
+### P25a 修订复审
+
+- 两位筛选 Agent均要求消除 target/mask calibration 泄露和原案多解释捆绑。
+- 主 Agent将 P25a 修订为严格 Episode leave-one-out：
+  - 每个留出 Episode 只用其余23个 Episode 的 target/prediction 生成 full covariance、
+    ridge、Cholesky 与 top residual mask；
+  - 48份 head×held-out calibration 在评测前写盘/hash并重载；
+  - raw/white/rescue 统一使用 shifted/true ratio 的 log单位；
+  - raw CI upper、white CI lower 和 rescue CI lower 共同判定；
+  - output/任务/shift guard 为整体有效性硬门；
+  - 技术无效 head 为 `inconclusive`，不补 Episode/seed；
+  - noise 子结论删除，P25b 参数/loss/direction模板结果前冻结。
+- 最终筛选 U/V 均 `APPROVE P25a`；P25b 仅允许对应 head 在 P25a 通过后独立启动。
+
+主 Agent批准 P25a 进入实现；visual/proprio 分头归因，不形成可互补的总体分数。

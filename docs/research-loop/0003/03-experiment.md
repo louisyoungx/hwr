@@ -903,6 +903,150 @@ visual/proprio 不得池化或相互补足。
 - R2 入口必须硬校验 E1 与 R1 的 source/report/calibration/manifest hash，并在 success/failure
   固化完整 recovery chain。
 
+## `R0001-P25a` Physical target scale masking 前向诊断
+
+### 执行元数据
+
+- 负责人：主 Agent 单一实现负责人。
+- 分支：`feat/research-loop`。
+- bootstrap seed：`20261325`，固定 10,000 次 Episode-block resample。
+- run：
+  `runs/research-loop/0003/r0003-p25a-target-scale-s20261325`。
+- 命令：
+  `.venv/bin/python -m hwr.apps.evaluate_target_scale_masking --device mps`。
+- 资源预算：冻结 world model/visual student 前向、两个 covariance/Cholesky 和 CPU bootstrap；
+  不 backward、不训练，预计小于 15 分钟。
+- 执行前要求：实现、测试、文档均提交并 push，工作区干净，run 路径不存在。
+
+### 固定输入与 recovery
+
+- checkpoint、Replay、24 Episode、window identity、shift `1/5/9` 与 P24-R2 相同。
+- P24-R2 source/report/calibration/manifest SHA-256：
+  - source：`cc5f2dd34176a52e3d867f34871b0353336d87c8`；
+  - report：`45cdc4be0c2120f1ec372fb2f6b37a3ad7a61a565643b9136e95c41b367871e8`；
+  - calibration：`16d4d6be2390415e215c5f02a61325171d38cfbebad4e0da67ab26c90b085337`；
+  - manifest：`40771d46d7d2549f0d55e7bc8dd6f2421576b1fb6b1298600145d5e9d799c19b`。
+- 重新计算的 hard feature 与 visual/proprio output 必须对全部24 Episode、72个branch、
+  全部输出元素复现 P24-R2，逐元素 maximum absolute difference `<=1e-6`；否则 P25a
+  整体实验失效。
+- output guard 必须继续为 visual/proprio 各 24/24，任务 `6/6、6/6、12/12`，每个
+  shift 均为 24/24；任一失败则 P25a 整体无效。
+- 训练 Replay 不含严格同 snapshot+同 action 的重复观测；P25a 不报告 noise/SNR 结论，
+  不使用普通近邻替代。
+
+### Target 与预测
+
+- visual target：冻结 visual student 对当前窗口 successor observation `t+1` 的 pooled
+  256 维表示；与 P24 one-step decoder output 对齐。
+- proprio target：Replay successor proprioception `t+1` 的 37 维原始值。
+- true/shift prediction：复用 P24 true/shift hard feature，经冻结 visual/proprio head 输出。
+- visual/proprio 分头；不得拼接、求和、共享 covariance 或相互补足。
+
+### Episode leave-one-out calibration
+
+- 24 个 Episode 都作为独立留出块；不得删除、替换或补 Episode。
+- 对每个留出 Episode `e`、每个 head，calibration 只使用其余 23 个 Episode 的
+  `N_train=23*16=368` 个 true successor target 与 true prediction。
+- 留出 Episode 的 target、prediction、shift 或结果不得参与自己的 whitening、mask、
+  ridge、active coordinate 或任何 calibration 选择。
+- 在计算任何 shift error 前，一次生成并写入 24×2 份 leave-one-out calibration 与各自
+  hash；随后从 artifact 重载后才允许评估留出 Episode。
+- calibration manifest 固化每份 calibration 使用的23个 source Episode、唯一留出
+  Episode、target/prediction hash、维数和样本数；样本归属漂移使实验失效。
+
+### Full covariance whitening
+
+- 对每份 leave-one-out calibration：
+  - `mu_e=(1/N_train)*sum_i y_i`；
+  - `C_e=(1/N_train)*sum_i (y_i-mu_e)(y_i-mu_e)^T`；
+  - `lambda_e=0.01*trace(C_e)/d`，`d=256/37`；
+  - `C_lambda_e=C_e+lambda_e*I`；
+  - `L_e L_e^T=C_lambda_e`。
+- whitened residual：
+  `e_white=L_e^{-1}(prediction-target)`。
+- raw/whitened error均为 residual 的 coordinate mean square；同时报告原始 RMSE。
+- calibration artifact 固化 `mu_e/C_e/lambda_e/L_e`、eigenvalue、condition number、
+  effective rank、target coordinate RMS 分布与 hash。
+- condition number 对 `C_lambda_e` 计算。
+- effective rank 使用未加 ridge 的 `C_e` eigenvalue：令 normalized eigenvalue 为 `q_j`，
+  `effective_rank=exp(-sum_j q_j log q_j)`，零 eigenvalue项取0。
+- 不得扫描 ridge、clip、改PCA维数或换 shrinkage。
+- 任一非有限值、Cholesky失败、`lambda_e<=0`、`condition(C_lambda_e)>1e8` 或
+  effective rank `<0.50*d` 使对应留出 Episode/head 技术无效；记录后该 head结论为
+  `inconclusive`，不得补 Episode、换 seed 或改 ridge 重跑。
+
+### Top 10% true-residual mask
+
+- 每份 leave-one-out calibration 只使用其余23个 Episode 的 true prediction residual，
+  按 coordinate pooled squared residual 从高到低排序。
+- 固定 top count=`ceil(0.10*d)`：visual 26，proprio 4。
+- 留出 Episode 的 true/shift error均不得参与 mask。
+- 在留出 Episode 上报告该 mask 的 raw true-residual loss share：
+  `mask_share_e=sum_mask residual_true^2 / sum_all residual_true^2`。
+- 该 mask只作 scale domination判定，不用于删除 coordinate 或重算 raw/whitened ratio。
+
+### Error ratio、Episode 与 bootstrap
+
+- 对每个 `head × Episode × shift`：
+  - `raw_ratio=shift_raw_MSE / true_raw_MSE`；
+  - `white_ratio=shift_white_MSE / true_white_MSE`；
+  - `L_raw=log(raw_ratio)`；
+  - `L_white=log(white_ratio)`；
+  - `log_rescue=L_white-L_raw`。
+- 任一 MSE `<1e-12`、ratio/log 非有限使该 branch 失效，不用 floor。
+- branch 通过：
+  - `L_raw <log(1.05)`；
+  - `L_white >=log(1.05)`；
+  - `log_rescue >=log(1.04)`。
+- Episode/head 至少 2/3 shift 通过，且该留出 Episode `mask_share_e>=0.80`。
+- head aggregate独立要求：
+  - Episode至少20/24；
+  - clear/store/tidy至少 `5/6、5/6、10/12`；
+  - 每shift至少18/24；
+  - mask share `>=0.80` 的 Episode至少20/24，且其中 clear/store/tidy 分别至少
+    `5/6、5/6、10/12`。
+- Episode statistic 为三个 shift 的 mean log ratio；24 Episode 是 bootstrap block，
+  shift不是独立样本。
+- 10,000 次 bootstrap 同时报告 raw/white/rescue mean log statistic 的 95% percentile CI。
+- scale masking通过还要求：
+  - `exp(mean L_white)>=1.05`；
+  - white CI lower `>=log(1.05)`；
+  - mean rescue `>=log(1.04)` 且 rescue CI lower `>0`；
+  - `R_raw_aggregate=exp(mean L_raw)<1.05`，等价于
+    `mean L_raw<log(1.05)`；
+  - raw CI upper `<log(1.05)`，证明 raw 指标未定位而不是只看点估计。
+
+### 路由
+
+- 单头通过：只接受该 head 的 target scale masking机制；允许冻结对应 head的P25b。
+- 单头不通过：该 head P25a拒绝，P25b自动拒绝。
+- 任一 head有技术无效 Episode：该 head标记 `inconclusive`，只修测量，不改 ridge/mask/
+  门槛；不得补Episode、换seed或重新选mask。
+- visual/proprio一正一负不得选择正向 head形成总体成功，只记录分头结论。
+- whitening、top mask、raw error或单个Episode方向均不得替代联合门槛。
+
+### P25b 结果前模板
+
+- P25b仅对P25a通过的head激活；未通过的head保留为rejected。
+- P25b使用相同24 Episode、同一leave-one-out calibration、相同shift和bootstrap seed。
+- 固定参数集合为对应 physical decoder head 的全部 Linear/LayerNorm参数；不包含RSSM、
+  visual student、Actor、其他head或shared observation encoder。
+- 当前原始 reconstruction loss固定为：
+  - visual：现有 `MSE + (1-cosine)`；
+  - proprio：现有 MSE。
+- action-discriminative output direction固定为
+  `delta_output=prediction_shift-prediction_true`；不使用未来target构造方向。
+- 主要指标模板：parameter gradient norm、output loss gradient在`delta_output`上的
+  normalized projection、true/shift projection difference、true/shift head-gradient
+  cosine与difference norm。
+- 对齐通过门模板：
+  - true/shift normalized projection difference mean `>=0.05`；
+  - Episode-block bootstrap 95% CI lower `>0`；
+  - 方向一致 Episode `>=18/24`且任务 `5/6、5/6、10/12`；
+  - head parameter gradient全部有限且 norm `>1e-6`。
+- P25b具体实现/schema仍需在P25a结果后单独筛选冻结，但不得修改上述参数集合、loss定义、
+  output direction、核心阈值或Episode集合。
+
 ## P17 路由
 
 - 预检失败：P17 `inconclusive`，不运行正式确认。
