@@ -277,3 +277,27 @@ shortcut，不扫描 action-scale 阈值，也不按任务挑选子集。
   分母保护和任务配额，不扫描 shift、epsilon 或阈值。
 - P22 延后；只有 P21 证明 transition effect 存在但下游 retention/sensitivity 系统性不足，
   才允许继续判断 posterior observation dominance。
+
+## P21 实现复审
+
+- 实现提交：`55515dc`。
+- 首轮实质复审发现并修复：
+  - Episode 通过不得额外要求低 retention 位置共识；
+  - evaluator/aggregate 必须严格拒绝非 16 transition；
+  - 两级 retention 分母均需 `>=1e-6`；
+  - 四次 GRU 一致性 error 必须全部有限；
+  - 专用入口锁定冻结 input/checkpoint/output/device，禁止换路径或 CPU 重跑；
+  - success/failure 产物补齐 criteria、device、invocation、stage、异常与全部 hash；
+  - true GRU reset/update/new gate 分布作为描述指标落盘。
+- 定向测试覆盖不同位置的 2/3 shift、inactive/subminimum denominator、GRU NaN、非16、
+  结构漂移、非冻结 invocation、checkpoint manifest/artifact mismatch、Replay/window
+  mismatch、重复 source/window、aggregate pass/inconclusive/fail，以及 success/failure
+  manifest 血缘。
+- 最终：
+  - P21 专项测试 27 项通过；
+  - P21/P20/P06/P19 相关测试 61 项通过；
+  - 正确入口全量测试通过；
+  - 357 文件尺寸门、架构门和物理完整性门通过；
+  - 两位独立复审 Agent 均给出 `approve`，确认阻断项清零。
+
+主 Agent据此批准提交并在干净、已 push 且冻结 run 路径不存在时唯一执行一次 P21。

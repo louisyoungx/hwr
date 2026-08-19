@@ -510,6 +510,8 @@ P19 只有同时满足才通过诊断：
   `.venv/bin/python -m hwr.apps.evaluate_layerwise_action_effect --device mps`。
 - 资源预算：单次冻结 checkpoint 前向，不训练、不执行 decoder；预计小于 15 分钟。
 - 执行前要求：实现、测试、文档均提交并 push，工作区干净，run 路径不存在。
+- 评测实现提交固定为 `55515dc`；执行 source commit 使用包含最终复审记录的实际干净
+  HEAD，并由 report 固化。
 
 ### 固定输入
 
