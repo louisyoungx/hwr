@@ -599,6 +599,101 @@ maximum absolute difference 必须 `<=1e-5`，否则实验失效。
   insensitivity 或目标定义。
 - 不得把不同首次低 retention 的 Episode 混合成一个训练改动。
 
+## `R0001-P23` Prior probability 到 argmax code 离散化诊断
+
+### 执行元数据
+
+- 负责人：主 Agent 单一实现负责人。
+- 分支：`feat/research-loop`。
+- selection seed：`20261306`。
+- run：
+  `runs/research-loop/0003/r0003-p23-prior-argmax-s20261323`。
+- 命令：
+  `.venv/bin/python -m hwr.apps.evaluate_prior_argmax_effect --device mps`。
+- 资源预算：单次冻结 checkpoint 前向，不训练、不执行 decoder/Actor/target/loss；
+  预计小于 15 分钟。
+- 执行前要求：实现、测试、文档均提交并 push，工作区干净，run 路径不存在。
+
+### 固定输入
+
+- checkpoint、训练 Replay、24 个 source Episode、selection seed、window identity 与
+  P21 完全相同。
+- Replay manifest SHA-256：
+  `c7f7a50925b581307dc95787078c1fc2ee520f8b210e61fd91e1007db21a1985`。
+- 24-window identity SHA-256：
+  `ecb75110942b7411de483265181fa732b1dbafccf06527d94388315fd372375f`。
+- checkpoint manifest/artifact SHA-256：
+  `72f9361762d7ff5086f086b9ae1db05396caa3cf91822ece20686095df4ad75b` /
+  `ef24bdfcca3cc46274bdfebc1d8b1a4afc81c73abff3aa4128e393e6da2109c6`。
+- 使用 P21 相同 posterior `(h_t,z_t)`、Episode 内循环 shift `1/5/9` 和正式
+  categorical unimix；不得扫描 shift、阈值或采样方式。
+- true/shift prior probability 和 hard code 均使用
+  `[transition, stochastic_variable, stochastic_class] = [16,32,32]` 坐标。
+
+### Active probability 与 effect
+
+- active mask 只由未施加 shift 的 true probability 决定，和 shift effect 无关：
+  - 对每个 `[variable,class]` 坐标，
+    `scale=sqrt(mean_t((p_true[t]-mean_t(p_true))^2))`；
+  - `scale>=1e-4` 为 active；
+  - active 坐标至少 `256/1024`，否则该 Episode 的全部 shift 失效；
+  - inactive/zero-scale 坐标不进入主 effect，不用 epsilon 替代。
+- probability standardized effect：
+  `sqrt(mean_active,t(((p_shift-p_true)/scale)^2))`。
+- hard code 使用独立 `argmax + one_hot` oracle 得到 `z_true/z_shift`，并在同一
+  probability active mask/scale 上计算：
+  `sqrt(mean_active,t(((z_shift-z_true)/scale)^2))`。
+- probability-to-code retention：
+  `hard_code_effect / probability_effect`。
+- probability effect `<1e-6`、任一 effect 非有限、active 覆盖不足时该 shift失效；
+  不得使用 floor 或 epsilon 形成 ratio。
+- 同时报告未标准化 probability RMS、hard code RMS 和 flip fraction；retention 只在
+  上述共同量纲下用于判定。
+
+### Margin、crossing 与实现门
+
+- 对每个 transition/variable：
+  - `winner=argmax(p_true)`；
+  - `true_margin=p_true[winner]-max(p_true[other])`；
+  - `shift_signed_margin=p_shift[winner]-max(p_shift[other])`；
+  - `margin_consumption=true_margin-shift_signed_margin`；
+  - `crossing=(shift_signed_margin<=0)`。
+- 竞争类允许在 shift 后变化，但 true winner 固定。
+- `true_margin<=1e-8` 为 near tie；任一 transition/variable near tie 都使该 shift失效，
+  不删除样本、不依赖 backend tie-break。
+- argmax flip fraction 和 crossing fraction 必须逐元素相等；不等则实验失效。
+- hard code 必须与正式 `rssm._sample(prior_logits, sample=False)` 逐元素一致；该检查只
+  是实现门，不计作机制成立证据。
+
+### 判定
+
+单个 shift 同时满足：
+
+1. probability standardized effect `>=0.05`；
+2. active probability 坐标至少 `256/1024`；
+3. argmax flip fraction `<=0.10`；
+4. probability-to-code retention `<0.50`；
+5. near tie count 为 0；
+6. flip/crossing 一致、hard code 实现一致、全部值有限。
+
+单个 Episode 至少 2/3 shift 通过。Aggregate 通过还要求：
+
+- 至少 20/24 Episode 通过；
+- clear dining table 至少 `5/6`；
+- store kitchen items 至少 `5/6`；
+- tidy living room 至少 `10/12`；
+- 三个 shift 各自至少 18/24 Episode 通过。
+
+Episode 是独立统计单位；三个 shift 只是 Episode 内重复证据，不得当作 72 个独立样本。
+
+### 路由
+
+- 通过：只接受“正式 deterministic argmax 抹除 stochastic action effect”的机制结论；
+  不直接修改 sampling。冻结 P24，用 hard feature 继续定位 decoder。
+- 不通过：拒绝 argmax 离散化解释；P24 仅在 hard feature effect 仍达到 `>=0.05` 且
+  至少 20/24 Episode 成立时才可重审，否则停止 decoder 链并转查目标定义。
+- `sample=False` 一致性、低 flip 或低 retention 单项均不得替代全部联合门槛。
+
 ## P17 路由
 
 - 预检失败：P17 `inconclusive`，不运行正式确认。

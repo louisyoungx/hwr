@@ -356,3 +356,48 @@ posterior target/训练目标定义。
   argmax 和 decoder 链条更直接。
 
 P23/P24/P25 均不得直接进入训练；先交两个新建、互不交流的筛选 Agent 独立评分。
+
+## Argmax/decoder 独立筛选
+
+| 提案 | 筛选 | 目标价值 | 证据强度 | 可检验性 | 因果可归因性 | 通用性 | 实施成本 | 回归风险 | 结论 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| P23 | I | 4 | 3 | 3 | 5 | 3 | 5 | 2 | `defer, revise` |
+| P23 | J | 4 | 4 | 5 | 5 | 3 | 5 | 2 | `approve` |
+| P24 | I | 3 | 2 | 4 | 4 | 3 | 4 | 3 | `defer` |
+| P24 | J | 4 | 3 | 4 | 4 | 4 | 3 | 2 | `defer` |
+| P25 | I | 3 | 1 | 3 | 2 | 2 | 4 | 2 | `defer` |
+| P25 | J | 3 | 2 | 4 | 4 | 3 | 3 | 3 | `defer` |
+
+筛选 I 的成本/风险高分表示更有利；筛选 J 的风险高分表示风险更高，因此不跨筛选汇总。
+
+### 共同反驳
+
+- 原 P23 的 probability 与 hard code effect 若各用自身自然尺度，retention 没有共同量纲。
+- 原 `hard code active >=25%` 的分母未定义，并可能与 `flip <=10%` 结构冲突。
+- margin 必须对 true winner 定义有向消耗；near tie 与 backend tie-break 需 fail-closed。
+- 24 Episode 是统计单位，三个 shift 只是 Episode 内重复证据，不得当作 72 个独立样本。
+- P24/P25 严格依赖上游；不得因 P23 阴性而绕过门槛继续扩大诊断链。
+
+### 主 Agent 决策
+
+- 不按一票 `approve` 直接执行 P23；先修订共同量纲和边界语义，再交原两位筛选复审。
+- 修订版统一使用 1024 categorical 坐标、true probability natural variation scale 和同一
+  active mask；删除 hard-code active 门。
+- top-1 margin 固定为 true winner 对最佳竞争类的 signed margin；margin `<=1e-8` 的
+  near tie 使该 shift 失效。
+- P24/P25 继续 defer；P23 修订版未获两位筛选放行前不冻结、不实施。
+
+### P23 修订复审
+
+- 筛选 J 在第一次修订后 `approve`。
+- 筛选 I 要求把 active mask、effect、retention、margin/crossing、near tie 和统计层级写成
+  可执行公式；主 Agent已全部冻结到 `03-experiment.md`。
+- 最终筛选 I/J 均 `approve P23`，共同确认：
+  - probability/hard code 使用同一 1024 坐标、true probability scale 和 active mask；
+  - retention 分母 fail-closed，不使用 epsilon；
+  - margin/crossing 固定 true winner，near tie fail-closed；
+  - Episode 是独立单位，任务和 shift 配额不能被 aggregate 覆盖；
+  - sample=False 一致性只作实现门，不算机制证据。
+
+主 Agent不按初始总分直接选择，而是在消除两份筛选共同指出的结构矛盾后批准 P23。P24/P25
+继续 defer，严格等待 P23 结果。

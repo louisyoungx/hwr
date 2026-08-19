@@ -15,7 +15,7 @@
 | `R0001-P20` | RSSM action 输入量级诊断 | 训练候选 | 诊断拒绝 |
 | `R0001-P21` | RSSM 逐级 action-effect 衰减定位 | 训练候选 | 诊断拒绝 |
 | `R0001-P22` | Posterior observation/deterministic 支配诊断 | 训练候选 | 延后，依赖 P21 |
-| `R0001-P23` | Prior probability 到 argmax code 离散化诊断 | 训练候选 | 待筛选 |
+| `R0001-P23` | Prior probability 到 argmax code 离散化诊断 | 训练候选 | 诊断入选 |
 | `R0001-P24` | Visual/proprio decoder 逐层 gain 诊断 | 训练候选 | 延后，依赖 P23 |
 | `R0001-P25` | Physical target scale/gradient 奖励诊断 | 训练候选 | 延后，依赖 P24 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
@@ -275,9 +275,16 @@
 - 最小验证：
   - 复用 P21 checkpoint、24 个窗口、shift `1/5/9` 和同一 true/shift prior probability；
   - 对每个 32-variable categorical 分布记录 true/shift top-1、top-2 margin、argmax code；
-  - 比较 probability 与 hard one-hot code 的 standardized paired effect；
-  - 分栏报告 flip fraction、margin 被 counterfactual probability displacement 穿越的比例，
-    以及 hard code active 维覆盖；
+  - probability 与 hard one-hot code 都使用相同的 1024 categorical 坐标、true probability
+    Episode natural variation scale 和 active mask；scale `>=1e-4` 的 active probability
+    维至少 25%；
+  - probability standardized effect 与 hard code standardized effect 均在同一 active mask
+    上计算，retention 才允许取比；
+  - true top-1 margin 定义为 `p_true[top1]-max(other)`；shift 后的 signed margin 固定保留
+    true winner：`p_shift[true_top1]-max(other)`；报告有向 margin consumption、crossing
+    fraction 与 argmax flip fraction；
+  - top1/top2 margin `<=1e-8` 视为 near tie；任一 shift 有 near tie 则失效，禁止依赖
+    backend tie-break 制造 flip；
   - 不做 coupled sampling，不把 soft probability 输入 decoder，不读取 target。
 - 主要指标：
   - prior probability standardized effect；
@@ -288,17 +295,18 @@
   - 24 Episode、三任务、三个 shift 一致性。
 - 通过条件：单 shift 同时满足：
   - probability standardized effect `>=0.05`；
-  - hard code active 维至少 25%；
+  - probability active 维至少 25%；
   - argmax flip fraction `<=0.10`；
   - probability-to-code retention `<0.50`；
+  - near tie count 为 0；
   - 全部有限且 hard code 与 RSSM `sample=False` 输出逐元素一致。
   Episode 至少 2/3 shift 通过；aggregate 至少 20/24，任务配额 `5/6、5/6、10/12`，
   每个 shift 至少 18/24。
-- 失效条件：probability effect 已低、argmax 经常翻转、code retention 不低、active 维不足、
-  任务一致性不足或任何血缘/逐元素校验漂移。
+- 失效条件：probability effect 已低、argmax 经常翻转、code retention 不低、probability
+  active 维不足、存在 near tie、任务一致性不足或任何血缘/逐元素校验漂移。
 - 成本：一次冻结前向，无训练、decoder、backward 或采样。
-- 风险：probability 与 one-hot 坐标的自然尺度不同；必须各自按 true Episode 内逐维
-  variation 标准化，并同时报告 raw flip fraction，禁止只看 retention ratio。
+- 风险：one-hot jump 相对 probability variation 可能很大；两者必须使用同一 probability
+  scale/active mask，并同时报告 raw flip 与 margin crossing，禁止只看 retention ratio。
 - 依赖：P21 的内部 stage helper、固定 shift、完整血缘和 MPS 入口。
 
 ### `R0001-P24`：Visual/proprio decoder 逐层 gain
