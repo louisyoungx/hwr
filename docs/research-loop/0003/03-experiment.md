@@ -868,6 +868,39 @@ visual/proprio 不得池化或相互补足。
 - 专用入口只允许 E1 不存在时默认路径；恢复提交后只允许上述 R1 路径一次，且报告必须
   固化 `recovery_of`、E1 report/manifest/calibration hash 与修复提交。
 
+### R1 结果失效与 R2 状态分类冻结
+
+- `R0001-P24-R1` 目录
+  `runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r1` 永久保留，不得覆盖、
+  删除或再次启动。
+- R1 endpoint 修复成功：
+  - 144 个 true/shifted head endpoint 的 official/direct 全部 exact；
+  - manual/direct maximum absolute difference 全部 `<=5e-6`，实际最大 `3.81e-6`。
+- R1 仍为 `diagnostic_invalid` 的唯一原因是 4 个 Episode 的 shift=1 feature effect
+  `<0.05` 被实现错误归类为 `jvp_invalid`；这些 branch 没有 retention/JVP 测量失效，
+  只是未通过预注册 feature guard。
+- R1 source commit：`97cbdcfef8505d8f6c8b7c24e520a281e5e7df8b`。
+- R1 report/calibration/manifest SHA-256：
+  - `619c4f2d7749555768937899e8acad6ffbc1e3f82a859bd392086a8425ea891e`；
+  - `16d4d6be2390415e215c5f02a61325171d38cfbebad4e0da67ab26c90b085337`；
+  - `9b285ba522a3c00a062a8927f63e10a28f6c572c2864874d49ace28c4e880723`。
+- `R0001-P24-R2` 只允许修复 branch 状态分类：
+  - endpoint、stage、active、retention denominator 和 selected path-JVP 均有效，但
+    P23 hard-feature guard 或 P24 global feature effect `<0.05` 时，branch 状态为
+    `feature_guard_failed`；
+  - `feature_guard_failed` 是有效阴性 branch：`valid=true, passed=false`，不计算 path-JVP；
+  - 只有 endpoint/stage/denominator/selected JVP 测量失效才为 `jvp_invalid`；
+  - Episode 的 valid branch 计数包含 `feature_guard_failed`；
+  - head 的 `not_localized` 要求72/72 branch均非 `jvp_invalid`，但可以包含
+    `feature_guard_failed`；output guard仍按原冻结公式独立判定。
+- 不得修改 endpoint、calibration、retention、path-JVP、配额、output guard 或 P25 决策表。
+- R2 新目录：
+  `runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r2`。
+- R2 命令：
+  `.venv/bin/python -m hwr.apps.evaluate_decoder_gain --device mps --output runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r2`。
+- R2 入口必须硬校验 E1 与 R1 的 source/report/calibration/manifest hash，并在 success/failure
+  固化完整 recovery chain。
+
 ## P17 路由
 
 - 预检失败：P17 `inconclusive`，不运行正式确认。
