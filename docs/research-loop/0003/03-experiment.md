@@ -836,6 +836,36 @@ visual/proprio 不得池化或相互补足。
   P24 状态；不得选有利 Episode、shift、边或尺度。
 - P23/P24 的低 gain、JVP 或 LN 单项均不得替代联合门槛。
 
+### 首次执行失效与恢复冻结
+
+- `R0001-P24-E1` 目录
+  `runs/research-loop/0003/r0003-p24-decoder-gain-s20261324` 永久保留，不得覆盖、
+  删除或再次启动。
+- E1 完成 24/24 Episode、calibration 与全部 manifest artifact，但因 endpoint 数值门被
+  标记 `diagnostic_invalid`，不得据此接受/拒绝 decoder gain 假设或启动 P25。
+- E1 source commit：`107b4c7e68fe407b79910daed3c62e0dc2ecee3e`。
+- E1 report/calibration/manifest SHA-256：
+  - `fcf1b5dad3b93316054a5c884e13c8c35d0417d83a6ae745cabe3dda988f6cb5`；
+  - `16d4d6be2390415e215c5f02a61325171d38cfbebad4e0da67ab26c90b085337`；
+  - `2ce984233c4ce3a3c3aa932f9e8d3f1765fe5a315c5e4e13cc0a17928a521dda`。
+- 只读根因诊断确认：
+  - 正式 `decode_features` 与直接调用 visual/proprio head 逐元素完全相等；
+  - 手工 LayerNorm 分段与直接 head 在 MPS float32 上因 fused kernel/运算次序产生
+    `7.15e-7`～`1.91e-6` maximum absolute difference；
+  - 原 `rtol=1e-6, atol=1e-7` 会对接近零输出产生假失败。
+- `R0001-P24-R1` 只允许修复 endpoint 实现门：
+  - 正式 `decode_features` 与直接 head 输出必须逐元素相等；
+  - 手工分段 output 与直接 head 的 maximum absolute difference 必须 `<=5e-6`；
+  - 同时报告 mean absolute difference；
+  - 任何非有限差异或超门仍使 branch invalid。
+- 不得修改 calibration、stage、retention、path-JVP、配额、P25 决策表或任何模型参数。
+- R1 新目录：
+  `runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r1`。
+- R1 命令：
+  `.venv/bin/python -m hwr.apps.evaluate_decoder_gain --device mps --output runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r1`。
+- 专用入口只允许 E1 不存在时默认路径；恢复提交后只允许上述 R1 路径一次，且报告必须
+  固化 `recovery_of`、E1 report/manifest/calibration hash 与修复提交。
+
 ## P17 路由
 
 - 预检失败：P17 `inconclusive`，不运行正式确认。
