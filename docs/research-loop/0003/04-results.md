@@ -383,3 +383,75 @@ variation contribution RMS：
 在至少 20 个 Episode 中成立，尤其 clear dining table 只有 2/6 通过。按照预注册门槛，
 P20 为 `diagnostic_failed`，action-scale 假设被拒绝；不进入 normalization smoke，不扫描
 阈值，不选择任务子集。下一步检查 posterior state shortcut。
+
+## `R0001-P21`：`diagnostic_failed`
+
+- 实现提交：`55515dc`
+- source commit：`d1e13d22f68ba3d37a7c0a8c24541ffe270aff65`
+- run：
+  `runs/research-loop/0003/r0003-p21-layerwise-action-effect-s20261321`
+- report SHA-256：
+  `3fed03ab1235c211749563f3fecfabb750cd4700a526c9784fdcaafce250ddde`
+- manifest SHA-256：
+  `437a925e556817fca2673ec24971b964c41d0005782c783b4a9945c3d4f94f65`
+- 24 个 Episode report 与 aggregate report，共 25 个 manifest artifact；全部 SHA-256
+  与字节数验证通过，无 `failure.json`。
+- device 为 `mps`，frozen invocation、Replay/window/checkpoint hash 与 P20-R1 冻结值一致。
+
+### Aggregate 判定
+
+| 指标 | 结果 | 门槛 | 判定 |
+|---|---:|---:|---|
+| Episode 通过 | 8/24 | `>=20/24` | 失败 |
+| shift=1 通过 | 7/24 | `>=18/24` | 失败 |
+| shift=5 通过 | 8/24 | `>=18/24` | 失败 |
+| shift=9 通过 | 8/24 | `>=18/24` | 失败 |
+| clear dining table | 2/6 | `>=5/6` | 失败 |
+| store kitchen items | 6/6 | `>=5/6` | 通过 |
+| tidy living room | 0/12 | `>=10/12` | 失败 |
+| 首次低 retention 集中 | 无 | `>=16 Episode` | 失败 |
+
+三个 aggregate core check 和 concentration 均失败，因此为 `diagnostic_failed`，不是
+`inconclusive`。
+
+### Shift 机制分解
+
+72 个 shift 的共同守护：
+
+- transition activation effect 全部 `>=0.05`；
+- main stage active 维、action/h input active 维全部满足；
+- retention 分母、local sensitivity 全部有效；
+- 所有 stage effect 有限；
+- 四次 GRU error 全部有限且 `<=1e-5`。
+
+判定分歧只来自：
+
+- `first_low_retention_exists`：`23/72` 通过；
+- 对应 sensitivity ratio `<0.50`：相同 `23/72` 通过。
+
+通过 shift 的首次低 retention 位置：
+
+- `activation -> h_next`：7；
+- `h_next -> prior probability`：16。
+
+描述性分布：
+
+| 指标 | minimum | median | maximum |
+|---|---:|---:|---:|
+| transition activation effect | 0.10460 | 0.33606 | 0.75298 |
+| activation→h retention | 0.38525 | 0.60434 | 0.90340 |
+| h→prior probability retention | 0.22042 | 0.67735 | 1.13392 |
+| h_next action/deterministic sensitivity | 0.04106 | 0.10428 | 0.24126 |
+| prior probability action/deterministic sensitivity | 0.01131 | 0.06523 | 0.15530 |
+
+GRU update gate 的 24-Episode 描述统计：
+
+- median 的 Episode 均值：`0.80435`；
+- p05 的 Episode 均值：`0.21708`；
+- p95 的 Episode 均值：`0.94509`。
+
+结论：action effect 能稳定进入 transition activation，且相对 deterministic 的局部
+sensitivity 很低，但大多数 shift 的 effect 并未在任一相邻层下降到 0.50 以下；该联合
+shortcut 假设只在 store kitchen items 稳定成立，在 tidy living room 完全不成立。P21
+正式拒绝，不进入 GRU/prior preservation smoke，不把 23 个通过 shift 或低 sensitivity
+ratio 单项挑选为正证据。下一步重新审查 decoder/output insensitivity 或目标定义。

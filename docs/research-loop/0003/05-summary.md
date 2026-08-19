@@ -13,6 +13,8 @@
 | `R0001-P06` | `rejected without training` |
 | `R0001-P19` | `diagnostic rejected` |
 | `R0001-P20` | `diagnostic rejected` |
+| `R0001-P21` | `diagnostic rejected` |
+| `R0001-P22` | `deferred, depends on P21` |
 | `R0001-P10` | `deferred` |
 
 ## 关键发现
@@ -33,6 +35,9 @@
 10. canonical action 的 variation contribution 相对 raw 稳定放大 2.19～3.04 倍，但
     raw/stochastic ratio 只有 17/24 Episode 低于 0.20，未达到 20/24 一致性门槛；
     action-scale 假设被否定，不进入 normalization smoke。
+11. action effect 在全部 72 个 shift 都能进入 RSSM transition，但只有 23/72 出现
+    `<0.50` 的相邻层 retention；P21 仅 8/24 Episode 通过，且 tidy living room 为
+    0/12，deterministic shortcut 联合假设被否定。
 
 ## 新基线
 
@@ -46,9 +51,11 @@
 需要构建不依赖 state nuisance 拟合的训练前物理因果证据，例如同状态配对实际动作干预。
 该问题继续在 `docs/research-loop/0003/` 内推进；`0001` 和 `0002` 保持冻结只读。
 
-P17 已接受，P11/P05/P06/P19/P20 已拒绝。P20 aggregate raw/stochastic ratio 与
+P17 已接受，P11/P05/P06/P19/P20/P21 已拒绝。P20 aggregate raw/stochastic ratio 与
 canonical/raw gain 虽然过线，但仅 17/24 Episode 同时满足条件，不能用 aggregate 覆盖
-预注册一致性门槛。下一步检查 posterior state shortcut；P10 与 stale-frame 修复保持独立。
+预注册一致性门槛。P21 又排除了 action effect 在 GRU/prior 相邻层普遍衰减的解释；P22
+不自动启动。下一步重新审查 decoder/output 对 latent action effect 的不敏感，或 posterior
+target/训练目标定义；P10 与 stale-frame 修复保持独立。
 
 ## 清理
 

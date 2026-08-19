@@ -301,3 +301,35 @@ shortcut，不扫描 action-scale 阈值，也不按任务挑选子集。
   - 两位独立复审 Agent 均给出 `approve`，确认阻断项清零。
 
 主 Agent据此批准提交并在干净、已 push 且冻结 run 路径不存在时唯一执行一次 P21。
+
+## P21 正式诊断后决策
+
+- source commit：`d1e13d22f68ba3d37a7c0a8c24541ffe270aff65`。
+- 24 个 Episode、25 个 manifest artifact、冻结 invocation 和输入血缘全部有效。
+- 所有 72 个 shift：
+  - transition activation effect 均 `>=0.05`；
+  - stage/local sensitivity 全部有限有效；
+  - GRU 复刻与 `nn.GRUCell` 全部一致；
+  - action 与 deterministic active 维全部满足要求。
+- 但只有 `23/72` shift 同时出现首次低 retention 且对应 sensitivity ratio `<0.50`：
+  - `activation -> h_next`：7 个通过 shift；
+  - `h_next -> prior probability`：16 个通过 shift；
+  - 其余 49 个 shift 没有 `<0.50` 的相邻 retention。
+- Episode 通过数仅 `8/24`，任务分层为：
+  - clear dining table：`2/6`；
+  - store kitchen items：`6/6`；
+  - tidy living room：`0/12`。
+- shift 通过数为 `7/24、8/24、8/24`，均低于冻结的 `18/24`。
+
+描述性结果显示 action/deterministic local sensitivity ratio 确实偏低：
+
+- `h_next` 中位数 `0.1043`；
+- prior probability 中位数 `0.0652`。
+
+但 P21 的核心假设不是“action sensitivity 低”单项，而是 transition effect 存在、在固定相邻
+层系统性衰减、且相对 deterministic sensitivity 低的联合条件。绝大多数 shift 没有低
+retention，且 tidy living room 为 0/12，因此不得用 sensitivity ratio 单项覆盖硬门。
+
+主 Agent将 P21 标记为 `diagnostic rejected`。不提出 GRU 或 prior preservation smoke；
+P22 不自动启动。按冻结路由重新审查 decoder/output 对 latent action effect 的不敏感，或
+posterior target/训练目标定义。

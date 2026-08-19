@@ -13,7 +13,7 @@
 | `R0001-P06` | 真实动作多步 posterior overshooting | 训练候选 | 预检拒绝 |
 | `R0001-P19` | RSSM free-nats 梯度死区诊断 | 训练候选 | 诊断拒绝 |
 | `R0001-P20` | RSSM action 输入量级诊断 | 训练候选 | 诊断拒绝 |
-| `R0001-P21` | RSSM 逐级 action-effect 衰减定位 | 训练候选 | 诊断入选 |
+| `R0001-P21` | RSSM 逐级 action-effect 衰减定位 | 训练候选 | 诊断拒绝 |
 | `R0001-P22` | Posterior observation/deterministic 支配诊断 | 训练候选 | 延后，依赖 P21 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 
