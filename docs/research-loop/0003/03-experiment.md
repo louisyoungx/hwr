@@ -613,6 +613,8 @@ maximum absolute difference 必须 `<=1e-5`，否则实验失效。
 - 资源预算：单次冻结 checkpoint 前向，不训练、不执行 decoder/Actor/target/loss；
   预计小于 15 分钟。
 - 执行前要求：实现、测试、文档均提交并 push，工作区干净，run 路径不存在。
+- 评测实现提交固定为 `a009515`；执行 source commit 使用包含最终复审记录的实际干净
+  HEAD，并由 report 固化。
 
 ### 固定输入
 

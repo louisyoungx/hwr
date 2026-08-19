@@ -401,3 +401,27 @@ P23/P24/P25 均不得直接进入训练；先交两个新建、互不交流的�
 
 主 Agent不按初始总分直接选择，而是在消除两份筛选共同指出的结构矛盾后批准 P23。P24/P25
 继续 defer，严格等待 P23 结果。
+
+## P23 实现复审
+
+- 实现提交：`a009515`。
+- 首轮复审发现并修复：
+  - app 不得调用 `world_model.observe()`，只允许 observation encoder + `rssm.observe`，
+    防止 decoder/aux heads 越界执行；
+  - hard feature 只作 P24 准入守护，不得污染 P23 主判定；
+  - 固定正式 `16×32×32`、1024 probability 坐标和至少 256 active 维；
+  - flip/crossing 或 sample=False 一致性失败升级为全局 `diagnostic_invalid`，不能被
+    Episode 2/3 或 aggregate 配额掩盖；
+  - failure 记录 criteria、invocation、当前 source/window、异常和全部 hash，Episode
+    artifact 成功写盘后才增加完成计数。
+- 定向测试覆盖共同 scale/mask、margin/crossing、near tie、subminimum denominator、
+  independent one-hot oracle、sample=False 一致性、hard-feature 独立守护、全局 invalid、
+  frozen invocation、checkpoint/Replay/window hash 和 success/failure manifest。
+- 最终：
+  - P23 专项测试 25 项通过；
+  - P23/P21/P20/P06/P19 相关测试通过；
+  - 正确入口全量测试通过；
+  - 360 文件尺寸门、架构门和物理完整性门通过；
+  - 两位独立实现复审 Agent 均 `approve`。
+
+主 Agent批准在实现与本复审记录均 push、工作区干净、冻结 run 路径不存在时唯一执行 P23。
