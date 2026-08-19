@@ -233,3 +233,14 @@
 不得把 aggregate 过线替代预注册的 `20/24` 门槛。P20 标记为 `diagnostic rejected`，
 canonical normalization 不进入 2-update smoke。按冻结路由继续检查 posterior state
 shortcut，不扫描 action-scale 阈值，也不按任务挑选子集。
+
+## Posterior shortcut 创新编排
+
+- 主 Agent 按 Agent 配置先后启动两批、共 6 个创新 Agent：第一批允许只读代码审查，
+  第二批只要求基于完整事实直接输出文本提案。
+- 两批 Agent 均在多次长等待和明确中断收束指令后保持 `running`，没有返回任何提案；
+  主 Agent关闭全部线程，未采用或伪造其观点。
+- 为避免研究循环因调度异常停滞，主 Agent仅基于已验证证据提出两个不重复的低成本诊断：
+  - P21：逐级定位 action effect 在 transition、GRU、prior 哪一级衰减；
+  - P22：比较 posterior 对 observation 与 prior deterministic 的经验干预敏感度。
+- 两项都不得直接进入训练，必须先交给两个新建、互不交流的筛选 Agent独立评分。

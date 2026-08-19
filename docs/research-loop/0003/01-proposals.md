@@ -13,6 +13,8 @@
 | `R0001-P06` | 真实动作多步 posterior overshooting | 训练候选 | 预检拒绝 |
 | `R0001-P19` | RSSM free-nats 梯度死区诊断 | 训练候选 | 诊断拒绝 |
 | `R0001-P20` | RSSM action 输入量级诊断 | 训练候选 | 诊断拒绝 |
+| `R0001-P21` | RSSM 逐级 action-effect 衰减定位 | 训练候选 | 待筛选 |
+| `R0001-P22` | Posterior observation/deterministic 支配诊断 | 训练候选 | 待筛选 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 
 ## `R0001-P14`：等预算连续 Probe
@@ -174,6 +176,75 @@
   - 同一 posterior stochastic 对 RSSM 首层 preactivation 的 RMS 贡献。
 - 只有 raw action/stochastic 贡献比低、canonical normalization 至少提升 1.5 倍且不产生
   非有限值时，才允许把“仅 RSSM dynamics 输入归一化”冻结为单变量 smoke。
+
+### `R0001-P21`：RSSM 逐级 action-effect 衰减定位
+
+- 证据：
+  - P06 中 true action 相对 zero/shifted 的多步 posterior target loss 只改善
+    0.88%/0.06%；
+  - 正式 teacher-forced one-step true/shuffled 物理预测 ratio 为 `1.00104`；
+  - P20 中 canonical/raw variation gain 为 `2.37899`，但只有 17/24 Episode 的 raw
+    action/stochastic ratio 低于 0.20，action scale 不是充分解释；
+  - `step_prior` 还有 P20 未覆盖的路径：512 维 previous deterministic 作为 GRU hidden；
+    checkpoint 的 GRU input/hidden Frobenius norm 为 `22.998/23.369`，参数量级不能定位
+    shortcut。
+- 假设：在固定同一 posterior `(h_t, z_t)` 时，true 与预注册 deranged action 的差异进入
+  transition embedding 后，主要在 GRU gate/hidden retention 或 prior head 被衰减；previous
+  deterministic 对下一状态的敏感度显著高于 action。
+- 最小验证：
+  - 只使用 P20 相同 checkpoint、训练 Replay、24 个窗口和 selection hash；
+  - 对每个 transition 固定 `(h_t, z_t)`，比较 true 与单一确定性 deranged action；
+  - 逐级记录 transition preactivation、LayerNorm/SiLU 输出、GRU reset/update/new gate、
+    `h_{t+1}`、prior logits/probability 的 paired effect；
+  - 以 Episode 内自然 variation RMS 标准化，不比较不同维度的裸 norm；
+  - 同时计算经验 action 差分方向与 previous-deterministic 差分方向到 `h_{t+1}` 和 prior
+    logits 的有限差分敏感度；不读取正式 holdout，不执行 decoder，不更新参数。
+- 主要指标：
+  - 各层 standardized paired effect 及相邻层 retention；
+  - GRU update gate 分布；
+  - action/deterministic sensitivity ratio；
+  - 24 Episode 一致性、任务分层和全部有限性。
+- 通过条件：transition action effect 有限非零，但 `h_{t+1}` 或 prior 的 standardized
+  retention `<0.50`，且 action/deterministic sensitivity ratio `<0.50`，至少 20/24
+  Episode 同时成立。
+- 失效条件：effect 在 transition 前已近零、下游 retention 不低、action sensitivity 不弱、
+  Episode 一致性不足，或任何 pairing/hash 漂移。
+- 成本：一次冻结 checkpoint 前向与有限差分；不训练。
+- 风险：gate 级 hook 容易误复刻 GRU 公式；必须用 `nn.GRUCell` 原输出做逐 transition
+  一致性校验。有限差分方向必须来自同一冻结窗口，不能扫描扰动幅度。
+- 依赖：P20 v2 的 MPS/血缘/中心化统计基础设施；P06 selector 与完整 window identity。
+
+### `R0001-P22`：Posterior observation/deterministic 支配诊断
+
+- 证据：
+  - posterior 首层直接拼接 512 维 prior deterministic 与 512 维 observation embedding；
+  - checkpoint 两支权重 Frobenius norm 为 `9.63/9.91`，单看参数没有 observation
+    dominance 证据；
+  - one-step 与 P06 都显示 prior action 对物理 target 的有效影响很弱，但尚未区分 posterior
+    是否被当前 observation 覆盖。
+- 假设：posterior logits 对当前 observation embedding 的经验干预远强于对 prior
+  deterministic 的干预，导致 latent target 主要表示当前观测 nuisance，action-conditioned
+  memory 对 posterior target 的约束过弱。
+- 最小验证：
+  - 复用 P21 相同冻结输入；
+  - 在每个 transition 固定另一分支，分别对 observation embedding 与 prior deterministic
+    使用预注册的同任务确定性 derangement；
+  - 比较 posterior 首层 centered contribution、posterior probability KL/JS、argmax flip
+    fraction；保留 true posterior 为共同 anchor；
+  - 不使用 zero branch 作为主要判定，避免 OOD 零向量制造结论。
+- 主要指标：
+  - observation/deterministic centered contribution ratio；
+  - observation-deranged / deterministic-deranged posterior divergence ratio；
+  - categorical flip ratio、24 Episode 一致性和任务分层。
+- 通过条件：两种 ratio 均 `>=2.0`，且 observation derangement 的 categorical flip
+  fraction 更高，至少 20/24 Episode 同时成立。
+- 失效条件：两支 effect 同量级、deterministic 更强、只在单任务成立，或 posterior
+  divergence 近零导致 ratio 不稳定。
+- 成本：一次冻结 checkpoint posterior 前向；低于 P21。
+- 风险：posterior 本来就应强依赖当前 observation；即使通过，也只能证明 target
+  dominance，不能单独证明 action path 是失败根因。需与 P21 级联解释，不能直接进入训练。
+- 依赖：稳定的同任务 derangement、完整 window identity 和 posterior categorical
+  divergence 实现。
 
 ### `R0001-P10`：安全正例分层
 
