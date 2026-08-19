@@ -523,3 +523,25 @@ P24 准入守护独立通过：
   - 两位独立实现复审 Agent 均 `approve`。
 
 主 Agent批准在实现与本复审记录均 push、工作区干净、冻结 run 路径不存在时唯一执行 P24。
+
+## P24 E1 与 R1 测量复审
+
+- E1 source commit：`107b4c7`，完成 24/24 Episode 与 calibration，但 aggregate 为
+  `diagnostic_invalid`。
+- 根因不是 decoder endpoint 真漂移：
+  - 正式 `decode_features` 与直接 head 逐元素完全相等；
+  - 手工 LayerNorm 分段与直接 head 在 MPS float32 的 maximum absolute difference 为
+    `7.15e-7`～`1.91e-6`；
+  - 原 `atol=1e-7` 对接近零输出形成假失败。
+- R1 修复提交：`6b3fdc4`，只修改 endpoint 实现门与 recovery 路径：
+  - official/direct 继续要求 exact；
+  - manual/direct maximum absolute difference `<=5e-6`；
+  - 报告 mean absolute difference并拒绝 NaN/Inf；
+  - 入口只允许 `...s20261324-r1`，并在创建 output 前硬校验 E1 report/calibration/
+    manifest/source hash；
+  - success/failure 均记录 `recovery_of`。
+- calibration、stage、retention、path-JVP、配额和 P25 五状态决策表保持不变。
+- 最终：P24-R1 专项测试 34 项、相关测试、全量测试、365 文件尺寸门、架构门和物理完整性
+  门通过；两位独立复审 Agent 均 `approve`。
+
+主 Agent批准在修复与本复审记录 push 后唯一执行 P24-R1；E1 永久保留，不得重跑。

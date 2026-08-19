@@ -863,6 +863,8 @@ visual/proprio 不得池化或相互补足。
   `runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r1`。
 - R1 命令：
   `.venv/bin/python -m hwr.apps.evaluate_decoder_gain --device mps --output runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r1`。
+- R1 测量修复提交固定为 `6b3fdc4`；执行 source commit 使用包含最终复审记录的实际干净
+  HEAD，并由 report 固化。
 - 专用入口只允许 E1 不存在时默认路径；恢复提交后只允许上述 R1 路径一次，且报告必须
   固化 `recovery_of`、E1 report/manifest/calibration hash 与修复提交。
 
