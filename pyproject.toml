@@ -47,6 +47,7 @@ hwr-evaluate-paired-action-intervention = "hwr.apps.evaluate_paired_action_inter
 hwr-evaluate-causal-plant-estimator = "hwr.apps.evaluate_causal_plant_estimator:main"
 hwr-evaluate-foundation-batch-arms = "hwr.apps.evaluate_foundation_batch_arms:main"
 hwr-aggregate-foundation-batch-arms = "hwr.apps.aggregate_foundation_batch_arms:main"
+hwr-evaluate-posterior-overshooting = "hwr.apps.evaluate_posterior_overshooting:main"
 hwr-serve-foundation-dashboard = "hwr.apps.serve_foundation_dashboard:main"
 
 [tool.setuptools.packages.find]
