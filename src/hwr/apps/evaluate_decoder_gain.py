@@ -44,7 +44,20 @@ from hwr.train.foundation_visual_update import encode_visual_student_bounded
 
 
 DEFAULT_OUTPUT = Path(
+    "runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r1"
+)
+ORIGINAL_OUTPUT = Path(
     "runs/research-loop/0003/r0003-p24-decoder-gain-s20261324"
+)
+ORIGINAL_SOURCE_COMMIT = "107b4c7e68fe407b79910daed3c62e0dc2ecee3e"
+ORIGINAL_REPORT_SHA256 = (
+    "fcf1b5dad3b93316054a5c884e13c8c35d0417d83a6ae745cabe3dda988f6cb5"
+)
+ORIGINAL_CALIBRATION_SHA256 = (
+    "16d4d6be2390415e215c5f02a61325171d38cfbebad4e0da67ab26c90b085337"
+)
+ORIGINAL_MANIFEST_SHA256 = (
+    "2ce984233c4ce3a3c3aa932f9e8d3f1765fe5a315c5e4e13cc0a17928a521dda"
 )
 
 
@@ -69,6 +82,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     )
     if output.exists():
         raise FileExistsError(output)
+    recovery_of = _require_recovery_artifacts(root)
     _require_checkpoint(checkpoint)
     replay_manifest = input_run / "replay/autonomous/manifest.json"
     _require_replay_manifest(replay_manifest)
@@ -175,6 +189,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
                 ),
                 "selected_windows": selected_windows,
                 "calibration_sha256": calibration_sha256,
+                "recovery_of": recovery_of,
                 "invocation": {
                     "module": "hwr.apps.evaluate_decoder_gain",
                     "device": str(arguments.device),
@@ -219,6 +234,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
                     else None
                 ),
                 "criteria": _criteria(),
+                "recovery_of": recovery_of,
                 "invocation": {
                     "module": "hwr.apps.evaluate_decoder_gain",
                     "device": str(arguments.device),
@@ -329,6 +345,29 @@ def _require_frozen_invocation(
     )
     if (input_run, checkpoint, output, device) != expected:
         raise ValueError("P24 invocation differs from frozen experiment")
+
+
+def _require_recovery_artifacts(root: Path) -> dict[str, object]:
+    original = root / ORIGINAL_OUTPUT
+    report = original / "report.json"
+    calibration = original / "calibration.json"
+    manifest = original / "manifest.json"
+    if (
+        _sha256(report) != ORIGINAL_REPORT_SHA256
+        or _sha256(calibration) != ORIGINAL_CALIBRATION_SHA256
+        or _sha256(manifest) != ORIGINAL_MANIFEST_SHA256
+    ):
+        raise ValueError("P24 recovery artifact identity differs")
+    value = json.loads(report.read_text(encoding="utf-8"))
+    if value.get("source_commit") != ORIGINAL_SOURCE_COMMIT:
+        raise ValueError("P24 recovery source commit differs")
+    return {
+        "run": str(original),
+        "source_commit": ORIGINAL_SOURCE_COMMIT,
+        "report_sha256": ORIGINAL_REPORT_SHA256,
+        "calibration_sha256": ORIGINAL_CALIBRATION_SHA256,
+        "manifest_sha256": ORIGINAL_MANIFEST_SHA256,
+    }
 
 
 def _write_json(path: Path, value: Mapping[str, object]) -> None:

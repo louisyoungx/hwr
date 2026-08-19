@@ -13,6 +13,7 @@ from hwr.eval.decoder_gain import (
     _assess_branch,
     _calibrated_effect,
     _decoder_stages,
+    _endpoint_report,
     _path_report,
     _scan_retentions,
     aggregate_decoder_gain,
@@ -281,11 +282,58 @@ def test_decoder_endpoint_mismatch_invalidates_branch(
     for head in report["heads"].values():
         assert not head["assessment"]["valid"]
         assert all(
-            not shift["endpoint_validation"][
-                "true_decoder_matches_decode_features"
+            not shift["endpoint_validation"]["true_decoder"][
+                "official_matches_direct_exactly"
             ]
             for shift in head["shifts"].values()
         )
+
+
+def test_endpoint_report_allows_frozen_manual_mps_tolerance() -> None:
+    direct = torch.zeros(1, 2, dtype=torch.float64)
+    manual = direct.clone()
+    manual[0, 0] = 5.0e-6
+
+    report = _endpoint_report(direct, direct.clone(), manual)
+
+    assert report["valid"]
+    assert report["finite"]
+    assert report["official_matches_direct_exactly"]
+    assert report["manual_to_direct_maximum_absolute_error"] == pytest.approx(
+        5.0e-6
+    )
+    assert report["manual_to_direct_mean_absolute_error"] == pytest.approx(
+        2.5e-6
+    )
+
+
+def test_endpoint_report_rejects_manual_or_direct_mismatch() -> None:
+    direct = torch.zeros(1, 2)
+    too_far = direct.clone()
+    too_far[0, 0] = 6.0e-6
+    wrong_direct = direct.clone()
+    wrong_direct[0, 1] = 1.0
+
+    manual_failure = _endpoint_report(direct, direct.clone(), too_far)
+    direct_failure = _endpoint_report(direct, wrong_direct, direct)
+
+    assert not manual_failure["valid"]
+    assert not direct_failure["valid"]
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf")])
+def test_endpoint_report_rejects_nonfinite_difference(value: float) -> None:
+    direct = torch.zeros(1, 2)
+    manual = direct.clone()
+    manual[0, 0] = value
+
+    report = _endpoint_report(direct, direct.clone(), manual)
+
+    assert not report["valid"]
+    assert not report["finite"]
+    assert not torch.isfinite(
+        torch.tensor(report["manual_to_direct_maximum_absolute_error"])
+    )
 
 
 @pytest.mark.skipif(
@@ -302,6 +350,20 @@ def test_decoder_report_supports_mps_path_jvp() -> None:
 
     assert report["transition_count"] == 16
     assert set(report["heads"]) == {"visual", "proprioception"}
+    for head in report["heads"].values():
+        for shift in head["shifts"].values():
+            for endpoint_name in ("true_decoder", "shifted_decoder"):
+                endpoint = shift["endpoint_validation"][endpoint_name]
+                assert endpoint["finite"]
+                assert endpoint["official_matches_direct_exactly"]
+                assert endpoint[
+                    "manual_to_direct_maximum_absolute_error"
+                ] <= 5.0e-6
+                assert torch.isfinite(
+                    torch.tensor(
+                        endpoint["manual_to_direct_mean_absolute_error"]
+                    )
+                )
 
 
 def test_episode_requires_two_shifts_on_same_edge() -> None:

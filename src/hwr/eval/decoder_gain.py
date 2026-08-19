@@ -49,6 +49,7 @@ FEATURE_EFFECT_MINIMUM = 0.05
 RETENTION_MAXIMUM = 0.50
 RECONSTRUCTION_COSINE_MINIMUM = 0.90
 RECONSTRUCTION_RELATIVE_ERROR_MAXIMUM = 0.10
+MANUAL_ENDPOINT_MAXIMUM_ERROR = 5.0e-6
 
 
 @dataclass(frozen=True)
@@ -173,13 +174,10 @@ def evaluate_decoder_gain(
     for head_index, head_name in enumerate(HEAD_NAMES):
         head = _head(model, head_name)
         true_stages, _ = _decoder_stages(head, branches.true_feature)
-        true_endpoint_valid = bool(
-            torch.allclose(
-                official_true[head_index],
-                true_stages["output"],
-                rtol=1.0e-6,
-                atol=1.0e-7,
-            )
+        true_endpoint = _endpoint_report(
+            official_true[head_index],
+            head(branches.true_feature),
+            true_stages["output"],
         )
         shift_reports = {
             str(shift): _evaluate_branch(
@@ -191,7 +189,7 @@ def evaluate_decoder_gain(
                 calibration["heads"][head_name]["stages"],
                 branches.p23_guard[shift],
                 branches.p23_endpoint_valid[shift],
-                true_endpoint_valid,
+                true_endpoint,
                 shift,
             )
             for shift in ACTION_SHIFTS
@@ -314,18 +312,15 @@ def _evaluate_branch(
     calibration: Mapping[str, Mapping[str, object]],
     p23_guard: Mapping[str, object],
     p23_endpoint_valid: bool,
-    true_decoder_endpoint_valid: bool,
+    true_decoder_endpoint: Mapping[str, object],
     shift: int,
 ) -> dict[str, object]:
     shifted_stages, _ = _decoder_stages(head, shifted_feature)
     official_shifted = model.decode_features(shifted_feature)[head_index]
-    shifted_decoder_endpoint_valid = bool(
-        torch.allclose(
-            official_shifted,
-            shifted_stages["output"],
-            rtol=1.0e-6,
-            atol=1.0e-7,
-        )
+    shifted_decoder_endpoint = _endpoint_report(
+        official_shifted,
+        head(shifted_feature),
+        shifted_stages["output"],
     )
     stage_effects = {
         name: _calibrated_effect(
@@ -357,8 +352,8 @@ def _evaluate_branch(
         path_reports[edge_name] = selected_path
     endpoint_valid = (
         p23_endpoint_valid
-        and true_decoder_endpoint_valid
-        and shifted_decoder_endpoint_valid
+        and true_decoder_endpoint["valid"] is True
+        and shifted_decoder_endpoint["valid"] is True
     )
     stage_valid = (
         p23_guard["guard_passed"] is True
@@ -383,12 +378,41 @@ def _evaluate_branch(
         "path_reports": path_reports,
         "endpoint_validation": {
             "p23_hard_code_matches_sample_false": p23_endpoint_valid,
-            "true_decoder_matches_decode_features": true_decoder_endpoint_valid,
-            "shifted_decoder_matches_decode_features": (
-                shifted_decoder_endpoint_valid
-            ),
+            "true_decoder": dict(true_decoder_endpoint),
+            "shifted_decoder": dict(shifted_decoder_endpoint),
         },
         "assessment": assessment,
+    }
+
+
+def _endpoint_report(
+    official: torch.Tensor,
+    direct: torch.Tensor,
+    manual: torch.Tensor,
+) -> dict[str, object]:
+    official_cpu = official.detach().cpu()
+    direct_cpu = direct.detach().cpu()
+    manual_cpu = manual.detach().cpu()
+    finite = bool(
+        torch.isfinite(official_cpu).all()
+        and torch.isfinite(direct_cpu).all()
+        and torch.isfinite(manual_cpu).all()
+    )
+    direct_exact = bool(torch.equal(official_cpu, direct_cpu))
+    difference = (manual_cpu - direct_cpu).double().abs()
+    maximum = float(difference.max()) if difference.numel() else 0.0
+    mean = float(difference.mean()) if difference.numel() else 0.0
+    return {
+        "valid": (
+            finite
+            and direct_exact
+            and maximum <= MANUAL_ENDPOINT_MAXIMUM_ERROR
+        ),
+        "finite": finite,
+        "official_matches_direct_exactly": direct_exact,
+        "manual_to_direct_maximum_absolute_error": maximum,
+        "manual_to_direct_mean_absolute_error": mean,
+        "manual_maximum_error_threshold": MANUAL_ENDPOINT_MAXIMUM_ERROR,
     }
 
 
@@ -566,6 +590,7 @@ def _criteria() -> dict[str, object]:
         "reconstruction_relative_error_maximum": (
             RECONSTRUCTION_RELATIVE_ERROR_MAXIMUM
         ),
+        "manual_endpoint_maximum_error": MANUAL_ENDPOINT_MAXIMUM_ERROR,
         "episode_shift_pass_minimum": 2,
         "aggregate_episode_pass_minimum": 20,
         "aggregate_shift_pass_minimum": 18,
