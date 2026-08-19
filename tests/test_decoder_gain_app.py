@@ -17,12 +17,25 @@ def test_current_recovery_artifacts_match_frozen_identity() -> None:
 
     recovery = decoder_app._require_recovery_artifacts(root)
 
-    assert recovery["source_commit"] == decoder_app.ORIGINAL_SOURCE_COMMIT
-    assert recovery["report_sha256"] == decoder_app.ORIGINAL_REPORT_SHA256
-    assert recovery["calibration_sha256"] == (
+    assert decoder_app.DEFAULT_OUTPUT == Path(
+        "runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r2"
+    )
+    assert decoder_app.ORIGINAL_OUTPUT == Path(
+        "runs/research-loop/0003/r0003-p24-decoder-gain-s20261324"
+    )
+    assert decoder_app.INTERMEDIATE_OUTPUT == Path(
+        "runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r1"
+    )
+    assert recovery["e1"]["source_commit"] == decoder_app.ORIGINAL_SOURCE_COMMIT
+    assert recovery["e1"]["report_sha256"] == decoder_app.ORIGINAL_REPORT_SHA256
+    assert recovery["e1"]["calibration_sha256"] == (
         decoder_app.ORIGINAL_CALIBRATION_SHA256
     )
-    assert recovery["manifest_sha256"] == decoder_app.ORIGINAL_MANIFEST_SHA256
+    assert recovery["e1"]["manifest_sha256"] == decoder_app.ORIGINAL_MANIFEST_SHA256
+    assert recovery["r1"]["source_commit"] == decoder_app.INTERMEDIATE_SOURCE_COMMIT
+    assert recovery["r1"]["report_sha256"] == (
+        decoder_app.INTERMEDIATE_REPORT_SHA256
+    )
 
 
 @pytest.mark.parametrize(
@@ -39,36 +52,24 @@ def test_recovery_artifact_identity_mismatch_is_rejected(
     )
     (original / "calibration.json").write_text("{}\n", encoding="utf-8")
     (original / "manifest.json").write_text("{}\n", encoding="utf-8")
-    monkeypatch.setattr(decoder_app, "ORIGINAL_OUTPUT", Path("e1"))
-    monkeypatch.setattr(
-        decoder_app,
-        "ORIGINAL_REPORT_SHA256",
-        (
-            "0" * 64
-            if mismatch == "report"
-            else decoder_app._sha256(original / "report.json")
-        ),
+    expected_source = (
+        "b" * 40 if mismatch == "source" else decoder_app.ORIGINAL_SOURCE_COMMIT
     )
-    monkeypatch.setattr(
-        decoder_app,
-        "ORIGINAL_CALIBRATION_SHA256",
-        (
-            "0" * 64
-            if mismatch == "calibration"
-            else decoder_app._sha256(original / "calibration.json")
-        ),
+    expected_report = (
+        "0" * 64
+        if mismatch == "report"
+        else decoder_app._sha256(original / "report.json")
     )
-    monkeypatch.setattr(
-        decoder_app,
-        "ORIGINAL_MANIFEST_SHA256",
-        (
-            "0" * 64
-            if mismatch == "manifest"
-            else decoder_app._sha256(original / "manifest.json")
-        ),
+    expected_calibration = (
+        "0" * 64
+        if mismatch == "calibration"
+        else decoder_app._sha256(original / "calibration.json")
     )
-    if mismatch == "source":
-        monkeypatch.setattr(decoder_app, "ORIGINAL_SOURCE_COMMIT", "b" * 40)
+    expected_manifest = (
+        "0" * 64
+        if mismatch == "manifest"
+        else decoder_app._sha256(original / "manifest.json")
+    )
 
     with pytest.raises(
         ValueError,
@@ -78,7 +79,14 @@ def test_recovery_artifact_identity_mismatch_is_rejected(
             else "recovery artifact identity differs"
         ),
     ):
-        decoder_app._require_recovery_artifacts(tmp_path)
+        decoder_app._require_recovery_run(
+            tmp_path,
+            Path("e1"),
+            expected_source,
+            expected_report,
+            expected_calibration,
+            expected_manifest,
+        )
 
 
 def test_recovery_failure_does_not_create_output(
@@ -148,11 +156,20 @@ def test_replay_hash_failure_does_not_create_output(
         decoder_app,
         "_require_recovery_artifacts",
         lambda root: {
-            "run": "e1",
-            "source_commit": decoder_app.ORIGINAL_SOURCE_COMMIT,
-            "report_sha256": decoder_app.ORIGINAL_REPORT_SHA256,
-            "calibration_sha256": decoder_app.ORIGINAL_CALIBRATION_SHA256,
-            "manifest_sha256": decoder_app.ORIGINAL_MANIFEST_SHA256,
+            "e1": {
+                "run": "e1",
+                "source_commit": decoder_app.ORIGINAL_SOURCE_COMMIT,
+                "report_sha256": decoder_app.ORIGINAL_REPORT_SHA256,
+                "calibration_sha256": decoder_app.ORIGINAL_CALIBRATION_SHA256,
+                "manifest_sha256": decoder_app.ORIGINAL_MANIFEST_SHA256,
+            },
+            "r1": {
+                "run": "r1",
+                "source_commit": decoder_app.INTERMEDIATE_SOURCE_COMMIT,
+                "report_sha256": decoder_app.INTERMEDIATE_REPORT_SHA256,
+                "calibration_sha256": decoder_app.INTERMEDIATE_CALIBRATION_SHA256,
+                "manifest_sha256": decoder_app.INTERMEDIATE_MANIFEST_SHA256,
+            },
         },
     )
     monkeypatch.setattr(decoder_app, "_require_checkpoint", lambda path: None)
@@ -304,11 +321,20 @@ def _patch_lightweight_app_run(
         decoder_app,
         "_require_recovery_artifacts",
         lambda root: {
-            "run": "e1",
-            "source_commit": decoder_app.ORIGINAL_SOURCE_COMMIT,
-            "report_sha256": decoder_app.ORIGINAL_REPORT_SHA256,
-            "calibration_sha256": decoder_app.ORIGINAL_CALIBRATION_SHA256,
-            "manifest_sha256": decoder_app.ORIGINAL_MANIFEST_SHA256,
+            "e1": {
+                "run": "e1",
+                "source_commit": decoder_app.ORIGINAL_SOURCE_COMMIT,
+                "report_sha256": decoder_app.ORIGINAL_REPORT_SHA256,
+                "calibration_sha256": decoder_app.ORIGINAL_CALIBRATION_SHA256,
+                "manifest_sha256": decoder_app.ORIGINAL_MANIFEST_SHA256,
+            },
+            "r1": {
+                "run": "r1",
+                "source_commit": decoder_app.INTERMEDIATE_SOURCE_COMMIT,
+                "report_sha256": decoder_app.INTERMEDIATE_REPORT_SHA256,
+                "calibration_sha256": decoder_app.INTERMEDIATE_CALIBRATION_SHA256,
+                "manifest_sha256": decoder_app.INTERMEDIATE_MANIFEST_SHA256,
+            },
         },
     )
     monkeypatch.setattr(decoder_app, "_require_checkpoint", lambda path: None)
@@ -420,10 +446,13 @@ def test_app_freezes_and_reloads_calibration_before_shift_pass(
     assert report["calibration_sha256"] == decoder_app._sha256(
         arguments.output / "calibration.json"
     )
-    assert report["recovery_of"]["source_commit"] == (
+    assert report["recovery_of"]["e1"]["source_commit"] == (
         decoder_app.ORIGINAL_SOURCE_COMMIT
     )
-    assert report["recovery_of"]["report_sha256"] == (
+    assert report["recovery_of"]["r1"]["report_sha256"] == (
+        decoder_app.INTERMEDIATE_REPORT_SHA256
+    )
+    assert report["recovery_of"]["e1"]["report_sha256"] == (
         decoder_app.ORIGINAL_REPORT_SHA256
     )
     assert set(manifest["artifacts"]) == {
@@ -454,10 +483,10 @@ def test_calibration_first_pass_failure_writes_failure_manifest(
     assert failure["completed_episode_count"] == 0
     assert failure["current_source_episode_id"] == "source-0"
     assert failure["current_window"]["episode_id"] == "window-0"
-    assert failure["recovery_of"]["calibration_sha256"] == (
+    assert failure["recovery_of"]["e1"]["calibration_sha256"] == (
         decoder_app.ORIGINAL_CALIBRATION_SHA256
     )
-    assert failure["recovery_of"]["manifest_sha256"] == (
-        decoder_app.ORIGINAL_MANIFEST_SHA256
+    assert failure["recovery_of"]["r1"]["manifest_sha256"] == (
+        decoder_app.INTERMEDIATE_MANIFEST_SHA256
     )
     assert set(manifest["artifacts"]) == {"failure.json"}

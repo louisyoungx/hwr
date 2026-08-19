@@ -328,12 +328,29 @@ def _evaluate_branch(
         )
         for name in STAGE_NAMES
     }
-    actual_retentions, first_low, retention_invalid = _scan_retentions(
-        stage_effects
+    endpoint_valid = (
+        p23_endpoint_valid
+        and true_decoder_endpoint["valid"] is True
+        and shifted_decoder_endpoint["valid"] is True
     )
+    (
+        p23_measurement_valid,
+        basic_measurement_valid,
+        feature_guard_passed,
+    ) = _branch_precondition(
+        stage_effects, endpoint_valid, p23_guard
+    )
+    actual_retentions = {}
+    first_low = None
+    retention_invalid = False
+    if basic_measurement_valid and feature_guard_passed:
+        actual_retentions, first_low, retention_invalid = _scan_retentions(
+            stage_effects
+        )
+    measurement_valid = basic_measurement_valid and not retention_invalid
     path_reports = {}
     selected_path = None
-    if first_low is not None:
+    if measurement_valid and feature_guard_passed and first_low is not None:
         edge = next(
             value
             for value in _edge_functions(head)
@@ -350,31 +367,21 @@ def _evaluate_branch(
             calibration[output_name],
         )
         path_reports[edge_name] = selected_path
-    endpoint_valid = (
-        p23_endpoint_valid
-        and true_decoder_endpoint["valid"] is True
-        and shifted_decoder_endpoint["valid"] is True
-    )
-    stage_valid = (
-        p23_guard["guard_passed"] is True
-        and all(effect["valid"] for effect in stage_effects.values())
-        and _at_least(
-            stage_effects["feature"]["standardized_effect"],
-            FEATURE_EFFECT_MINIMUM,
-        )
-        and endpoint_valid
-        and not retention_invalid
-    )
     assessment = _assess_branch(
-        first_low, selected_path, stage_valid
+        first_low,
+        selected_path,
+        measurement_valid,
+        feature_guard_passed,
     )
     return {
         "shift": shift,
         "p23_hard_feature_guard": dict(p23_guard),
+        "p23_hard_feature_measurement_valid": p23_measurement_valid,
         "stage_effects": stage_effects,
         "actual_retentions": actual_retentions,
         "first_low_retention_edge": first_low,
         "retention_invalid": retention_invalid,
+        "feature_guard_passed": feature_guard_passed,
         "path_reports": path_reports,
         "endpoint_validation": {
             "p23_hard_code_matches_sample_false": p23_endpoint_valid,
@@ -416,6 +423,41 @@ def _endpoint_report(
     }
 
 
+def _p23_guard_measurement_valid(
+    guard: Mapping[str, object],
+) -> bool:
+    return (
+        guard.get("finite") is True
+        and float(guard.get("active_fraction", 0.0))
+        >= ACTIVE_FRACTION_MINIMUM
+    )
+
+
+def _branch_precondition(
+    stage_effects: Mapping[str, Mapping[str, object]],
+    endpoint_valid: bool,
+    p23_guard: Mapping[str, object],
+) -> tuple[bool, bool, bool]:
+    p23_measurement_valid = _p23_guard_measurement_valid(p23_guard)
+    basic_measurement_valid = (
+        all(effect["valid"] for effect in stage_effects.values())
+        and endpoint_valid
+        and p23_measurement_valid
+    )
+    feature_guard_passed = (
+        p23_guard["guard_passed"] is True
+        and _at_least(
+            stage_effects["feature"]["standardized_effect"],
+            FEATURE_EFFECT_MINIMUM,
+        )
+    )
+    return (
+        p23_measurement_valid,
+        basic_measurement_valid,
+        feature_guard_passed,
+    )
+
+
 def _scan_retentions(
     stage_effects: Mapping[str, Mapping[str, object]],
 ) -> tuple[dict[str, float | None], str | None, bool]:
@@ -436,16 +478,24 @@ def _scan_retentions(
 def _assess_branch(
     first_low: str | None,
     selected_path: Mapping[str, object] | None,
-    stage_valid: bool,
+    measurement_valid: bool,
+    feature_guard_passed: bool,
 ) -> dict[str, object]:
-    if first_low is None:
-        valid = stage_valid
+    if not measurement_valid:
+        valid = False
+        state = "jvp_invalid"
+        passed = False
+    elif not feature_guard_passed:
+        valid = True
+        state = "feature_guard_failed"
+        passed = False
+    elif first_low is None:
+        valid = True
         state = "not_localized" if valid else "jvp_invalid"
         passed = False
     else:
         passed = (
-            stage_valid
-            and selected_path is not None
+            selected_path is not None
             and selected_path["valid"] is True
             and _below(
                 selected_path["path_retention"], RETENTION_MAXIMUM

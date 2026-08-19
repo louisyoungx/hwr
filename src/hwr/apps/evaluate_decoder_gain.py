@@ -44,7 +44,7 @@ from hwr.train.foundation_visual_update import encode_visual_student_bounded
 
 
 DEFAULT_OUTPUT = Path(
-    "runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r1"
+    "runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r2"
 )
 ORIGINAL_OUTPUT = Path(
     "runs/research-loop/0003/r0003-p24-decoder-gain-s20261324"
@@ -58,6 +58,19 @@ ORIGINAL_CALIBRATION_SHA256 = (
 )
 ORIGINAL_MANIFEST_SHA256 = (
     "2ce984233c4ce3a3c3aa932f9e8d3f1765fe5a315c5e4e13cc0a17928a521dda"
+)
+INTERMEDIATE_OUTPUT = Path(
+    "runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r1"
+)
+INTERMEDIATE_SOURCE_COMMIT = "97cbdcfef8505d8f6c8b7c24e520a281e5e7df8b"
+INTERMEDIATE_REPORT_SHA256 = (
+    "619c4f2d7749555768937899e8acad6ffbc1e3f82a859bd392086a8425ea891e"
+)
+INTERMEDIATE_CALIBRATION_SHA256 = (
+    "16d4d6be2390415e215c5f02a61325171d38cfbebad4e0da67ab26c90b085337"
+)
+INTERMEDIATE_MANIFEST_SHA256 = (
+    "9b285ba522a3c00a062a8927f63e10a28f6c572c2864874d49ace28c4e880723"
 )
 
 
@@ -348,25 +361,52 @@ def _require_frozen_invocation(
 
 
 def _require_recovery_artifacts(root: Path) -> dict[str, object]:
-    original = root / ORIGINAL_OUTPUT
+    original = _require_recovery_run(
+        root,
+        ORIGINAL_OUTPUT,
+        ORIGINAL_SOURCE_COMMIT,
+        ORIGINAL_REPORT_SHA256,
+        ORIGINAL_CALIBRATION_SHA256,
+        ORIGINAL_MANIFEST_SHA256,
+    )
+    intermediate = _require_recovery_run(
+        root,
+        INTERMEDIATE_OUTPUT,
+        INTERMEDIATE_SOURCE_COMMIT,
+        INTERMEDIATE_REPORT_SHA256,
+        INTERMEDIATE_CALIBRATION_SHA256,
+        INTERMEDIATE_MANIFEST_SHA256,
+    )
+    return {"e1": original, "r1": intermediate}
+
+
+def _require_recovery_run(
+    root: Path,
+    relative: Path,
+    source_commit: str,
+    report_sha256: str,
+    calibration_sha256: str,
+    manifest_sha256: str,
+) -> dict[str, object]:
+    original = root / relative
     report = original / "report.json"
     calibration = original / "calibration.json"
     manifest = original / "manifest.json"
     if (
-        _sha256(report) != ORIGINAL_REPORT_SHA256
-        or _sha256(calibration) != ORIGINAL_CALIBRATION_SHA256
-        or _sha256(manifest) != ORIGINAL_MANIFEST_SHA256
+        _sha256(report) != report_sha256
+        or _sha256(calibration) != calibration_sha256
+        or _sha256(manifest) != manifest_sha256
     ):
         raise ValueError("P24 recovery artifact identity differs")
     value = json.loads(report.read_text(encoding="utf-8"))
-    if value.get("source_commit") != ORIGINAL_SOURCE_COMMIT:
+    if value.get("source_commit") != source_commit:
         raise ValueError("P24 recovery source commit differs")
     return {
         "run": str(original),
-        "source_commit": ORIGINAL_SOURCE_COMMIT,
-        "report_sha256": ORIGINAL_REPORT_SHA256,
-        "calibration_sha256": ORIGINAL_CALIBRATION_SHA256,
-        "manifest_sha256": ORIGINAL_MANIFEST_SHA256,
+        "source_commit": source_commit,
+        "report_sha256": report_sha256,
+        "calibration_sha256": calibration_sha256,
+        "manifest_sha256": manifest_sha256,
     }
 
 

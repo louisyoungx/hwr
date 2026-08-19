@@ -11,10 +11,12 @@ from hwr.eval.decoder_gain import (
     EDGE_NAMES,
     HEAD_NAMES,
     _assess_branch,
+    _branch_precondition,
     _calibrated_effect,
     _decoder_stages,
     _endpoint_report,
     _path_report,
+    _p23_guard_measurement_valid,
     _scan_retentions,
     aggregate_decoder_gain,
     assess_decoder_head_episode,
@@ -404,6 +406,7 @@ def test_first_low_edge_jvp_failure_cannot_be_not_localized() -> None:
             "relative_error": None,
         },
         True,
+        True,
     )
 
     assert assessment["state"] == "jvp_invalid"
@@ -411,9 +414,89 @@ def test_first_low_edge_jvp_failure_cannot_be_not_localized() -> None:
     assert not assessment["passed"]
 
 
-def test_feature_guard_failure_invalidates_branch() -> None:
-    assessment = _assess_branch(None, None, False)
+def test_measurement_failure_invalidates_branch() -> None:
+    assessment = _assess_branch(None, None, False, True)
 
+    assert assessment["state"] == "jvp_invalid"
+    assert not assessment["valid"]
+
+
+def test_feature_guard_failure_is_valid_negative_branch() -> None:
+    assessment = _assess_branch(None, None, True, False)
+
+    assert assessment["state"] == "feature_guard_failed"
+    assert assessment["valid"]
+    assert not assessment["passed"]
+
+
+def test_p23_guard_measurement_failure_takes_priority() -> None:
+    assert not _p23_guard_measurement_valid(
+        {"finite": False, "active_fraction": 1.0}
+    )
+    assert not _p23_guard_measurement_valid(
+        {"finite": True, "active_fraction": 0.20}
+    )
+    assert _p23_guard_measurement_valid(
+        {
+            "finite": True,
+            "active_fraction": 1.0,
+            "guard_passed": False,
+        }
+    )
+
+
+@pytest.mark.parametrize("effect", [0.0, 1.0e-8, 0.049])
+def test_valid_low_feature_effect_is_feature_guard_failure(effect: float) -> None:
+    stage_effects = {
+        name: {"valid": True, "standardized_effect": 1.0}
+        for name in (
+            "feature",
+            "linear_preactivation",
+            "layer_norm_normalized",
+            "layer_norm_affine",
+            "hidden",
+            "output",
+        )
+    }
+    stage_effects["feature"]["standardized_effect"] = effect
+
+    p23_valid, basic_valid, feature_passed = _branch_precondition(
+        stage_effects,
+        True,
+        {"finite": True, "active_fraction": 1.0, "guard_passed": True},
+    )
+
+    assert p23_valid
+    assert basic_valid
+    assert not feature_passed
+    assessment = _assess_branch(None, None, basic_valid, feature_passed)
+    assert assessment["state"] == "feature_guard_failed"
+    assert assessment["valid"]
+
+
+def test_p23_measurement_failure_beats_feature_guard_failure() -> None:
+    stage_effects = {
+        name: {"valid": True, "standardized_effect": 0.0}
+        for name in (
+            "feature",
+            "linear_preactivation",
+            "layer_norm_normalized",
+            "layer_norm_affine",
+            "hidden",
+            "output",
+        )
+    }
+
+    p23_valid, basic_valid, feature_passed = _branch_precondition(
+        stage_effects,
+        True,
+        {"finite": False, "active_fraction": 1.0, "guard_passed": False},
+    )
+
+    assert not p23_valid
+    assert not basic_valid
+    assert not feature_passed
+    assessment = _assess_branch(None, None, basic_valid, feature_passed)
     assert assessment["state"] == "jvp_invalid"
     assert not assessment["valid"]
 
@@ -526,6 +609,28 @@ def test_not_localized_requires_all_branches_valid() -> None:
     assert aggregate["heads"]["visual"]["state"] == "jvp_invalid"
     assert not aggregate["heads"]["visual"]["all_branches_valid"]
     assert aggregate["assessment"]["decision"] == "diagnostic_invalid"
+
+
+def test_not_localized_allows_feature_guard_failed_branches() -> None:
+    reports = _aggregate_reports()
+    for report in reports:
+        visual = report["heads"]["visual"]
+        visual["assessment"]["passed"] = False
+        visual["assessment"]["localized_edge"] = None
+        visual["assessment"]["valid"] = True
+        visual["assessment"]["output_guard_passed"] = True
+        for shift in visual["shifts"].values():
+            shift["assessment"] = {
+                "state": "feature_guard_failed",
+                "valid": True,
+                "passed": False,
+                "localized_edge": None,
+            }
+
+    aggregate = aggregate_decoder_gain(reports)
+
+    assert aggregate["heads"]["visual"]["state"] == "not_localized"
+    assert aggregate["heads"]["visual"]["all_branches_valid"]
 
 
 def _calibration_for(value: torch.Tensor) -> dict[str, object]:
