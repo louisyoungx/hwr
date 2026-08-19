@@ -898,6 +898,8 @@ visual/proprio 不得池化或相互补足。
   `runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r2`。
 - R2 命令：
   `.venv/bin/python -m hwr.apps.evaluate_decoder_gain --device mps --output runs/research-loop/0003/r0003-p24-decoder-gain-s20261324-r2`。
+- R2 状态分类修复提交固定为 `cf572d7`；执行 source commit 使用包含最终复审记录的实际
+  干净 HEAD，并由 report 固化。
 - R2 入口必须硬校验 E1 与 R1 的 source/report/calibration/manifest hash，并在 success/failure
   固化完整 recovery chain。
 

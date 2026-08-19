@@ -545,3 +545,23 @@ P24 准入守护独立通过：
   门通过；两位独立复审 Agent 均 `approve`。
 
 主 Agent批准在修复与本复审记录 push 后唯一执行 P24-R1；E1 永久保留，不得重跑。
+
+## P24 R1 与 R2 状态复审
+
+- R1 source commit：`97cbdcf`，endpoint 修复成功：
+  - official/direct 144/144 exact；
+  - manual/direct maximum absolute difference 最大 `3.81e-6`，全部低于 `5e-6`。
+- R1 仍 `diagnostic_invalid` 的原因不是 endpoint 或 JVP，而是 4 个 Episode 的 shift=1
+  feature effect `<0.05` 被错误归类为 `jvp_invalid`。
+- R2 修复提交：`cf572d7`，只重排 branch 状态优先级与 recovery chain：
+  - 基础测量失效优先 `jvp_invalid`；
+  - 测量有效但 P23/global feature guard 未过为
+    `feature_guard_failed(valid=true, passed=false)`，不扫描 retention/JVP；
+  - `not_localized` 可以包含 `feature_guard_failed`，但不得包含任何 `jvp_invalid`；
+  - 入口锁定 `...s20261324-r2`，同时硬校验 E1+R1 report/calibration/manifest/source。
+- 边界测试覆盖 effect `0/1e-8/0.049`、P23 finite/active 失效优先、aggregate
+  `feature_guard_failed`/`jvp_invalid` 路由、双 recovery chain 与 exact R2 path。
+- 最终：P24-R2 专项测试 41 项、相关测试、全量测试、365 文件尺寸门、架构门和物理完整性
+  门通过；两位独立复审 Agent 均 `approve`。
+
+主 Agent批准在 R2 修复与本复审记录 push 后唯一执行 P24-R2；E1/R1 均永久保留。
