@@ -499,3 +499,27 @@ P24 准入守护独立通过：
   feature 物理语义或能力提升结论。
 
 主 Agent批准 P24 进入实现；P25 继续 defer，等待 P24 分头状态。
+
+## P24 实现复审
+
+- 实现提交：`34a29ab`。
+- 首轮复审发现并修复：
+  - calibration 严格两遍：第一遍只生成 true hard feature，calibration 写盘/hash/重载后
+    第二遍才计算任何 shift/P23 guard；
+  - P23 hard-code endpoint 与正式 `decode_features` endpoint 均独立逐元素校验；
+  - 全局 feature effect `>=0.05` 使用 P24 calibration scale，不复用 Episode 自适应 guard；
+  - 固定首低边后只计算该边 path-JVP，不让后续无关边污染结论；
+  - actual retention 不可计算立即 branch invalid，不得跳后边或进入 `not_localized`；
+  - selected JVP 不合格 branch 直接 `jvp_invalid`；
+  - Episode 允许 2 个有效同边 branch 加 1 个 invalid branch；但 `not_localized` head
+    要求 72/72 branch 全部有效；
+  - head/LN/output checkpoint 维数、首遍 failure 血缘与 calibration artifact 均锁定。
+- 为满足 800 行门，calibration/path-JVP 数学拆到独立模块；行为接口不变。
+- 最终：
+  - P24 core/app 专项测试 24 项通过；
+  - P24/P23/P21/P20 相关测试通过；
+  - 正确入口全量测试通过；
+  - 365 文件尺寸门、架构门和物理完整性门通过；
+  - 两位独立实现复审 Agent 均 `approve`。
+
+主 Agent批准在实现与本复审记录均 push、工作区干净、冻结 run 路径不存在时唯一执行 P24。

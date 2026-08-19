@@ -718,6 +718,8 @@ Episode 是独立统计单位；三个 shift 只是 Episode 内重复证据，�
 - 资源预算：冻结 decoder 前向与 16 段 path-integrated JVP，不训练、不读取 target/loss，
   预计小于 15 分钟。
 - 执行前要求：实现、测试、文档均提交并 push，工作区干净，run 路径不存在。
+- 评测实现提交固定为 `34a29ab`；执行 source commit 使用包含最终复审记录的实际干净
+  HEAD，并由 report 固化。
 
 ### 固定输入与准入
 
