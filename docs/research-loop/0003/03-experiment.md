@@ -429,18 +429,26 @@ P19 只有同时满足才通过诊断：
 
 ### 指标
 
-- stochastic-only preactivation RMS；
-- raw-action-only 与 canonical-action-only preactivation RMS；
-- action/stochastic RMS 比；
-- canonical/raw action contribution 增益；
-- 每 action 维 RMS、bounds 内比例和非有限值；
-- 同时报告 transition_input stochastic/action 权重的 element RMS、column norm 和 Frobenius
-  norm，避免把维数差误作单元素权重差。
+- 判定指标使用 Episode 内去均值的 preactivation variation RMS：
+  - `center(x)=x-mean_transition(x)`；
+  - stochastic-only、raw-action-only 与 canonical-action-only 分别计算
+    `RMS(center(Wx))`；
+  - action/stochastic variation RMS 比；
+  - canonical/raw action variation contribution 增益。
+- 描述指标同时报告未中心化绝对 preactivation RMS、preactivation 均值/DC RMS 和
+  Linear bias；这些不得参与判定。
+- 24 Episode aggregate 的 RMS 必须按底层元素数量平方池化：
+  `sqrt(sum(n_i*rms_i^2)/sum(n_i))`，不得对 Episode RMS 做算术平均。
+- 每 action 维报告 raw/canonical RMS、canonical bounds 内比例、越界数量和非有限数量。
+- 同时报告 transition_input stochastic/action 权重的 element RMS、全部 column norm 和
+  Frobenius norm，避免把维数差误作单元素权重差。
+- report 固化 Replay manifest SHA-256、checkpoint 双 hash、selection seed 和 24 个有序
+  window identity：source Episode、window Episode、task、seed、transition start/stop。
 
 ### 判定
 
-- raw action/stochastic contribution ratio `<0.20`；
-- canonical/raw contribution gain `>=1.50`；
+- raw action/stochastic variation contribution ratio `<0.20`；
+- canonical/raw variation contribution gain `>=1.50`；
 - canonical action 全部有限且位于 `[-1,1]`；
 - 24 Episode 中至少 20 个同时满足以上两个贡献条件。
 
@@ -450,6 +458,39 @@ P19 只有同时满足才通过诊断：
   2-update 三臂 smoke；数据、loss、head 和评测不变。
 - 不通过：拒绝 action-scale 假设，继续检查 posterior state shortcut。
 - 不得同时修改 action execution head 的物理单位输出。
+
+### 首次执行失效与恢复冻结
+
+- `R0001-P20-E1` 首次执行目录
+  `runs/research-loop/0003/r0003-p20-action-input-contribution-s20261320` 永久保留，
+  不得删除、覆盖或再次启动。
+- 首次执行在第一个 Episode 写出前因 MPS 不支持设备侧 `float64` 转换而失败：
+  - 完成 Episode：`0/24`；
+  - failure SHA-256：
+    `52c9ad040cf6749df5467fcf77e07f9388508326a45e9b675f14e26ac578b20a`；
+  - manifest SHA-256：
+    `2f4f0361873858ab6fd551e71408b72db192e259749434637e6326fc0e88c616`。
+- 该失败没有生成任何冻结指标，标记为 `invalid execution`，不得据此接受或拒绝 P20。
+- `R0001-P20-R1` 只允许修复评测实现：
+  - 统计张量先搬到 CPU，再转 `float64`；
+  - 判定使用 Episode 内去均值 variation contribution；
+  - aggregate 使用平方池化；
+  - 补齐 bounds、权重、bias 和窗口血缘审计。
+- 不得修改模型输入、checkpoint、窗口选择、canonical 公式、阈值或模型权重。
+- 修复必须增加 MPS 回归测试并通过原有门禁，使用干净提交唯一运行新目录：
+  `runs/research-loop/0003/r0003-p20-action-input-contribution-s20261320-r1`。
+- 恢复命令固定为：
+  `.venv/bin/python -m hwr.apps.evaluate_action_input_contribution --device mps --output runs/research-loop/0003/r0003-p20-action-input-contribution-s20261320-r1`。
+- Replay manifest SHA-256 冻结为
+  `c7f7a50925b581307dc95787078c1fc2ee520f8b210e61fd91e1007db21a1985`；
+  checkpoint manifest/artifact SHA-256 冻结为
+  `72f9361762d7ff5086f086b9ae1db05396caa3cf91822ece20686095df4ad75b` /
+  `ef24bdfcca3cc46274bdfebc1d8b1a4afc81c73abff3aa4128e393e6da2109c6`；
+  selection seed 固定为 `20261306`。
+- R1 是评测实现修复，不是能力改动；仍使用本节修订后的冻结标准，不得将 E1 与 R1
+  当作两个 seed 或选择性结果。
+- R1 采用项目内原子 dispatch 标记和 app 输出目录防覆盖双锁；看门狗只读检查，绝不
+  自动重启。若 R1 再失效则永久保留并停止，未经重新审查不得创建 R2。
 
 ## P17 路由
 

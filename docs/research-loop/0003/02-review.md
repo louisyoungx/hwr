@@ -156,3 +156,40 @@
 - action 权重单元素 RMS 不低于 stochastic，但 action 维数少 64 倍，且连续 action 未按
   canonical bounds 归一化。
 - 先做 P20 只读 preactivation 贡献诊断；不修改 checkpoint、不读取正式 holdout。
+
+## P20 首次执行后实现审计
+
+`R0001-P20-E1` 在 `0/24` Episode、尚未产生任何指标时因 MPS 设备侧 `float64`
+转换失败。主 Agent 保留失败 run，并在 R1 执行前组织三份独立创新审查和两份独立筛选。
+
+### 共同发现
+
+1. MPS 修复本身成立：统计张量先搬到 CPU，再用 `float64` 归约，不改变模型输入或公式。
+2. aggregate 不能对 Episode RMS 做算术平均，必须使用
+   `sqrt(sum(n_i * rms_i^2) / sum(n_i))`。
+3. canonical 映射含平移项，尤其 gripper `[0,1] -> [-1,1]`；未中心化 RMS 会把 DC
+   偏移误当作 action variation，可能虚增 gain。
+4. 判定必须基于 Episode 内去均值的 variation contribution；绝对 RMS 与 DC RMS 只作
+   描述，不参与阈值。
+5. 必须补齐 canonical bounds 比例/计数、非有限计数、stochastic/action column norms、
+   Linear bias 和完整窗口血缘。
+
+### 独立筛选
+
+两位筛选 Agent 在互不交流的情况下均给出 `changes_required`。
+
+| 筛选 | 目标价值 | 证据强度 | 可检验性 | 因果可归因性 | 通用性 | 实施成本 | 回归风险 | 结论 |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| A | 4 | 2 | 3 | 2 | 3 | 5 | 4 | `changes_required` |
+| B | 4 | 3 | 5 | 2 | 4 | 2 | 2 | `changes_required` |
+
+筛选 A 的成本/风险高分表示更有利；筛选 B 的成本/风险高分表示成本或风险更高，因此这两列
+不做横向总分。两者共同否决“只修 MPS 后直接执行 R1”，但没有否决 P20 假设。
+
+### 主 Agent 决策
+
+- E1 标记为 `invalid execution`，不计作 seed 或假设结果。
+- 在看到任何 R1 指标前修订诊断定义和血缘合同。
+- 修订仍是评测实现修复，不是能力改动；不得改 checkpoint、窗口、action、模型权重或
+  原阈值。
+- 修订实现再次通过独立筛选后，才允许唯一执行 R1。

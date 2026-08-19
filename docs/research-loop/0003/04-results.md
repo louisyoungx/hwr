@@ -294,3 +294,31 @@ candidate 与 raw 参数梯度 cosine 为 1.0。current 梯度并未接近零，
 
 下一步 P20 检查未归一化物理 action 在 1024+16 维 RSSM transition 输入中的实际
 preactivation 贡献，仍只做冻结训练 Replay 诊断。
+
+## `R0001-P20-E1`：`invalid execution`
+
+- 源码提交：`be678cceaade0a4ccc36bf81bcce0320f64d25c4`
+- run：
+  `runs/research-loop/0003/r0003-p20-action-input-contribution-s20261320`
+- failure SHA-256：
+  `52c9ad040cf6749df5467fcf77e07f9388508326a45e9b675f14e26ac578b20a`
+- manifest SHA-256：
+  `2f4f0361873858ab6fd551e71408b72db192e259749434637e6326fc0e88c616`
+- manifest 中唯一 artifact 为 `failure.json`，其 SHA-256 与字节数验证通过。
+- 完成 Episode：`0/24`；没有 `episodes/*.json`，也没有 `report.json`。
+- 失败发生在首个 Episode 的 contribution RMS 统计：MPS 不支持设备侧 Tensor 转
+  `float64`，`value.double()` 抛出 `TypeError`。
+
+该执行没有产生任何冻结指标，不能按 P20 阈值归因。失败目录永久保留，不删除、不覆盖、
+不复用。
+
+首次恢复计划只修复 MPS 搬运顺序，但在 R1 启动前的三份创新审查和两份独立筛选中发现：
+
+- aggregate 对 Episode RMS 做算术平均，不是平方池化的 pooled RMS；
+- canonical 的仿射平移会把 gripper DC 偏移计入未中心化 contribution gain；
+- bounds、双侧 column norm、bias 和完整窗口血缘未全部落盘。
+
+两位筛选均给出 `changes_required`。R1 路径从未创建，也没有看到任何 R1 指标；因此允许在
+结果前修订评测实现和冻结合同。修订后判定只使用 Episode 内去均值 variation RMS，绝对/
+DC RMS 仅作描述，aggregate 使用平方池化；checkpoint、24 个窗口、action、canonical
+公式和原阈值保持不变。
