@@ -493,8 +493,9 @@ P19 只有同时满足才通过诊断：
   当作两个 seed 或选择性结果。
 - R1 采用项目内原子 dispatch 标记和 app 输出目录防覆盖双锁；看门狗只读检查，绝不
   自动重启。若 R1 再失效则永久保留并停止，未经重新审查不得创建 R2。
-- R1 源码提交固定为 `5fca360`；执行前必须确认分支 `feat/research-loop`、工作区干净、
-  远端包含该提交、E1 两个 hash 不变、R1 目录与 dispatch 标记均不存在。
+- R1 评测实现提交固定为 `5fca360`；执行 source commit 使用包含本冻结记录的实际干净
+  HEAD，并由 report 固化。执行前必须确认分支 `feat/research-loop`、工作区干净、远端
+  包含实际 HEAD、E1 两个 hash 不变、R1 目录与 dispatch 标记均不存在。
 
 ## P17 路由
 
