@@ -4,7 +4,7 @@
 
 - 轮次：`R0003`
 - 起始提交：`4050dcf`
-- 状态：进行中
+- 状态：已完成
 - 当前证据提交：`ed0f90feadf2a82c589e0355fe3dee6368c526a6`
 - 前一轮结论：observation lag 单变量假设被否定
 - 本轮主要证据：P09 完整 128-transition 轨迹与 R0001 7×16 Replay 的 Probe 结论不一致

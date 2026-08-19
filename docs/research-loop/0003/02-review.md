@@ -640,3 +640,28 @@ calibration 和全部有效 branch，不指定有利边；visual/proprio 不得�
 - 最终筛选 U/V 均 `APPROVE P25a`；P25b 仅允许对应 head 在 P25a 通过后独立启动。
 
 主 Agent批准 P25a 进入实现；visual/proprio 分头归因，不形成可互补的总体分数。
+
+## P25a 实施前守护决策
+
+实现前按冻结合同复核 P24-R2 的每个 head×shift output guard：
+
+| head | shift=1 | shift=5 | shift=9 | 冻结要求 |
+|---|---:|---:|---:|---:|
+| visual | 23/24 | 24/24 | 24/24 | 每 shift 24/24 |
+| proprioception | 21/24 | 24/24 | 24/24 | 每 shift 24/24 |
+
+shift=1 的任务分层：
+
+- visual：clear/store/tidy=`6/6、5/6、12/12`；
+- proprioception：clear/store/tidy=`6/6、4/6、11/12`。
+
+因此 P25a 的结果前整体有效性硬门已失败。该门槛在 P25a 合同冻结、独立筛选批准后明确写为
+“任一 head/shift 未达到24/24则整体无效”，不能在看到 P24-R2 后降为 Episode 2/3、
+20/24 或任务配额。
+
+主 Agent决策：
+
+- P25a 标记 `rejected without run`；没有创建 run、没有执行 whitening/bootstrap；
+- 四个未提交实现/测试草稿已删除，从未提交、push或参与正式产物；
+- P25b 只允许对应 head 的 P25a 通过后启动，因此 visual/proprio 两头都自动拒绝；
+- 不从 shift=5/9 或满足 guard 的 Episode 子集继续，不修改 P25a 门槛。

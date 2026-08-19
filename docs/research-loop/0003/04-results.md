@@ -603,3 +603,31 @@ E1/R1 均永久保留，不重跑、不删除、不参与 P24 机制判定。
 系统性的相邻层 `<0.50` retention；P24 decoder low-gain 假设拒绝。按冻结决策表，两头都
 是 `not_localized` 且 output guard 全过，因此 P25 可分头重筛 target scale/gradient 奖励；
 不得指定少量 localized branch、不得合并 visual/proprio。
+
+## `R0001-P25a/P25b`：`rejected without run`
+
+P25a exact 合同在实现前冻结并经两位筛选 Agent `APPROVE`，其中整体有效性守护要求：
+
+- visual/proprio output effect 对全部24 Episode、每个 shift 均为 24/24；
+- 任一 head/shift 失败则 P25a 整体无效。
+
+对 P24-R2 现有 72 branch 的前置复核：
+
+| head | shift=1 | shift=5 | shift=9 |
+|---|---:|---:|---:|
+| visual | 23/24 | 24/24 | 24/24 |
+| proprioception | 21/24 | 24/24 | 24/24 |
+
+shift=1 失败集中在：
+
+- visual store kitchen items `5/6`；
+- proprio store kitchen items `4/6`、tidy living room `11/12`。
+
+因此 P25a 在任何正式计算前已不满足冻结守护，标记 `rejected without run`：
+
+- 未创建 `runs/research-loop/0003/r0003-p25a-target-scale-s20261325`；
+- 未执行 covariance、Cholesky、mask、whitening 或 bootstrap；
+- 未扫描/放宽 guard，也未选择 shift=5/9 或 Episode 子集；
+- 未提交的实现/测试草稿已删除。
+
+P25b 只允许对应 head 的 P25a 全部门槛通过后启动，因此两头均 `rejected without run`。

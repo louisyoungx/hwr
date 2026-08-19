@@ -14,12 +14,12 @@
 | `R0001-P19` | RSSM free-nats 梯度死区诊断 | 训练候选 | 诊断拒绝 |
 | `R0001-P20` | RSSM action 输入量级诊断 | 训练候选 | 诊断拒绝 |
 | `R0001-P21` | RSSM 逐级 action-effect 衰减定位 | 训练候选 | 诊断拒绝 |
-| `R0001-P22` | Posterior observation/deterministic 支配诊断 | 训练候选 | 延后，依赖 P21 |
+| `R0001-P22` | Posterior observation/deterministic 支配诊断 | 训练候选 | 依赖拒绝，未运行 |
 | `R0001-P23` | Prior probability 到 argmax code 离散化诊断 | 训练候选 | 诊断拒绝 |
 | `R0001-P24` | Visual/proprio decoder 逐层 gain 诊断 | 训练候选 | 诊断拒绝，两头 not_localized |
-| `R0001-P25` | Physical target scale/gradient 奖励诊断 | 训练候选 | 拆分 |
-| `R0001-P25a` | Physical target scale masking 前向诊断 | 训练候选 | 诊断入选，已筛选 |
-| `R0001-P25b` | Physical gradient reward alignment 诊断 | 训练候选 | 条件延后 |
+| `R0001-P25` | Physical target scale/gradient 奖励诊断 | 训练候选 | 拆分后拒绝 |
+| `R0001-P25a` | Physical target scale masking 前向诊断 | 训练候选 | 前置守护拒绝，未运行 |
+| `R0001-P25b` | Physical gradient reward alignment 诊断 | 训练候选 | 依赖拒绝，未运行 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 
 ## `R0001-P14`：等预算连续 Probe

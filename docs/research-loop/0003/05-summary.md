@@ -14,10 +14,11 @@
 | `R0001-P19` | `diagnostic rejected` |
 | `R0001-P20` | `diagnostic rejected` |
 | `R0001-P21` | `diagnostic rejected` |
-| `R0001-P22` | `deferred, depends on P21` |
+| `R0001-P22` | `rejected without run, dependency failed` |
 | `R0001-P23` | `diagnostic rejected` |
 | `R0001-P24` | `diagnostic rejected, both heads not_localized` |
-| `R0001-P25` | `eligible for split rescreening` |
+| `R0001-P25a` | `rejected without run` |
+| `R0001-P25b` | `rejected without run` |
 | `R0001-P10` | `deferred` |
 
 ## 关键发现
@@ -47,6 +48,8 @@
 13. P24-R2 中 visual/proprio 的 decoder input/output effect 都 24/24 存活，但系统性低
     retention 均未定位；两头只各有 1/24 Episode 定位到 feature→linear，decoder low-gain
     假设被否定。两头均按冻结决策表进入 `not_localized`，允许分头重筛 P25。
+14. P25a 在运行前被更严格的 per-shift output guard 拒绝：shift=1 仅 visual 23/24、
+    proprio 21/24，未达到每 shift 24/24。P25a 未运行，P25b 依赖自动拒绝。
 
 ## 新基线
 
@@ -57,19 +60,25 @@
 
 ## 下一阶段问题
 
-需要构建不依赖 state nuisance 拟合的训练前物理因果证据，例如同状态配对实际动作干预。
-该问题继续在 `docs/research-loop/0003/` 内推进；`0001` 和 `0002` 保持冻结只读。
+P17 已证明训练数据中的实际 plant action 具有物理因果性，但 P05/P06/P19/P20/P21/P23/P24
+依次排除了 batch source、posterior overshooting、free-nats、纯 action scale、普遍
+GRU/prior shortcut、argmax 离散化和 decoder 系统低 gain 作为充分解释。
 
-P17 已接受，P11/P05/P06/P19/P20/P21 已拒绝。P20 aggregate raw/stochastic ratio 与
-canonical/raw gain 虽然过线，但仅 17/24 Episode 同时满足条件，不能用 aggregate 覆盖
-预注册一致性门槛。P21 又排除了 action effect 在 GRU/prior 相邻层普遍衰减的解释；P22
-不自动启动。P23 进一步否定正式 argmax 普遍抹除 stochastic effect，但 hard feature
-24/24 稳定到达 decoder 输入。P24 又否定 visual/proprio decoder 的系统性逐层低 gain，
-但两头 output guard 都 24/24 通过。下一步按头独立重筛 P25 target scale/gradient 奖励；
-P10 与 stale-frame 修复保持独立。
+下一轮主要问题：
+
+1. 为什么少数 shift=1/任务 Episode 的 decoded output effect 低于门槛；
+2. 现有 absolute reconstruction 与 KL 目标是否没有稳定奖励 action-discriminative
+   方向；
+3. stale-frame 修复和 P10 安全正例分层仍保持独立，不与能力候选捆绑。
+
+新一轮在 `docs/research-loop/0004/` 建立；`0001`、`0002`、`0003` 全部冻结只读。
 
 ## 清理
 
 - 未删除 P09/P16 正式报告与 trial。
 - 未删除 R0001 v4 负基线。
 - 本轮未执行清理 Agent。
+- 清理前可用空间：`79,829,604 KiB`。
+- 清理后可用空间：`79,829,604 KiB`。
+- 删除内容：无。P20/P21/P23/P24 的 invalid、failed、complete 产物、manifest、日志和
+  dispatch 证据全部保留；P25a/P25b 没有 run 产物。
