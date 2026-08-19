@@ -233,3 +233,30 @@ C-B 的预注册最弱任务/模态 ratio 差为：
 因此跨 source batch 不是当前 action utilization 失败的有效修复，P05 为 `rejected`。
 不得从单个任务或 seed 的局部方向宣称收益。按预注册路由重审 P06，但原 shuffled-margin
 设计因评测泄露被放弃，只允许先验证真实动作 posterior overshooting 的离线预检。
+
+## `R0001-P06`：`rejected without training`
+
+- 源码提交：`40cadf2`
+- run：
+  `runs/research-loop/0003/r0003-p06-posterior-overshooting-s20261306`
+- report SHA-256：
+  `639b6f260b522c844a331f5dc5ee88f126dbdf320442773390df6d2f8ddc6a51`
+- manifest SHA-256：
+  `cb6d1d42fe39d236b4fdb1b26014222249a1ae763393c0929394b8fda26c5128`
+- 24 个 source Episode、24 个确定性窗口、25 个 artifact 全部 hash 通过。
+- checkpoint manifest/artifact hash 与冻结合同一致。
+- action gradient norm：`0.397753`，有限且 `>1e-6`。
+- posterior target 无梯度。
+
+| condition | h1 | h2 | h4 | h8 | mean |
+|---|---:|---:|---:|---:|---:|
+| true action | 10.4032 | 13.5121 | 19.4607 | 27.5470 | 17.7308 |
+| zero action | 10.1448 | 13.3864 | 19.7262 | 28.2961 | 17.8884 |
+| shifted action | 10.4098 | 13.5171 | 19.4774 | 27.5617 | 17.7415 |
+
+- true/zero ratio：`0.99119`，只改善 0.88%，未达到 5%。
+- true/shifted ratio：`0.99940`，只改善 0.06%，未达到 5%。
+- true 只在 2/4 horizon 同时优于两个负控。
+
+因此 P06 预检失败，不启动训练、不扫描权重或 horizon。下一步检查标准 RSSM
+dynamics KL 是否因 `free_nats=1.0` 长期处于梯度死区。

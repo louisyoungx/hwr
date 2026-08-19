@@ -10,7 +10,8 @@
 | `R0001-P17` | 同状态配对实际动作干预 | 物理因果诊断 | 接受 |
 | `R0001-P11` | 因果 latent proposal-history gate | 训练候选 | 拒绝 |
 | `R0001-P05` | 跨 source batch 三臂归因 | 训练候选 | 拒绝 |
-| `R0001-P06` | 真实动作多步 posterior overshooting | 训练候选 | 预检入选 |
+| `R0001-P06` | 真实动作多步 posterior overshooting | 训练候选 | 预检拒绝 |
+| `R0001-P19` | RSSM free-nats 梯度死区诊断 | 训练候选 | 诊断入选 |
 | `R0001-P10` | 安全正例窗口分层采样 | 训练候选 | 延后 |
 
 ## `R0001-P14`：等预算连续 Probe
@@ -140,6 +141,21 @@
   - 不更新正式模型，不查看正式 holdout 结果。
 - 预检通过后才冻结权重、预算和独立训练 seed；不得与 stale-frame 修复、P10 或数据改动
   首次捆绑。
+
+### `R0001-P19`：RSSM free-nats 梯度死区
+
+- P05 九个正式 run 的 `world/dynamics` 与 `world/representation` 长期精确等于 1.0，
+  即当前 `free_nats` 下限。
+- P06 中真实动作相对 zero/shifted 只有 0.88%/0.06% 优势，说明当前 prior 尚未形成可用于
+  overshooting 的动作对齐结构。
+- 假设：当前 `_categorical_kl(...).clamp_min(1.0)` 使绝大多数 transition 的 dynamics KL
+  梯度归零，RSSM prior 主要靠间接重建/ensemble 信号训练。
+- 最小验证只读取冻结 checkpoint 与 P06 的 24 个训练窗口：
+  - 报告 raw dynamics KL 分布和被 1.0 截断的比例；
+  - 比较 current free-nats 1.0、预注册候选 0.1 与 raw KL 对 transition/prior 参数的梯度；
+  - 不更新参数、不读取正式 holdout、不扫描其他阈值。
+- 只有当前梯度近零、raw 梯度非零且 0.1 恢复有限梯度时，才允许把 free-nats 作为单变量
+  训练候选。
 
 ### `R0001-P10`：安全正例分层
 

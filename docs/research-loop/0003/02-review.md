@@ -120,3 +120,21 @@
   - 不生成 shuffled action，不读取正式 holdout；
   - 正式 action-shuffle 只作为实施完成后的独立评测。
 - 主 Agent 只选择低成本离线预检；预检未证明 action 梯度与时间对齐时，不启动正式训练。
+
+## P06 预检后决策
+
+- 24 个 source Episode、25 个 artifact 与 checkpoint/input hash 全部有效。
+- action gradient norm 为 `0.39775`，有限且非零；posterior target 正确停止梯度。
+- 真实动作 aggregate loss：
+  - 相对 zero action 只低 0.88%，未达到 5%；
+  - 相对 shifted action 只低 0.06%，未达到 5%；
+  - 只在 2/4 horizon 同时优于两个负控。
+- P06 标记为 `rejected without training`；不得扫描权重、horizon 或放宽负控门。
+
+### 下一诊断
+
+- P05 九个 run 的 dynamics/representation loss 长期精确落在 free-nats=1.0。
+- 先选 P19 只读梯度诊断，区分：
+  1. raw posterior-prior KL 本身没有 action 梯度；
+  2. raw KL 有梯度，但被 free-nats 截断为零。
+- P19 只比较冻结的 `1.0/0.1/raw` 三个预注册门，不训练、不读取正式 holdout。

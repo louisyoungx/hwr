@@ -10,7 +10,8 @@
 | `R0001-P15` | `blocked` |
 | `R0001-P11` | `rejected` |
 | `R0001-P05` | `rejected` |
-| `R0001-P06` | `preflight selected` |
+| `R0001-P06` | `rejected without training` |
+| `R0001-P19` | `diagnostic selected` |
 | `R0001-P10` | `deferred` |
 
 ## 关键发现
@@ -24,6 +25,8 @@
    100ms action validity 窗口过期，正式 144 Episode 合同因此拒绝。
 7. 跨 source batch 在三个 seed 上没有稳定优于同 source 不同窗口，action-shuffle ratio
    仍约为 1.0，且真实误差与 action execution 守护回归。
+8. 真实动作 posterior overshooting 相对 zero/shifted 只有 0.88%/0.06% 优势，不足以支持
+   新训练目标。
 
 ## 新基线
 
@@ -37,8 +40,9 @@
 需要构建不依赖 state nuisance 拟合的训练前物理因果证据，例如同状态配对实际动作干预。
 该问题继续在 `docs/research-loop/0003/` 内推进；`0001` 和 `0002` 保持冻结只读。
 
-P17 已接受，P11/P05 已拒绝。下一步只做 P06 真实动作 posterior overshooting 的冻结
-Replay 离线预检；不通过则不启动训练。P10 与 stale-frame 修复保持独立。
+P17 已接受，P11/P05/P06 已拒绝。下一步只做 P19 free-nats 梯度死区诊断；先证明当前
+1.0 截断确实消除 prior/action 梯度，才允许冻结 0.1 单变量训练候选。P10 与 stale-frame
+修复保持独立。
 
 ## 清理
 

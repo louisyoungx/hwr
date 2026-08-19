@@ -377,6 +377,43 @@
 - 不通过：P06 `rejected without training`，不扫描权重、horizon 或负控。
 - stale-frame 修复、P10、安全采样和模型结构改动均不与本预检捆绑。
 
+## `R0001-P19` free-nats 梯度死区诊断
+
+### 固定输入
+
+- 复用 P06 相同 checkpoint、24 个 source Episode 窗口和模型状态。
+- 只使用训练 Replay observed posterior/prior logits。
+- 比较三个预注册条件：
+  - `current`：per-transition categorical KL sum clamp_min 1.0；
+  - `candidate`：同一 KL clamp_min 0.1；
+  - `raw`：不截断。
+- 不更新 optimizer，不修改模型，不读取 causality holdout。
+
+### 指标
+
+- raw dynamics KL 的 min/p05/median/p95/max；
+- raw KL `<0.1`、`<1.0` 的 transition 比例；
+- 三条件对 RSSM `transition_input`、`recurrent`、`prior` 的总梯度 norm；
+- 三条件对 executed action 的梯度 norm；
+- 所有数值按 24 Episode 和 aggregate 报告。
+
+### 判定
+
+P19 只有同时满足才通过诊断：
+
+- raw KL `<1.0` 的 transition 比例 `>=0.80`；
+- current prior-parameter gradient norm `<=1e-8`；
+- raw prior-parameter gradient norm `>1e-6`；
+- candidate prior-parameter gradient norm `>1e-6`；
+- candidate/action gradient 有限且 `>1e-6`；
+- candidate 梯度方向与 raw 的 cosine `>=0.90`。
+
+### 路由
+
+- 通过：将 free-nats 从 1.0 到 0.1 冻结为单变量训练候选，先做 2-update smoke。
+- 不通过：拒绝 free-nats 假设，重新检查 action conditioning 或 posterior shortcut。
+- 不得扫描其他 free-nats 值或同时加入 overshooting。
+
 ## P17 路由
 
 - 预检失败：P17 `inconclusive`，不运行正式确认。
