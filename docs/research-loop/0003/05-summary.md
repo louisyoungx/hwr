@@ -12,7 +12,7 @@
 | `R0001-P05` | `rejected` |
 | `R0001-P06` | `rejected without training` |
 | `R0001-P19` | `diagnostic rejected` |
-| `R0001-P20` | `diagnostic selected` |
+| `R0001-P20` | `diagnostic rejected` |
 | `R0001-P10` | `deferred` |
 
 ## 关键发现
@@ -30,6 +30,9 @@
    新训练目标。
 9. raw dynamics KL 中位数 8.05，current free-nats=1.0 仍有强 prior/action 梯度，
    free-nats 死区假设被否定。
+10. canonical action 的 variation contribution 相对 raw 稳定放大 2.19～3.04 倍，但
+    raw/stochastic ratio 只有 17/24 Episode 低于 0.20，未达到 20/24 一致性门槛；
+    action-scale 假设被否定，不进入 normalization smoke。
 
 ## 新基线
 
@@ -43,9 +46,9 @@
 需要构建不依赖 state nuisance 拟合的训练前物理因果证据，例如同状态配对实际动作干预。
 该问题继续在 `docs/research-loop/0003/` 内推进；`0001` 和 `0002` 保持冻结只读。
 
-P17 已接受，P11/P05/P06/P19 已拒绝。下一步只做 P20 RSSM action 输入贡献诊断；先证明
-物理单位 action 在 transition preactivation 中显著偏弱且 canonical normalization 能恢复
-量级，才允许单变量 smoke。P10 与 stale-frame 修复保持独立。
+P17 已接受，P11/P05/P06/P19/P20 已拒绝。P20 aggregate raw/stochastic ratio 与
+canonical/raw gain 虽然过线，但仅 17/24 Episode 同时满足条件，不能用 aggregate 覆盖
+预注册一致性门槛。下一步检查 posterior state shortcut；P10 与 stale-frame 修复保持独立。
 
 ## 清理
 

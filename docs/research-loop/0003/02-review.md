@@ -211,3 +211,25 @@
 
 两位 v2 筛选 Agent 在补齐回归测试后均给出 `approve`，共同确认阻断项清零，允许在
 干净已提交源码上唯一执行 R1；E1 不得重启，R1 不得重复。
+
+## P20 正式诊断后决策
+
+- R1 使用 source commit `c6493cfb32d4738ed8c624a73ebb0461034348bf`，24 个
+  Episode、25 个 manifest artifact 与冻结输入血缘全部有效。
+- aggregate raw action/stochastic variation ratio 为 `0.16974`，canonical/raw gain
+  为 `2.37899`，canonical action 也全部有限且在界内。
+- 但只有 `17/24` Episode 同时满足两个贡献条件，低于冻结的 `20/24`：
+  - raw ratio `<0.20`：`17/24`；
+  - canonical/raw gain `>=1.50`：`24/24`；
+  - 两者同时通过：`17/24`。
+- 七个失败 Episode 的 raw ratio 为 `0.227998`～`0.339840`；失败不是非有限值、越界、
+  hash 漂移或执行异常。
+- 任务分层通过数：
+  - clear dining table：`2/6`；
+  - store kitchen items：`5/6`；
+  - tidy living room：`10/12`。
+
+因此 raw action 偏弱和 canonical gain 在 aggregate 上成立，但跨 Episode 一致性不足；
+不得把 aggregate 过线替代预注册的 `20/24` 门槛。P20 标记为 `diagnostic rejected`，
+canonical normalization 不进入 2-update smoke。按冻结路由继续检查 posterior state
+shortcut，不扫描 action-scale 阈值，也不按任务挑选子集。

@@ -322,3 +322,64 @@ preactivation 贡献，仍只做冻结训练 Replay 诊断。
 结果前修订评测实现和冻结合同。修订后判定只使用 Episode 内去均值 variation RMS，绝对/
 DC RMS 仅作描述，aggregate 使用平方池化；checkpoint、24 个窗口、action、canonical
 公式和原阈值保持不变。
+
+## `R0001-P20-R1`：`diagnostic_failed`
+
+- 评测实现提交：`5fca360`
+- source commit：`c6493cfb32d4738ed8c624a73ebb0461034348bf`
+- run：
+  `runs/research-loop/0003/r0003-p20-action-input-contribution-s20261320-r1`
+- report SHA-256：
+  `1e94233f14c54fcc8beda7943aa5db9d243d05908aff9d2cc74cf67c8b3dc77c`
+- manifest SHA-256：
+  `1c071f74687afe5c471806321bb714cb07070f0b6d743ec471abb380748b3d3c`
+- 24 个 Episode report、aggregate report，共 25 个 manifest artifact；全部 SHA-256
+  与字节数验证通过，无 `failure.json`。
+- Replay manifest、24-window selection、checkpoint manifest/artifact hash 与冻结值一致：
+  - Replay：
+    `c7f7a50925b581307dc95787078c1fc2ee520f8b210e61fd91e1007db21a1985`；
+  - windows：
+    `ecb75110942b7411de483265181fa732b1dbafccf06527d94388315fd372375f`；
+  - checkpoint：
+    `72f9361762d7ff5086f086b9ae1db05396caa3cf91822ece20686095df4ad75b` /
+    `ef24bdfcca3cc46274bdfebc1d8b1a4afc81c73abff3aa4128e393e6da2109c6`。
+
+### Aggregate
+
+| 指标 | 结果 | 门槛 | 判定 |
+|---|---:|---:|---|
+| raw/stochastic variation ratio | 0.16974 | `<0.20` | 通过 |
+| canonical/raw variation gain | 2.37899 | `>=1.50` | 通过 |
+| canonical finite | 6144/6144 | 全部 | 通过 |
+| canonical in bounds | 6144/6144 | 全部 | 通过 |
+| Episode 同时通过 | 17/24 | `>=20/24` | 失败 |
+
+variation contribution RMS：
+
+- stochastic：`0.0814234`；
+- raw action：`0.0138211`；
+- canonical action：`0.0328803`。
+
+描述性 absolute/DC 结果：
+
+- absolute stochastic/raw/canonical：`0.138415 / 0.0280656 / 0.0592188`；
+- DC stochastic/raw/canonical：`0.111933 / 0.0244265 / 0.0492520`。
+
+### Episode 一致性
+
+- raw ratio `<0.20`：`17/24`，范围 `0.079955`～`0.339840`，中位数
+  `0.174389`；
+- canonical/raw gain `>=1.50`：`24/24`，范围 `2.19342`～`3.04170`，中位数
+  `2.32266`；
+- 两条件同时通过：`17/24`。
+
+任务分层通过数：
+
+- `clear_dining_table_3d/v1`：`2/6`；
+- `store_kitchen_items_3d/v1`：`5/6`；
+- `tidy_living_room_3d/v1`：`10/12`。
+
+结论：canonical normalization 的量级增益稳定存在，但 raw action 相对 stochastic 偏弱并未
+在至少 20 个 Episode 中成立，尤其 clear dining table 只有 2/6 通过。按照预注册门槛，
+P20 为 `diagnostic_failed`，action-scale 假设被拒绝；不进入 normalization smoke，不扫描
+阈值，不选择任务子集。下一步检查 posterior state shortcut。
