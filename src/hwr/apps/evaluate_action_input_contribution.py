@@ -17,6 +17,7 @@ from hwr.apps.evaluate_posterior_overshooting import (
     EXPECTED_CHECKPOINT_ARTIFACT,
     EXPECTED_CHECKPOINT_MANIFEST,
     SELECTION_SEED,
+    _window_identity,
     select_source_episode_windows,
 )
 from hwr.eval.action_input_contribution import (
@@ -31,6 +32,12 @@ from hwr.train.foundation_visual_update import encode_visual_student_bounded
 
 DEFAULT_OUTPUT = Path(
     "runs/research-loop/0003/r0003-p20-action-input-contribution-s20261320"
+)
+EXPECTED_REPLAY_MANIFEST = (
+    "c7f7a50925b581307dc95787078c1fc2ee520f8b210e61fd91e1007db21a1985"
+)
+EXPECTED_WINDOW_SELECTION = (
+    "ecb75110942b7411de483265181fa732b1dbafccf06527d94388315fd372375f"
 )
 
 
@@ -53,12 +60,18 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     if output.exists():
         raise FileExistsError(output)
     _require_checkpoint(checkpoint)
+    replay_manifest = input_run / "replay/autonomous/manifest.json"
+    _require_replay_manifest(replay_manifest)
     inputs = load_frozen_batch_replay_inputs(
         root, input_run, device=str(arguments.device)
     )
     selected = select_source_episode_windows(
         inputs.training_loader, seed=SELECTION_SEED
     )
+    selected_windows = _selected_windows(inputs.training_loader, selected)
+    selection_sha256 = _selection_sha256(selected_windows)
+    if selection_sha256 != EXPECTED_WINDOW_SELECTION:
+        raise ValueError("P20 frozen window selection identity differs")
     stack = build_foundation_learning_stack(
         root / "configs/foundation",
         device=str(arguments.device),
@@ -72,6 +85,9 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     output.mkdir(parents=True)
     try:
         for source, index in selected.items():
+            window = _window_identity(
+                inputs.training_loader.window_metadata(index)
+            )
             batch = inputs.training_loader.build(
                 (index,), include_visual_targets=False
             )
@@ -102,6 +118,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
                 {
                     "source_episode_id": source,
                     "window_index": index,
+                    "window": window,
                 }
             )
             reports.append(report)
@@ -112,7 +129,9 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
                 "proposal_id": "R0001-P20",
                 "source_commit": source_commit,
                 "selection_seed": SELECTION_SEED,
+                "window_selection_sha256": selection_sha256,
                 "input_run": str(input_run),
+                "input_replay_manifest_sha256": _sha256(replay_manifest),
                 "checkpoint": str(checkpoint),
                 "checkpoint_manifest_sha256": _sha256(
                     checkpoint / "manifest.json"
@@ -120,6 +139,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
                 "checkpoint_artifact_sha256": _sha256(
                     checkpoint / "training-state.pt"
                 ),
+                "selected_windows": selected_windows,
             }
         )
         _write_json(output / "report.json", aggregate)
@@ -150,6 +170,29 @@ def _require_checkpoint(path: Path) -> None:
         or _sha256(path / "training-state.pt") != EXPECTED_CHECKPOINT_ARTIFACT
     ):
         raise ValueError("P20 frozen checkpoint identity differs")
+
+
+def _require_replay_manifest(path: Path) -> None:
+    if _sha256(path) != EXPECTED_REPLAY_MANIFEST:
+        raise ValueError("P20 frozen Replay manifest identity differs")
+
+
+def _selected_windows(loader, selected: Mapping[str, int]) -> list[dict[str, object]]:
+    return [
+        {
+            "source_episode_id": source,
+            "window_index": index,
+            **_window_identity(loader.window_metadata(index)),
+        }
+        for source, index in selected.items()
+    ]
+
+
+def _selection_sha256(windows: Sequence[Mapping[str, object]]) -> str:
+    payload = json.dumps(
+        windows, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _write_manifest(output: Path, source_commit: str) -> None:
