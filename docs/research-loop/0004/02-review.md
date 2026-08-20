@@ -156,3 +156,59 @@ S2 的依赖顺序：
 - successor posterior 的结果可见性使 probe 容易成为 inverse-dynamics 捷径，且到 prior
   与闭环控制的路由最弱。
 - 保留提案与反例，但不采集数据、不实现、不训练。
+
+## P28 修订合同独立复审
+
+P29 完成后，主 Agent 把 P28 修订为三折 source-level、fresh-head、true-action-only
+训练草案。两个新的干净只读 Agent 独立复审，均未看到对方意见，均给出
+`changes_required`。
+
+### S1-R
+
+阻断项：
+
+1. 只有 split/fold hash，没有逐 source/window 可读清单、规范序列化和完整 batch
+   schedule，无法唯一重建执行。
+2. 未强制 visual student/world model `eval()` 与 inference path，posterior sampling
+   可能使两臂差异不再只有 feature source。
+3. successor posterior 已读取 target observation，只能作 head/data/预算上界；
+   `prior/posterior <=1.25` 不能作公平硬门。
+4. reverse 与 slot rotate 仍可能由时间位置、时距、动作幅值、相关性和 reservoir stage
+   指纹区分。
+5. 37-D proprio 的可控 16 维映射、单位和 innovation 幅值门未冻结；visual 缺少
+   current-state/action-blind innovation 守护。
+6. seed 内聚合和 bootstrap 必须明确 source 是唯一单位，并按任务/折保留依赖结构。
+
+S1-R 结论：在补齐可重建 manifest、确定性 feature path、负例可识别性守护、精确 metric
+和统计合同前不得执行。
+
+### S2-R
+
+阻断项：
+
+1. successor posterior 的结果可见性使 oracle 对 prior 不公平；应删除 prior/oracle
+   硬比较，或增加信息匹配 control。
+2. `sample=False` 与正式训练 `sample=True` 分布不同；硬门必须匹配拟议训练采样路径并
+   冻结 latent RNG。
+3. 两个负例族仍是经验 action 时间重配，与正式 global derangement 同质；“算法不同”
+   不足以证明无 audit 泄露。
+4. 需要 head-independent label probe 证明时间、幅值、delta、时距不能识别负例来源，
+   并至少加入一个支持内、非置换 counterfactual family。
+5. constant baseline 与 visual cosine 的维度、epsilon、零 norm、reduction 和聚合顺序
+   未完全定义。
+6. `<30分钟` 的 MPS 时间、显存和 CPU/MPS parity 没有 smoke 证据。
+7. 即使 head-only 通过，也只证明 frozen feature 可解码；没有冻结正式 world-model
+   单变量 objective、梯度路径、对照和未见分布闭环合同。
+
+S2-R 结论：P28 目前最多是诊断草案，不能授权 world-model 训练。
+
+### 主 Agent 最终决策
+
+- 两份复审均指出的是结构性因果与泄露风险，不是可在同轮内修补的实现细节。
+- 继续修改负例、oracle、采样和 metric 会在看到多轮设计反馈后扩大变量空间，增加
+  研究者自由度。
+- 本轮停止 P28：不实现、不运行、不扫描预算或负例。
+- 状态：`rejected before implementation after independent re-review`。
+- P26 依赖同类负例可识别性问题，也不在本轮启动。
+- 下一轮若继续目标函数方向，应先提出不依赖正式 audit 形状、具有信息匹配 control 的
+  新稳定 ID 候选；不得直接复活当前 P28 草案。

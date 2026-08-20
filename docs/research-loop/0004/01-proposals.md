@@ -13,10 +13,10 @@
 
 | 稳定 ID | 名称 | 类型 | 独立来源 | 状态 |
 |---|---|---|---|---|
-| `R0001-P26` | 真实动作反事实 prior margin | 训练候选 | A | 保留，需修订 |
+| `R0001-P26` | 真实动作反事实 prior margin | 训练候选 | A | 延后 |
 | `R0001-P27` | 配对因果逆动力学表征 | 诊断后训练候选 | A、C | 拒绝 |
-| `R0001-P28` | prior-feature 物理 successor 解码 | 训练候选 | C | 保留，需修订 |
-| `R0001-P29` | stale observation validity 合同 | 评测/运行时修复 | B | 入选纯诊断 |
+| `R0001-P28` | prior-feature 物理 successor 解码 | 训练候选 | C | 复审拒绝，未实现 |
+| `R0001-P29` | stale observation validity 合同 | 评测/运行时修复 | B | 接受为合同诊断 |
 | `R0001-P30` | observation-action 执行时刻对齐 | 数据合同诊断 | B | 拒绝，重复 P09 |
 
 ## 提案要求

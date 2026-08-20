@@ -73,8 +73,19 @@
 
 - 若未来保留 latency=3 为必测域，需要另立单变量的 latency-aware action scheduling
   系统设计，并保持真正 stale 输入仍被安全拒绝；
-- 本轮不立即修改 runtime，继续回到主瓶颈，执行修订后的 P28 head-only 可学习性门；
+- 本轮不立即修改 runtime，继续回到主瓶颈，只冻结并独立复审 P28 head-only 草案；
 - P29 结果不得与 P28 训练首次捆绑。
+
+### 最终仓库门禁
+
+- 全量 `.venv/bin/python -m pytest -q` 通过；
+- 既有 11 项 skip；
+- 18 条 warning 均来自 `torch.jit.script` deprecation；
+- `scripts/check_python_size.py` 通过；
+- `scripts/check_architecture.py` 通过；
+- `scripts/verify_training_semantics.py` 通过；
+- `scripts/verify_physics_integrity.py` 通过；
+- 历史 `docs/research-loop/0001`～`0003` 零差异。
 
 ## `R0001-P30`：`rejected without run`
 
@@ -85,7 +96,40 @@
   同次 outcome transition 成对存储；
 - 未实现 P30、未搜索 offset、未重标 Replay、未重跑 P09。
 
+## `R0001-P28`：`rejected without implementation`
+
+- 主 Agent 按首次筛选意见冻结了三折 source-level、fresh-head、true-action-only 草案；
+- 两名新的独立复审 Agent 均给出 `changes_required`；
+- 共同阻断为：
+  - successor posterior oracle 结果可见且对 prior 不公平；
+  - `sample=False` 与拟议训练采样路径不同；
+  - reverse/slot-rotate 负例可能携带位置、幅值、时距和阶段指纹，并与正式 audit 同质；
+  - split/batch/metric/statistic 尚不能由文档唯一重建；
+  - head-only 可解码性不能直接路由到正式 world-model objective 与闭环能力；
+  - MPS 预算和数值 parity 未验证。
+- 未新增 P28 实现文件；
+- 未创建
+  `runs/research-loop/0004/r0004-p28-prior-successor-s20262801`；
+- 未运行 head-only 或 world-model 训练；
+- 未扫描负例、采样、预算、学习率、seed 或门槛。
+
+P28 正式标记
+`rejected before implementation after independent re-review`。
+
+## `R0001-P27`：`rejected without implementation`
+
+- successor posterior 已看到结果 observation，inverse dynamics probe 容易读取结果瞬态；
+- 新 paired 数据、辅助头和 loss 难以形成单变量对比；
+- 到 action-conditioned prior 与闭环控制的路由不足；
+- 未采集新数据、未实现、未训练。
+
+## `R0001-P26`：`deferred`
+
+- 两名首轮筛选均要求解决负例位置/幅值/时距指纹与正式 audit 同质问题；
+- P28 复审进一步确认该类风险仍未消除；
+- 本轮不实现、不训练，不把 P28 负例修改事后迁移到 P26。
+
 ## 当前状态
 
-尚未运行 R0001-P28 或任何完整训练。后续结果仍须记录完整 seed、失败、异常、源码提交、
-命令、环境、配置、输入与模型 hash、资源消耗、产物目录和 manifest。
+R0004 没有启动任何完整训练，也没有新的能力候选。唯一接受结论为 P29 runtime 合同诊断；
+能力基线保持不变。
