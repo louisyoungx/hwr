@@ -127,6 +127,14 @@ P36-E1 使用的是 P11/P29 诊断证据，没有任务成功标签，不报告�
 - P36/P29/闭环 evaluator：28 passed；
 - repository constraints 与 architecture tests：8 passed；
 - py_compile、Python size 和 architecture script 全部通过；
+- training semantics 与 physics integrity 通过；
+- 沙箱内全量 pytest 有 65 项 MuJoCo 渲染测试因
+  `CGLError: invalid CoreGraphics connection` 失败；所有失败均发生在 CGL context
+  创建处，不经过 P36 实现；
+- 按沙箱规则在沙箱外用同一提交重跑全量 pytest 后全部通过：
+  - 11 项既有 skip；
+  - 18 条 warning 全部来自 `torch.jit.script` deprecation；
+  - 无测试失败；
 - 正式 run 后逐字段核验：
   - report/manifest SHA-256 与 bytes；
   - source commit；
