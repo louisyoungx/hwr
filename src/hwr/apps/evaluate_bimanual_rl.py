@@ -16,9 +16,14 @@ from hwr.adapters.mujoco import (
 )
 from hwr.eval import (
     BimanualEpisodeEvaluation,
+    PlannedEpisodeSeed,
     assess_bimanual_acceptance,
     combine_bimanual_reports,
     evaluate_bimanual_policy,
+    plan_episode_seeds,
+    random_seed_salt,
+    read_seed_salt,
+    seed_lineage_manifest,
 )
 from hwr.perception import FrozenNgramLanguageConfig, FrozenNgramLanguageEncoder
 from hwr.policy import BimanualVLAActorPolicy
@@ -43,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evaluation-id")
     parser.add_argument("--seed-count", type=int, default=20)
     parser.add_argument("--seed-start", type=int)
+    parser.add_argument("--seed-salt-file", type=Path)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--video-seed-count", type=int, default=1)
     parser.add_argument("--video-width", type=int, default=640)
@@ -220,6 +226,9 @@ def _evaluation_manifest(
     run_path: Path,
     seeds: tuple[int, ...],
     videos: Sequence[Mapping[str, Any]],
+    plan_id: str,
+    salt: str,
+    planned_episodes: Sequence[PlannedEpisodeSeed],
 ) -> dict[str, Any]:
     files = (output_path / "report.json", output_path / "acceptance.json")
     video_files = tuple(
@@ -228,13 +237,16 @@ def _evaluation_manifest(
         for path in video["views"].values()
     )
     return {
-        "schema_version": "hwr.bimanual-evaluation-run/v1",
+        "schema_version": "hwr.bimanual-evaluation-run/v2",
         "training_run": str(run_path),
         "training_manifest_sha256": _sha256(run_path / "manifest.json"),
         "actor_sha256": _read_json(run_path / "model-manifest.json")[
             "actor_sha256"
         ],
         "unseen_seeds": list(seeds),
+        "seed_lineage": seed_lineage_manifest(
+            plan_id, salt, planned_episodes
+        ),
         "ablations": list(ABLATIONS),
         "videos": list(videos),
         "artifacts": {
@@ -252,6 +264,12 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
     manifest = verify_bimanual_training_run(run_path)
     seeds = _unseen_seeds(run_path, arguments.seed_count, arguments.seed_start)
     evaluation_id = arguments.evaluation_id or manifest["run_id"]
+    plan_id = f"bimanual-evaluation:{evaluation_id}"
+    salt = (
+        read_seed_salt(arguments.seed_salt_file.resolve())
+        if arguments.seed_salt_file is not None
+        else random_seed_salt()
+    )
     output_root = (
         arguments.output_root
         if arguments.output_root.is_absolute()
@@ -268,6 +286,7 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
         height=arguments.video_height,
     )
     reports = []
+    planned_episodes: list[PlannedEpisodeSeed] = []
     try:
         for task_id in sorted(tasks):
             task = tasks[task_id]
@@ -282,13 +301,22 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
                 )
 
             for ablation in ABLATIONS:
+                episode_seeds = plan_episode_seeds(
+                    plan_id,
+                    task_id,
+                    ablation,
+                    len(seeds),
+                    salt,
+                    environment_seeds=seeds,
+                )
+                planned_episodes.extend(episode_seeds)
                 reports.append(
                     evaluate_bimanual_policy(
                         task_id,
                         task.max_steps,
                         environment_factory,
                         policy,
-                        seeds,
+                        episode_seeds,
                         ablation=ablation,
                         observer=observer,
                     )
@@ -304,7 +332,15 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
     _write_json(output_path / "acceptance.json", acceptance)
     _write_json(
         output_path / "manifest.json",
-        _evaluation_manifest(output_path, run_path, seeds, observer.results),
+        _evaluation_manifest(
+            output_path,
+            run_path,
+            seeds,
+            observer.results,
+            plan_id,
+            salt,
+            planned_episodes,
+        ),
     )
     return {
         "output_path": str(output_path),

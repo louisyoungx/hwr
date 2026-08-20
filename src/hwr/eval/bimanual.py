@@ -10,6 +10,11 @@ from typing import Any, Callable, Literal, Mapping, Protocol, Sequence
 
 from hwr.core.embodied import DualArmAction, DualArmActionFrame, DualArmObservation
 from hwr.core.runtime import Policy, RuntimeBackend
+from hwr.eval.seed_contract import (
+    SEED_SCHEMA,
+    PlannedEpisodeSeed,
+    validate_episode_seed_plan,
+)
 
 
 AblationMode = Literal["none", "lock_left", "lock_right"]
@@ -60,7 +65,10 @@ class BimanualEvaluationObserver(Protocol):
 @dataclass(frozen=True)
 class BimanualEpisodeEvaluation:
     task_id: str
-    seed: int
+    environment_seed: int
+    policy_rng_seed: int
+    planned_episode_id: str
+    seed_commitment: str
     ablation: AblationMode
     success: bool
     reason: str
@@ -76,18 +84,30 @@ class BimanualEpisodeEvaluation:
     action_sources: tuple[str, ...]
     audit: Mapping[str, Any]
 
+    @property
+    def seed(self) -> int:
+        return self.environment_seed
+
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        value = asdict(self)
+        value["seed"] = self.environment_seed
+        return value
 
 
 @dataclass(frozen=True)
 class BimanualEvaluationReport:
     policy_id: str
+    plan_id: str
     episodes: tuple[BimanualEpisodeEvaluation, ...]
 
     def __post_init__(self) -> None:
-        if not self.policy_id or not self.episodes:
+        if not self.policy_id or not self.plan_id or not self.episodes:
             raise ValueError("bimanual evaluation report cannot be empty")
+        identities = [episode.planned_episode_id for episode in self.episodes]
+        if len(set(identities)) != len(identities):
+            raise ValueError("bimanual evaluation report repeats an Episode identity")
+        if len({episode.seed_commitment for episode in self.episodes}) != 1:
+            raise ValueError("bimanual evaluation report mixes seed commitments")
 
     def group(
         self, task_id: str, ablation: AblationMode
@@ -119,8 +139,11 @@ class BimanualEvaluationReport:
                 }
             )
         return {
-            "schema_version": "hwr.bimanual-evaluation/v1",
+            "schema_version": "hwr.bimanual-evaluation/v2",
             "policy_id": self.policy_id,
+            "seed_schema": SEED_SCHEMA,
+            "plan_id": self.plan_id,
+            "seed_commitment": self.episodes[0].seed_commitment,
             "episode_count": len(self.episodes),
             "groups": groups,
             "episodes": [episode.to_dict() for episode in self.episodes],
@@ -165,38 +188,52 @@ def evaluate_bimanual_policy(
     max_steps: int,
     environment_factory: Callable[[], AuditedDualArmBackend],
     policy: AppliedActionAwarePolicy,
-    seeds: Sequence[int],
+    episode_seeds: Sequence[PlannedEpisodeSeed],
     *,
     ablation: AblationMode = "none",
     observer: BimanualEvaluationObserver | None = None,
 ) -> BimanualEvaluationReport:
     """Evaluate one task and condition without exploration or privileged inputs."""
-    if max_steps <= 0 or not seeds:
+    if max_steps <= 0 or not episode_seeds:
         raise ValueError("bimanual evaluation requires steps and unseen seeds")
     if ablation not in ("none", "lock_left", "lock_right"):
         raise ValueError("unknown bimanual ablation")
+    validate_episode_seed_plan(
+        episode_seeds,
+        task_id=task_id,
+        ablation=ablation,
+    )
     episodes = tuple(
         _evaluate_episode(
             task_id,
             max_steps,
             environment_factory,
             policy,
-            int(seed),
+            episode_seed,
             ablation,
             observer,
         )
-        for seed in seeds
+        for episode_seed in episode_seeds
     )
-    return BimanualEvaluationReport(policy.spec().policy_id, episodes)
+    return BimanualEvaluationReport(
+        policy.spec().policy_id,
+        episode_seeds[0].plan_id,
+        episodes,
+    )
 
 
 def combine_bimanual_reports(
     reports: Sequence[BimanualEvaluationReport],
 ) -> BimanualEvaluationReport:
-    if not reports or len({report.policy_id for report in reports}) != 1:
-        raise ValueError("combined evaluation reports require one policy")
+    if (
+        not reports
+        or len({report.policy_id for report in reports}) != 1
+        or len({report.plan_id for report in reports}) != 1
+    ):
+        raise ValueError("combined evaluation reports require one policy and plan")
     return BimanualEvaluationReport(
         reports[0].policy_id,
+        reports[0].plan_id,
         tuple(episode for report in reports for episode in report.episodes),
     )
 
@@ -393,18 +430,24 @@ def _evaluate_episode(
     max_steps: int,
     environment_factory: Callable[[], AuditedDualArmBackend],
     policy: AppliedActionAwarePolicy,
-    seed: int,
+    episode_seed: PlannedEpisodeSeed,
     ablation: AblationMode,
     observer: BimanualEvaluationObserver | None,
 ) -> BimanualEpisodeEvaluation:
     environment = environment_factory()
     record: BimanualEpisodeEvaluation | None = None
     try:
-        observation = environment.reset(seed=seed, task_id=task_id)
-        policy.reset(task_id=task_id, seed=seed)
+        observation = environment.reset(
+            seed=episode_seed.environment_seed,
+            task_id=task_id,
+        )
+        policy.reset(task_id=task_id, seed=episode_seed.policy_rng_seed)
         if observer is not None:
             observer.episode_started(
-                environment, observation, seed=seed, ablation=ablation
+                environment,
+                observation,
+                seed=episode_seed.environment_seed,
+                ablation=ablation,
             )
         source = f"learned:{policy.spec().policy_id}"
         interventions = 0
@@ -432,7 +475,10 @@ def _evaluate_episode(
         audit = environment.task_audit()
         record = BimanualEpisodeEvaluation(
             task_id=task_id,
-            seed=seed,
+            environment_seed=episode_seed.environment_seed,
+            policy_rng_seed=episode_seed.policy_rng_seed,
+            planned_episode_id=episode_seed.planned_episode_id,
+            seed_commitment=episode_seed.seed_commitment,
             ablation=ablation,
             success=result.success,
             reason=result.reason,

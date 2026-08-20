@@ -22,9 +22,14 @@ from hwr.adapters.mujoco import (
 )
 from hwr.eval import (
     BimanualEpisodeEvaluation,
+    PlannedEpisodeSeed,
     assess_bimanual_acceptance,
     combine_bimanual_reports,
     evaluate_bimanual_policy,
+    plan_episode_seeds,
+    random_seed_salt,
+    read_seed_salt,
+    seed_lineage_manifest,
 )
 from hwr.eval.foundation_causality import require_foundation_causality_structure
 from hwr.eval.foundation_language import (
@@ -71,6 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evaluation-id")
     parser.add_argument("--seed-count", type=int, default=40)
     parser.add_argument("--seed-start", type=int)
+    parser.add_argument("--seed-salt-file", type=Path)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--foundation-device", default="cpu")
     parser.add_argument(
@@ -429,6 +435,10 @@ def _artifact_manifest(
     run_path: Path,
     seeds: tuple[int, ...],
     videos: Sequence[Mapping[str, Any]],
+    *,
+    plan_id: str,
+    salt: str,
+    planned_episodes: Sequence[PlannedEpisodeSeed],
 ) -> dict[str, Any]:
     causality = _require_action_causality(run_path)
     run_manifest = _read_json(run_path / "run-manifest.json")
@@ -477,7 +487,7 @@ def _artifact_manifest(
             for path in video["views"].values()
         }
     )
-    return {
+    result = {
         "schema_version": "hwr.foundation-evaluation-run/v3",
         "training_run": str(run_path),
         "training_seed": int(run_manifest["training_config"]["seed"]),
@@ -498,6 +508,10 @@ def _artifact_manifest(
             for name, path in files.items()
         },
     }
+    result["seed_lineage"] = seed_lineage_manifest(
+        plan_id, salt, planned_episodes
+    )
+    return result
 
 
 def _video_acceptance(
@@ -536,12 +550,19 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
     _require_action_causality(run_path)
     run_manifest = _read_json(run_path / "run-manifest.json")
     seeds = _unseen_seeds(run_path, arguments.seed_count, arguments.seed_start)
+    evaluation_id = arguments.evaluation_id or run_path.name
+    plan_id = f"foundation-evaluation:{evaluation_id}"
+    salt = (
+        read_seed_salt(arguments.seed_salt_file.resolve())
+        if arguments.seed_salt_file is not None
+        else random_seed_salt()
+    )
     output_root = (
         arguments.output_root
         if arguments.output_root.is_absolute()
         else root / arguments.output_root
     )
-    output_path = output_root / (arguments.evaluation_id or run_path.name)
+    output_path = output_root / evaluation_id
     output_path.mkdir(parents=True, exist_ok=False)
     tasks, bindings = load_default_formal_household_catalogs(root)
     locks = load_foundation_model_locks(
@@ -565,6 +586,7 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
         height=arguments.video_height,
     )
     reports = []
+    planned_episodes: list[PlannedEpisodeSeed] = []
     try:
         for task_id in sorted(tasks):
             task = tasks[task_id]
@@ -580,13 +602,22 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
                 )
 
             for ablation in ABLATIONS:
+                episode_seeds = plan_episode_seeds(
+                    plan_id,
+                    task_id,
+                    ablation,
+                    len(seeds),
+                    salt,
+                    environment_seeds=seeds,
+                )
+                planned_episodes.extend(episode_seeds)
                 reports.append(
                     evaluate_bimanual_policy(
                         task_id,
                         task.max_steps,
                         environment_factory,
                         policy,
-                        seeds,
+                        episode_seeds,
                         ablation=ablation,
                         observer=observer,
                     )
@@ -611,7 +642,13 @@ def run(arguments: argparse.Namespace) -> dict[str, Any]:
     _write_json(output_path / "report.json", report.to_dict())
     _write_json(output_path / "acceptance.json", acceptance)
     manifest = _artifact_manifest(
-        output_path, run_path, seeds, observer.results
+        output_path,
+        run_path,
+        seeds,
+        observer.results,
+        plan_id=plan_id,
+        salt=salt,
+        planned_episodes=planned_episodes,
     )
     _write_json(output_path / "manifest.json", manifest)
     return {

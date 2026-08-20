@@ -15,6 +15,7 @@ from hwr.apps.evaluate_foundation_world_model import (
 )
 from hwr.data.foundation_cache import FoundationCacheKey
 from hwr.perception.foundation import language_source_sha256
+from hwr.eval import plan_episode_seeds
 from hwr.world_model import (
     ACTION_CAUSALITY_COMPONENTS,
     CounterfactualCausalityReport,
@@ -35,6 +36,7 @@ def test_foundation_evaluation_defaults_match_fixed_acceptance_protocol() -> Non
 
     assert arguments.seed_count == 40
     assert arguments.video_seed_count == 1
+    assert arguments.seed_salt_file is None
     assert ABLATIONS == ("none", "lock_left", "lock_right")
 
 
@@ -169,6 +171,31 @@ def test_missing_language_weights_fail_before_policy_or_episode(
 
     with pytest.raises(FileNotFoundError, match="missing Qwen3 weights"):
         evaluation_app.run(arguments)
+
+
+def test_seed_salt_is_not_read_before_action_causality_gate(
+    tmp_path, monkeypatch
+) -> None:
+    run, arguments = _minimal_run_arguments(tmp_path, "gate-before-salt")
+    salt_file = tmp_path / "missing-salt.txt"
+    arguments.seed_salt_file = salt_file
+    events = []
+
+    def reject(path):
+        assert path == run.resolve()
+        events.append("causality")
+        raise RuntimeError("deployment gate rejected")
+
+    def unexpected(path):
+        pytest.fail(f"seed salt read before gate: {path}")
+
+    monkeypatch.setattr(evaluation_app, "_require_action_causality", reject)
+    monkeypatch.setattr(evaluation_app, "read_seed_salt", unexpected)
+
+    with pytest.raises(RuntimeError, match="deployment gate rejected"):
+        evaluation_app.run(arguments)
+
+    assert events == ["causality"]
 
 
 def test_unseen_seeds_exclude_training_and_causality_holdout(tmp_path) -> None:
@@ -566,12 +593,36 @@ def test_evaluation_manifest_hashes_training_data_model_and_gate_artifacts(
         "formal_passed": False,
     })
     _evaluation_language(output, run)
+    salt = "foundation-manifest-fixture"
+    planned = plan_episode_seeds(
+        "foundation-plan",
+        "task-a/v1",
+        "none",
+        1,
+        salt,
+        environment_seeds=(31,),
+    )
 
-    manifest = _artifact_manifest(output, run, (31,), ())
+    manifest = _artifact_manifest(
+        output,
+        run,
+        (31,),
+        (),
+        plan_id="foundation-plan",
+        salt=salt,
+        planned_episodes=planned,
+    )
 
     assert manifest["schema_version"] == "hwr.foundation-evaluation-run/v3"
     assert manifest["per_seed_passed"] is True
     assert manifest["formal_passed"] is False
+    assert manifest["seed_lineage"]["plan_id"] == "foundation-plan"
+    assert manifest["seed_lineage"]["reveal"]["salt"] == salt
+    assert manifest["seed_lineage"]["episodes"][0]["environment_seed"] == 31
+    assert (
+        manifest["seed_lineage"]["episodes"][0]["policy_rng_seed"]
+        != 31
+    )
     assert {
         "training/development-ready.json",
         "training/episodes.jsonl",
