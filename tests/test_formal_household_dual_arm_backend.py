@@ -178,6 +178,89 @@ def test_formal_diagnostic_override_changes_only_action_latency() -> None:
     assert three_provenance["verified_only_action_latency_changed"] is True
 
 
+@pytest.mark.parametrize("task_id", sorted(TASKS))
+def test_formal_joint_latency_diagnostic_changes_only_latency_pair(task_id) -> None:
+    backend = _backend(task_id, evaluation=True)
+    records = []
+    try:
+        backend.set_camera_rendering(False)
+        for observation_latency in (1, 2, 3):
+            for action_latency in (1, 2, 3):
+                observation = backend.reset_for_latency_pair_diagnostic(
+                    seed=61,
+                    task_id=task_id,
+                    observation_latency_steps=observation_latency,
+                    action_latency_steps=action_latency,
+                )
+                audit = backend.task_audit()
+                records.append((observation, audit))
+    finally:
+        backend.close()
+
+    randomizations = [dict(audit["randomization"]) for _, audit in records]
+    without_latency = []
+    for value in randomizations:
+        assert value.pop("observation_latency_steps") in (1, 2, 3)
+        assert value.pop("action_latency_steps") in (1, 2, 3)
+        without_latency.append(value)
+    assert all(value == without_latency[0] for value in without_latency)
+    assert len({observation.instruction.text for observation, _ in records}) == 1
+    assert len({tuple(observation.camera_calibrations) for observation, _ in records}) == 1
+    provenance = [audit["latency_pair_diagnostic"] for _, audit in records]
+    assert len({value["sampled_randomization_sha256"] for value in provenance}) == 1
+    assert len({value["other_randomization_sha256"] for value in provenance}) == 1
+    assert all(value["verified_only_latency_pair_changed"] is True for value in provenance)
+    assert {
+        (
+            value["effective_observation_latency_steps"],
+            value["effective_action_latency_steps"],
+        )
+        for value in provenance
+    } == {(observation, action) for observation in (1, 2, 3) for action in (1, 2, 3)}
+
+
+@pytest.mark.parametrize(
+    ("observation_latency", "action_latency", "message"),
+    [
+        (0, 1, "observation"),
+        (4, 1, "observation"),
+        (1, 0, "action"),
+        (1, 4, "action"),
+    ],
+)
+def test_formal_joint_latency_diagnostic_rejects_out_of_range_cells(
+    observation_latency, action_latency, message
+) -> None:
+    task_id = "clear_dining_table_3d/v1"
+    backend = _backend(task_id, evaluation=True)
+    try:
+        with pytest.raises(ValueError, match=message):
+            backend.reset_for_latency_pair_diagnostic(
+                seed=61,
+                task_id=task_id,
+                observation_latency_steps=observation_latency,
+                action_latency_steps=action_latency,
+            )
+    finally:
+        backend.close()
+
+
+def test_formal_joint_latency_diagnostic_is_reset_only() -> None:
+    task_id = "clear_dining_table_3d/v1"
+    backend = _backend(task_id, evaluation=True)
+    try:
+        observation = backend.reset_for_latency_pair_diagnostic(
+            seed=61,
+            task_id=task_id,
+            observation_latency_steps=3,
+            action_latency_steps=3,
+        )
+        with pytest.raises(RuntimeError, match="reset-only"):
+            backend.apply(_idle(observation))
+    finally:
+        backend.close()
+
+
 def test_formal_runtime_can_defer_and_resume_camera_rendering() -> None:
     task_id = "clear_dining_table_3d/v1"
     backend = _backend(task_id)
