@@ -20,6 +20,7 @@ def _evaluation(*, passed: bool = True) -> dict[str, object]:
             "passed": True,
             "classification_precision": 1.0,
             "classification_recall": 1.0,
+            "contact_associated_motion_exclusion": app.SETTLING_EXCLUSION,
         },
         "tasks": [
             {
@@ -28,6 +29,7 @@ def _evaluation(*, passed: bool = True) -> dict[str, object]:
                 "entity_contact_graph": {
                     "schema_version": app.MEASUREMENT_SCHEMA,
                     "mapping": {"robot_body_roots": roots},
+                    "contact_associated_motion_exclusion": app.SETTLING_EXCLUSION,
                 },
             }
             for task_id in app.TASK_IDS
@@ -37,6 +39,7 @@ def _evaluation(*, passed: bool = True) -> dict[str, object]:
             "all_checks": passed,
         },
         "passed": passed,
+        "contact_associated_motion_exclusion": app.SETTLING_EXCLUSION,
         "physics": {
             task_id: {
                 "mujoco_version": "test",
@@ -89,6 +92,7 @@ def test_evaluator_pairs_disabled_and_enabled_bit_identical_traces(
             },
             "entity_contact_graph": {
                 "contract_valid": True,
+                "contact_associated_motion_exclusion": app.SETTLING_EXCLUSION,
                 "mapping": {
                     "robot_body_roots": roots,
                     "robot_geoms": [{}] * 48,
@@ -121,6 +125,7 @@ def test_evaluator_pairs_disabled_and_enabled_bit_identical_traces(
             "passed": True,
             "classification_precision": 1.0,
             "classification_recall": 1.0,
+            "contact_associated_motion_exclusion": app.SETTLING_EXCLUSION,
         },
     )
     monkeypatch.setattr(app, "_run_trace", trace)
@@ -170,6 +175,9 @@ def test_runner_atomically_binds_contract_provenance_and_artifact_hashes(
     }
     assert manifest["physics"] == report["physics"]
     assert manifest["robot_body_roots"] == report["robot_body_roots"]
+    assert report["contact_associated_motion_exclusion"] == app.SETTLING_EXCLUSION
+    assert manifest["contact_associated_motion_exclusion"] == app.SETTLING_EXCLUSION
+    assert manifest["constants"]["excluded_initial_periods"] == 1
     for name, expected in app.CLAIM_FLAGS.items():
         assert report[name] is expected
         assert manifest[name] is expected

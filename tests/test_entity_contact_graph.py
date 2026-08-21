@@ -29,7 +29,9 @@ ROOT = Path(__file__).resolve().parents[1]
 TASKS, BINDINGS = load_default_formal_household_catalogs(ROOT)
 
 
-def _graph(*, enabled: bool = True) -> EntityContactGraph:
+def _graph(
+    *, enabled: bool = True, excluded_initial_periods: int = 1
+) -> EntityContactGraph:
     return EntityContactGraph(
         all_geom_ids=(1, 2, 3, 4, 5, 6, 10, 11, 12, 13, 14, 15),
         robot_part_by_geom={
@@ -50,6 +52,7 @@ def _graph(*, enabled: bool = True) -> EntityContactGraph:
         },
         timestep=0.01,
         enabled=enabled,
+        excluded_initial_periods=excluded_initial_periods,
         motion_source_by_entity={
             "manipulated_object:a": EntityMotionSource("translation", 10),
             "manipulated_object:b": EntityMotionSource("translation", 11),
@@ -250,26 +253,35 @@ def test_same_distinct_single_and_grasp_qualified_contacts_do_not_mix() -> None:
 def test_motion_is_associated_only_with_same_period_entity_contact() -> None:
     graph = _graph()
     graph.begin_control_period(_motion())
-    graph.record_substep(())
-    free = graph.end_control_period(_motion(first=(0.1, 0.0, 0.0)))
+    graph.record_substep((EntityContactPointObservation(2, 10, 1.0),))
+    settling = graph.end_control_period(_motion(first=(0.1, 0.0, 0.0)))
     graph.begin_control_period(_motion(first=(0.1, 0.0, 0.0)))
     graph.record_substep((EntityContactPointObservation(2, 10, 1.0),))
-    contact = graph.end_control_period(_motion(first=(0.15, 0.0, 0.0)))
-    graph.begin_control_period(_motion(first=(0.15, 0.0, 0.0)))
+    contact = graph.end_control_period(_motion(first=(0.2, 0.0, 0.0)))
+    graph.begin_control_period(_motion(first=(0.2, 0.0, 0.0)))
     graph.record_substep(())
-    inertia = graph.end_control_period(_motion(first=(0.2, 0.0, 0.0)))
+    inertia = graph.end_control_period(_motion(first=(0.3, 0.0, 0.0)))
 
     entity = "manipulated_object:a"
-    assert free["entity_motion"][entity] == {
+    assert settling["entity_motion"][entity] == {
         "motion": 0.1,
-        "robot_contact_observed": False,
+        "robot_contact_observed": True,
+        "reset_settling_excluded": True,
         "contact_associated_motion": 0.0,
     }
+    assert settling["reset_settling_excluded"] is True
+    assert contact["reset_settling_excluded"] is False
+    assert contact["entity_motion"][entity]["reset_settling_excluded"] is False
     assert contact["entity_motion"][entity]["contact_associated_motion"] == (
-        pytest.approx(0.05)
+        pytest.approx(0.1)
     )
     assert inertia["entity_motion"][entity]["contact_associated_motion"] == 0.0
     assert "controlled" not in " ".join(contact["entity_motion"][entity])
+    assert graph.report()["contact_associated_motion_exclusion"] == {
+        "reason": "reset_settling",
+        "rule": "period_index < excluded_initial_periods",
+        "excluded_initial_periods": 1,
+    }
 
 
 @pytest.mark.parametrize(
@@ -334,6 +346,12 @@ def test_robot_body_root_identity_fails_closed() -> None:
 
     with pytest.raises(ValueError, match="frozen contract"):
         EntityContactGraph(**arguments)
+
+
+@pytest.mark.parametrize("value", (-1, 1.0, True))
+def test_initial_period_exclusion_requires_nonnegative_integer(value) -> None:
+    with pytest.raises(ValueError, match="nonnegative integer"):
+        _graph(excluded_initial_periods=value)
 
 
 def test_disabled_graph_is_a_deterministic_zero_measurement() -> None:

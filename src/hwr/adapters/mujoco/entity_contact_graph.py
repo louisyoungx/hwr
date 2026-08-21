@@ -23,32 +23,27 @@ ENTITY_ROLES = frozenset(
     ("floor_support", "manipulated_object", "target_container", "articulation", "forbidden")
 )
 P40_FIELDS = (
-    "pair_peak_force", "category_peak_force", "cumulative_impulse",
-    "contact_duration_seconds", "contact_point_count", "unique_pair_observation_count",
+    "pair_peak_force", "category_peak_force", "cumulative_impulse", "contact_duration_seconds",
+    "contact_point_count", "unique_pair_observation_count",
 )
 COUNT_FIELDS = (
-    "physics_substep_count", "contact_point_count",
-    "robot_environment_contact_point_count",
+    "physics_substep_count", "contact_point_count", "robot_environment_contact_point_count",
     "task_relevant_world_world_contact_point_count",
-    "ignored_robot_self_contact_point_count",
-    "ignored_world_world_contact_point_count", "missing_normal_force_count",
-    "nonfinite_normal_force_count", "invalid_negative_normal_force_count",
+    "ignored_robot_self_contact_point_count", "ignored_world_world_contact_point_count",
+    "missing_normal_force_count", "nonfinite_normal_force_count",
+    "invalid_negative_normal_force_count",
     "unknown_mapping_count", "invalid_motion_state_count",
 )
 INTERACTION_FIELDS = (
-    "same_entity_dual_arm_substep_count",
-    "same_entity_dual_arm_entity_observation_count",
+    "same_entity_dual_arm_substep_count", "same_entity_dual_arm_entity_observation_count",
     "distinct_entity_dual_arm_substep_count",
     "distinct_entity_dual_arm_pair_observation_count", "single_arm_substep_count",
-    "same_object_dual_arm_grasp_substep_count",
-    "same_object_dual_arm_grasp_observation_count",
+    "same_object_dual_arm_grasp_substep_count", "same_object_dual_arm_grasp_observation_count",
 )
 INVALID_FIELDS = COUNT_FIELDS[-5:]
 
-
 class EntityContactGraphError(RuntimeError):
     """Raised when contact or mapping evidence violates the frozen contract."""
-
 
 @dataclass(frozen=True)
 class EntityContactPointObservation:
@@ -111,7 +106,6 @@ class _Accumulator:
             "contact_duration_seconds": self.contact_duration_seconds,
             "contact_point_count": self.contact_point_count,
         }
-
 class EntityContactGraph:
     """Aggregate read-only contacts by robot part and task entity."""
 
@@ -123,6 +117,7 @@ class EntityContactGraph:
         entity_by_geom: Mapping[int, str],
         timestep: float,
         enabled: bool,
+        excluded_initial_periods: int = 1,
         motion_source_by_entity: Mapping[str, EntityMotionSource] | None = None,
         gripper_pad_groups: Mapping[
             str, tuple[Iterable[int], Iterable[int]]
@@ -139,6 +134,7 @@ class EntityContactGraph:
         }
         self.timestep = float(timestep)
         self.enabled = bool(enabled)
+        self.excluded_initial_periods = excluded_initial_periods
         self.motion_source_by_entity = dict(motion_source_by_entity or {})
         self.gripper_pad_groups = {
             part: (frozenset(first), frozenset(second))
@@ -159,6 +155,12 @@ class EntityContactGraph:
             raise ValueError("entity contact graph requires geometry")
         if not math.isfinite(self.timestep) or self.timestep <= 0.0:
             raise ValueError("entity contact graph timestep must be positive")
+        if (
+            not isinstance(self.excluded_initial_periods, int)
+            or isinstance(self.excluded_initial_periods, bool)
+            or self.excluded_initial_periods < 0
+        ):
+            raise ValueError("excluded initial periods must be a nonnegative integer")
         robot = set(self.robot_part_by_geom)
         environment = set(self.entity_by_geom)
         if robot & environment:
@@ -215,7 +217,6 @@ class EntityContactGraph:
         self._substep_observations: list[dict[str, object]] = []
         self._counts = _empty_counts()
         self._interaction_counts = _empty_interaction_counts()
-
     def begin_control_period(self, motion_state: Mapping[str, object]) -> None:
         if not self.enabled:
             return
@@ -231,7 +232,6 @@ class EntityContactGraph:
             "motion_start": self._normalize_motion_state(motion_state),
             "substeps": [],
         }
-
     def sample_mujoco_substep(
         self, model: mujoco.MjModel, data: mujoco.MjData
     ) -> None:
@@ -253,7 +253,6 @@ class EntityContactGraph:
                 )
             )
         self.record_substep(observations)
-
     def record_substep(
         self, points: Iterable[EntityContactPointObservation]
     ) -> None:
@@ -301,7 +300,6 @@ class EntityContactGraph:
             raise EntityContactGraphError(
                 "entity contact graph observed invalid force or mapping evidence"
             )
-
     def _classify_pair(self, pair: tuple[int, int]) -> tuple[object, ...]:
         first, second = pair
         first_robot = first in self.robot_part_by_geom
@@ -324,7 +322,6 @@ class EntityContactGraph:
             edge = tuple(sorted((first_entity, second_entity)))
             return ("world_world", *edge)
         return ("ignored_world_world",)
-
     def _count_classification(
         self, classification: tuple[object, ...], period: Mapping[str, object]
     ) -> None:
@@ -345,7 +342,6 @@ class EntityContactGraph:
             self._increment(
                 "ignored_world_world_contact_point_count", period=period
             )
-
     def _aggregate_valid_pairs(
         self,
         pair_forces: Mapping[tuple[int, int], float],
@@ -392,7 +388,6 @@ class EntityContactGraph:
         self._update_edges(robot_values, period, robot=True)
         self._update_edges(world_values, period, robot=False)
         self._record_interactions(arm_entities, grasp_pads, period)
-
     def _update_category(
         self,
         category: str,
@@ -409,7 +404,6 @@ class EntityContactGraph:
         }
         period["categories"][category].update(**values)
         self._episode_categories[category].update(**values)
-
     def _update_edges(
         self,
         values: Mapping[tuple[str, str], list[tuple[float, int]]],
@@ -431,7 +425,6 @@ class EntityContactGraph:
             }
             period_edges.setdefault(edge, _Accumulator()).update(**update)
             episode_edges.setdefault(edge, _Accumulator()).update(**update)
-
     def _record_grasp_pad(
         self,
         grasp_pads: dict[tuple[str, str], set[int]],
@@ -448,7 +441,6 @@ class EntityContactGraph:
         for index, group in enumerate(groups):
             if robot_geom in group:
                 grasp_pads.setdefault((part, entity), set()).add(index)
-
     def _record_interactions(
         self,
         arm_entities: Mapping[str, set[str]],
@@ -496,24 +488,29 @@ class EntityContactGraph:
         for name, value in increments.items():
             self._interaction_counts[name] += value
             period["interactions"][name] += value
-
     def end_control_period(self, motion_state: Mapping[str, object]) -> dict[str, object]:
         if not self.enabled:
             return self.report()
         period = self._require_period()
+        period_index = len(self._periods)
+        settling_excluded = period_index < self.excluded_initial_periods
         end = self._normalize_motion_state(motion_state)
         start = period["motion_start"]
         motions: dict[str, dict[str, object]] = {}
         for entity, source in self.motion_source_by_entity.items():
             displacement = _motion_delta(source.kind, start[entity], end[entity])
-            associated = entity in period["contacted_entities"]
+            contact_observed = entity in period["contacted_entities"]
             motions[entity] = {
                 "motion": displacement,
-                "robot_contact_observed": associated,
-                "contact_associated_motion": displacement if associated else 0.0,
+                "robot_contact_observed": contact_observed,
+                "reset_settling_excluded": settling_excluded,
+                "contact_associated_motion": (
+                    displacement if contact_observed and not settling_excluded else 0.0
+                ),
             }
         report = {
-            "period_index": len(self._periods),
+            "period_index": period_index,
+            "reset_settling_excluded": settling_excluded,
             **dict(period["counts"]),
             "legacy_p40_categories": {
                 category: period["categories"][category].category_dict(period=True)
@@ -592,12 +589,15 @@ class EntityContactGraph:
             "enabled": self.enabled,
             "measurement_only": True,
             "timestep": self.timestep,
+            "contact_associated_motion_exclusion": {
+                "reason": "reset_settling",
+                "rule": "period_index < excluded_initial_periods",
+                "excluded_initial_periods": self.excluded_initial_periods,
+            },
             "mapping": self.mapping_report(),
             "control_period_count": len(self._periods),
             **dict(self._counts),
-            "contract_valid": not any(
-                self._counts[name] for name in INVALID_FIELDS
-            ),
+            "contract_valid": not any(self._counts[name] for name in INVALID_FIELDS),
             "legacy_p40_categories": {
                 category: self._episode_categories[category].category_dict(period=False)
                 for category in CONTACT_CATEGORIES
@@ -655,7 +655,6 @@ class EntityContactGraph:
             )
         return self._period
 
-
 def resolve_robot_part_by_geom(
     model: mujoco.MjModel,
     robot_geoms: Iterable[int],
@@ -695,7 +694,6 @@ def resolve_robot_part_by_geom(
     }
     return result, identity
 
-
 def p40_conservation_differences(
     graph_report: Mapping[str, object], ledger_report: Mapping[str, object]
 ) -> dict[str, object]:
@@ -721,18 +719,14 @@ def p40_conservation_differences(
         "passed": maximum <= 1.0e-12,
     }
 
-
 def _empty_categories() -> dict[str, _Accumulator]:
     return {category: _Accumulator() for category in CONTACT_CATEGORIES}
-
 
 def _empty_counts() -> dict[str, int]:
     return dict.fromkeys(COUNT_FIELDS, 0)
 
-
 def _empty_interaction_counts() -> dict[str, int]:
     return dict.fromkeys(INTERACTION_FIELDS, 0)
-
 
 def _edge_reports(
     edges: Mapping[tuple[str, str], _Accumulator],
@@ -750,13 +744,11 @@ def _edge_reports(
         reports.append({**identity, **accumulator.edge_dict(period=period)})
     return reports
 
-
 def _entity_role(entity: str) -> str:
     role, separator, identifier = entity.partition(":")
     if separator != ":" or not identifier or role not in ENTITY_ROLES:
         raise ValueError(f"invalid task entity identity: {entity}")
     return role
-
 
 def _task_relevant_world_edge(first: str, second: str) -> bool:
     first_role, second_role = _entity_role(first), _entity_role(second)
@@ -771,7 +763,6 @@ def _task_relevant_world_edge(first: str, second: str) -> bool:
         first_role == second_role == "manipulated_object" and first != second
     )
 
-
 def _motion_delta(kind: str, start: object, end: object) -> float:
     if kind == "joint":
         return abs(float(end) - float(start))
@@ -781,7 +772,6 @@ def _motion_delta(kind: str, start: object, end: object) -> float:
             for left, right in zip(start, end, strict=True)
         )
     )
-
 
 def _model_id(model: mujoco.MjModel, kind: mujoco.mjtObj, name: str) -> int:
     value = int(mujoco.mj_name2id(model, kind, name))

@@ -34,6 +34,12 @@ TASK_IDS = (
     "store_kitchen_items_3d/v1",
 )
 BASE_SEED, SEED_STRIDE, CONTROL_STEP_LIMIT = 20_264_002, 104_729, 32
+EXCLUDED_INITIAL_PERIODS = 1
+SETTLING_EXCLUSION = {
+    "reason": "reset_settling",
+    "rule": "period_index < excluded_initial_periods",
+    "excluded_initial_periods": EXCLUDED_INITIAL_PERIODS,
+}
 FROZEN_PARENT_COMMIT = "4c4efda16759577cb05098a7628f29d3bfbef890"
 FROZEN_DOCUMENT_COMMIT = "b56ee96953652e2e80d644b8167181e8449c0a8b"
 FROZEN_BINDING_SHA256 = "7984ef2544bb618269681d274257a598b02621371a26de002bfdd8bbf7decab6"
@@ -51,14 +57,10 @@ CLAIM_FLAGS = {
     "hardware_safety_claim_allowed": False,
     "action_causality_claim_allowed": False,
 }
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     return parser
-
-
 def run(arguments: argparse.Namespace) -> dict[str, object]:
     root = Path(__file__).resolve().parents[3]
     output = _resolve(root, arguments.output)
@@ -105,8 +107,6 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         "report_sha256": manifest["artifacts"]["report.json"]["sha256"],
         "manifest_sha256": hashlib.sha256(artifacts["manifest.json"]).hexdigest(),
     }
-
-
 def _evaluate_contract(root: Path) -> dict[str, object]:
     tasks, bindings = load_default_formal_household_catalogs(root)
     if set(tasks) != set(TASK_IDS):
@@ -148,6 +148,7 @@ def _evaluate_contract(root: Path) -> dict[str, object]:
         "tasks": reports,
         "checks": checks,
         "passed": all(checks.values()),
+        "contact_associated_motion_exclusion": dict(SETTLING_EXCLUSION),
         "physics": {value["task_id"]: value["physics"] for value in reports},
         "robot_body_roots": {
             value["task_id"]: value["entity_contact_graph"]["mapping"][
@@ -156,8 +157,6 @@ def _evaluate_contract(root: Path) -> dict[str, object]:
             for value in reports
         },
     }
-
-
 def _run_trace(task, binding, *, seed: int, enabled: bool) -> dict[str, object]:
     backend = MujocoFormalHouseholdDualArmBackend(
         task, binding, camera_width=16, camera_height=12, evaluation_profile=True
@@ -224,8 +223,6 @@ def _run_trace(task, binding, *, seed: int, enabled: bool) -> dict[str, object]:
         "fixed_hold_action": list(action.vector()),
         "physics": physics,
     }
-
-
 def _legacy_trace_step(backend, outcome, observation, step: int) -> dict[str, object]:
     audit = backend.task_audit()
     result = backend.result()
@@ -244,8 +241,6 @@ def _legacy_trace_step(backend, outcome, observation, step: int) -> dict[str, ob
         "maximum_forbidden_pair": audit["maximum_forbidden_pair"],
         "safety_intervened": outcome.info["safety_intervened"],
     }
-
-
 def _graph_from_backend(backend, *, enabled: bool) -> EntityContactGraph:
     model, ids, binding = backend.model, backend.household_ids, backend.binding
     robot_geoms = frozenset(int(value) for value in ids.robot_geoms)
@@ -305,6 +300,7 @@ def _graph_from_backend(backend, *, enabled: bool) -> EntityContactGraph:
         entity_by_geom=entity_by_geom,
         timestep=float(model.opt.timestep),
         enabled=enabled,
+        excluded_initial_periods=EXCLUDED_INITIAL_PERIODS,
         motion_source_by_entity=motion_sources,
         gripper_pad_groups=pads,
         geom_name_by_id={
@@ -313,8 +309,6 @@ def _graph_from_backend(backend, *, enabled: bool) -> EntityContactGraph:
         },
         robot_body_roots=root_identity,
     )
-
-
 def _environment_entities(
     model, robot_geoms, role_by_geom, object_by_geom, articulation
 ) -> dict[int, str]:
@@ -331,8 +325,6 @@ def _environment_entities(
             identifier = model.geom(geom).name or f"geom_{geom}"
         result[geom] = f"{role}:{identifier}"
     return result
-
-
 def _run_fixture() -> dict[str, object]:
     graph = _fixture_graph()
     ledger = ContactLedger(
@@ -362,7 +354,18 @@ def _run_fixture() -> dict[str, object]:
     first_report = graph.report()
     conservation = p40_conservation_differences(first_report, ledger.report())
     graph.begin_control_period(moved)
-    free_motion = dict(moved)
+    associated = dict(moved)
+    associated["manipulated_object:a"] = (0.06, 0.04, 0.0)
+    associated["articulation:drawer"] = 0.3
+    graph.record_substep(
+        (
+            EntityContactPointObservation(4, 10, 1.0),
+            EntityContactPointObservation(4, 14, 1.0),
+        )
+    )
+    associated_period = graph.end_control_period(associated)
+    graph.begin_control_period(associated)
+    free_motion = dict(associated)
     free_motion["manipulated_object:b"] = (0.1, 0.0, 0.0)
     graph.record_substep(())
     no_contact_period = graph.end_control_period(free_motion)
@@ -376,7 +379,7 @@ def _run_fixture() -> dict[str, object]:
     inertia_period = graph.end_control_period(inertia)
     report = graph.report()
     cases = _fixture_case_results(
-        report, first_period, no_contact_period, inertia_period
+        report, first_period, associated_period, no_contact_period, inertia_period
     )
     invalid = {
         name: _invalid_force_fixture(value, counter)
@@ -393,6 +396,7 @@ def _run_fixture() -> dict[str, object]:
     passed = passed and not any(report[name] for name in INVALID_COUNT_FIELDS)
     return {
         "schema_version": FIXTURE_SCHEMA,
+        "contact_associated_motion_exclusion": dict(SETTLING_EXCLUSION),
         "cases": cases,
         "classification_precision": 1.0 if all(cases.values()) else 0.0,
         "classification_recall": 1.0 if all(cases.values()) else 0.0,
@@ -404,8 +408,6 @@ def _run_fixture() -> dict[str, object]:
         },
         "passed": passed,
     }
-
-
 def _fixture_graph(**overrides) -> EntityContactGraph:
     arguments = {
         "all_geom_ids": (*range(1, 8), *range(10, 16)),
@@ -420,6 +422,7 @@ def _fixture_graph(**overrides) -> EntityContactGraph:
         },
         "timestep": 0.01,
         "enabled": True,
+        "excluded_initial_periods": EXCLUDED_INITIAL_PERIODS,
         "motion_source_by_entity": {
             "manipulated_object:a": EntityMotionSource("translation", 10),
             "manipulated_object:b": EntityMotionSource("translation", 11),
@@ -431,14 +434,10 @@ def _fixture_graph(**overrides) -> EntityContactGraph:
     }
     arguments.update(overrides)
     return EntityContactGraph(**arguments)
-
-
 def _fixture_motion_state() -> dict[str, object]:
     return dict.fromkeys(
         ("manipulated_object:a", "manipulated_object:b"), (0.0, 0.0, 0.0)
     ) | {"articulation:drawer": 0.0}
-
-
 def _fixture_substeps() -> tuple[tuple[EntityContactPointObservation, ...], ...]:
     point = EntityContactPointObservation
     return (
@@ -453,10 +452,8 @@ def _fixture_substeps() -> tuple[tuple[EntityContactPointObservation, ...], ...]
         (point(10, 11, 6.0),),
         (point(1, 2, 1.0), point(12, 13, 1.0)),
     )
-
-
 def _fixture_case_results(
-    report, first_period, no_contact_period, inertia_period
+    report, first_period, associated_period, no_contact_period, inertia_period
 ) -> dict[str, bool]:
     observations = report["substeps"]
     world_edges = report["task_relevant_world_world_edges"]
@@ -476,9 +473,22 @@ def _fixture_case_results(
             "same_entity_dual_arm_contacts", "left_only_entities",
             "right_only_entities",
         )),
-        "articulation_motion": first_period["entity_motion"][
+        "reset_settling_contact_motion_excluded": (
+            first_period["reset_settling_excluded"] is True
+            and first_period["entity_motion"]["manipulated_object:a"][
+                "robot_contact_observed"
+            ] is True
+            and first_period["entity_motion"]["manipulated_object:a"]["motion"] > 0.0
+            and first_period["entity_motion"]["manipulated_object:a"][
+                "contact_associated_motion"
+            ] == 0.0
+        ),
+        "subsequent_contact_motion_associated": associated_period["entity_motion"][
+            "manipulated_object:a"
+        ]["contact_associated_motion"] > 0.0,
+        "articulation_motion_associated": associated_period["entity_motion"][
             "articulation:drawer"
-        ]["contact_associated_motion"] == 0.2,
+        ]["contact_associated_motion"] > 0.0,
         "no_contact_motion": no_contact_period["entity_motion"][
             "manipulated_object:b"
         ]["contact_associated_motion"] == 0.0,
@@ -499,12 +509,8 @@ def _fixture_case_results(
             "manipulated_object"
         ]["pair_peak_force"] == 7.0,
     }
-
-
 def _has_world_edge(edges, entities: tuple[str, str]) -> bool:
     return any(edge["entities"] == list(entities) for edge in edges)
-
-
 def _invalid_force_fixture(value: float | None, counter: str) -> bool:
     graph = _fixture_graph()
     graph.begin_control_period(_fixture_motion_state())
@@ -514,8 +520,6 @@ def _invalid_force_fixture(value: float | None, counter: str) -> bool:
         report = graph.report()
         return report[counter] == 1 and report["contract_valid"] is False
     return False
-
-
 def _mapping_failure_fixture() -> dict[str, bool]:
     cases: dict[str, Callable[[], object]] = {
         "missing": lambda: _fixture_graph(
@@ -547,21 +551,25 @@ def _mapping_failure_fixture() -> dict[str, bool]:
         ),
     }
     return {name: _raises_value_error(function) for name, function in cases.items()}
-
-
 def _raises_value_error(function: Callable[[], object]) -> bool:
     try:
         function()
     except ValueError:
         return True
     return False
-
-
 def _contract_checks(fixture, reports) -> dict[str, bool]:
     return {
         "fixture_passed": fixture["passed"] is True,
         "fixture_precision_recall_one": fixture["classification_precision"] == 1.0
         and fixture["classification_recall"] == 1.0,
+        "settling_exclusion_frozen": (
+            fixture["contact_associated_motion_exclusion"] == SETTLING_EXCLUSION
+            and all(
+                value["entity_contact_graph"]["contact_associated_motion_exclusion"]
+                == SETTLING_EXCLUSION
+                for value in reports
+            )
+        ),
         "all_mappings_complete": all(
             set(value["entity_contact_graph"]["mapping"]["robot_body_roots"])
             == set(ROBOT_BODY_ROOT_NAMES)
@@ -610,7 +618,6 @@ def _contract_checks(fixture, reports) -> dict[str, bool]:
         ),
     }
 
-
 def _build_report(
     source_commit: str,
     command: Sequence[str],
@@ -631,7 +638,6 @@ def _build_report(
         "legacy_runtime_behavior_unchanged": legacy_unchanged,
         **evaluation,
     }
-
 
 def _manifest(
     source_commit: str,
@@ -657,6 +663,7 @@ def _manifest(
         "frozen_document_commit_is_ancestor": status == "complete",
         "command": list(command),
         "binding": dict(binding_identity),
+        "contact_associated_motion_exclusion": dict(SETTLING_EXCLUSION),
         "robot_body_roots": (
             None if evaluation is None else evaluation["robot_body_roots"]
         ),
@@ -665,6 +672,7 @@ def _manifest(
             "base_seed": BASE_SEED,
             "seed_stride": SEED_STRIDE,
             "control_step_limit": CONTROL_STEP_LIMIT,
+            "excluded_initial_periods": EXCLUDED_INITIAL_PERIODS,
             "task_ids": list(TASK_IDS),
             "robot_body_root_names": dict(ROBOT_BODY_ROOT_NAMES),
         },
@@ -678,7 +686,6 @@ def _manifest(
             for name, content in artifacts.items()
         },
     }
-
 
 def _require_clean_source(
     root: Path, binding_identity: Mapping[str, object]
@@ -708,7 +715,6 @@ def _require_clean_source(
     ):
         raise RuntimeError("P40-E2 binding identity differs from the frozen contract")
 
-
 def _source_commit(root: Path) -> str:
     result = subprocess.run(
         ("git", "rev-parse", "HEAD"),
@@ -719,7 +725,6 @@ def _source_commit(root: Path) -> str:
         raise RuntimeError("P40-E2 runner requires a full Git source commit")
     return commit
 
-
 def _file_identity(root: Path, path: Path) -> dict[str, object]:
     content = path.read_bytes()
     return {
@@ -727,7 +732,6 @@ def _file_identity(root: Path, path: Path) -> dict[str, object]:
         "sha256": hashlib.sha256(content).hexdigest(),
         "bytes": len(content),
     }
-
 
 def _create_output(output: Path, artifacts: Mapping[str, bytes]) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -744,7 +748,6 @@ def _create_output(output: Path, artifacts: Mapping[str, bytes]) -> None:
             staging.rmdir()
         raise
 
-
 def _atomic_write(path: Path, content: bytes) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     with temporary.open("xb") as handle:
@@ -753,22 +756,18 @@ def _atomic_write(path: Path, content: bytes) -> None:
         os.fsync(handle.fileno())
     os.replace(temporary, path)
 
-
 def _canonical_sha256(value: object) -> str:
     content = json.dumps(
         value, ensure_ascii=True, separators=(",", ":"), sort_keys=True
     ).encode("utf-8")
     return hashlib.sha256(content).hexdigest()
 
-
 def _json_bytes(value: Mapping[str, object]) -> bytes:
     value = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     return value.encode("utf-8")
 
-
 def _resolve(root: Path, path: Path) -> Path:
     return path.resolve() if path.is_absolute() else (root / path).resolve()
-
 
 def main(argv: Sequence[str] | None = None) -> int:
     result = run(build_parser().parse_args(argv))
