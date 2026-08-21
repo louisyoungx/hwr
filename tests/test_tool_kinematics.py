@@ -12,14 +12,17 @@ from hwr.eval.tool_kinematics import (
     JOINTS_PER_ARM,
     STATE_SEED,
     aggregate_task_reports,
+    audit_action_isolation,
     frame_invariance_report,
     frozen_decision,
     frozen_state_grid,
     measure_task,
     policy_tool_position,
+    recursive_xml_input_identity,
     scrambled_halton,
     state_grid_report,
     summarize_terminals,
+    task_arm_replay_status,
     world_site_to_base,
 )
 
@@ -197,3 +200,131 @@ def test_frozen_decision_and_weakest_task_arm_use_all_terminal_errors() -> None:
         == "accepted as material FK mismatch evidence"
     )
     assert frozen_decision({"complete": False}, mismatch) == "invalid"
+
+
+@pytest.mark.parametrize(
+    "source, expected_kind",
+    (
+        (
+            "from hwr.core.embodied import DualArmAction as DA\n"
+            "wrapped = DA\n"
+            "wrapped(0, 0, (), (), 0, 0)\n",
+            "forbidden_import",
+        ),
+        (
+            "import hwr.eval.target_selection as selection\n"
+            "wrapped = selection.select_candidate_index\n"
+            "wrapped(None, ())\n",
+            "forbidden_call",
+        ),
+        (
+            "from hwr.adapters.mujoco.dual_arm_backend import "
+            "MujocoDualArmBackend as Runtime\n",
+            "forbidden_import",
+        ),
+        (
+            "import hwr.adapters.mujoco.dual_arm_backend as runtime\n",
+            "forbidden_import",
+        ),
+        ("backend.apply(frame)\n", "forbidden_call"),
+        ("getattr(backend, 'step')()\n", "forbidden_dynamic_lookup"),
+        ("backend.__getattribute__('apply')()\n", "forbidden_dynamic_lookup"),
+        (
+            "import hwr.eval.target_selection as selection\n"
+            "consume(selection.primitive_action)\n",
+            "forbidden_reference",
+        ),
+    ),
+)
+def test_action_isolation_audit_rejects_alias_wrappers_and_calls(
+    source: str, expected_kind: str
+) -> None:
+    report = audit_action_isolation({"synthetic.py": source})
+
+    assert report["passed"] is False
+    assert expected_kind in {value["kind"] for value in report["violations"]}
+
+
+def test_action_isolation_audit_accepts_measurement_only_kinematics() -> None:
+    report = audit_action_isolation(
+        {
+            "measurement.py": (
+                "from hwr.eval.target_selection import _tool_position as fk\n"
+                "result = fk((0.0,) * 6, 0.31)\n"
+                "site = data.site_xpos[site_id]\n"
+            )
+        }
+    )
+
+    assert report["passed"] is True
+    assert report["violations"] == []
+
+
+def test_recursive_xml_identity_tracks_every_include(tmp_path) -> None:
+    root = tmp_path.resolve()
+    scene = root / "scene/main.xml"
+    common = root / "common"
+    scene.parent.mkdir()
+    common.mkdir()
+    scene.write_text(
+        '<mujoco><include file="../common/robot.xml"/></mujoco>',
+        encoding="utf-8",
+    )
+    (common / "robot.xml").write_text(
+        '<mujocoinclude><include file="defaults.xml"/></mujocoinclude>',
+        encoding="utf-8",
+    )
+    defaults = common / "defaults.xml"
+    defaults.write_text("<mujocoinclude/>", encoding="utf-8")
+
+    first = recursive_xml_input_identity(root, scene)
+    replay = recursive_xml_input_identity(root, scene)
+    defaults.write_text("<mujocoinclude><default/></mujocoinclude>", encoding="utf-8")
+    changed = recursive_xml_input_identity(root, scene)
+
+    assert first == replay
+    assert [value["path"] for value in first["dependencies"]] == [
+        "common/defaults.xml",
+        "common/robot.xml",
+        "scene/main.xml",
+    ]
+    assert first["identity"] != changed["identity"]
+
+
+def test_task_arm_replay_status_is_explicit_and_fail_closed() -> None:
+    reports = []
+    for task_id in (
+        "tidy_living_room_3d/v1",
+        "clear_dining_table_3d/v1",
+        "store_kitchen_items_3d/v1",
+    ):
+        terminals = [
+            {
+                "terminal_id": f"{task_id}|state|{arm}",
+                "task_id": task_id,
+                "arm": arm,
+                "euclidean_error_m": 0.0,
+                "absolute_error_m": (0.0, 0.0, 0.0),
+            }
+            for arm in ARM_ORDER
+        ]
+        reports.append(
+            {
+                "task_id": task_id,
+                "by_arm": {
+                    arm: summarize_terminals(
+                        [value for value in terminals if value["arm"] == arm]
+                    )
+                    for arm in ARM_ORDER
+                },
+                "terminals": terminals,
+            }
+        )
+
+    replay = task_arm_replay_status(reports, reports)
+    missing = task_arm_replay_status(reports, reports[:-1])
+
+    assert replay["all_bit_identical"] is True
+    assert replay["task_arm_count"] == 6
+    assert all(value["bit_identical"] for value in replay["task_arms"])
+    assert missing["all_bit_identical"] is False

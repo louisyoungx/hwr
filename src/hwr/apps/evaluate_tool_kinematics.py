@@ -39,11 +39,14 @@ from hwr.eval.tool_kinematics import (
     TASK_IDS,
     KinematicState,
     aggregate_task_reports,
+    audit_action_isolation,
     frame_invariance_report,
     frozen_decision,
     frozen_state_grid,
     measure_task,
+    recursive_xml_input_identity,
     state_grid_report,
+    task_arm_replay_status,
     world_site_to_base,
 )
 
@@ -63,6 +66,16 @@ TASK_BYTES = 5480
 ROBOT_PATH = Path("assets/mujoco/common/robot_body.xml")
 ROBOT_SHA256 = "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
 ROBOT_BYTES = 14003
+SOURCE_PATHS = {
+    "p52_app": Path("src/hwr/apps/evaluate_tool_kinematics.py"),
+    "p52_core": Path("src/hwr/eval/tool_kinematics.py"),
+    "target_selection_fk_source": Path("src/hwr/eval/target_selection.py"),
+    "mujoco_model_loader": Path("src/hwr/adapters/mujoco/model.py"),
+    "mujoco_names": Path("src/hwr/adapters/mujoco/names.py"),
+    "mujoco_training_catalog": Path("src/hwr/adapters/mujoco/training_catalog.py"),
+    "mujoco_binding_loader": Path("src/hwr/adapters/mujoco/bindings.py"),
+    "formal_task_catalog": Path("src/hwr/scenarios/formal3d.py"),
+}
 TOOL_SITE_NAMES = {"left": "left_grasp_center", "right": "right_grasp_center"}
 JOINT_NAMES = {
     "left": SECONDARY_ARM_JOINTS,
@@ -120,10 +133,14 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         first_payload = _canonical_bytes(first)
         second_payload = _canonical_bytes(second)
         measurement_equal = first_payload == second_payload
+        task_arm_replay = task_arm_replay_status(
+            first["task_reports"], second["task_reports"]
+        )
         replay = {
             "measurement_payload_bit_identical": measurement_equal,
             "first_measurement_payload": _identity(first_payload),
             "second_measurement_payload": _identity(second_payload),
+            "task_arm_replay": task_arm_replay,
         }
         first_evaluation = _with_determinism(
             first, replay, report_equal=True
@@ -205,24 +222,53 @@ def _with_determinism(
     report_equal: bool,
 ) -> dict[str, object]:
     measurement_equal = bool(replay["measurement_payload_bit_identical"])
+    task_arm_replay = replay["task_arm_replay"]
     checks = {
         **evaluation["checks"],
         "deterministic_measurement_payload_bit_identical": measurement_equal,
         "deterministic_report_payload_bit_identical": report_equal,
+        "deterministic_task_arm_payloads_bit_identical": bool(
+            task_arm_replay["all_bit_identical"]
+        ),
     }
     checks["all_measurement_contract_gates"] = all(checks.values())
+    replay_by_task_arm = {
+        (value["task_id"], value["arm"]): value
+        for value in task_arm_replay["task_arms"]
+    }
+    task_reports = [
+        {
+            **report,
+            "by_arm": {
+                arm: {
+                    **report["by_arm"][arm],
+                    "deterministic_replay": replay_by_task_arm.get(
+                        (report["task_id"], arm)
+                    ),
+                }
+                for arm in ARM_ORDER
+            },
+        }
+        for report in evaluation["task_reports"]
+    ]
     return {
         **evaluation,
+        "task_reports": task_reports,
         "deterministic_replay": {
             **replay,
             "report_payload_bit_identical": report_equal,
-            "passed": measurement_equal and report_equal,
+            "passed": (
+                measurement_equal
+                and report_equal
+                and task_arm_replay["all_bit_identical"]
+            ),
         },
         "checks": checks,
     }
 
 
 def _evaluate_contract(root: Path) -> dict[str, object]:
+    isolation_audit = _action_isolation_audit(root)
     tasks, bindings = load_default_formal_household_catalogs(root)
     if tuple(tasks) != TASK_IDS or tuple(bindings) != TASK_IDS:
         raise RuntimeError("P52 task/binding catalog differs from frozen order")
@@ -233,7 +279,7 @@ def _evaluate_contract(root: Path) -> dict[str, object]:
     frame_fixture = None
     for task_id in TASK_IDS:
         binding = bindings[task_id]
-        model_identity = _file_identity(root, binding.model_path)
+        model_identity = recursive_xml_input_identity(root, binding.model_path)
         model_identities.append({"task_id": task_id, **model_identity})
         evaluator = _ToolSiteEvaluator(task_id, binding, model_identity)
         domain = evaluator.joint_domain()
@@ -280,10 +326,7 @@ def _evaluate_contract(root: Path) -> dict[str, object]:
             for terminal in value["terminals"]
         ),
         "evaluator_private_truth_did_not_enter_action": (
-            CLAIM_FLAGS["policy_action_modified"] is False
-            and CLAIM_FLAGS["evaluator_private_site_used_for_action"] is False
-            and CLAIM_FLAGS["evaluator_private_qpos_used_for_action"] is False
-            and CLAIM_FLAGS["object_truth_used"] is False
+            isolation_audit["passed"]
         ),
     }
     return {
@@ -293,6 +336,7 @@ def _evaluate_contract(root: Path) -> dict[str, object]:
         "frame_invariance": frame_fixture,
         "mappings": mappings,
         "model_identities": model_identities,
+        "action_isolation_audit": isolation_audit,
         "checks": checks,
     }
 
@@ -500,6 +544,7 @@ def _build_report(
         "aggregate": aggregate,
         "frame_invariance": evaluation["frame_invariance"],
         "mappings": evaluation["mappings"],
+        "action_isolation_audit": evaluation["action_isolation_audit"],
         "deterministic_replay": evaluation["deterministic_replay"],
         "checks": checks,
         **CLAIM_FLAGS,
@@ -553,6 +598,9 @@ def _manifest(
         "model_identities": (
             None if evaluation is None else evaluation["model_identities"]
         ),
+        "action_isolation_audit": (
+            None if evaluation is None else evaluation["action_isolation_audit"]
+        ),
         **CLAIM_FLAGS,
         "artifacts": {
             name: _identity(content) for name, content in artifacts.items()
@@ -565,7 +613,23 @@ def _source_identities(root: Path) -> dict[str, object]:
         "binding": _file_identity(root, root / BINDING_PATH),
         "task_config": _file_identity(root, root / TASK_PATH),
         "robot_model_source": _file_identity(root, root / ROBOT_PATH),
+        "sources": {
+            name: _file_identity(root, root / path)
+            for name, path in SOURCE_PATHS.items()
+        },
     }
+
+
+def _action_isolation_audit(root: Path) -> dict[str, object]:
+    return audit_action_isolation(
+        {
+            path.as_posix(): (root / path).read_text(encoding="utf-8")
+            for path in (
+                SOURCE_PATHS["p52_app"],
+                SOURCE_PATHS["p52_core"],
+            )
+        }
+    )
 
 
 def _require_clean_source(
@@ -573,7 +637,7 @@ def _require_clean_source(
     identities: Mapping[str, object],
 ) -> None:
     status = subprocess.run(
-        ("git", "status", "--porcelain"),
+        ("git", "status", "--porcelain", "--untracked-files=all"),
         cwd=root,
         check=True,
         capture_output=True,

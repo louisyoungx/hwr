@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Mapping, Sequence
+from xml.etree import ElementTree
 
 import numpy as np
 
@@ -35,6 +38,23 @@ TERMINAL_SCHEMA = "hwr.p52-tool-kinematics-terminal/v1"
 HALTON_SCHEMA = "digit-permuted-halton-fixed-zero/v1"
 QUANTILE_METHOD = "linear"
 POLICY_LATERAL_OFFSET = {"left": 0.31, "right": -0.31}
+ISOLATION_AUDIT_SCHEMA = "hwr.p52-action-isolation-audit/v1"
+MODEL_INPUT_SCHEMA = "hwr.p52-mujoco-xml-inputs/v1"
+FORBIDDEN_ACTION_SYMBOLS = frozenset({
+    "hwr.core.embodied.DualArmAction", "hwr.core.embodied.DualArmActionFrame",
+    "hwr.eval.target_selection.primitive_action",
+    "hwr.eval.target_selection.select_candidate_index",
+    "hwr.eval.target_selection.select_control_index",
+    "hwr.eval.target_selection.candidate_scores",
+})
+FORBIDDEN_CALL_NAMES = frozenset(
+    {
+        "DualArmAction", "DualArmActionFrame", "primitive_action",
+        "select_candidate_index", "select_control_index", "candidate_scores",
+        "apply", "step", "mj_step", "mj_step1", "mj_step2",
+        "_write_controls", "_advance_tool_targets",
+    }
+)
 
 
 class ToolKinematicsContractError(ValueError):
@@ -386,6 +406,134 @@ def frozen_decision(
     return "inconclusive"
 
 
+def audit_action_isolation(
+    sources: Mapping[str, str],
+) -> dict[str, object]:
+    violations: list[dict[str, object]] = []
+    audited_sources = []
+    for path, source in sorted(sources.items()):
+        content = source.encode("utf-8")
+        audited_sources.append({"path": path, **_identity(content)})
+        try:
+            tree = ast.parse(source, filename=path)
+        except SyntaxError as error:
+            violations.append(
+                {
+                    "path": path,
+                    "line": error.lineno or 0,
+                    "column": error.offset or 0,
+                    "kind": "syntax_error",
+                    "symbol": error.msg,
+                }
+            )
+            continue
+        aliases = _symbol_aliases(tree)
+        for node in ast.walk(tree):
+            for kind, symbol in _forbidden_node_uses(node, aliases):
+                violations.append(
+                    {
+                        "path": path,
+                        "line": int(getattr(node, "lineno", 0)),
+                        "column": int(getattr(node, "col_offset", 0)),
+                        "kind": kind,
+                        "symbol": symbol,
+                    }
+                )
+    violations.sort(
+        key=lambda value: (
+            value["path"],
+            value["line"],
+            value["column"],
+            value["kind"],
+            value["symbol"],
+        )
+    )
+    return {
+        "schema_version": ISOLATION_AUDIT_SCHEMA,
+        "passed": not violations,
+        "audited_source_count": len(audited_sources),
+        "audited_sources": audited_sources,
+        "forbidden_action_symbols": sorted(FORBIDDEN_ACTION_SYMBOLS),
+        "forbidden_call_names": sorted(FORBIDDEN_CALL_NAMES),
+        "violations": violations,
+    }
+
+
+def recursive_xml_input_identity(root: Path, entry: Path) -> dict[str, object]:
+    repository = root.resolve()
+    entry = entry.resolve()
+    pending, records = [entry], {}
+    while pending:
+        path = pending.pop()
+        relative = _relative_input_path(repository, path)
+        if relative in records:
+            continue
+        content = path.read_bytes()
+        document = ElementTree.fromstring(content)
+        includes = []
+        for element in document.iter():
+            if element.tag.rsplit("}", 1)[-1] != "include":
+                continue
+            include = element.attrib.get("file")
+            if not include:
+                raise ToolKinematicsContractError("MuJoCo include is missing file")
+            dependency = (path.parent / include).resolve()
+            includes.append(_relative_input_path(repository, dependency))
+            pending.append(dependency)
+        records[relative] = {
+            "path": relative,
+            **_identity(content),
+            "includes": sorted(includes),
+        }
+    dependencies = [records[path] for path in sorted(records)]
+    payload = {
+        "schema_version": MODEL_INPUT_SCHEMA,
+        "entry_model": _relative_input_path(repository, entry),
+        "dependencies": dependencies,
+    }
+    return {**payload, "identity": _identity(_canonical_bytes(payload))}
+
+
+def task_arm_replay_status(
+    first_reports: Sequence[Mapping[str, object]],
+    second_reports: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    first_by_task = _unique_task_reports(first_reports)
+    second_by_task = _unique_task_reports(second_reports)
+    records = []
+    extras = sorted((set(first_by_task) | set(second_by_task)) - set(TASK_IDS))
+    task_ids = (*TASK_IDS, *extras)
+    for task_id in task_ids:
+        for arm in ARM_ORDER:
+            first_payload = _task_arm_payload(first_by_task.get(task_id), arm)
+            second_payload = _task_arm_payload(second_by_task.get(task_id), arm)
+            first_content = None if first_payload is None else _canonical_bytes(first_payload)
+            second_content = None if second_payload is None else _canonical_bytes(second_payload)
+            records.append(
+                {
+                    "task_id": task_id,
+                    "arm": arm,
+                    "bit_identical": (
+                        first_content is not None
+                        and second_content is not None
+                        and first_content == second_content
+                    ),
+                    "first_payload": None if first_content is None else _identity(first_content),
+                    "second_payload": None if second_content is None else _identity(second_content),
+                }
+            )
+    expected = len(TASK_IDS) * len(ARM_ORDER)
+    return {
+        "expected_task_arm_count": expected,
+        "task_arm_count": len(records),
+        "all_bit_identical": (
+            len(records) == expected
+            and all(value["bit_identical"] for value in records)
+        ),
+        "task_arms": records,
+    }
+
+
 def _validated_joint_domain(
     qpos0: Mapping[str, Sequence[float]],
     joint_ranges: Mapping[str, Sequence[Sequence[float]]],
@@ -433,6 +581,192 @@ def _radical_inverse(
         result += permutation[digit] * factor
         factor /= base
     return result
+
+
+def _symbol_aliases(tree: ast.AST) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for item in node.names:
+                local = item.asname or item.name.split(".", 1)[0]
+                aliases[local] = item.name if item.asname else local
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for item in node.names:
+                if item.name != "*":
+                    aliases[item.asname or item.name] = (
+                        f"{node.module}.{item.name}"
+                    )
+    assignments = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+    ]
+    for _ in range(len(assignments) + 1):
+        changed = False
+        for node in assignments:
+            targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
+            value = _resolved_symbol(node.value, aliases)
+            if value is None:
+                continue
+            for target in targets:
+                if isinstance(target, ast.Name) and aliases.get(target.id) != value:
+                    aliases[target.id] = value
+                    changed = True
+        if not changed:
+            break
+    return aliases
+
+
+def _forbidden_node_uses(
+    node: ast.AST,
+    aliases: Mapping[str, str],
+) -> tuple[tuple[str, str], ...]:
+    uses = []
+    if isinstance(node, ast.Import):
+        for item in node.names:
+            reason = _forbidden_import(item.name)
+            if reason:
+                uses.append(("forbidden_import", reason))
+    elif isinstance(node, ast.ImportFrom) and node.module:
+        for item in node.names:
+            reason = _forbidden_import(f"{node.module}.{item.name}")
+            if reason:
+                uses.append(("forbidden_import", reason))
+    elif isinstance(node, ast.Call):
+        symbol = _resolved_symbol(node.func, aliases)
+        reason = _forbidden_call(symbol)
+        if reason:
+            uses.append(("forbidden_call", reason))
+        dynamic = _forbidden_dynamic_lookup(node, aliases)
+        if dynamic:
+            uses.append(("forbidden_dynamic_lookup", dynamic))
+    elif isinstance(node, (ast.Name, ast.Attribute)):
+        symbol = _resolved_symbol(node, aliases)
+        reason = _forbidden_reference(symbol)
+        if reason:
+            uses.append(("forbidden_reference", reason))
+    return tuple(uses)
+
+
+def _resolved_symbol(
+    node: ast.AST,
+    aliases: Mapping[str, str],
+) -> str | None:
+    if isinstance(node, ast.Name):
+        return aliases.get(node.id, node.id)
+    if isinstance(node, ast.Attribute):
+        owner = _resolved_symbol(node.value, aliases)
+        return node.attr if owner is None else f"{owner}.{node.attr}"
+    return None
+
+
+def _forbidden_import(symbol: str) -> str | None:
+    if symbol in FORBIDDEN_ACTION_SYMBOLS:
+        return symbol
+    tail = symbol.rsplit(".", 1)[-1]
+    if (
+        (
+            tail == "*"
+            and symbol.rsplit(".", 1)[0]
+            in {"hwr.core.embodied", "hwr.eval.target_selection"}
+        )
+        or tail in FORBIDDEN_CALL_NAMES
+        or tail.endswith("Action")
+        or tail.endswith("ActionFrame")
+        or tail.endswith("Backend")
+        or tail == "backend"
+        or tail.endswith("_backend")
+    ):
+        return symbol
+    module = symbol.rsplit(".", 1)[0] if "." in symbol else symbol
+    module_tail = module.rsplit(".", 1)[-1]
+    if (
+        module.startswith("hwr.adapters.mujoco.")
+        and (module_tail == "backend" or module_tail.endswith("_backend"))
+    ):
+        return symbol
+    return None
+
+
+def _forbidden_call(symbol: str | None) -> str | None:
+    if symbol is None:
+        return None
+    if symbol in FORBIDDEN_ACTION_SYMBOLS:
+        return symbol
+    tail = symbol.rsplit(".", 1)[-1]
+    return (
+        symbol
+        if (
+            tail in FORBIDDEN_CALL_NAMES
+            or tail.endswith("Action")
+            or tail.endswith("ActionFrame")
+        )
+        else None
+    )
+
+
+def _forbidden_reference(symbol: str | None) -> str | None:
+    if symbol is None or "." not in symbol:
+        return None
+    if symbol in FORBIDDEN_ACTION_SYMBOLS:
+        return symbol
+    return _forbidden_call(symbol)
+
+
+def _forbidden_dynamic_lookup(
+    node: ast.Call,
+    aliases: Mapping[str, str],
+) -> str | None:
+    function = _resolved_symbol(node.func, aliases)
+    if function not in {"getattr", "builtins.getattr"} and not str(function).endswith(".__getattribute__"):
+        return None
+    index = 0 if function.endswith("__getattribute__") else 1
+    if len(node.args) <= index or not isinstance(node.args[index], ast.Constant):
+        return None
+    name = node.args[index].value
+    return str(name) if name in FORBIDDEN_CALL_NAMES else None
+
+
+def _relative_input_path(root: Path, path: Path) -> str:
+    try:
+        relative = path.relative_to(root)
+    except ValueError as error:
+        raise ToolKinematicsContractError(
+            "MuJoCo XML dependency escapes repository root"
+        ) from error
+    if not path.is_file():
+        raise ToolKinematicsContractError(
+            f"MuJoCo XML dependency is unavailable: {relative.as_posix()}"
+        )
+    return relative.as_posix()
+
+
+def _unique_task_reports(
+    reports: Sequence[Mapping[str, object]],
+) -> dict[str, Mapping[str, object]]:
+    result = {}
+    for report in reports:
+        task_id = str(report["task_id"])
+        if task_id in result:
+            raise ToolKinematicsContractError("duplicate task replay report")
+        result[task_id] = report
+    return result
+
+
+def _task_arm_payload(
+    report: Mapping[str, object] | None,
+    arm: str,
+) -> dict[str, object] | None:
+    if report is None or arm not in report["by_arm"]:
+        return None
+    return {
+        "task_id": report["task_id"],
+        "arm": arm,
+        "summary": report["by_arm"][arm],
+        "terminals": [
+            value for value in report["terminals"] if value["arm"] == arm
+        ],
+    }
 
 
 def _finite_vector(
