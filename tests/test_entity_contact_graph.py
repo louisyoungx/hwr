@@ -30,7 +30,10 @@ TASKS, BINDINGS = load_default_formal_household_catalogs(ROOT)
 
 
 def _graph(
-    *, enabled: bool = True, excluded_initial_periods: int = 1
+    *,
+    enabled: bool = True,
+    excluded_initial_periods: int = 1,
+    timestep: float = 0.01,
 ) -> EntityContactGraph:
     return EntityContactGraph(
         all_geom_ids=(1, 2, 3, 4, 5, 6, 10, 11, 12, 13, 14, 15),
@@ -50,7 +53,7 @@ def _graph(
             14: "articulation:drawer",
             15: "forbidden:wall",
         },
-        timestep=0.01,
+        timestep=timestep,
         enabled=enabled,
         excluded_initial_periods=excluded_initial_periods,
         motion_source_by_entity={
@@ -213,6 +216,39 @@ def test_unordered_geom_pairs_are_summed_once_and_conserve_legacy_p40() -> None:
     assert set(conservation["categories"]) == set(CONTACT_CATEGORIES)
     assert report["task_relevant_world_world_contact_point_count"] == 2
     assert len(report["task_relevant_world_world_edges"]) == 2
+
+
+def test_long_trace_preserves_period_level_p40_summation_order() -> None:
+    graph = _graph(excluded_initial_periods=0, timestep=0.002)
+    ledger = ContactLedger(
+        robot_geoms=(1, 2, 3, 4, 5, 6),
+        allowed_role_by_geom={10: "manipulated_object"},
+        timestep=0.002,
+        enabled=True,
+    )
+    for period_index in range(1655):
+        graph.begin_control_period(_motion())
+        ledger.begin_control_period()
+        for substep in range(25):
+            force = 1000.0 / (period_index + substep + 1)
+            observations = (
+                EntityContactPointObservation(2, 10, force),
+                EntityContactPointObservation(10, 2, force / 3.0),
+            )
+            graph.record_substep(observations)
+            ledger.record_substep(
+                ContactPointObservation(
+                    value.geom1, value.geom2, value.normal_force
+                )
+                for value in observations
+            )
+        graph.end_control_period(_motion())
+        ledger.end_control_period()
+
+    conservation = p40_conservation_differences(graph.report(), ledger.report())
+
+    assert conservation["maximum_absolute_difference"] == 0.0
+    assert conservation["passed"] is True
 
 
 def test_same_distinct_single_and_grasp_qualified_contacts_do_not_mix() -> None:

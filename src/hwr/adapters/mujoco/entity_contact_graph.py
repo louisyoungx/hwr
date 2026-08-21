@@ -403,7 +403,6 @@ class EntityContactGraph:
             "timestep": self.timestep,
         }
         period["categories"][category].update(**values)
-        self._episode_categories[category].update(**values)
     def _update_edges(
         self,
         values: Mapping[tuple[str, str], list[tuple[float, int]]],
@@ -526,6 +525,15 @@ class EntityContactGraph:
             "substeps": list(period["substeps"]),
             "entity_motion": motions,
         }
+        for category in CONTACT_CATEGORIES:
+            source = period["categories"][category]
+            target = self._episode_categories[category]
+            target.pair_peak = max(target.pair_peak, source.pair_peak)
+            target.substep_peak = max(target.substep_peak, source.substep_peak)
+            target.impulse += source.impulse
+            target.contact_duration_seconds += source.contact_duration_seconds
+            target.contact_point_count += source.contact_point_count
+            target.pair_observation_count += source.pair_observation_count
         self._period = None
         self._periods.append(report)
         return report
