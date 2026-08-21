@@ -293,6 +293,7 @@ gripper、phase 时长、撤回、停止、environment seed、policy seed 和评
 - 工作分支：`feat/research-loop` 当前分支上的原子实现提交。
 - 允许修改：
   - 新增 `src/hwr/eval/target_selection.py`；
+  - 新增 `src/hwr/eval/target_selection_safety.py`；
   - 新增 `src/hwr/adapters/mujoco/target_selection_diagnostic.py`；
   - 新增 `src/hwr/apps/evaluate_target_selection.py`；
   - 新增 `tests/test_target_selection.py`；
@@ -301,6 +302,8 @@ gripper、phase 时长、撤回、停止、environment seed、policy seed 和评
 - 原则上不修改现有 backend、contact graph、policy、训练、task、reward、safety、success、
   配置或 package export。
 - app 可直接从新模块导入，避免为导出符号扩大所有权。
+- 实现审查发现 force/impulse 非劣与 MuJoCo bridge 合并会超过单文件 800 行门禁；因此在
+  行为实现提交前冻结新增上述纯统计模块。该拆分不改变输入、统计、门槛或运行范围。
 - 若必须越过上述边界，停止并交主 Agent 重新冻结。
 
 ### 冻结身份
