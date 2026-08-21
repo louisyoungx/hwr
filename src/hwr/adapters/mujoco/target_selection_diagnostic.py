@@ -704,5 +704,3 @@ def _canonical_sha256(value: object) -> str:
     payload = json.dumps(value, ensure_ascii=True, separators=(",", ":"),
                          sort_keys=True).encode()
     return hashlib.sha256(payload).hexdigest()
-
-

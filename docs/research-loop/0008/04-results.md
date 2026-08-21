@@ -303,4 +303,3 @@ twin-run 均 bit-identical。所有 branch：
 - 新家务任务成功：0；
 - qualified deployment：无；
 - 世界模型、Actor、任务成功率、泛化或硬件安全改善：无声明。
-
