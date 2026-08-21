@@ -757,7 +757,14 @@ entity 分区必须发布。
 
 smoke：
 
-- 每 task 2 个非正式 seed；
+- 本节的精确 smoke 设计取代前文 Same-index bit identity 第 2 条中
+  “每个 task × observation latency × action latency 至少 2 个 seed”的宽泛表述；
+- 每 task 固定两个 supported 自然 latency cell：
+  - `(observation latency=1, action latency=1)`；
+  - `(observation latency=2, action latency=2)`；
+- 每 cell 1 pair，共 6 pair、12 branch Episode；
+- seed 只按自然 evaluation profile 的 sampled latency 作结果前 rejection，所有 rejected
+  seed 均写入 plan audit；
 - 强制 same index twin-run；
 - 只验证 candidate-set nonempty、contract、bit-identity、运行时和产物；
 - 不比较 selector 优劣；
