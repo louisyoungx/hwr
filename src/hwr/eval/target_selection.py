@@ -412,8 +412,18 @@ def primitive_action(
     left_velocity = right_velocity = np.zeros(3, np.float64)
     if left_target is not None and right_target is not None:
         left_tool, right_tool = tool_positions_in_acquisition(value, origin)
-        left_velocity = _clip_norm(2.0 * (left_target - left_tool), velocity_max)
-        right_velocity = _clip_norm(2.0 * (right_target - right_tool), velocity_max)
+        left_velocity = acquisition_error_to_base_velocity(
+            left_target - left_tool,
+            velocity_max,
+            acquisition_yaw=origin[2],
+            current_base_yaw=value.base_pose[2],
+        )
+        right_velocity = acquisition_error_to_base_velocity(
+            right_target - right_tool,
+            velocity_max,
+            acquisition_yaw=origin[2],
+            current_base_yaw=value.base_pose[2],
+        )
     action = np.asarray(
         (
             base_linear, base_angular,
@@ -442,6 +452,40 @@ def tool_positions_in_acquisition(
     return (
         _transform_point(transform, _tool_position(value.left_joint_position, 0.31)),
         _transform_point(transform, _tool_position(value.right_joint_position, -0.31)),
+    )
+
+
+def acquisition_error_to_base_velocity(
+    acquisition_error: Sequence[float],
+    velocity_max: float,
+    *,
+    acquisition_yaw: float,
+    current_base_yaw: float,
+) -> np.ndarray:
+    error = np.asarray(acquisition_error, np.float64)
+    yaws = (float(acquisition_yaw), float(current_base_yaw))
+    if error.shape != (3,) or not np.isfinite(error).all():
+        raise TargetSelectionContractError(
+            "acquisition error must have three finite values"
+        )
+    if not math.isfinite(velocity_max) or velocity_max < 0.0:
+        raise TargetSelectionContractError(
+            "Cartesian velocity maximum must be finite and nonnegative"
+        )
+    if not all(math.isfinite(yaw) for yaw in yaws):
+        raise TargetSelectionContractError("base yaws must be finite")
+    velocity = _clip_norm(2.0 * error, velocity_max)
+    relative_yaw = yaws[0] - yaws[1]
+    if relative_yaw == 0.0:
+        return velocity.copy()
+    cosine, sine = math.cos(relative_yaw), math.sin(relative_yaw)
+    return np.asarray(
+        (
+            cosine * velocity[0] - sine * velocity[1],
+            sine * velocity[0] + cosine * velocity[1],
+            velocity[2],
+        ),
+        np.float64,
     )
 
 

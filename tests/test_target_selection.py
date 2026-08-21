@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 
 import numpy as np
 import pytest
@@ -11,6 +12,7 @@ from hwr.eval.target_selection import (
     PolicyVisibleInput,
     TargetSelectionContractError,
     _candidate_from_points,
+    acquisition_error_to_base_velocity,
     candidate_scores,
     deserialize_policy_input,
     primitive_action,
@@ -21,9 +23,15 @@ from hwr.eval.target_selection import (
 from hwr.eval.target_selection_safety import paired_primary_statistics
 
 
-def _input(*, phase_step: int = 0, safety_state: str = "ok") -> PolicyVisibleInput:
+def _input(
+    *,
+    phase_step: int = 0,
+    safety_state: str = "ok",
+    base_pose: tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> PolicyVisibleInput:
     proprioception = np.zeros(37, dtype="<f8")
     proprioception[24:26] = 0.25
+    proprioception[26:29] = base_pose
     return PolicyVisibleInput(
         observation_timestamp_ns=50_000_000,
         sequence_id=3,
@@ -143,6 +151,139 @@ def test_primitive_is_same_index_bit_identical_and_uses_frozen_bounds() -> None:
         550,
     )
     assert stopped == (0.0, 0.0, *(0.0,) * 12, 0.25, 0.25)
+
+
+@pytest.mark.parametrize(
+    ("acquisition_yaw", "relative_yaw"),
+    (
+        (0.0, 0.0),
+        (math.pi / 3.0, math.pi / 6.0),
+        (-math.pi / 2.0, -math.pi / 2.0),
+        (math.pi / 3.0, math.pi),
+    ),
+)
+def test_acquisition_error_is_clipped_then_rotated_into_current_base(
+    acquisition_yaw: float,
+    relative_yaw: float,
+) -> None:
+    error = np.asarray((0.3, -0.4, 0.5), np.float64)
+    velocity_max = 0.08
+    clipped = 2.0 * error
+    clipped *= velocity_max / np.linalg.norm(clipped)
+    current_yaw = acquisition_yaw + relative_yaw
+
+    actual = acquisition_error_to_base_velocity(
+        error,
+        velocity_max,
+        acquisition_yaw=acquisition_yaw,
+        current_base_yaw=current_yaw,
+    )
+    cosine, sine = math.cos(-relative_yaw), math.sin(-relative_yaw)
+    expected = np.asarray(
+        (
+            cosine * clipped[0] - sine * clipped[1],
+            sine * clipped[0] + cosine * clipped[1],
+            clipped[2],
+        )
+    )
+
+    assert actual == pytest.approx(expected, abs=1e-15)
+    assert np.linalg.norm(actual) == pytest.approx(velocity_max, abs=1e-15)
+    assert actual[2] == clipped[2]
+    if relative_yaw == 0.0:
+        assert actual.astype("<f8").tobytes() == clipped.astype("<f8").tobytes()
+
+
+def test_primitive_rotates_only_linear_arm_commands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hwr.eval.target_selection as target_selection
+
+    monkeypatch.setattr(
+        target_selection,
+        "tool_positions_in_acquisition",
+        lambda value, origin: (np.zeros(3), np.zeros(3)),
+    )
+    payload = serialize_policy_input(
+        _input(base_pose=(0.0, 0.0, math.pi / 2.0))
+    )
+    candidate = _candidate_set().candidates[0]
+
+    action = np.asarray(
+        primitive_action(payload, candidate, (0.0, 0.0, 0.0), 400),
+        np.float64,
+    )
+    spacing = candidate.width + 0.12
+    left_error = np.asarray((0.82, 0.5 * spacing, 0.75))
+    right_error = np.asarray((0.82, -0.5 * spacing, 0.75))
+    expected_left = acquisition_error_to_base_velocity(
+        left_error,
+        0.08,
+        acquisition_yaw=0.0,
+        current_base_yaw=math.pi / 2.0,
+    )
+    expected_right = acquisition_error_to_base_velocity(
+        right_error,
+        0.08,
+        acquisition_yaw=0.0,
+        current_base_yaw=math.pi / 2.0,
+    )
+    zero_yaw_action = np.asarray(
+        primitive_action(
+            serialize_policy_input(_input()),
+            candidate,
+            (0.0, 0.0, 0.0),
+            400,
+        ),
+        dtype="<f8",
+    )
+    monkeypatch.setattr(
+        target_selection,
+        "acquisition_error_to_base_velocity",
+        lambda error, maximum, **kwargs: target_selection._clip_norm(
+            2.0 * np.asarray(error, np.float64), maximum
+        ),
+    )
+    legacy_action = np.asarray(
+        primitive_action(
+            serialize_policy_input(_input()),
+            candidate,
+            (0.0, 0.0, 0.0),
+            400,
+        ),
+        dtype="<f8",
+    )
+
+    assert action[:2].tolist() == [0.0, 0.0]
+    assert action[2:5] == pytest.approx(expected_left / 0.30)
+    assert action[5:8].tolist() == [0.0, 0.0, 0.0]
+    assert action[8:11] == pytest.approx(expected_right / 0.30)
+    assert action[11:14].tolist() == [0.0, 0.0, 0.0]
+    assert action[14:].tolist() == [0.0, 0.0]
+    assert np.max(np.abs(action)) <= 0.35
+    assert zero_yaw_action.tobytes() == legacy_action.tobytes()
+
+
+@pytest.mark.parametrize(
+    ("error", "velocity_max", "message"),
+    (
+        ((1.0, 2.0), 0.08, "three finite"),
+        ((1.0, 2.0, float("nan")), 0.08, "three finite"),
+        ((1.0, 2.0, 3.0), -0.01, "finite and nonnegative"),
+    ),
+)
+def test_acquisition_error_rotation_fails_closed(
+    error: tuple[float, ...],
+    velocity_max: float,
+    message: str,
+) -> None:
+    with pytest.raises(TargetSelectionContractError, match=message):
+        acquisition_error_to_base_velocity(
+            error,
+            velocity_max,
+            acquisition_yaw=0.0,
+            current_base_yaw=0.0,
+        )
 
 
 def test_primary_statistics_keep_all_supported_itt_pairs() -> None:
