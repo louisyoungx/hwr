@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import asdict
 
 import pytest
 
@@ -45,6 +46,46 @@ def _idle(observation) -> DualArmActionFrame:
         "test_policy",
         action,
     )
+
+
+def _measurement_trace(enabled: bool) -> tuple[list[dict[str, object]], dict[str, object]]:
+    task_id = "clear_dining_table_3d/v1"
+    backend = MujocoFormalHouseholdDualArmBackend(
+        TASKS[task_id],
+        BINDINGS[task_id],
+        camera_width=16,
+        camera_height=12,
+        evaluation_profile=True,
+    )
+    trace = []
+    try:
+        backend.contact_ledger.set_enabled(enabled)
+        observation = backend.reset(seed=20264001, task_id=task_id)
+        backend.set_camera_rendering(False)
+        for _ in range(3):
+            outcome = backend.apply(_idle(observation))
+            observation = outcome.observation
+            audit = backend.task_audit()
+            result = backend.result()
+            trace.append(
+                {
+                    "applied_action": outcome.info["applied_action"].action.vector(),
+                    "proprioception": asdict(observation.proprioception),
+                    "reward": outcome.reward,
+                    "terminated": outcome.terminated,
+                    "truncated": outcome.truncated,
+                    "success": None if result is None else result.success,
+                    "reason": None if result is None else result.reason,
+                    "severe_collision_count": audit["severe_collision_count"],
+                    "maximum_forbidden_force": audit["maximum_forbidden_force"],
+                    "maximum_forbidden_pair": audit["maximum_forbidden_pair"],
+                    "safety_intervened": outcome.info["safety_intervened"],
+                }
+            )
+        ledger = backend.contact_ledger.report()
+    finally:
+        backend.close()
+    return trace, ledger
 
 
 @pytest.mark.parametrize("task_id", sorted(TASKS))
@@ -281,6 +322,25 @@ def test_formal_runtime_can_defer_and_resume_camera_rendering() -> None:
     )
     assert resumed.sequence_id == observation.sequence_id + 1
     assert resumed.cameras[0].timestamp_ns == resumed.timestamp_ns
+
+
+def test_contact_measurement_does_not_change_legacy_runtime_or_safety_trace() -> None:
+    disabled_trace, disabled_ledger = _measurement_trace(False)
+    enabled_trace, enabled_ledger = _measurement_trace(True)
+
+    assert enabled_trace == disabled_trace
+    assert disabled_ledger["enabled"] is False
+    assert disabled_ledger["control_period_count"] == 0
+    assert enabled_ledger["enabled"] is True
+    assert enabled_ledger["control_period_count"] == 3
+    assert enabled_ledger["contract_valid"] is True
+    assert set(enabled_ledger["categories"]) == {
+        "floor_support",
+        "manipulated_object",
+        "target_container",
+        "articulation",
+        "forbidden",
+    }
 
 
 def test_formal_runtime_rejects_predicted_severe_collision_before_commit() -> None:

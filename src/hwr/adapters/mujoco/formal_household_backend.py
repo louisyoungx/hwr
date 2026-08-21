@@ -14,6 +14,7 @@ import numpy as np
 
 from hwr.adapters.mujoco.bindings import MujocoTaskBinding
 from hwr.adapters.mujoco.contact import GraspContactMonitor
+from hwr.adapters.mujoco.contact_ledger import contact_ledger_from_binding
 from hwr.adapters.mujoco.dual_arm_backend import (
     MujocoDualArmBackend,
     MujocoDualArmConfig,
@@ -110,6 +111,7 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
             )
         )
         self.household_ids = self._resolve_household_ids()
+        self.contact_ledger = contact_ledger_from_binding(self.model, self.household_ids.robot_geoms, binding)
         self._defaults = self._capture_defaults()
         self._placement = MultiObjectStabilityCriterion(
             tuple(item.object_id for item in task.objects),
@@ -245,6 +247,7 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
         self._severe_collision_count = 0
         self._maximum_forbidden_force = 0.0
         self._maximum_forbidden_pair = None
+        self.contact_ledger.reset()
         self._left_contact_steps = 0
         self._right_contact_steps = 0
         self._simultaneous_contact_steps = 0
@@ -498,9 +501,11 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
         self._step_left_contact |= left
         self._step_right_contact |= right
         self._scan_forbidden_contacts()
+        self.contact_ledger.sample_mujoco_substep(self.model, self.data)
 
     def _after_control_step(self, action: DualArmActionFrame) -> None:
         del action
+        self.contact_ledger.end_control_period()
         self._left_contact_steps += int(self._step_left_contact)
         self._right_contact_steps += int(self._step_right_contact)
         simultaneous = self._step_left_contact and self._step_right_contact
@@ -734,10 +739,8 @@ class MujocoFormalHouseholdDualArmBackend(MujocoDualArmBackend):
             payload[rng.random(payload.shape) < dropout] = 0.0
         return replace(frame, payload=np.ascontiguousarray(payload).tobytes())
 
-
 def _json_copy(value: dict[str, Any]) -> dict[str, Any]:
     return json.loads(json.dumps(value, sort_keys=True))
-
 
 def _canonical_sha256(value: object) -> str:
     payload = json.dumps(

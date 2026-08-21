@@ -8,6 +8,15 @@ from hwr.adapters.mujoco.bimanual_bindings import (
 )
 from hwr.adapters.mujoco.bindings import MujocoTaskBinding, load_mujoco_task_bindings
 from hwr.adapters.mujoco.contact import GraspContactMonitor, GraspContactSample
+from hwr.adapters.mujoco.contact_ledger import (
+    ALLOWED_CONTACT_ROLES,
+    CONTACT_CATEGORIES,
+    ContactLedger,
+    ContactLedgerError,
+    ContactPointObservation,
+    resolve_allowed_contact_role_ids,
+    run_timestep_stability_fixture,
+)
 from hwr.adapters.mujoco.dual_arm_backend import MujocoDualArmBackend, MujocoDualArmConfig
 from hwr.adapters.mujoco.evidence import (
     BIMANUAL_EVIDENCE_VIEWS,
@@ -44,12 +53,17 @@ __all__ = [
     "BimanualMujocoBinding",
     "GraspContactMonitor",
     "GraspContactSample",
+    "ContactLedger",
+    "ContactLedgerError",
+    "ContactPointObservation",
     "ContactGraspReport",
     "FormalExpertOutput",
     "PrivilegedCartesianExpert",
     "PrivilegedHouseholdExpert",
     "RobotModelReport",
     "BIMANUAL_EVIDENCE_VIEWS",
+    "ALLOWED_CONTACT_ROLES",
+    "CONTACT_CATEGORIES",
     "ScenePreview",
     "inspect_robot_model",
     "load_mujoco_task_bindings",
@@ -57,5 +71,7 @@ __all__ = [
     "load_default_bimanual_training_catalogs",
     "load_default_formal_household_catalogs",
     "render_scene_preview",
+    "resolve_allowed_contact_role_ids",
+    "run_timestep_stability_fixture",
     "run_contact_grasp_trial",
 ]

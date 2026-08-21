@@ -8,7 +8,13 @@
         "duck": {"body": "toy_duck", "joint": "toy_duck_free", "collision_geom": "toy_duck_collision", "target_site": "living_target_volume"},
         "football": {"body": "toy_football", "joint": "toy_football_free", "collision_geom": "toy_football_collision", "target_site": "living_target_volume"}
       },
-      "allowed_robot_contact_geoms": ["floor", "toy_duck_collision", "toy_football_collision", "basket_front_collision", "basket_back_collision", "basket_left_collision", "basket_right_collision", "basket_bottom_collision"]
+      "allowed_robot_contact_geoms": ["floor", "toy_duck_collision", "toy_football_collision", "basket_front_collision", "basket_back_collision", "basket_left_collision", "basket_right_collision", "basket_bottom_collision"],
+      "allowed_robot_contact_roles": {
+        "floor_support": ["floor"],
+        "manipulated_object": ["toy_duck_collision", "toy_football_collision"],
+        "target_container": ["basket_front_collision", "basket_back_collision", "basket_left_collision", "basket_right_collision", "basket_bottom_collision"],
+        "articulation": []
+      }
     },
     {
       "task_id": "clear_dining_table_3d/v1",
@@ -17,7 +23,13 @@
         "cup": {"body": "dining_cup", "joint": "dining_cup_free", "collision_geom": "dining_cup_collision", "target_site": "cup_target_volume"},
         "plate": {"body": "dining_plate", "joint": "dining_plate_free", "collision_geom": "dining_plate_collision", "target_site": "plate_target_volume"}
       },
-      "allowed_robot_contact_geoms": ["floor", "dining_cup_collision", "dining_plate_collision", "cup_holder", "plate_holder"]
+      "allowed_robot_contact_geoms": ["floor", "dining_cup_collision", "dining_plate_collision", "cup_holder", "plate_holder"],
+      "allowed_robot_contact_roles": {
+        "floor_support": ["floor"],
+        "manipulated_object": ["dining_cup_collision", "dining_plate_collision"],
+        "target_container": ["cup_holder", "plate_holder"],
+        "articulation": []
+      }
     },
     {
       "task_id": "store_kitchen_items_3d/v1",
@@ -27,7 +39,13 @@
         "cleaner_pink": {"body": "cleaner_pink", "joint": "cleaner_pink_free", "collision_geom": "cleaner_pink_collision", "target_site": "pink_target_volume"}
       },
       "articulation": {"articulation_id": "drawer", "joint": "kitchen_drawer_slide", "handle_geom": "drawer_handle"},
-      "allowed_robot_contact_geoms": ["floor", "cleaner_yellow_collision", "cleaner_pink_collision", "drawer_handle", "drawer_bottom", "drawer_front", "drawer_back", "drawer_left", "drawer_right", "drawer_divider"]
+      "allowed_robot_contact_geoms": ["floor", "cleaner_yellow_collision", "cleaner_pink_collision", "drawer_handle", "drawer_bottom", "drawer_front", "drawer_back", "drawer_left", "drawer_right", "drawer_divider"],
+      "allowed_robot_contact_roles": {
+        "floor_support": ["floor"],
+        "manipulated_object": ["cleaner_yellow_collision", "cleaner_pink_collision"],
+        "target_container": ["drawer_bottom", "drawer_front", "drawer_back", "drawer_left", "drawer_right", "drawer_divider"],
+        "articulation": ["drawer_handle"]
+      }
     }
   ]
 }
