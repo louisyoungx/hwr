@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -88,6 +89,17 @@ def test_parser_enforces_frozen_mode_salts() -> None:
                 ["--output", "x", "--salt", app.FORMAL_SALT, "--smoke"]
             )
         )
+
+
+def test_frozen_p40_artifact_hashes_match_current_evidence() -> None:
+    root = Path(app.__file__).resolve().parents[3]
+
+    assert app._file_identity(root, root / app.P40_REPORT)["sha256"] == (
+        app.P40_REPORT_SHA256
+    )
+    assert app._file_identity(root, root / app.P40_MANIFEST)["sha256"] == (
+        app.P40_MANIFEST_SHA256
+    )
 
 
 def test_exact_power_is_replayable_and_selects_frozen_54_pairs() -> None:

@@ -272,7 +272,14 @@ git diff --check
 - 最终 P40-E2 report：
   `runs/research-loop/0008/r0008-p40-entity-contact-e2-s20264002/report.json`
 - report SHA-256：
-  `ac311f4b7ed05010d5e5b940ab40675df584fa65018f9e9d9a2daa7ea8d956d1`
+  `987a2217cf9f5c6eb08b018b3bf13164917c75bccbfa77140a8786c80987f841`
+- manifest SHA-256：
+  `fdb847a41f55a7a3bb362d650baa2d131e2a5178ac73166336d57368ba60546b`
+- P40-E2 数值顺序修复提交：
+  `8b79597a6af36233b1a2e6437c769db12567f88c`。该修复只令 episode category
+  与 P40-E1 一样按 control period 累加，未改变 P41 的候选、score、phase、primitive、
+  阈值、salt、样本量或判定标准。旧 `cefb240` 产物和首次 provenance 拒绝均保留为
+  superseded 证据；本节在新 smoke Episode 执行前重绑定上述固定哈希。
 - P41-E2 研究问题：
 
 > 在相同 policy-visible 几何候选集、相同采集阶段、相同双臂 assignment、相同 Cartesian
