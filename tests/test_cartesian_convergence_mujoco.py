@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -64,6 +65,31 @@ def test_treatment_injection_changes_only_arm_linear_xy() -> None:
     assert guard["different_bytes"] is True
     assert guard["only_arm_linear_xy_differs"] is True
     assert guard["arm_action_noncollapsed"] is True
+
+
+def test_noncollinear_b1_pose_targets_match_primitive_actual_errors() -> None:
+    candidate = _candidate()
+    value = _policy_input()
+    proprioception = value.proprioception.copy()
+    proprioception[26:29] = (0.17, -0.11, np.pi / 2.0)
+    value = replace(value, proprioception=proprioception)
+    payload = target_selection.serialize_policy_input(value)
+    targets = bridge.preposition_targets(
+        candidate, (0.0, 0.0, 0.0), value.base_pose
+    )
+
+    _, crosscheck = bridge._fixed_action_with_target_crosscheck(
+        payload, candidate, (0.0, 0.0, 0.0), targets
+    )
+
+    assert crosscheck["passed"] is True
+    assert len(crosscheck["actual_error_calls"]) == 2
+    assert crosscheck["reconstructed_targets"]["left"] == pytest.approx(
+        targets["left"]
+    )
+    assert crosscheck["reconstructed_targets"]["right"] == pytest.approx(
+        targets["right"]
+    )
 
 
 def test_continuation_identity_covers_queues_history_and_counters(

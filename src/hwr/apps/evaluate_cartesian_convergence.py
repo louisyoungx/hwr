@@ -40,7 +40,6 @@ from hwr.eval.cartesian_convergence import (
     TERMINAL_SCHEMA,
     CartesianConvergenceContractError,
     analyze_terminals,
-    canonical_bytes,
     frozen_cells,
     pair_identity,
     raw_seed_record,
@@ -59,7 +58,8 @@ MODULE_NAME = "hwr.apps.evaluate_cartesian_convergence"
 REPORT_SCHEMA = "hwr.p51-cartesian-convergence-report/v1"
 MANIFEST_SCHEMA = "hwr.p51-cartesian-convergence-artifacts/v1"
 FAILURE_SCHEMA = "hwr.p51-cartesian-convergence-failure/v1"
-FROZEN_DOCUMENT_COMMIT = "5fad6cec27e8f797c31a202497745a5616ab220b"
+FROZEN_DOCUMENT_COMMIT = "2d1752f2c0c8b9e39d7f3ebaa8e9ff0ec1d13f38"
+FROZEN_DOCUMENT_PATH = Path("docs/research-loop/0010/03-experiment.md")
 BINDING_PATH = Path("configs/adapters/mujoco/formal_3d_v1.json")
 TASK_PATH = Path("configs/tasks/formal_3d_v1.json")
 SOURCE_PATHS = (
@@ -79,10 +79,15 @@ SOURCE_PATHS = (
     Path("src/hwr/adapters/mujoco/model.py"),
     Path("src/hwr/adapters/mujoco/training_catalog.py"),
     Path("src/hwr/core/embodied.py"),
+    Path("src/hwr/core/runtime.py"),
+    Path("src/hwr/core/state_snapshot.py"),
+    Path("src/hwr/core/types.py"),
     Path("src/hwr/safety/dual_arm.py"),
+    Path("src/hwr/safety/supervisor.py"),
     Path("src/hwr/scenarios/formal3d.py"),
-    Path("docs/research-loop/0010/03-experiment.md"),
+    FROZEN_DOCUMENT_PATH,
 )
+SOURCE_TREES = (Path("src/hwr"), Path("configs"), Path("assets"))
 HISTORICAL_TREES = {
     "docs/research-loop/0001": "416912b7dc1c19611bcfc4375028180014a1989b",
     "docs/research-loop/0002": "6fb603dbd52451fe1749157daf05aa482ca7222f",
@@ -168,7 +173,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
             validate_bank(bank)
             _require_bank_provenance(root, bank, identities)
             terminals = evaluate_bank(root, bank)
-            analysis = analyze_terminals(terminals)
+            analysis = analyze_terminals(terminals, bank)
             report = _evaluation_report(bank, terminals, analysis)
             identities["bank"] = bank_identity
             artifacts = {
@@ -243,9 +248,8 @@ def build_bank(
                 cell.action_latency_steps,
             )
             audit = {
+                **cell.to_dict(),
                 **seed,
-                "cell_id": cell.cell_id,
-                "task_id": cell.task_id,
                 "sampled_observation_latency_steps": sampled[0],
                 "sampled_action_latency_steps": sampled[1],
                 "latency_matched": matched,
@@ -268,9 +272,7 @@ def build_bank(
                     order_seed, order = role_order(salt, pair_id)
                     cell_pairs.append(
                         {
-                            **cell.to_dict(),
-                            **seed,
-                            **prefix,
+                            **audit,
                             "pair_id": pair_id,
                             "replicate_ordinal": len(cell_pairs),
                             "role_order_domain_seed": order_seed,
@@ -346,7 +348,7 @@ def evaluate_bank(
         except Exception as error:
             record = _unresolved_record(pair, error)
         records.append(record)
-        if record.get("hard_safety_stop"):
+        if record.get("hard_safety_stop") or not record.get("resolved"):
             break
     return {
         "schema_version": TERMINAL_SCHEMA,
@@ -488,6 +490,10 @@ def _source_identities(root: Path) -> dict[str, object]:
     }
     robot = root / "assets/mujoco/common/robot_body.xml"
     values["robot_model"] = _file_identity(root, robot)
+    values["git_trees"] = {
+        path.as_posix(): _git_output(root, ("rev-parse", f"HEAD:{path}"))
+        for path in SOURCE_TREES
+    }
     return values
 
 
@@ -503,25 +509,28 @@ def _require_clean_source(
     )
     if status.stdout.strip():
         raise RuntimeError("P51-E1 runner requires clean committed source")
-    ancestor = subprocess.run(
-        (
-            "git",
-            "merge-base",
-            "--is-ancestor",
-            FROZEN_DOCUMENT_COMMIT,
-            "HEAD",
-        ),
-        cwd=root,
-        check=False,
-    )
-    if ancestor.returncode:
-        raise RuntimeError("P51-E1 frozen document commit is not an ancestor")
+    _require_frozen_document(root)
     for path, expected in HISTORICAL_TREES.items():
         actual = _git_output(root, ("rev-parse", f"HEAD:{path}"))
         if actual != expected:
             raise RuntimeError(f"historical research-loop tree drifted: {path}")
     if not identities:
         raise RuntimeError("P51-E1 source provenance is empty")
+
+
+def _require_frozen_document(root: Path) -> None:
+    expected = subprocess.run(
+        (
+            "git",
+            "show",
+            f"{FROZEN_DOCUMENT_COMMIT}:{FROZEN_DOCUMENT_PATH.as_posix()}",
+        ),
+        cwd=root,
+        check=True,
+        capture_output=True,
+    ).stdout
+    if (root / FROZEN_DOCUMENT_PATH).read_bytes() != expected:
+        raise RuntimeError("P51-E1 frozen experiment document content drifted")
 
 
 def _require_committed_bank(root: Path, bank_path: Path) -> dict[str, object]:
@@ -557,6 +566,8 @@ def _require_committed_bank(root: Path, bank_path: Path) -> dict[str, object]:
 
 def _require_bank_provenance(root, bank, current) -> None:
     source = str(bank.get("source_commit", ""))
+    if bank.get("frozen_document_commit") != FROZEN_DOCUMENT_COMMIT:
+        raise RuntimeError("bank frozen document commit differs")
     if subprocess.run(
         ("git", "merge-base", "--is-ancestor", source, "HEAD"),
         cwd=root,

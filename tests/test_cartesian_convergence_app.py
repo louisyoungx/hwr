@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -10,6 +11,9 @@ import pytest
 from hwr.apps import evaluate_cartesian_convergence as app
 from hwr.eval import cartesian_convergence as convergence
 from hwr.eval.seed_contract import seed_commitment
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_cli_requires_mode_specific_inputs_and_frozen_commitment() -> None:
@@ -215,7 +219,7 @@ def test_evaluate_mode_never_reads_salt_and_writes_bound_artifacts(
     monkeypatch.setattr(app, "validate_bank", lambda value: None)
     monkeypatch.setattr(app, "_require_bank_provenance", lambda *values: None)
     monkeypatch.setattr(app, "evaluate_bank", lambda root, value: terminals)
-    monkeypatch.setattr(app, "analyze_terminals", lambda value: analysis)
+    monkeypatch.setattr(app, "analyze_terminals", lambda value, bank: analysis)
     monkeypatch.setattr(
         app,
         "read_seed_salt",
@@ -265,6 +269,47 @@ def test_failure_writes_failure_and_manifest(tmp_path, monkeypatch) -> None:
     assert failure["decision"] == "invalid"
     assert manifest["status"] == "failed"
     assert set(manifest["artifacts"]) == {"failure.json"}
+
+
+def test_frozen_document_matches_main_commit_and_tamper_fails(
+    tmp_path, monkeypatch
+) -> None:
+    app._require_frozen_document(ROOT)
+    expected = (ROOT / app.FROZEN_DOCUMENT_PATH).read_bytes()
+    target = tmp_path / app.FROZEN_DOCUMENT_PATH
+    target.parent.mkdir(parents=True)
+    target.write_bytes(expected)
+    monkeypatch.setattr(
+        app.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(stdout=expected),
+    )
+    app._require_frozen_document(tmp_path)
+    target.write_bytes(expected + b"\ntampered\n")
+    with pytest.raises(RuntimeError, match="document content drifted"):
+        app._require_frozen_document(tmp_path)
+
+
+def test_source_tree_identity_and_bank_dependency_drift_fail_closed(
+    monkeypatch,
+) -> None:
+    identities = app._source_identities(ROOT)
+    assert set(identities["git_trees"]) == {"src/hwr", "configs", "assets"}
+    assert app.FROZEN_DOCUMENT_PATH.as_posix() in identities
+    bank = {
+        "source_commit": "a" * 40,
+        "frozen_document_commit": app.FROZEN_DOCUMENT_COMMIT,
+        "source_identities": copy.deepcopy(identities),
+    }
+    monkeypatch.setattr(
+        app.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0),
+    )
+    app._require_bank_provenance(ROOT, bank, identities)
+    del bank["source_identities"]["src/hwr/core/runtime.py"]
+    with pytest.raises(RuntimeError, match="identity drifted"):
+        app._require_bank_provenance(ROOT, bank, identities)
 
 
 class _FakeBridge:
@@ -337,8 +382,19 @@ def _prefix() -> dict[str, object]:
         "selected_index": 0,
         "selected_record": candidate,
         "relative_yaw_at_b2": 1.0,
+        "acquisition_input_hashes": ["c" * 64],
+        "acquisition_input_sequence_sha256": "d" * 64,
+        "b0_b1_proposed_action_sha256": "e" * 64,
+        "b0_b1_applied_action_sha256": "f" * 64,
+        "acquisition_base_pose": [0.0, 0.0, 0.0],
+        "acquisition_world_origin": [0.0, 0.0, 0.22],
         "continuation_identity": {"identity": {"sha256": "a" * 64}},
         "prefix_trace_sha256": "b" * 64,
+        "preposition_targets": {
+            "left": [0.82, 0.12, 0.75],
+            "right": [0.82, -0.12, 0.75],
+        },
+        "primitive_target_crosscheck": {"passed": True},
         "first_treatment_actions": actions,
         "first_treatment_guard": convergence.first_treatment_guard(
             actions["frame_legacy"], actions["frame_fixed"]

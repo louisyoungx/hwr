@@ -76,6 +76,8 @@ class _PrefixRun:
     continuation_identity: dict[str, object]
     first_actions: dict[str, tuple[float, ...]]
     first_guard: dict[str, object]
+    preposition_targets: dict[str, tuple[float, float, float]]
+    primitive_target_crosscheck: dict[str, object]
 
     @property
     def candidate(self) -> Candidate | None:
@@ -127,6 +129,13 @@ class CartesianConvergenceMujoco:
                     and run.selected_index == expected_index
                     and canonical_sha256(run.trace) == expected_trace
                     and run.first_guard == pair["first_treatment_guard"]
+                    and {
+                        name: list(value)
+                        for name, value in run.preposition_targets.items()
+                    }
+                    == pair["preposition_targets"]
+                    and run.primitive_target_crosscheck
+                    == pair["primitive_target_crosscheck"]
                     and {
                         value: list(action)
                         for value, action in run.first_actions.items()
@@ -296,7 +305,7 @@ class CartesianConvergenceMujoco:
                 failure,
             )
             failure = failure or _final_prefix_failure(backend, graph)
-            first_actions, first_guard = _first_actions(
+            first_actions, first_guard, targets, target_check = _first_actions(
                 observation,
                 history,
                 available,
@@ -310,6 +319,8 @@ class CartesianConvergenceMujoco:
             )
             if failure is None and abs(relative_yaw) < math.pi / 6.0:
                 failure = "relative_yaw_below_pi_over_6"
+            if failure is None and not target_check["passed"]:
+                failure = "primitive_target_crosscheck_failed"
             if failure is None and not treatment_guard_passes(first_guard):
                 failure = "first_treatment_action_ineligible"
             identity = continuation_identity(
@@ -333,6 +344,8 @@ class CartesianConvergenceMujoco:
                 identity,
                 first_actions,
                 first_guard,
+                targets,
+                target_check,
             )
         except BaseException:
             backend.close()
@@ -344,7 +357,22 @@ class CartesianConvergenceMujoco:
             raise CartesianConvergenceContractError(
                 "ineligible prefix entered B2"
             )
-        targets = preposition_targets(run.candidate)
+        first_payload = policy_input_bytes(
+            run.observation,
+            run.history,
+            run.history_available,
+            run.policy_rng_seed,
+            phase_index=B2_PHASE_INDEX,
+            phase_step=0,
+        )
+        current_pose = deserialize_policy_input(first_payload).base_pose
+        targets = preposition_targets(
+            run.candidate, run.acquisition_pose, current_pose
+        )
+        if targets != run.preposition_targets:
+            raise CartesianConvergenceContractError(
+                "B2 preposition target replay differs"
+            )
         distances = [_distance_record(run, targets)]
         proposed: list[list[float]] = []
         applied: list[list[float]] = []
@@ -442,6 +470,8 @@ class CartesianConvergenceMujoco:
             "tool_distances": carried,
             "first_treatment_action": list(run.first_actions[role]),
             "first_treatment_guard": run.first_guard,
+            "proposed_actions": proposed,
+            "applied_actions": applied,
             "proposed_action_sha256": canonical_sha256(proposed),
             "applied_action_sha256": canonical_sha256(applied),
             "action_summary": action_summary(proposed, applied),
@@ -536,7 +566,7 @@ def _first_actions(
     if candidate_set is None or not 0 <= selected_index < len(
         candidate_set.candidates
     ):
-        return {}, empty_guard
+        return {}, empty_guard, {}, {"passed": False}
     payload = policy_input_bytes(
         observation,
         history,
@@ -546,16 +576,71 @@ def _first_actions(
         phase_step=0,
     )
     candidate = candidate_set.candidates[selected_index]
+    value = deserialize_policy_input(payload)
+    targets = preposition_targets(
+        candidate, acquisition_pose, value.base_pose
+    )
+    fixed, target_check = _fixed_action_with_target_crosscheck(
+        payload, candidate, acquisition_pose, targets
+    )
     actions = {
-        role: _primitive_action(
-            payload, candidate, acquisition_pose, 400, role
-        )
-        for role in ROLES
+        "frame_legacy": _primitive_action(
+            payload, candidate, acquisition_pose, 400, "frame_legacy"
+        ),
+        "frame_fixed": fixed,
     }
     guard = first_treatment_guard(
         actions["frame_legacy"], actions["frame_fixed"]
     )
-    return actions, guard
+    return actions, guard, targets, target_check
+
+
+def _fixed_action_with_target_crosscheck(
+    payload, candidate, acquisition_pose, targets
+):
+    calls = []
+    original = target_selection.acquisition_error_to_base_velocity
+
+    def traced(error, maximum, **yaws):
+        calls.append(
+            {
+                "error": list(np.asarray(error, np.float64)),
+                "velocity_max": float(maximum),
+                "yaws": {name: float(value) for name, value in yaws.items()},
+            }
+        )
+        return original(error, maximum, **yaws)
+
+    target_selection.acquisition_error_to_base_velocity = traced
+    try:
+        action = target_selection.primitive_action(
+            payload, candidate, acquisition_pose, 400
+        )
+    finally:
+        target_selection.acquisition_error_to_base_velocity = original
+    value = deserialize_policy_input(payload)
+    tools = target_selection.tool_positions_in_acquisition(
+        value, acquisition_pose
+    )
+    reconstructed = {
+        arm: tuple(tools[index] + np.asarray(calls[index]["error"]))
+        for index, arm in enumerate(("left", "right"))
+    }
+    passed = (
+        len(calls) == 2
+        and all(call["velocity_max"] == 0.08 for call in calls)
+        and all(
+            np.allclose(reconstructed[arm], targets[arm], atol=1.0e-12, rtol=0.0)
+            for arm in ("left", "right")
+        )
+    )
+    return action, {
+        "actual_error_calls": calls,
+        "reconstructed_targets": {
+            arm: list(value) for arm, value in reconstructed.items()
+        },
+        "passed": passed,
+    }
 def _primitive_action(
     payload: bytes,
     candidate: Candidate,
@@ -700,6 +785,11 @@ def _bank_prefix_record(run: _PrefixRun) -> dict[str, object]:
             for role, action in run.first_actions.items()
         },
         "first_treatment_guard": run.first_guard,
+        "preposition_targets": {
+            name: list(value)
+            for name, value in run.preposition_targets.items()
+        },
+        "primitive_target_crosscheck": run.primitive_target_crosscheck,
     }
 def _advance(backend, graph, observation, action, step):
     next_observation, period, row = _step(
