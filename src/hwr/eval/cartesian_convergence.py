@@ -363,11 +363,3 @@ def canonical_sha256(value: object) -> str:
     return hashlib.sha256(canonical_bytes(value)).hexdigest()
 def wrap_angle(value: float) -> float:
     return math.atan2(math.sin(value), math.cos(value))
-def analyze_terminals(terminals, bank):
-    from hwr.eval.cartesian_convergence_validation import analyze_terminals as run
-    return run(terminals, bank)
-
-
-def validate_bank(bank) -> None:
-    from hwr.eval.cartesian_convergence_validation import validate_bank as validate
-    validate(bank)

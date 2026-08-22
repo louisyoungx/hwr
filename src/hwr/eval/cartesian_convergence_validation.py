@@ -18,6 +18,7 @@ from hwr.eval.cartesian_convergence import (
     BOOTSTRAP_REPLICATES,
     BOOTSTRAP_SEED,
     CONTINUOUS_MDE,
+    LATENCY_VALUES,
     LATENCY_MATCH_LIMIT,
     PAIR_COUNT_PER_CELL,
     PLAN_ID,
@@ -391,7 +392,7 @@ def _binary_analysis(records: Sequence[Mapping[str, object]]) -> dict[str, objec
             if row["observation_latency_steps"] == observation
             and row["action_latency_steps"] == action
         )
-        for observation in (1, 2) for action in (1, 2)
+        for observation in LATENCY_VALUES for action in LATENCY_VALUES
     }
     wins = sum(row["win"] for row in rows)
     checks = {
@@ -428,7 +429,7 @@ def _delta_row(record: Mapping[str, object]) -> dict[str, object]:
 
 def _latency_means(rows: Sequence[Mapping[str, object]], field: str) -> dict[str, float]:
     result = {}
-    for latency in (1, 2):
+    for latency in LATENCY_VALUES:
         cell_means = [
             _mean([row["delta"] for row in rows if row["cell_id"] == cell.cell_id])
             for cell in frozen_cells() if getattr(cell, field) == latency
@@ -440,7 +441,7 @@ def _latency_means(rows: Sequence[Mapping[str, object]], field: str) -> dict[str
 def _win_counts(rows, field):
     return {
         str(value): sum(row["win"] for row in rows if row[field] == value)
-        for value in (1, 2)
+        for value in LATENCY_VALUES
     }
 
 

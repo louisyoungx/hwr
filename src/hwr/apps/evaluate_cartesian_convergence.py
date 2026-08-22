@@ -39,13 +39,12 @@ from hwr.eval.cartesian_convergence import (
     TASK_IDS,
     TERMINAL_SCHEMA,
     CartesianConvergenceContractError,
-    analyze_terminals,
     frozen_cells,
     pair_identity,
     raw_seed_record,
     role_order,
-    validate_bank,
 )
+from hwr.eval.cartesian_convergence_validation import analyze_terminals, validate_bank
 from hwr.eval.seed_contract import (
     SEED_SCHEMA,
     read_seed_salt,

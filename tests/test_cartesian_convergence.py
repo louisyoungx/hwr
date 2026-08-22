@@ -128,8 +128,8 @@ def test_equal_cell_bootstrap_and_binary_guards_accept_frozen_effect(
     bank = _local_bank(monkeypatch)
     terminals = _terminal_document(bank, delta=0.20)
 
-    first = convergence.analyze_terminals(terminals, bank)
-    second = convergence.analyze_terminals(terminals, bank)
+    first = validation.analyze_terminals(terminals, bank)
+    second = validation.analyze_terminals(terminals, bank)
 
     assert first == second
     assert first["decision"] == (
@@ -149,7 +149,7 @@ def test_analysis_rejects_duplicate_identity_and_hard_safety(
     bank = _local_bank(monkeypatch)
     records = _terminal_records(bank, delta=0.20)
     records[1]["pair_id"] = records[0]["pair_id"]
-    invalid = convergence.analyze_terminals(_terminal_document(bank, records=records), bank)
+    invalid = validation.analyze_terminals(_terminal_document(bank, records=records), bank)
     assert invalid["decision"] == "invalid"
 
     records = _terminal_records(bank, delta=0.20)
@@ -157,7 +157,7 @@ def test_analysis_rejects_duplicate_identity_and_hard_safety(
     records[-1]["arms"]["frame_fixed"]["hard_guard_passed"] = False
     records[-1]["arms"]["frame_fixed"]["hard_failure_reason"] = "severe_collision"
     records[-1]["hard_safety_stop"] = True
-    rejected = convergence.analyze_terminals(_terminal_document(bank, records=records), bank)
+    rejected = validation.analyze_terminals(_terminal_document(bank, records=records), bank)
     assert rejected["decision"] == "rejected"
     assert rejected["hard_guard"]["passed"] is False
 
@@ -173,7 +173,7 @@ def test_analysis_rejects_duplicate_identity_and_hard_safety(
     records[0]["hard_safety_stop"] = True
     records[0]["delta_i"] = None
     convergence.attach_pair_invariants(records[0], complete=False)
-    partial = convergence.analyze_terminals(
+    partial = validation.analyze_terminals(
         _terminal_document(bank, records=records[:1]), bank
     )
     assert partial["decision"] == "rejected"
@@ -199,7 +199,7 @@ def test_analysis_rejects_terminal_tampering(monkeypatch, path, value) -> None:
         target = target[name]
     target[path[-1]] = value
 
-    assert convergence.analyze_terminals(terminals, bank)["decision"] == "invalid"
+    assert validation.analyze_terminals(terminals, bank)["decision"] == "invalid"
 
 
 def test_validate_bank_rejects_candidate_and_seed_tampering(
@@ -209,7 +209,7 @@ def test_validate_bank_rejects_candidate_and_seed_tampering(
     monkeypatch.setattr(convergence, "SALT_COMMITMENT", seed_commitment(salt))
     bank = _bank(salt)
 
-    convergence.validate_bank(bank)
+    validation.validate_bank(bank)
 
     tampered = copy.deepcopy(bank)
     tampered["pairs"][0]["selected_index"] = 1
@@ -217,7 +217,7 @@ def test_validate_bank_rejects_candidate_and_seed_tampering(
         convergence.CartesianConvergenceContractError,
         match="pair differs|selected index",
     ):
-        convergence.validate_bank(tampered)
+        validation.validate_bank(tampered)
 
     tampered = copy.deepcopy(bank)
     tampered["seed_audit"][1]["candidate_ordinal"] = 2
@@ -225,7 +225,7 @@ def test_validate_bank_rejects_candidate_and_seed_tampering(
         convergence.CartesianConvergenceContractError,
         match="contiguous",
     ):
-        convergence.validate_bank(tampered)
+        validation.validate_bank(tampered)
 
 
 def test_bank_state_machine_rejects_mismatch_prefix_and_post_accept_audit(
@@ -241,7 +241,7 @@ def test_bank_state_machine_rejects_mismatch_prefix_and_post_accept_audit(
         convergence.CartesianConvergenceContractError,
         match="mismatch contains prefix",
     ):
-        convergence.validate_bank(mismatch)
+        validation.validate_bank(mismatch)
 
     extra = copy.deepcopy(bank)
     cell = convergence.frozen_cells()[0]
@@ -262,7 +262,7 @@ def test_bank_state_machine_rejects_mismatch_prefix_and_post_accept_audit(
         convergence.CartesianConvergenceContractError,
         match="after third eligible",
     ):
-        convergence.validate_bank(extra)
+        validation.validate_bank(extra)
 
 
 def test_seed_state_machine_rejects_sixty_fifth_matched_prefix(monkeypatch) -> None:
