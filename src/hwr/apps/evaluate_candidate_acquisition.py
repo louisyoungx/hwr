@@ -1,7 +1,4 @@
 """Run frozen R0001-P50-E1 acquisition and R0001-P50-E2 offline funnel."""
-
-from __future__ import annotations
-
 import argparse
 import hashlib
 import importlib.metadata
@@ -15,9 +12,12 @@ import time
 import tracemalloc
 from pathlib import Path
 from typing import Mapping, Sequence
-
 import numpy as np
-
+from hwr.apps import (
+    aggregate_candidate_funnels,
+    analyze_candidate_capsule_directory,
+    read_bound_blob as _read_bound_blob,
+)
 from hwr.adapters.mujoco.candidate_acquisition import (
     CAPSULE_SCHEMA,
     EPISODE_SCHEMA,
@@ -39,6 +39,10 @@ from hwr.eval.seed_contract import (
     read_seed_salt,
     require_seed_reveal,
 )
+from hwr.eval.candidate_funnel import (
+    CandidateFunnelContractError,
+    candidate_gate_source_identity,
+)
 from hwr.eval.target_selection import (
     ACQUISITION_STEPS,
     CANDIDATE_SCHEMA,
@@ -46,7 +50,6 @@ from hwr.eval.target_selection import (
     TASK_IDS,
 )
 from hwr.eval.tool_kinematics import recursive_xml_input_identity
-
 MODULE_NAME = "hwr.apps.evaluate_candidate_acquisition"
 PROPOSAL_ID = "R0001-P50-E1"
 PLAN_ID = "R0001-P50-E1-formal"
@@ -61,6 +64,11 @@ FORMAL_OUTPUT = Path(
     "runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001"
 )
 FORMAL_SALT_FILE = Path("runs/research-loop/0010/.host/p50-e1-salt.txt")
+FUNNEL_OUTPUT = Path("runs/research-loop/0010/r0010-p50-e2-funnel-s20265001")
+FUNNEL_INPUT = FORMAL_OUTPUT
+FUNNEL_REPORT_SCHEMA = "hwr.p50-candidate-funnel-report/v1"
+FUNNEL_MANIFEST_SCHEMA = "hwr.p50-candidate-funnel-artifacts/v1"
+FUNNEL_FAILURE_SCHEMA = "hwr.p50-candidate-funnel-failure/v1"
 BINDING_PATH = Path("configs/adapters/mujoco/formal_3d_v1.json")
 TASK_PATH = Path("configs/tasks/formal_3d_v1.json")
 HISTORICAL_TREES = {
@@ -106,17 +114,19 @@ CLAIM_FLAGS = {
     "generalization_claim_allowed": False,
     "hardware_safety_claim_allowed": False,
 }
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--mode", choices=("acquisition", "funnel"), default="acquisition")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--salt-file", type=Path, required=True)
+    parser.add_argument("--salt-file", type=Path)
+    parser.add_argument("--capsules", type=Path)
     return parser
-
-
 def run(arguments: argparse.Namespace) -> dict[str, object]:
     _validate_arguments(arguments)
+    if arguments.mode == "funnel":
+        return _run_funnel(arguments)
+    return _run_acquisition(arguments)
+def _run_acquisition(arguments: argparse.Namespace) -> dict[str, object]:
     root = Path(__file__).resolve().parents[3]
     output = _resolve(root, arguments.output)
     salt_file = _resolve(root, arguments.salt_file)
@@ -198,6 +208,92 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         "output": str(output),
         "decision": report["decision"],
         "planned_episode_count": plan["planned_episode_count"],
+        "report_sha256": manifest["artifacts"]["report.json"]["sha256"],
+        "manifest_sha256": _sha256(artifacts["manifest.json"]),
+    }
+def _run_funnel(arguments: argparse.Namespace) -> dict[str, object]:
+    root = Path(__file__).resolve().parents[3]
+    output = _resolve(root, arguments.output)
+    capsules = _resolve(root, arguments.capsules)
+    if output.exists() or output.with_name(output.name + ".tmp").exists():
+        raise FileExistsError(output)
+    source_commit = _source_commit(root)
+    command = [
+        ".venv/bin/python", "-m", MODULE_NAME, "--mode", "funnel",
+        "--capsules", arguments.capsules.as_posix(),
+        "--output", arguments.output.as_posix(),
+    ]
+    started = time.perf_counter()
+    tracemalloc.start()
+    identities: Mapping[str, object] = {}
+    input_identity: Mapping[str, object] | None = None
+    try:
+        identities = _source_identities(root)
+        _require_clean_source(root, identities)
+        first, input_identity = analyze_candidate_capsule_directory(
+            root, capsules, identities
+        )
+        second, replay_identity = analyze_candidate_capsule_directory(
+            root, capsules, identities
+        )
+        deterministic = _json_bytes(first) == _json_bytes(second)
+        if input_identity != replay_identity:
+            raise CandidateFunnelContractError("E1 input identity changed during replay")
+        checks = {
+            **first["aggregate"]["checks"],
+            "report_bit_identical": deterministic,
+            "e1_accepted": True,
+        }
+        passed = all(checks.values())
+        report = {
+            "schema_version": FUNNEL_REPORT_SCHEMA,
+            "proposal_id": "R0001-P50-E2",
+            "source_commit": source_commit,
+            "command": command,
+            "decision": (
+                "accepted as candidate-funnel measurement evidence"
+                if passed else "invalid"
+            ),
+            "source_acquisition": input_identity,
+            "gate_source_identity": candidate_gate_source_identity(),
+            "episodes": first["episodes"],
+            "aggregate": {**first["aggregate"], "checks": {**checks, "passed": passed}},
+            "report_replay_bit_identical": deterministic,
+            "wall_time_seconds": time.perf_counter() - started,
+            "peak_tracemalloc_bytes": tracemalloc.get_traced_memory()[1],
+            "descriptive_stage_is_not_causal_improvement_evidence": True,
+            **CLAIM_FLAGS,
+        }
+        artifacts = {"report.json": _json_bytes(report)}
+        manifest = _funnel_manifest(
+            source_commit, command, identities, input_identity, artifacts,
+            status="complete",
+        )
+        artifacts["manifest.json"] = _json_bytes(manifest)
+        _create_output(output, artifacts)
+    except BaseException as error:
+        failure = {
+            "schema_version": FUNNEL_FAILURE_SCHEMA,
+            "proposal_id": "R0001-P50-E2",
+            "source_commit": source_commit,
+            "error_type": type(error).__name__,
+            "error": str(error),
+            **CLAIM_FLAGS,
+        }
+        artifacts = {"failure.json": _json_bytes(failure)}
+        manifest = _funnel_manifest(
+            source_commit, command, identities, input_identity, artifacts,
+            status="failed",
+        )
+        artifacts["manifest.json"] = _json_bytes(manifest)
+        _create_output(output, artifacts)
+        raise
+    finally:
+        tracemalloc.stop()
+    return {
+        "output": str(output),
+        "decision": report["decision"],
+        "episode_count": report["aggregate"]["episode_count"],
         "report_sha256": manifest["artifacts"]["report.json"]["sha256"],
         "manifest_sha256": _sha256(artifacts["manifest.json"]),
     }
@@ -447,11 +543,19 @@ def _sampler_for_cell(
 
 
 def _validate_arguments(arguments: argparse.Namespace) -> None:
-    if arguments.output != FORMAL_OUTPUT:
-        raise ValueError(f"R0001-P50-E1 requires frozen output {FORMAL_OUTPUT}")
-    if arguments.salt_file != FORMAL_SALT_FILE:
+    if arguments.mode == "acquisition":
+        if arguments.output != FORMAL_OUTPUT:
+            raise ValueError(f"R0001-P50-E1 requires frozen output {FORMAL_OUTPUT}")
+        if arguments.salt_file != FORMAL_SALT_FILE or arguments.capsules is not None:
+            raise ValueError(f"R0001-P50-E1 requires frozen salt file {FORMAL_SALT_FILE}")
+    elif (
+        arguments.output != FUNNEL_OUTPUT
+        or arguments.capsules != FUNNEL_INPUT
+        or arguments.salt_file is not None
+    ):
         raise ValueError(
-            f"R0001-P50-E1 requires frozen salt file {FORMAL_SALT_FILE}"
+            f"R0001-P50-E2 requires frozen capsules {FUNNEL_INPUT} "
+            f"and output {FUNNEL_OUTPUT}"
         )
 
 
@@ -560,6 +664,43 @@ def _manifest(
         "terminal_episode_count": (
             None if execution is None else len(execution["terminals"])
         ),
+        **CLAIM_FLAGS,
+        "artifacts": {
+            name: {"sha256": _sha256(content), "bytes": len(content)}
+            for name, content in sorted(artifacts.items())
+        },
+    }
+
+
+def _funnel_manifest(
+    source_commit: str,
+    command: Sequence[str],
+    identities: Mapping[str, object],
+    input_identity: Mapping[str, object] | None,
+    artifacts: Mapping[str, bytes],
+    *,
+    status: str,
+) -> dict[str, object]:
+    return {
+        "schema_version": FUNNEL_MANIFEST_SCHEMA,
+        "proposal_id": "R0001-P50-E2",
+        "status": status,
+        "source_commit": source_commit,
+        "frozen_document_commit": FROZEN_DOCUMENT_COMMIT,
+        "frozen_document_commit_is_ancestor": status == "complete",
+        "command": list(command),
+        "source_identities": identities,
+        "source_acquisition": input_identity,
+        "gate_source_identity": candidate_gate_source_identity(),
+        "runtime": {
+            "python": platform.python_version(),
+            "numpy": np.__version__,
+            "mujoco": mujoco_runtime_version(),
+            "hwr_platform": importlib.metadata.version("hwr-platform"),
+        },
+        "report_only": True,
+        "formal_candidate_output_modified": False,
+        "unique_observation_shadow_enters_candidate_output": False,
         **CLAIM_FLAGS,
         "artifacts": {
             name: {"sha256": _sha256(content), "bytes": len(content)}

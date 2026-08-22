@@ -8,8 +8,6 @@ from types import SimpleNamespace
 import pytest
 
 from hwr.apps import evaluate_candidate_acquisition as app
-
-
 SALT = "0" * 64
 
 
@@ -72,6 +70,36 @@ def test_cli_keeps_exact_frozen_acquisition_paths() -> None:
     )
     with pytest.raises(ValueError, match="frozen output"):
         app._validate_arguments(wrong)
+
+
+def test_cli_keeps_exact_frozen_funnel_paths_and_forbids_salt() -> None:
+    arguments = app.build_parser().parse_args(
+        [
+            "--mode",
+            "funnel",
+            "--capsules",
+            app.FUNNEL_INPUT.as_posix(),
+            "--output",
+            app.FUNNEL_OUTPUT.as_posix(),
+        ]
+    )
+
+    app._validate_arguments(arguments)
+    with pytest.raises(ValueError, match="frozen capsules"):
+        app._validate_arguments(
+            app.build_parser().parse_args(
+                [
+                    "--mode",
+                    "funnel",
+                    "--capsules",
+                    app.FUNNEL_INPUT.as_posix(),
+                    "--output",
+                    app.FUNNEL_OUTPUT.as_posix(),
+                    "--salt-file",
+                    app.FORMAL_SALT_FILE.as_posix(),
+                ]
+            )
+        )
 
 
 def test_plan_has_twelve_ordered_cells_and_two_natural_matches(
@@ -315,3 +343,78 @@ def test_runner_writes_hash_bound_capsule_artifacts_and_failure_atomically(
             "bytes": len(payload),
         }
     assert not output.with_name(output.name + ".tmp").exists()
+
+
+def test_funnel_runner_analyzes_twice_and_writes_independent_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "funnel"
+    source = tmp_path / "capsules"
+    source.mkdir()
+    analysis = {
+        "episodes": [],
+        "aggregate": {
+            "episode_count": 24,
+            "checks": {"passed": True},
+        },
+    }
+    source_identity = {
+        "path": str(source),
+        "source_commit": "a" * 40,
+        "report": {"path": "report.json", "sha256": "b" * 64, "bytes": 1},
+        "manifest": {"path": "manifest.json", "sha256": "c" * 64, "bytes": 1},
+    }
+    calls = []
+    monkeypatch.setattr(app, "_validate_arguments", lambda arguments: None)
+    monkeypatch.setattr(app, "_source_commit", lambda root: "d" * 40)
+    monkeypatch.setattr(app, "_source_identities", lambda root: _identities())
+    monkeypatch.setattr(app, "_require_clean_source", lambda root, identities: None)
+
+    def analyze(root, capsules, identities):
+        calls.append((root, capsules, identities))
+        return analysis, source_identity
+
+    monkeypatch.setattr(app, "analyze_candidate_capsule_directory", analyze)
+    result = app.run(
+        app.build_parser().parse_args(
+            [
+                "--mode",
+                "funnel",
+                "--capsules",
+                str(source),
+                "--output",
+                str(output),
+            ]
+        )
+    )
+    report = json.loads((output / "report.json").read_text())
+    manifest = json.loads((output / "manifest.json").read_text())
+
+    assert len(calls) == 2
+    assert result["decision"] == (
+        "accepted as candidate-funnel measurement evidence"
+    )
+    assert report["report_replay_bit_identical"] is True
+    assert report["descriptive_stage_is_not_causal_improvement_evidence"] is True
+    assert manifest["report_only"] is True
+    assert manifest["formal_candidate_output_modified"] is False
+    assert set(path.name for path in output.iterdir()) == {
+        "report.json",
+        "manifest.json",
+    }
+
+
+def test_bound_blob_rejects_path_escape_and_tamper(tmp_path: Path) -> None:
+    blob = tmp_path / "blob.bin"
+    blob.write_bytes(b"data")
+    identity = {
+        "path": "blob.bin",
+        "sha256": hashlib.sha256(b"data").hexdigest(),
+        "bytes": 4,
+    }
+
+    assert app._read_bound_blob(tmp_path, identity) == b"data"
+    with pytest.raises(app.CandidateFunnelContractError, match="escaped"):
+        app._read_bound_blob(tmp_path, {**identity, "path": "../blob.bin"})
+    with pytest.raises(app.CandidateFunnelContractError, match="differ"):
+        app._read_bound_blob(tmp_path, {**identity, "sha256": "0" * 64})
