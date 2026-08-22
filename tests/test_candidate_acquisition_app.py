@@ -9,6 +9,7 @@ import pytest
 
 from hwr.apps import evaluate_candidate_acquisition as app
 SALT = "0" * 64
+TEST_COMMITMENT = hashlib.sha256(SALT.encode()).hexdigest()
 
 
 class _Sampler:
@@ -49,7 +50,14 @@ def _identities() -> dict[str, object]:
         "binding": {"path": "binding", "sha256": "a" * 64, "bytes": 1},
         "task_config": {"path": "task", "sha256": "b" * 64, "bytes": 1},
         "recursive_xml": {},
-        "sources": {},
+        "sources": {
+            name: {
+                "path": path.as_posix(),
+                "sha256": hashlib.sha256(name.encode()).hexdigest(),
+                "bytes": len(name),
+            }
+            for name, path in app.SOURCE_PATHS.items()
+        },
         "historical_research_loop_trees": dict(app.HISTORICAL_TREES),
         "frozen_document": {
             "path": app.FROZEN_DOCUMENT_PATH.as_posix(),
@@ -117,6 +125,7 @@ def test_plan_has_twelve_ordered_cells_and_two_natural_matches(
         lambda root: (tasks, bindings),
     )
     monkeypatch.setattr(app, "require_seed_reveal", lambda commitment, salt: None)
+    monkeypatch.setattr(app, "SALT_COMMITMENT", TEST_COMMITMENT)
 
     class Sampler(_Sampler):
         def sample_latencies(self, seed: int) -> tuple[int, int]:
@@ -245,7 +254,10 @@ def test_terminal_ledger_rejects_missing_duplicate_unplanned_and_replacement() -
         "replacement",
     ),
 )
-def test_plan_record_tampering_fails_closed(field: str) -> None:
+def test_plan_record_tampering_fails_closed(
+    field: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app, "SALT_COMMITMENT", TEST_COMMITMENT)
     for collection, check in (
         ("terminals", "planned_terminal_ledger"),
         ("capsules", "planned_capsule_ledger"),
@@ -274,66 +286,44 @@ def test_plan_record_tampering_fails_closed(field: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "field",
+    "tamper",
     (
-        "planned_episode_id",
-        "task_id",
-        "cell_id",
-        "cell_ordinal",
-        "replicate_ordinal",
-        "candidate_ordinal",
+        "delete",
         "environment_seed",
         "policy_rng_seed",
-        "planned_latency",
-        "replacement",
+        "cell",
+        "planned_episode_id",
     ),
 )
-def test_e2_loader_rejects_plan_record_tampering(
-    field: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_synchronized_plan_and_record_tampering_still_fails_closed(
+    tamper: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import hwr.apps as app_helpers
-
+    monkeypatch.setattr(app, "SALT_COMMITMENT", TEST_COMMITMENT)
     plan, execution = _acceptance_fixture()
-    records = execution["capsules"]["episodes"]
-    records[0][field] = (
-        {"observation_steps": 2, "action_steps": 1}
-        if field == "planned_latency"
-        else True if field == "replacement" else "tampered"
-    )
-    documents = {
-        "manifest.json": {
-            "status": "complete",
-            "source_commit": "a" * 40,
-            "frozen_document_commit": app.FROZEN_DOCUMENT_COMMIT,
-            "frozen_document_commit_is_ancestor": True,
-        },
-        "report.json": {
-            "decision": "accepted as immutable acquisition evidence contract"
-        },
-        "plan.json": plan,
-        "capsules.json": {
-            "capsule_count": 24,
-            "episodes": records,
-            "terminals": execution["terminals"],
-        },
-    }
-    monkeypatch.setattr(
-        app_helpers, "_read_object", lambda path: documents[path.name]
-    )
-    monkeypatch.setattr(app_helpers, "_verify_artifacts", lambda root, manifest: None)
-    monkeypatch.setattr(
-        app_helpers, "candidate_commit_is_ancestor", lambda *args: True
-    )
-    monkeypatch.setattr(
-        app_helpers,
-        "_require_e1_source_identity",
-        lambda manifest, identities: None,
-    )
+    terminals = execution["terminals"]
+    capsules = execution["capsules"]["episodes"]
+    if tamper == "delete":
+        del plan["episodes"][0]
+        del terminals[0]
+        del capsules[0]
+        plan["planned_episode_count"] = 23
+        plan["planned_control_step_count"] = 23 * app.ACQUISITION_STEPS
+        plan["validation_replay_count"] = 23
+        plan["maximum_physical_acquisition_count"] = 46
+        plan["maximum_control_step_count"] = 46 * app.ACQUISITION_STEPS
+    elif tamper in ("environment_seed", "policy_rng_seed"):
+        for record in (plan["episodes"][0], terminals[0], capsules[0]):
+            record[tamper] += 1
+    elif tamper == "cell":
+        for record in (plan["episodes"][0], terminals[0], capsules[0]):
+            record["cell_id"] = "cell-11-obs-2-action-2"
+            record["cell_ordinal"] = 11
+    else:
+        for record in (plan["episodes"][0], terminals[0], capsules[0]):
+            record["planned_episode_id"] = "f" * 64
 
-    with pytest.raises(app.CandidateFunnelContractError, match="ledger differs"):
-        app_helpers.analyze_candidate_capsule_directory(
-            tmp_path, tmp_path, _identities(), app.FROZEN_DOCUMENT_COMMIT
-        )
+    with pytest.raises(app.CandidateFunnelContractError, match="plan contract"):
+        app.analyze_acquisition(plan, execution)
 
 
 @pytest.mark.parametrize(
@@ -389,31 +379,89 @@ def test_e2_loader_rejects_forged_manifest_and_invalid_source_lineage(
         app.CandidateFunnelContractError, match="frozen/source ancestry"
     ):
         app_helpers.analyze_candidate_capsule_directory(
-            tmp_path, tmp_path, _identities(), app.FROZEN_DOCUMENT_COMMIT
+            tmp_path,
+            tmp_path,
+            _identities(),
+            app.FROZEN_DOCUMENT_COMMIT,
+            app.E1_SOURCE_NAMES,
+            expected_plan_schema=app.PLAN_SCHEMA,
+            expected_proposal_id=app.PROPOSAL_ID,
+            expected_plan_id=app.PLAN_ID,
+            expected_commitment=TEST_COMMITMENT,
+            expected_cells=app.FROZEN_CELLS,
+            acquisition_steps=app.ACQUISITION_STEPS,
         )
 
 
 def _acceptance_fixture() -> tuple[dict[str, object], dict[str, object]]:
-    episodes = [
+    cells = [
         {
-            "planned_episode_id": f"{index:064x}",
-            "task_id": f"task-{index // 8}",
-            "cell_id": f"cell-{index // 2:02d}",
-            "replicate_ordinal": index % 2,
-            "candidate_ordinal": index,
-            "environment_seed": 100 + index,
-            "policy_rng_seed": 200 + index,
-            "sampled_observation_latency_steps": 1,
-            "sampled_action_latency_steps": 1,
+            "cell_id": f"cell-{ordinal:02d}-obs-{observation}-action-{action}",
+            "cell_ordinal": ordinal,
+            "task_id": task,
+            "observation_latency_steps": observation,
+            "action_latency_steps": action,
+            "replicate_count": 2,
         }
-        for index in range(24)
+        for ordinal, (task, observation, action) in enumerate(app.FROZEN_CELLS)
     ]
+    episodes = []
+    for cell in cells:
+        for replicate in range(2):
+            candidate_ordinal = replicate
+            identity = app.planned_episode_id(
+                app.PLAN_ID,
+                cell["task_id"],
+                cell["cell_id"],
+                candidate_ordinal,
+            )
+            episodes.append(
+                {
+                    "planned_episode_id": identity,
+                    "task_id": cell["task_id"],
+                    "cell_id": cell["cell_id"],
+                    "cell_ordinal": cell["cell_ordinal"],
+                    "replicate_ordinal": replicate,
+                    "candidate_ordinal": candidate_ordinal,
+                    "environment_seed": app.derive_domain_seed(
+                        SALT, "environment", identity
+                    ),
+                    "policy_rng_seed": app.derive_domain_seed(
+                        SALT, "policy", identity
+                    ),
+                    "sampled_observation_latency_steps": cell[
+                        "observation_latency_steps"
+                    ],
+                    "sampled_action_latency_steps": cell[
+                        "action_latency_steps"
+                    ],
+                    "replacement": False,
+                }
+            )
     plan = {
+        "schema_version": app.PLAN_SCHEMA,
+        "proposal_id": app.PROPOSAL_ID,
+        "mode": "formal",
+        "plan_id": app.PLAN_ID,
+        "salt_commitment": TEST_COMMITMENT,
+        "salt_reveal": SALT,
+        "commitment_verified": True,
+        "seed_schema": app.SEED_SCHEMA,
+        "role_enters_seed_derivation": False,
+        "natural_evaluation_latency_rejection": True,
+        "reset_latency_override_used": False,
+        "replacement_seed_allowed": False,
+        "maximum_candidate_ordinal": 95,
+        "maximum_latency_sampler_calls": 1_152,
+        "planned_control_steps_per_episode": app.ACQUISITION_STEPS,
         "planned_episode_count": 24,
-        "cells": [
-            {"cell_id": f"cell-{index:02d}"} for index in range(12)
-        ],
+        "planned_control_step_count": 24 * app.ACQUISITION_STEPS,
+        "validation_replay_count": 24,
+        "maximum_physical_acquisition_count": 48,
+        "maximum_control_step_count": 48 * app.ACQUISITION_STEPS,
+        "cells": cells,
         "episodes": episodes,
+        "rejected_seed_audit": [],
     }
     validation = {
         "trace_step_count": app.ACQUISITION_STEPS,
@@ -432,10 +480,13 @@ def _acceptance_fixture() -> tuple[dict[str, object], dict[str, object]]:
             "resolved": True,
             "trace_step_count": app.ACQUISITION_STEPS,
             "runtime_terminal": False,
-            "planned_latency": {"observation_steps": 1, "action_steps": 1},
+            "planned_latency": {
+                "observation_steps": episode["sampled_observation_latency_steps"],
+                "action_steps": episode["sampled_action_latency_steps"],
+            },
             "runtime_latency": {
-                "observation_steps": 1,
-                "action_steps": 1,
+                "observation_steps": episode["sampled_observation_latency_steps"],
+                "action_steps": episode["sampled_action_latency_steps"],
                 "override_inactive": True,
             },
             "action_bounds_valid": True,
@@ -453,7 +504,10 @@ def _acceptance_fixture() -> tuple[dict[str, object], dict[str, object]]:
     capsules = [
         {
             **episode,
-            "planned_latency": {"observation_steps": 1, "action_steps": 1},
+            "planned_latency": {
+                "observation_steps": episode["sampled_observation_latency_steps"],
+                "action_steps": episode["sampled_action_latency_steps"],
+            },
             "offline_candidate_replay_bit_identical": True,
             "same_seed_validation_replay": True,
             "capture_enabled_disabled_identity": True,
@@ -465,6 +519,12 @@ def _acceptance_fixture() -> tuple[dict[str, object], dict[str, object]]:
         "terminals": terminals,
         "capsules": {"episodes": capsules},
     }
+
+
+def test_acceptance_fixture_is_contract_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app, "SALT_COMMITMENT", TEST_COMMITMENT)
+    plan, execution = _acceptance_fixture()
+    assert app.analyze_acquisition(plan, execution)["contract_valid"] is True
 
 
 @pytest.mark.parametrize(
@@ -485,8 +545,12 @@ def _acceptance_fixture() -> tuple[dict[str, object], dict[str, object]]:
     ),
 )
 def test_acceptance_rejects_safety_terminal_and_runtime_latency_drift(
-    path: tuple[object, ...], value: object, check: str
+    path: tuple[object, ...],
+    value: object,
+    check: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(app, "SALT_COMMITMENT", TEST_COMMITMENT)
     plan, execution = _acceptance_fixture()
     target = execution
     for key in path[:-1]:
@@ -686,8 +750,8 @@ def test_funnel_runner_analyzes_twice_and_writes_independent_artifacts(
     monkeypatch.setattr(app, "_source_identities", lambda root: _identities())
     monkeypatch.setattr(app, "_require_clean_source", lambda root, identities: None)
 
-    def analyze(root, capsules, identities, frozen):
-        calls.append((root, capsules, identities, frozen))
+    def analyze(root, capsules, identities, frozen, names, **kwargs):
+        calls.append((root, capsules, identities, frozen, names, kwargs))
         return analysis, source_identity
 
     monkeypatch.setattr(app, "analyze_candidate_capsule_directory", analyze)

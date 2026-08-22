@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import hashlib
 import sys
 from collections import Counter
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
 
+import hwr.apps as app_helpers
 from hwr.apps import aggregate_candidate_funnels
+from hwr.apps import evaluate_candidate_acquisition as app
 from hwr.eval import candidate_funnel, target_selection
 from hwr.eval.candidate_funnel import (
     ANCHOR_REJECTION_STAGES,
@@ -23,6 +27,143 @@ from hwr.eval.target_selection import (
     generate_candidate_set,
     serialize_policy_input,
 )
+
+SALT = "0" * 64
+TEST_COMMITMENT = hashlib.sha256(SALT.encode()).hexdigest()
+
+
+def _plan_and_execution() -> tuple[dict[str, object], dict[str, object]]:
+    cells = [
+        {
+            "cell_id": f"cell-{ordinal:02d}-obs-{observation}-action-{action}",
+            "cell_ordinal": ordinal,
+            "task_id": task,
+            "observation_latency_steps": observation,
+            "action_latency_steps": action,
+            "replicate_count": 2,
+        }
+        for ordinal, (task, observation, action) in enumerate(app.FROZEN_CELLS)
+    ]
+    episodes = []
+    for cell in cells:
+        for replicate in range(2):
+            identity = app.planned_episode_id(
+                app.PLAN_ID, cell["task_id"], cell["cell_id"], replicate
+            )
+            episodes.append(
+                {
+                    "planned_episode_id": identity,
+                    "task_id": cell["task_id"],
+                    "cell_id": cell["cell_id"],
+                    "cell_ordinal": cell["cell_ordinal"],
+                    "replicate_ordinal": replicate,
+                    "candidate_ordinal": replicate,
+                    "environment_seed": app.derive_domain_seed(
+                        SALT, "environment", identity
+                    ),
+                    "policy_rng_seed": app.derive_domain_seed(
+                        SALT, "policy", identity
+                    ),
+                    "sampled_observation_latency_steps": cell[
+                        "observation_latency_steps"
+                    ],
+                    "sampled_action_latency_steps": cell["action_latency_steps"],
+                    "replacement": False,
+                }
+            )
+    plan = {
+        "schema_version": app.PLAN_SCHEMA,
+        "proposal_id": app.PROPOSAL_ID,
+        "mode": "formal",
+        "plan_id": app.PLAN_ID,
+        "salt_commitment": TEST_COMMITMENT,
+        "salt_reveal": SALT,
+        "commitment_verified": True,
+        "seed_schema": app.SEED_SCHEMA,
+        "role_enters_seed_derivation": False,
+        "natural_evaluation_latency_rejection": True,
+        "reset_latency_override_used": False,
+        "replacement_seed_allowed": False,
+        "maximum_candidate_ordinal": 95,
+        "maximum_latency_sampler_calls": 1_152,
+        "planned_control_steps_per_episode": app.ACQUISITION_STEPS,
+        "planned_episode_count": 24,
+        "planned_control_step_count": 24 * app.ACQUISITION_STEPS,
+        "validation_replay_count": 24,
+        "maximum_physical_acquisition_count": 48,
+        "maximum_control_step_count": 48 * app.ACQUISITION_STEPS,
+        "cells": cells,
+        "episodes": episodes,
+        "rejected_seed_audit": [],
+    }
+    records = [
+        {
+            **episode,
+            "planned_latency": {
+                "observation_steps": episode[
+                    "sampled_observation_latency_steps"
+                ],
+                "action_steps": episode["sampled_action_latency_steps"],
+            },
+            "replacement": False,
+        }
+        for episode in episodes
+    ]
+    return plan, {
+        "terminals": [dict(record) for record in records],
+        "capsules": {"episodes": [dict(record) for record in records]},
+    }
+
+
+def _mock_e2_loader(monkeypatch, documents) -> None:
+    monkeypatch.setattr(
+        app_helpers, "_read_object", lambda path: documents[path.name]
+    )
+    monkeypatch.setattr(
+        app_helpers, "_verify_artifacts", lambda root, manifest: None
+    )
+    monkeypatch.setattr(
+        app_helpers, "candidate_commit_is_ancestor", lambda *args: True
+    )
+    monkeypatch.setattr(
+        app_helpers, "_require_e1_source_identity", lambda *args: None
+    )
+
+
+def _load_e2(tmp_path: Path) -> None:
+    app_helpers.analyze_candidate_capsule_directory(
+        tmp_path,
+        tmp_path,
+        {},
+        app.FROZEN_DOCUMENT_COMMIT,
+        app.E1_SOURCE_NAMES,
+        expected_plan_schema=app.PLAN_SCHEMA,
+        expected_proposal_id=app.PROPOSAL_ID,
+        expected_plan_id=app.PLAN_ID,
+        expected_commitment=TEST_COMMITMENT,
+        expected_cells=app.FROZEN_CELLS,
+        acquisition_steps=app.ACQUISITION_STEPS,
+    )
+
+
+def _e2_documents(plan, execution) -> dict[str, object]:
+    return {
+        "manifest.json": {
+            "status": "complete",
+            "source_commit": "a" * 40,
+            "frozen_document_commit": app.FROZEN_DOCUMENT_COMMIT,
+            "frozen_document_commit_is_ancestor": True,
+        },
+        "report.json": {
+            "decision": "accepted as immutable acquisition evidence contract"
+        },
+        "plan.json": plan,
+        "capsules.json": {
+            "capsule_count": 24,
+            "episodes": execution["capsules"]["episodes"],
+            "terminals": execution["terminals"],
+        },
+    }
 
 
 def _input(
@@ -389,6 +530,73 @@ def test_anchor_stage_names_are_frozen_and_ordered() -> None:
         "planarity",
         "width",
     )
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "planned_episode_id",
+        "task_id",
+        "cell_id",
+        "cell_ordinal",
+        "replicate_ordinal",
+        "candidate_ordinal",
+        "environment_seed",
+        "policy_rng_seed",
+        "planned_latency",
+        "replacement",
+    ),
+)
+def test_e2_loader_rejects_plan_record_tampering(
+    field: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan, execution = _plan_and_execution()
+    record = execution["capsules"]["episodes"][0]
+    record[field] = (
+        {"observation_steps": 2, "action_steps": 1}
+        if field == "planned_latency"
+        else True if field == "replacement" else "tampered"
+    )
+    _mock_e2_loader(monkeypatch, _e2_documents(plan, execution))
+
+    with pytest.raises(CandidateFunnelContractError, match="ledger differs"):
+        _load_e2(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    (
+        "delete",
+        "environment_seed",
+        "policy_rng_seed",
+        "cell",
+        "planned_episode_id",
+    ),
+)
+def test_e2_loader_rejects_synchronized_plan_and_record_tampering(
+    tamper: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan, execution = _plan_and_execution()
+    terminals = execution["terminals"]
+    records = execution["capsules"]["episodes"]
+    if tamper == "delete":
+        del plan["episodes"][0]
+        del terminals[0]
+        del records[0]
+    elif tamper in ("environment_seed", "policy_rng_seed"):
+        for record in (plan["episodes"][0], terminals[0], records[0]):
+            record[tamper] += 1
+    elif tamper == "cell":
+        for record in (plan["episodes"][0], terminals[0], records[0]):
+            record["cell_id"] = "cell-11-obs-2-action-2"
+            record["cell_ordinal"] = 11
+    else:
+        for record in (plan["episodes"][0], terminals[0], records[0]):
+            record["planned_episode_id"] = "f" * 64
+    _mock_e2_loader(monkeypatch, _e2_documents(plan, execution))
+
+    with pytest.raises(CandidateFunnelContractError, match="plan contract"):
+        _load_e2(tmp_path)
 
 
 def test_aggregate_requires_twenty_four_unique_episodes_and_twelve_cells() -> None:

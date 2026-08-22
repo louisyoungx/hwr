@@ -14,14 +14,14 @@ from hwr.apps import (
     analyze_candidate_capsule_directory,
     candidate_artifact_manifest,
     candidate_commit_is_ancestor,
-    candidate_file_identity as _file_identity,
-    candidate_git_tree as _git_tree,
     candidate_json_bytes as _json_bytes,
     candidate_sha256 as _sha256,
+    candidate_source_identities,
     candidate_source_commit as _source_commit,
     create_candidate_output as _create_output,
     persist_candidate_episode,
     read_bound_blob as _read_bound_blob,
+    require_candidate_clean_source,
     require_candidate_disk_capacity as _require_disk_capacity,
     resolve_candidate_path as _resolve,
     validate_candidate_terminal_ledger,
@@ -46,6 +46,7 @@ from hwr.eval.seed_contract import (
     read_seed_salt,
     require_seed_reveal,
 )
+from hwr.eval import validate_plan_contract
 from hwr.eval.candidate_funnel import (
     CandidateFunnelContractError,
     candidate_gate_source_identity,
@@ -56,7 +57,6 @@ from hwr.eval.target_selection import (
     INPUT_SCHEMA,
     TASK_IDS,
 )
-from hwr.eval.tool_kinematics import recursive_xml_input_identity
 MODULE_NAME = "hwr.apps.evaluate_candidate_acquisition"
 PROPOSAL_ID = "R0001-P50-E1"
 PLAN_ID = "R0001-P50-E1-formal"
@@ -91,6 +91,7 @@ HISTORICAL_TREES = {
 SOURCE_PATHS = {
     "p50_app": Path("src/hwr/apps/evaluate_candidate_acquisition.py"),
     "p50_app_helpers": Path("src/hwr/apps/__init__.py"),
+    "p50_eval_helpers": Path("src/hwr/eval/__init__.py"),
     "p50_bridge": Path("src/hwr/adapters/mujoco/candidate_acquisition.py"),
     "p50_funnel": Path("src/hwr/eval/candidate_funnel.py"),
     "formal_generator": Path("src/hwr/eval/target_selection.py"),
@@ -99,6 +100,8 @@ SOURCE_PATHS = {
         "src/hwr/adapters/mujoco/formal_household_backend.py"
     ),
 }
+E1_SOURCE_NAMES = tuple(SOURCE_PATHS)
+E2_SOURCE_NAMES = E1_SOURCE_NAMES
 PROTECTED_PATHS = (
     "assets/mujoco",
     BINDING_PATH.as_posix(),
@@ -239,10 +242,30 @@ def _run_funnel(arguments: argparse.Namespace) -> dict[str, object]:
         identities = _source_identities(root)
         _require_clean_source(root, identities)
         first, input_identity = analyze_candidate_capsule_directory(
-            root, capsules, identities, FROZEN_DOCUMENT_COMMIT
+            root,
+            capsules,
+            identities,
+            FROZEN_DOCUMENT_COMMIT,
+            E1_SOURCE_NAMES,
+            expected_plan_schema=PLAN_SCHEMA,
+            expected_proposal_id=PROPOSAL_ID,
+            expected_plan_id=PLAN_ID,
+            expected_commitment=SALT_COMMITMENT,
+            expected_cells=FROZEN_CELLS,
+            acquisition_steps=ACQUISITION_STEPS,
         )
         second, replay_identity = analyze_candidate_capsule_directory(
-            root, capsules, identities, FROZEN_DOCUMENT_COMMIT
+            root,
+            capsules,
+            identities,
+            FROZEN_DOCUMENT_COMMIT,
+            E1_SOURCE_NAMES,
+            expected_plan_schema=PLAN_SCHEMA,
+            expected_proposal_id=PROPOSAL_ID,
+            expected_plan_id=PLAN_ID,
+            expected_commitment=SALT_COMMITMENT,
+            expected_cells=FROZEN_CELLS,
+            acquisition_steps=ACQUISITION_STEPS,
         )
         deterministic = _json_bytes(first) == _json_bytes(second)
         if input_identity != replay_identity:
@@ -392,9 +415,10 @@ def build_plan(root: Path, salt: str) -> dict[str, object]:
             raise AcquisitionContractError(
                 f"{cell_id} did not find two matches by candidate ordinal 95"
             )
-    return {
+    plan = {
         "schema_version": PLAN_SCHEMA,
         "proposal_id": PROPOSAL_ID,
+        "mode": "formal",
         "plan_id": PLAN_ID,
         "salt_commitment": SALT_COMMITMENT,
         "salt_reveal": salt,
@@ -416,6 +440,17 @@ def build_plan(root: Path, salt: str) -> dict[str, object]:
         "episodes": episodes,
         "rejected_seed_audit": rejected,
     }
+    validate_plan_contract(
+        plan,
+        salt=salt,
+        expected_schema=PLAN_SCHEMA,
+        expected_proposal_id=PROPOSAL_ID,
+        expected_plan_id=PLAN_ID,
+        expected_commitment=SALT_COMMITMENT,
+        expected_cells=FROZEN_CELLS,
+        acquisition_steps=ACQUISITION_STEPS,
+    )
+    return plan
 def execute_plan(
     root: Path, plan: Mapping[str, object]
 ) -> dict[str, object]:
@@ -472,6 +507,16 @@ def execute_plan(
 def analyze_acquisition(
     plan: Mapping[str, object], execution: Mapping[str, object]
 ) -> dict[str, object]:
+    validate_plan_contract(
+        plan,
+        salt=None,
+        expected_schema=PLAN_SCHEMA,
+        expected_proposal_id=PROPOSAL_ID,
+        expected_plan_id=PLAN_ID,
+        expected_commitment=SALT_COMMITMENT,
+        expected_cells=FROZEN_CELLS,
+        acquisition_steps=ACQUISITION_STEPS,
+    )
     terminals = execution["terminals"]
     capsules = execution["capsules"]["episodes"]
     terminal_ledger = validate_candidate_terminal_ledger(plan, terminals)
@@ -632,71 +677,15 @@ def _validate_arguments(arguments: argparse.Namespace) -> None:
             f"and output {FUNNEL_OUTPUT}"
         )
 def _source_identities(root: Path) -> dict[str, object]:
-    _, bindings = load_default_formal_household_catalogs(root)
-    return {
-        "binding": _file_identity(root, root / BINDING_PATH),
-        "task_config": _file_identity(root, root / TASK_PATH),
-        "recursive_xml": {
-            task_id: recursive_xml_input_identity(root, bindings[task_id].model_path)
-            for task_id in TASK_IDS
-        },
-        "sources": {
-            name: _file_identity(root, root / path)
-            for name, path in SOURCE_PATHS.items()
-        },
-        "historical_research_loop_trees": {
-            path: _git_tree(root, path) for path in HISTORICAL_TREES
-        },
-        "frozen_document": _file_identity(root, root / FROZEN_DOCUMENT_PATH),
-    }
-def _require_clean_source(
-    root: Path, identities: Mapping[str, object]
-) -> None:
-    status = subprocess.run(
-        ("git", "status", "--porcelain", "--untracked-files=all"),
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
+    return candidate_source_identities(
+        root, BINDING_PATH, TASK_PATH, TASK_IDS, SOURCE_PATHS,
+        HISTORICAL_TREES, FROZEN_DOCUMENT_PATH,
     )
-    if status.stdout.strip():
-        raise RuntimeError("P50-E1 runner requires clean committed source")
-    ancestor = subprocess.run(
-        ("git", "merge-base", "--is-ancestor", FROZEN_DOCUMENT_COMMIT, "HEAD"),
-        cwd=root,
-        check=False,
+def _require_clean_source(root: Path, identities: Mapping[str, object]) -> None:
+    require_candidate_clean_source(
+        root, identities, FROZEN_DOCUMENT_COMMIT, FROZEN_DOCUMENT_PATH,
+        PROTECTED_PATHS, HISTORICAL_TREES, subprocess.run,
     )
-    if ancestor.returncode != 0:
-        raise RuntimeError("P50 frozen document commit is not an ancestor")
-    protected = subprocess.run(
-        (
-            "git",
-            "diff",
-            "--quiet",
-            FROZEN_DOCUMENT_COMMIT,
-            "HEAD",
-            "--",
-            *PROTECTED_PATHS,
-        ),
-        cwd=root,
-        check=False,
-    )
-    if protected.returncode != 0:
-        raise RuntimeError("P50 source/config/XML anchors drifted")
-    if identities.get("historical_research_loop_trees") != HISTORICAL_TREES:
-        raise RuntimeError("P50 historical research-loop documents drifted")
-    frozen = subprocess.run(
-        ("git", "show", f"{FROZEN_DOCUMENT_COMMIT}:{FROZEN_DOCUMENT_PATH}"),
-        cwd=root,
-        check=True,
-        capture_output=True,
-    ).stdout
-    if identities["frozen_document"] != {
-        "path": FROZEN_DOCUMENT_PATH.as_posix(),
-        "sha256": _sha256(frozen),
-        "bytes": len(frozen),
-    }:
-        raise RuntimeError("P50 frozen document content drifted")
 def _manifest(
     source_commit,
     command,
@@ -707,13 +696,19 @@ def _manifest(
     *,
     status,
 ):
+    manifest_identities = {
+        **identities,
+        "sources": {
+            name: identities["sources"][name] for name in E1_SOURCE_NAMES
+        },
+    }
     return candidate_artifact_manifest(
         schema=MANIFEST_SCHEMA,
         proposal_id=PROPOSAL_ID,
         source_commit=source_commit,
         frozen_document_commit=FROZEN_DOCUMENT_COMMIT,
         command=command,
-        identities=identities,
+        identities=manifest_identities,
         artifacts=artifacts,
         runtime_versions={
             "mujoco": mujoco_runtime_version(),
@@ -767,7 +762,12 @@ def _funnel_manifest(
         source_commit=source_commit,
         frozen_document_commit=FROZEN_DOCUMENT_COMMIT,
         command=command,
-        identities=identities,
+        identities={
+            **identities,
+            "sources": {
+                name: identities["sources"][name] for name in E2_SOURCE_NAMES
+            },
+        },
         artifacts=artifacts,
         runtime_versions={
             "mujoco": mujoco_runtime_version(),

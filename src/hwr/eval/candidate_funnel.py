@@ -49,6 +49,12 @@ COMPONENT_TERMINAL_STAGES = (
 class CandidateFunnelContractError(ValueError):
     """Raised when exact formal-gate instrumentation cannot be proven."""
 
+    def __init__(
+        self, message: str, *, details: Mapping[str, object] | None = None
+    ) -> None:
+        super().__init__(message)
+        self.details = {} if details is None else dict(details)
+
 
 def candidate_visible_bytes(value: PolicyVisibleInput) -> bytes:
     """Serialize exactly the fields consumed by the formal candidate generator."""

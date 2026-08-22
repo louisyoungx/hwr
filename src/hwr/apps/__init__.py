@@ -12,6 +12,7 @@ from typing import Mapping, Sequence
 
 import numpy as np
 
+from hwr.eval import validate_plan_contract
 from hwr.eval.candidate_funnel import (
     CandidateFunnelContractError,
     analyze_candidate_funnel,
@@ -400,11 +401,98 @@ def require_candidate_disk_capacity(output: Path) -> None:
         raise RuntimeError("P50-E1 requires at least 5GiB free on the data volume")
 
 
+def candidate_source_identities(
+    root, binding_path, task_path, task_ids, source_paths, historical_trees,
+    frozen_document_path,
+):
+    from hwr.adapters.mujoco.training_catalog import load_default_formal_household_catalogs
+    from hwr.eval.tool_kinematics import recursive_xml_input_identity
+
+    _, bindings = load_default_formal_household_catalogs(root)
+    return {
+        "binding": candidate_file_identity(root, root / binding_path),
+        "task_config": candidate_file_identity(root, root / task_path),
+        "recursive_xml": {
+            task_id: recursive_xml_input_identity(root, bindings[task_id].model_path)
+            for task_id in task_ids
+        },
+        "sources": {
+            name: candidate_file_identity(root, root / path)
+            for name, path in source_paths.items()
+        },
+        "historical_research_loop_trees": {
+            path: candidate_git_tree(root, path) for path in historical_trees
+        },
+        "frozen_document": candidate_file_identity(root, root / frozen_document_path),
+    }
+
+
+def require_candidate_clean_source(
+    root, identities, frozen_document_commit, frozen_document_path,
+    protected_paths, historical_trees, runner=subprocess.run,
+) -> None:
+    status = runner(
+        ("git", "status", "--porcelain", "--untracked-files=all"),
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    if status.stdout.strip():
+        raise RuntimeError("P50-E1 runner requires clean committed source")
+    ancestor = runner(
+        ("git", "merge-base", "--is-ancestor", frozen_document_commit, "HEAD"),
+        cwd=root,
+        check=False,
+    )
+    if ancestor.returncode != 0:
+        raise RuntimeError("P50 frozen document commit is not an ancestor")
+    protected = runner(
+        (
+            "git",
+            "diff",
+            "--quiet",
+            frozen_document_commit,
+            "HEAD",
+            "--",
+            *protected_paths,
+        ),
+        cwd=root,
+        check=False,
+    )
+    if protected.returncode != 0:
+        raise RuntimeError("P50 source/config/XML anchors drifted")
+    if identities.get("historical_research_loop_trees") != historical_trees:
+        raise RuntimeError("P50 historical research-loop documents drifted")
+    frozen = runner(
+        ("git", "show", f"{frozen_document_commit}:{frozen_document_path}"),
+        cwd=root,
+        check=True,
+        capture_output=True,
+    ).stdout
+    if identities["frozen_document"] != {
+        "path": frozen_document_path.as_posix(),
+        "sha256": _sha256(frozen),
+        "bytes": len(frozen),
+    }:
+        raise RuntimeError("P50 frozen document content drifted")
+
+
 def analyze_candidate_capsule_directory(
     repository: Path,
     capsule_directory: Path,
     current_identities: Mapping[str, object],
     frozen_document_commit: str,
+    required_source_names: Sequence[str] | None = None,
+    *,
+    expected_plan_schema: str = "hwr.p50-acquisition-plan/v1",
+    expected_proposal_id: str = "R0001-P50-E1",
+    expected_plan_id: str = "R0001-P50-E1-formal",
+    expected_commitment: str = (
+        "ed945b2dcfe90c6aab639164da32cc8a1a905df56534c42a443d1bd4753e16a4"
+    ),
+    expected_cells: Sequence[tuple[str, int, int]] = (),
+    acquisition_steps: int = 995,
 ) -> tuple[dict[str, object], dict[str, object]]:
     manifest = _read_object(capsule_directory / "manifest.json")
     report = _read_object(capsule_directory / "report.json")
@@ -425,7 +513,20 @@ def analyze_candidate_capsule_directory(
         or not source_to_head
     ):
         raise CandidateFunnelContractError("E1 frozen/source ancestry differs")
-    _require_e1_source_identity(manifest, current_identities)
+    _require_e1_source_identity(
+        repository, source_commit, manifest, current_identities,
+        frozen_document_commit, required_source_names,
+    )
+    validate_plan_contract(
+        plan,
+        salt=None,
+        expected_schema=expected_plan_schema,
+        expected_proposal_id=expected_proposal_id,
+        expected_plan_id=expected_plan_id,
+        expected_commitment=expected_commitment,
+        expected_cells=expected_cells,
+        acquisition_steps=acquisition_steps,
+    )
     if (
         manifest.get("status") != "complete"
         or report.get("decision")
@@ -553,18 +654,65 @@ def _verify_artifacts(root, manifest):
         read_bound_blob(root, {"path": name, **identity})
 
 
-def _require_e1_source_identity(manifest, current):
+def _require_e1_source_identity(
+    repository, source_commit, manifest, current, frozen_document_commit,
+    required_source_names,
+):
     source = manifest.get("source_identities")
     if not isinstance(source, Mapping):
         raise CandidateFunnelContractError("E1 source identities are missing")
-    for key in ("binding", "task_config", "recursive_xml", "frozen_document"):
-        if source.get(key) != current.get(key):
-            raise CandidateFunnelContractError(f"E1 {key} identity drifted")
-    if set(source.get("sources", ())) != set(current.get("sources", ())):
+    for key in ("binding", "task_config"):
+        _require_committed_identity(repository, source_commit, source.get(key))
+    frozen = source.get("frozen_document")
+    _require_committed_identity(
+        repository, frozen_document_commit, frozen
+    )
+    recursive = source.get("recursive_xml")
+    current_recursive = current.get("recursive_xml")
+    if not isinstance(recursive, Mapping) or set(recursive) != set(current_recursive):
+        raise CandidateFunnelContractError("E1 recursive XML identity set differs")
+    for task_id, identity in recursive.items():
+        current_identity = current_recursive[task_id]
+        if (
+            identity.get("entry_model") != current_identity.get("entry_model")
+            or {
+                value.get("path") for value in identity.get("dependencies", [])
+            } != {
+                value.get("path")
+                for value in current_identity.get("dependencies", [])
+            }
+        ):
+            raise CandidateFunnelContractError("E1 recursive XML paths differ")
+        for dependency in identity.get("dependencies", []):
+            _require_committed_identity(repository, source_commit, dependency)
+    expected_names = (
+        tuple(current.get("sources", ()))
+        if required_source_names is None
+        else tuple(required_source_names)
+    )
+    if set(source.get("sources", ())) != set(expected_names):
         raise CandidateFunnelContractError("E1 source identity set differs")
-    for name in current["sources"]:
-        if source["sources"].get(name) != current["sources"].get(name):
+    for name in expected_names:
+        identity = source["sources"].get(name)
+        if identity.get("path") != current["sources"][name].get("path"):
             raise CandidateFunnelContractError(f"E1 {name} identity drifted")
+        _require_committed_identity(repository, source_commit, identity)
+
+
+def _require_committed_identity(repository, commit, identity) -> None:
+    if not isinstance(identity, Mapping):
+        raise CandidateFunnelContractError("E1 source identity is missing")
+    content = subprocess.run(
+        ("git", "show", f"{commit}:{identity.get('path')}"),
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    ).stdout
+    if (
+        identity.get("sha256") != _sha256(content)
+        or identity.get("bytes") != len(content)
+    ):
+        raise CandidateFunnelContractError("E1 source identity bytes differ")
 
 
 def _read_object(path):
