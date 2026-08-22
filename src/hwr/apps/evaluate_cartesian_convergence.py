@@ -64,8 +64,10 @@ BINDING_PATH = Path("configs/adapters/mujoco/formal_3d_v1.json")
 TASK_PATH = Path("configs/tasks/formal_3d_v1.json")
 SOURCE_PATHS = (
     Path("src/hwr/eval/cartesian_convergence.py"),
+    Path("src/hwr/eval/cartesian_convergence_validation.py"),
     Path("src/hwr/eval/seed_contract.py"),
     Path("src/hwr/adapters/mujoco/cartesian_convergence.py"),
+    Path("src/hwr/adapters/mujoco/cartesian_convergence_provenance.py"),
     Path("src/hwr/apps/evaluate_cartesian_convergence.py"),
     Path("src/hwr/eval/target_selection.py"),
     Path("src/hwr/eval/target_selection_safety.py"),

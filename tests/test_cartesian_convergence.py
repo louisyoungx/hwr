@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from hwr.eval import cartesian_convergence as convergence
+from hwr.eval import cartesian_convergence_validation as validation
 from hwr.eval.seed_contract import seed_commitment
 from hwr.eval.target_selection import Candidate
 
@@ -286,7 +287,7 @@ def test_seed_state_machine_rejects_sixty_fifth_matched_prefix(monkeypatch) -> N
         convergence.CartesianConvergenceContractError,
         match="budget exceeded",
     ):
-        convergence._validate_seed_records(records, salt)
+        validation._validate_seed_records(records, salt)
 
 
 def _terminal_document(bank, delta=0.20, records=None) -> dict[str, object]:

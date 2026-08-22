@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from hwr.adapters.mujoco import cartesian_convergence as bridge
+from hwr.adapters.mujoco import cartesian_convergence_provenance as provenance
 from hwr.adapters.mujoco import dual_arm_backend
 from hwr.adapters.mujoco.training_catalog import (
     load_default_formal_household_catalogs,
@@ -96,12 +97,12 @@ def test_continuation_identity_covers_queues_history_and_counters(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        bridge.mujoco,
+        provenance.mujoco,
         "mj_stateSize",
         lambda model, specification: 3,
     )
     monkeypatch.setattr(
-        bridge.mujoco,
+        provenance.mujoco,
         "mj_getState",
         lambda model, data, target, specification: target.__setitem__(
             slice(None), (1.0, 2.0, 3.0)
@@ -111,7 +112,7 @@ def test_continuation_identity_covers_queues_history_and_counters(
     observation = _observation()
     graph = _FakeGraph()
 
-    first = bridge.continuation_identity(
+    first = provenance.continuation_identity(
         backend, observation, [(0.0,) * 16], [True], graph
     )
     assert set(first["components"]) == {
@@ -128,7 +129,7 @@ def test_continuation_identity_covers_queues_history_and_counters(
     backend._action_queue.append(
         DualArmAction(0.0, 0.0, (0.1,) * 6, (0.0,) * 6, 0.0, 0.0)
     )
-    second = bridge.continuation_identity(
+    second = provenance.continuation_identity(
         backend, observation, [(0.0,) * 16], [True], graph
     )
     assert first["identity"] != second["identity"]
@@ -137,7 +138,7 @@ def test_continuation_identity_covers_queues_history_and_counters(
     ]
 
     backend._observation_queue.append(observation)
-    queued = bridge.continuation_identity(
+    queued = provenance.continuation_identity(
         backend, observation, [(0.0,) * 16], [True], graph
     )
     assert second["identity"] != queued["identity"]
@@ -145,12 +146,12 @@ def test_continuation_identity_covers_queues_history_and_counters(
         "components"
     ]["observation_latency_queue"]
 
-    third = bridge.continuation_identity(
+    third = provenance.continuation_identity(
         backend, observation, [(0.1,) * 16], [True], graph
     )
     assert queued["identity"] != third["identity"]
     backend._steps += 1
-    fourth = bridge.continuation_identity(
+    fourth = provenance.continuation_identity(
         backend, observation, [(0.1,) * 16], [True], graph
     )
     assert third["identity"] != fourth["identity"]
