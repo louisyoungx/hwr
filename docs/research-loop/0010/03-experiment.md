@@ -137,9 +137,12 @@ subpayload 不同必须 fail-closed；完整 payload 因 phase/history 不同可
   - terminal；
   - missing payload；
   均保留，不 replacement。
-- 每 Episode 固定执行 P41 原 acquisition 的 995 个 control step，随后停止。
-- 上界：1,152 个 latency sampler 调用、24 个 MuJoCo acquisition Episode、23,880 个
-  control step；无 post-selection。
+- 每个 planned Episode 与 validation replay 最多执行 P41 原 acquisition 的 995 个
+  control step，物理 runtime terminal 必须提前停止并原样保留。
+- 上界：1,152 个 latency sampler 调用、24 个 planned MuJoCo acquisition Episode 加
+  24 个同 seed validation replay，最多 47,760 个 control step；无 post-selection。
+- validation replay 使用新的 backend/reset 完整重跑同一 seed，并同时关闭 artifact
+  capture side effect；它不是在同一 payload stream 上调用第二个 controller state。
 - 原始 capsule 预估上限 24 × 49 × 0.35MiB 约 412MiB；运行前须确认数据卷至少 5GiB
   可用。
 
