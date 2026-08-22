@@ -422,7 +422,12 @@ def _manifest(
         "status": status,
         "source_commit": source_commit,
         "frozen_document_commit": FROZEN_DOCUMENT_COMMIT,
-        "frozen_document_commit_is_ancestor": status == "complete",
+        "frozen_document_commit_is_ancestor": bool(
+            identities.get("frozen_document", {}).get("commit_is_ancestor")
+        ),
+        "frozen_document_content_matches": bool(
+            identities.get("frozen_document", {}).get("content_matches")
+        ),
         "command": list(command),
         "runtime": {
             "python": platform.python_version(),
@@ -491,6 +496,7 @@ def _source_identities(root: Path) -> dict[str, object]:
     }
     robot = root / "assets/mujoco/common/robot_body.xml"
     values["robot_model"] = _file_identity(root, robot)
+    values["frozen_document"] = _frozen_document_status(root)
     values["git_trees"] = {
         path.as_posix(): _git_output(root, ("rev-parse", f"HEAD:{path}"))
         for path in SOURCE_TREES
@@ -510,7 +516,7 @@ def _require_clean_source(
     )
     if status.stdout.strip():
         raise RuntimeError("P51-E1 runner requires clean committed source")
-    _require_frozen_document(root)
+    _require_frozen_document(root, identities["frozen_document"])
     for path, expected in HISTORICAL_TREES.items():
         actual = _git_output(root, ("rev-parse", f"HEAD:{path}"))
         if actual != expected:
@@ -519,7 +525,12 @@ def _require_clean_source(
         raise RuntimeError("P51-E1 source provenance is empty")
 
 
-def _require_frozen_document(root: Path) -> None:
+def _frozen_document_status(root: Path) -> dict[str, object]:
+    ancestor = subprocess.run(
+        ("git", "merge-base", "--is-ancestor", FROZEN_DOCUMENT_COMMIT, "HEAD"),
+        cwd=root,
+        check=False,
+    ).returncode == 0
     expected = subprocess.run(
         (
             "git",
@@ -530,7 +541,21 @@ def _require_frozen_document(root: Path) -> None:
         check=True,
         capture_output=True,
     ).stdout
-    if (root / FROZEN_DOCUMENT_PATH).read_bytes() != expected:
+    actual = (root / FROZEN_DOCUMENT_PATH).read_bytes()
+    return {
+        "commit": FROZEN_DOCUMENT_COMMIT,
+        "commit_is_ancestor": ancestor,
+        "content_matches": actual == expected,
+        "current": _bytes_identity(actual),
+        "frozen": _bytes_identity(expected),
+    }
+
+
+def _require_frozen_document(root: Path, status=None) -> None:
+    status = _frozen_document_status(root) if status is None else status
+    if not status["commit_is_ancestor"]:
+        raise RuntimeError("P51-E1 frozen experiment commit is not an ancestor")
+    if not status["content_matches"]:
         raise RuntimeError("P51-E1 frozen experiment document content drifted")
 
 
@@ -580,18 +605,22 @@ def _require_bank_provenance(root, bank, current) -> None:
 
 
 def _unresolved_record(pair, error) -> dict[str, object]:
+    identity_fields = (
+        "pair_id", "planned_episode_id", "task_id", "cell_id",
+        "replicate_ordinal", "observation_latency_steps", "action_latency_steps",
+        "environment_seed", "policy_rng_seed", "role_order",
+        "candidate_set_sha256", "selected_index", "continuation_identity",
+        "prefix_trace_sha256", "first_treatment_guard", "preposition_targets",
+        "preposition_target_identity", "preposition_target_identities",
+    )
     return {
-        "pair_id": pair["pair_id"],
-        "planned_episode_id": pair["planned_episode_id"],
-        "task_id": pair["task_id"],
-        "cell_id": pair["cell_id"],
-        "replicate_ordinal": pair["replicate_ordinal"],
-        "observation_latency_steps": pair["observation_latency_steps"],
-        "action_latency_steps": pair["action_latency_steps"],
-        "environment_seed": pair["environment_seed"],
-        "policy_rng_seed": pair["policy_rng_seed"],
-        "role_order": pair["role_order"],
-        "pair_identity_valid": None,
+        **{name: pair[name] for name in identity_fields},
+        "bank_pair_sha256": hashlib.sha256(
+            json.dumps(
+                pair, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+            ).encode("ascii")
+        ).hexdigest(),
+        "pair_identity_valid": True,
         "continuation_identity_equal": None,
         "first_treatment_guard": pair["first_treatment_guard"],
         "resolved": False,

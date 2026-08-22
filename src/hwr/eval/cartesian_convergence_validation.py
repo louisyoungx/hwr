@@ -18,8 +18,11 @@ from hwr.eval.cartesian_convergence import (
     BOOTSTRAP_REPLICATES,
     BOOTSTRAP_SEED,
     CONTINUOUS_MDE,
+    ELIGIBILITY_REASONS,
+    INPUT_FAILURE_REASONS,
     LATENCY_VALUES,
     LATENCY_MATCH_LIMIT,
+    ORDINARY_TERMINAL_REASONS,
     PAIR_COUNT_PER_CELL,
     PLAN_ID,
     PREFIX_FIELDS,
@@ -35,7 +38,9 @@ from hwr.eval.cartesian_convergence import (
     canonical_sha256,
     first_treatment_guard,
     frozen_cells,
+    identity,
     pair_identity,
+    preposition_targets,
     raw_seed_record,
     role_order,
     signed_derivatives,
@@ -100,10 +105,14 @@ def _validated_terminal_records(terminals, bank):
         for index, record in enumerate(records)
     ]
     hard_stop = any(bool(record.get("hard_safety_stop")) for record in records)
-    unresolved = any(not record.get("resolved") for record in records)
+    unresolved_indices = [
+        index for index, record in enumerate(records)
+        if not record.get("resolved")
+    ]
+    unresolved = bool(unresolved_indices)
     if hard_stop and not records[-1].get("hard_safety_stop"):
         raise CartesianConvergenceContractError("hard safety stop is not terminal")
-    if unresolved and not hard_stop and records[-1].get("resolved"):
+    if unresolved_indices and unresolved_indices != [len(records) - 1]:
         raise CartesianConvergenceContractError("unresolved record is not terminal")
     if not hard_stop and not unresolved and len(records) != len(planned):
         raise CartesianConvergenceContractError("terminal plan is incomplete")
@@ -128,10 +137,13 @@ def _validate_terminal_pair(record, pair) -> dict[str, object]:
         "replicate_ordinal", "observation_latency_steps", "action_latency_steps",
         "environment_seed", "policy_rng_seed", "role_order",
         "candidate_set_sha256", "selected_index", "continuation_identity",
-        "prefix_trace_sha256", "first_treatment_guard",
+        "prefix_trace_sha256", "first_treatment_guard", "preposition_targets",
+        "preposition_target_identity", "preposition_target_identities",
     )
     if any(record.get(name) != pair.get(name) for name in fields):
         raise CartesianConvergenceContractError("terminal pair differs from bank")
+    if record.get("bank_pair_sha256") != canonical_sha256(pair):
+        raise CartesianConvergenceContractError("terminal bank identity differs")
     actions = pair["first_treatment_actions"]
     expected_guard = first_treatment_guard(
         actions["frame_legacy"], actions["frame_fixed"]
@@ -142,7 +154,12 @@ def _validate_terminal_pair(record, pair) -> dict[str, object]:
     if not isinstance(arms, Mapping) or not set(arms) <= set(ROLES):
         raise CartesianConvergenceContractError("terminal role set differs")
     if not record.get("resolved"):
-        if arms or record.get("hard_safety_stop"):
+        if (
+            arms
+            or record.get("hard_safety_stop")
+            or record.get("pair_identity_valid") is not True
+            or not isinstance(record.get("infrastructure_failure"), Mapping)
+        ):
             raise CartesianConvergenceContractError("unresolved terminal payload differs")
         return dict(record)
     if not record.get("pair_identity_valid"):
@@ -236,6 +253,12 @@ def _validated_arm(role, arm, pair) -> dict[str, object]:
         if not _same_number(arm.get(name), outcome[name]):
             raise CartesianConvergenceContractError(f"terminal {name} differs")
     carry = B2_STEPS - executed
+    ordinary_reason = arm.get("ordinary_runtime_terminal")
+    if executed < B2_STEPS and arm["hard_guard_passed"]:
+        if ordinary_reason not in ORDINARY_TERMINAL_REASONS:
+            raise CartesianConvergenceContractError("ordinary terminal reason differs")
+    elif ordinary_reason is not None and ordinary_reason not in ORDINARY_TERMINAL_REASONS:
+        raise CartesianConvergenceContractError("ordinary terminal reason differs")
     if arm.get("carried_forward_step_count") != carry:
         raise CartesianConvergenceContractError("terminal carry-forward count differs")
     if bool(arm.get("symmetric_terminal_carry_forward")) != bool(carry):
@@ -253,6 +276,22 @@ def _validated_arm(role, arm, pair) -> dict[str, object]:
             raise CartesianConvergenceContractError("tool distance mean differs")
         if not _same_number(values[2], distances[index]):
             raise CartesianConvergenceContractError("distance trace differs")
+    target = arm.get("preposition_targets")
+    target_identity = arm.get("preposition_target_identity")
+    if target != pair.get("preposition_targets") or target_identity != pair.get(
+        "preposition_target_identity"
+    ):
+        raise CartesianConvergenceContractError("terminal target differs from bank")
+    if identity(target) != target_identity:
+        raise CartesianConvergenceContractError("terminal target identity differs")
+    target_identities = arm.get("preposition_target_identities")
+    if target_identities != pair.get("preposition_target_identities") or any(
+        identity(target[name]) != target_identities.get(name)
+        for name in ("left", "right")
+    ):
+        raise CartesianConvergenceContractError("terminal arm target identity differs")
+    if carry and tool[executed:] != [tool[executed]] * (carry + 1):
+        raise CartesianConvergenceContractError("tool carry-forward values differ")
     if signed_derivatives(tool, applied) != arm.get(
         "first_10_applied_nonzero_arm_signed_derivatives"
     ):
@@ -509,7 +548,25 @@ def _validate_pair_record(pair, reveal):
     candidate = Candidate(**pair["selected_record"])
     if list(candidate.canonical_record()) != document["candidates"][index]:
         raise CartesianConvergenceContractError("bank selected record differs")
+    rebuilt_targets = preposition_targets(
+        candidate, pair["acquisition_base_pose"], pair["b2_policy_base_pose"]
+    )
+    if {
+        name: list(value) for name, value in rebuilt_targets.items()
+    } != pair.get("preposition_targets"):
+        raise CartesianConvergenceContractError("bank target reconstruction differs")
     guard, actions = pair["first_treatment_guard"], pair["first_treatment_actions"]
+    targets = pair.get("preposition_targets")
+    if not isinstance(targets, Mapping) or set(targets) != {"left", "right"}:
+        raise CartesianConvergenceContractError("bank preposition targets differ")
+    if identity(targets) != pair.get("preposition_target_identity"):
+        raise CartesianConvergenceContractError("bank target identity differs")
+    target_identities = pair.get("preposition_target_identities")
+    if not isinstance(target_identities, Mapping) or any(
+        identity(targets[name]) != target_identities.get(name)
+        for name in ("left", "right")
+    ):
+        raise CartesianConvergenceContractError("bank arm target identity differs")
     if (
         set(actions) != set(ROLES)
         or first_treatment_guard(actions["frame_legacy"], actions["frame_fixed"]) != guard
@@ -541,6 +598,8 @@ def _validate_seed_records(
         current = state[cell_id]
         if len(current["eligible"]) == PAIR_COUNT_PER_CELL:
             raise CartesianConvergenceContractError("audit continues after third eligible")
+        if current["matched"] == LATENCY_MATCH_LIMIT:
+            raise CartesianConvergenceContractError("audit continues after matched budget")
         if ordinal != current["next"]:
             raise CartesianConvergenceContractError("seed audit ordinals are not contiguous")
         current["next"] += 1
@@ -589,8 +648,66 @@ def _validate_prefix_record(record: Mapping[str, object]) -> None:
             f"matched prefix fields missing: {sorted(missing)}"
         )
     eligible, reason = bool(record["eligible"]), record.get("eligibility_reason")
-    if (eligible and reason != "eligible") or (not eligible and reason == "eligible"):
+    if reason not in ELIGIBILITY_REASONS:
+        raise CartesianConvergenceContractError("prefix eligibility reason is unknown")
+    candidate_bytes = bytes.fromhex(str(record["candidate_bytes_hex"]))
+    if hashlib.sha256(candidate_bytes).hexdigest() != record["candidate_set_sha256"]:
+        raise CartesianConvergenceContractError("prefix candidate bytes differ")
+    if candidate_bytes:
+        document = json.loads(candidate_bytes)
+        candidates = document.get("candidates")
+        if not isinstance(candidates, list):
+            raise CartesianConvergenceContractError("prefix candidate document differs")
+    else:
+        candidates = []
+    if int(record["candidate_count"]) != len(candidates):
+        raise CartesianConvergenceContractError("prefix candidate count differs")
+    selected = int(record["selected_index"])
+    selected_valid = 0 <= selected < len(candidates)
+    selected_record = record["selected_record"]
+    if selected_valid:
+        candidate = Candidate(**selected_record)
+        if list(candidate.canonical_record()) != candidates[selected]:
+            raise CartesianConvergenceContractError("prefix selected record differs")
+    elif selected_record is not None:
+        raise CartesianConvergenceContractError("invalid selection has a record")
+    hashes = record["acquisition_input_hashes"]
+    if (
+        not isinstance(hashes, list)
+        or canonical_sha256(hashes) != record["acquisition_input_sequence_sha256"]
+    ):
+        raise CartesianConvergenceContractError("acquisition input hashes differ")
+    step_count = int(record["prefix_step_count"])
+    if (
+        not 0 <= step_count <= 1395
+        or bool(record["prefix_complete"])
+        != (step_count == 1395 and not record["prefix_terminal_observed"])
+    ):
+        raise CartesianConvergenceContractError("prefix completion evidence differs")
+    if any(
+        int(record[name]) < 0
+        for name in (
+            "prefix_safety_intervention_count",
+            "prefix_stale_action_applied_count",
+            "prefix_severe_collision_count",
+            "prefix_invalid_force_count",
+        )
+    ):
+        raise CartesianConvergenceContractError("prefix counter is negative")
+    actions = record["first_treatment_actions"]
+    if set(actions) not in (set(), set(ROLES)):
+        raise CartesianConvergenceContractError("prefix treatment actions differ")
+    if actions and first_treatment_guard(
+        actions["frame_legacy"], actions["frame_fixed"]
+    ) != record["first_treatment_guard"]:
+        raise CartesianConvergenceContractError("prefix treatment guard differs")
+    expected_reason = _prefix_failure_reason(record)
+    if reason != expected_reason or eligible != (expected_reason == "eligible"):
         raise CartesianConvergenceContractError("prefix eligibility reason differs")
+    if record.get("prefix_failure_reason") != (
+        None if eligible else expected_reason
+    ):
+        raise CartesianConvergenceContractError("prefix failure reason differs")
     if eligible and (
         int(record["candidate_count"]) <= 0
         or not record["selected_record"]
@@ -599,6 +716,46 @@ def _validate_prefix_record(record: Mapping[str, object]) -> None:
         or not record["primitive_target_crosscheck"].get("passed")
     ):
         raise CartesianConvergenceContractError("eligible prefix is incomplete")
+
+
+def _prefix_failure_reason(record: Mapping[str, object]) -> str:
+    input_failure = record.get("input_failure_reason")
+    if input_failure is not None:
+        if input_failure not in INPUT_FAILURE_REASONS:
+            raise CartesianConvergenceContractError("input failure reason is unknown")
+        return str(input_failure)
+    checks = (
+        ("acquisition_main_event", "main_event_during_acquisition", True),
+        ("prefix_action_bounds_valid", "action_bounds_violation", False),
+        ("prefix_stale_action_applied_count", "stale_action_applied", "positive"),
+        ("prefix_severe_collision_count", "severe_collision", "positive"),
+        ("prefix_safety_intervention_count", "safety_intervention_during_prefix", "positive"),
+        ("prefix_terminal_observed", "runtime_terminal_during_prefix", True),
+        ("prefix_invalid_force_count", "invalid_force", "positive"),
+        ("prefix_p40_conservation_maximum_absolute_difference",
+         "p40_conservation_violation", "positive"),
+    )
+    for field, reason, failure_value in checks:
+        value = record.get(field)
+        failed = value == failure_value if failure_value != "positive" else float(value) > 0.0
+        if failed:
+            return reason
+    if not record.get("prefix_complete"):
+        raise CartesianConvergenceContractError("incomplete prefix lacks failure evidence")
+    if int(record["candidate_count"]) <= 0:
+        return "candidate_set_empty"
+    selected = int(record["selected_index"])
+    if not 0 <= selected < int(record["candidate_count"]):
+        return "selected_index_out_of_range"
+    if abs(float(record["relative_yaw_at_b2"])) < math.pi / 6.0:
+        return "relative_yaw_below_pi_over_6"
+    if not record["primitive_target_crosscheck"].get("passed"):
+        return "primitive_target_crosscheck_failed"
+    if not treatment_guard_passes(record["first_treatment_guard"]):
+        return "first_treatment_action_ineligible"
+    if record.get("prefix_failure_reason") is not None:
+        raise CartesianConvergenceContractError("prefix failure reason lacks evidence")
+    return "eligible"
 
 
 def _mean(values: Sequence[float]) -> float:

@@ -282,7 +282,7 @@ def test_frozen_document_matches_main_commit_and_tamper_fails(
     monkeypatch.setattr(
         app.subprocess,
         "run",
-        lambda *args, **kwargs: SimpleNamespace(stdout=expected),
+        lambda *args, **kwargs: SimpleNamespace(stdout=expected, returncode=0),
     )
     app._require_frozen_document(tmp_path)
     target.write_bytes(expected + b"\ntampered\n")
@@ -382,17 +382,34 @@ def _prefix() -> dict[str, object]:
         "selected_index": 0,
         "selected_record": candidate,
         "relative_yaw_at_b2": 1.0,
+        "prefix_failure_reason": None,
+        "input_failure_reason": None,
+        "prefix_step_count": 1395,
+        "prefix_complete": True,
+        "prefix_terminal_observed": False,
+        "prefix_safety_intervention_count": 0,
+        "prefix_action_bounds_valid": True,
+        "prefix_stale_action_applied_count": 0,
+        "prefix_severe_collision_count": 0,
+        "prefix_invalid_force_count": 0,
+        "prefix_p40_conservation_maximum_absolute_difference": 0.0,
+        "acquisition_main_event": False,
         "acquisition_input_hashes": ["c" * 64],
-        "acquisition_input_sequence_sha256": "d" * 64,
+        "acquisition_input_sequence_sha256": convergence.canonical_sha256(
+            ["c" * 64]
+        ),
         "b0_b1_proposed_action_sha256": "e" * 64,
         "b0_b1_applied_action_sha256": "f" * 64,
         "acquisition_base_pose": [0.0, 0.0, 0.0],
         "acquisition_world_origin": [0.0, 0.0, 0.22],
+        "b2_policy_base_pose": [0.0, 0.0, 0.0],
         "continuation_identity": {"identity": {"sha256": "a" * 64}},
         "prefix_trace_sha256": "b" * 64,
-        "preposition_targets": {
-            "left": [0.82, 0.12, 0.75],
-            "right": [0.82, -0.12, 0.75],
+        "preposition_targets": _fixture_targets(),
+        "preposition_target_identity": convergence.identity(_fixture_targets()),
+        "preposition_target_identities": {
+            name: convergence.identity(value)
+            for name, value in _fixture_targets().items()
         },
         "primitive_target_crosscheck": {"passed": True},
         "first_treatment_actions": actions,
@@ -413,4 +430,18 @@ def _pair() -> dict[str, object]:
         "policy_rng_seed": 2,
         "role_order": list(convergence.ROLES),
         "first_treatment_guard": {},
+    }
+
+
+def _fixture_targets() -> dict[str, list[float]]:
+    from hwr.eval.target_selection import Candidate
+
+    candidate = Candidate(
+        (1.0, 0.0, 0.7), (-1.0, 0.0, 0.0), 0.12, 0.1, 30, 2, 0, 20, 30
+    )
+    return {
+        name: list(value)
+        for name, value in convergence.preposition_targets(
+            candidate, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)
+        ).items()
     }

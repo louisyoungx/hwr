@@ -264,6 +264,34 @@ def test_bank_state_machine_rejects_mismatch_prefix_and_post_accept_audit(
     ):
         validation.validate_bank(extra)
 
+    manual_skip = copy.deepcopy(bank)
+    manual_skip["seed_audit"][0].update(
+        eligible=False,
+        eligibility_reason="manual_skip",
+    )
+    with pytest.raises(
+        convergence.CartesianConvergenceContractError,
+        match="unknown|differs",
+    ):
+        validation.validate_bank(manual_skip)
+
+
+def test_bank_and_terminal_target_tampering_is_invalid(monkeypatch) -> None:
+    bank = _local_bank(monkeypatch)
+    tampered = copy.deepcopy(bank)
+    tampered["pairs"][0]["preposition_targets"]["left"][0] += 0.01
+    with pytest.raises(
+        convergence.CartesianConvergenceContractError,
+        match="pair differs|target",
+    ):
+        validation.validate_bank(tampered)
+
+    terminals = _terminal_document(bank)
+    terminals["records"][0]["arms"]["frame_fixed"][
+        "preposition_target_identities"
+    ]["left"]["sha256"] = "0" * 64
+    assert validation.analyze_terminals(terminals, bank)["decision"] == "invalid"
+
 
 def test_seed_state_machine_rejects_sixty_fifth_matched_prefix(monkeypatch) -> None:
     salt = "34" * 32
@@ -285,9 +313,52 @@ def test_seed_state_machine_rejects_sixty_fifth_matched_prefix(monkeypatch) -> N
         )
     with pytest.raises(
         convergence.CartesianConvergenceContractError,
-        match="budget exceeded",
+        match="matched budget",
     ):
         validation._validate_seed_records(records, salt)
+
+
+def test_unresolved_identity_is_validated_before_inconclusive(monkeypatch) -> None:
+    bank = _local_bank(monkeypatch)
+    pair = bank["pairs"][0]
+    unresolved = _unresolved(pair)
+    terminals = _terminal_document(bank, records=[unresolved])
+
+    assert validation.analyze_terminals(terminals, bank)["decision"] == "inconclusive"
+    unresolved["candidate_set_sha256"] = "0" * 64
+    assert validation.analyze_terminals(terminals, bank)["decision"] == "invalid"
+
+
+def test_early_stop_requires_frozen_terminal_reason_and_carry(monkeypatch) -> None:
+    bank = _local_bank(monkeypatch)
+    records = _terminal_records(bank, delta=0.20)
+    arm = records[0]["arms"]["frame_fixed"]
+    arm["executed_b2_steps"] = 50
+    arm["proposed_actions"] = arm["proposed_actions"][:50]
+    arm["applied_actions"] = arm["applied_actions"][:50]
+    arm["proposed_action_sha256"] = convergence.canonical_sha256(
+        arm["proposed_actions"]
+    )
+    arm["applied_action_sha256"] = convergence.canonical_sha256(
+        arm["applied_actions"]
+    )
+    arm["action_summary"] = convergence.action_summary(
+        arm["proposed_actions"], arm["applied_actions"]
+    )
+    arm["first_10_applied_nonzero_arm_signed_derivatives"] = (
+        convergence.signed_derivatives(
+            arm["tool_distances"], arm["applied_actions"]
+        )
+    )
+    arm["carried_forward_step_count"] = 50
+    arm["symmetric_terminal_carry_forward"] = True
+    terminals = _terminal_document(bank, records=records)
+    assert validation.analyze_terminals(terminals, bank)["decision"] == "invalid"
+    arm["ordinary_runtime_terminal"] = "unknown_terminal"
+    assert validation.analyze_terminals(terminals, bank)["decision"] == "invalid"
+    arm["ordinary_runtime_terminal"] = "formal_household_bimanual_success"
+    result = validation.analyze_terminals(terminals, bank)
+    assert result["decision"].startswith(("accepted", "rejected"))
 
 
 def _terminal_document(bank, delta=0.20, records=None) -> dict[str, object]:
@@ -314,10 +385,12 @@ def _terminal_records(bank, delta: float) -> list[dict[str, object]]:
             "action_latency_steps", "environment_seed", "policy_rng_seed",
             "role_order", "candidate_set_sha256", "selected_index",
             "continuation_identity", "prefix_trace_sha256",
-            "first_treatment_guard",
+            "first_treatment_guard", "preposition_targets",
+            "preposition_target_identity", "preposition_target_identities",
         )
         record = {
             **{name: pair[name] for name in fields},
+            "bank_pair_sha256": convergence.canonical_sha256(pair),
             "continuation_replay_identities": {
                 role: pair["continuation_identity"] for role in pair["role_order"]
             },
@@ -372,7 +445,32 @@ def _arm(auc: float, pair, role: str) -> dict[str, object]:
         "action_bounds_valid": True,
         "hard_guard_passed": True,
         "hard_failure_reason": None,
+        "ordinary_runtime_terminal": None,
+        "preposition_targets": pair["preposition_targets"],
+        "preposition_target_identity": pair["preposition_target_identity"],
+        "preposition_target_identities": pair["preposition_target_identities"],
         "invariant_identities": invariants,
+    }
+
+
+def _unresolved(pair) -> dict[str, object]:
+    fields = (
+        "pair_id", "planned_episode_id", "task_id", "cell_id",
+        "replicate_ordinal", "observation_latency_steps", "action_latency_steps",
+        "environment_seed", "policy_rng_seed", "role_order",
+        "candidate_set_sha256", "selected_index", "continuation_identity",
+        "prefix_trace_sha256", "first_treatment_guard", "preposition_targets",
+        "preposition_target_identity", "preposition_target_identities",
+    )
+    return {
+        **{name: pair[name] for name in fields},
+        "bank_pair_sha256": convergence.canonical_sha256(pair),
+        "pair_identity_valid": True,
+        "continuation_identity_equal": None,
+        "resolved": False,
+        "hard_safety_stop": False,
+        "infrastructure_failure": {"error_type": "OSError", "error": "interrupted"},
+        "arms": {},
     }
 
 
@@ -451,16 +549,33 @@ def _audit_prefix(candidate, candidate_bytes) -> dict[str, object]:
         "continuation_identity": {"identity": {"sha256": "a" * 64}},
         "prefix_trace_sha256": "b" * 64,
         "relative_yaw_at_b2": np.pi / 2.0,
+        "prefix_failure_reason": None,
+        "input_failure_reason": None,
+        "prefix_step_count": 1395,
+        "prefix_complete": True,
+        "prefix_terminal_observed": False,
+        "prefix_safety_intervention_count": 0,
+        "prefix_action_bounds_valid": True,
+        "prefix_stale_action_applied_count": 0,
+        "prefix_severe_collision_count": 0,
+        "prefix_invalid_force_count": 0,
+        "prefix_p40_conservation_maximum_absolute_difference": 0.0,
+        "acquisition_main_event": False,
         "acquisition_input_hashes": ["c" * 64],
-        "acquisition_input_sequence_sha256": "d" * 64,
+        "acquisition_input_sequence_sha256": convergence.canonical_sha256(
+            ["c" * 64]
+        ),
         "b0_b1_proposed_action_sha256": "e" * 64,
         "b0_b1_applied_action_sha256": "f" * 64,
         "acquisition_base_pose": [0.0, 0.0, 0.0],
         "acquisition_world_origin": [0.0, 0.0, 0.22],
+        "b2_policy_base_pose": [0.0, 0.0, np.pi / 2.0],
         "first_treatment_actions": actions,
-        "preposition_targets": {
-            "left": [0.82, 0.12, 0.75],
-            "right": [0.82, -0.12, 0.75],
+        "preposition_targets": _fixture_targets(),
+        "preposition_target_identity": convergence.identity(_fixture_targets()),
+        "preposition_target_identities": {
+            name: convergence.identity(value)
+            for name, value in _fixture_targets().items()
         },
         "primitive_target_crosscheck": {"passed": True},
         "first_treatment_guard": convergence.first_treatment_guard(
@@ -477,17 +592,46 @@ def _treatment_actions() -> dict[str, list[float]]:
     return {"frame_legacy": legacy, "frame_fixed": fixed}
 
 
+def _fixture_targets() -> dict[str, list[float]]:
+    candidate = Candidate(
+        (1.0, 0.0, 0.7), (-1.0, 0.0, 0.0), 0.12, 0.1, 30, 2, 0, 20, 30
+    )
+    return {
+        name: list(value)
+        for name, value in convergence.preposition_targets(
+            candidate, (0.0, 0.0, 0.0), (0.0, 0.0, np.pi / 2.0)
+        ).items()
+    }
+
+
 def _ineligible_prefix() -> dict[str, object]:
+    empty_bytes = json.dumps(
+        {"candidates": []}, separators=(",", ":"), sort_keys=True
+    ).encode()
     value = _audit_prefix(
         Candidate((1.0, 0.0, 0.7), (-1.0, 0.0, 0.0), 0.12, 0.1, 30, 2, 0, 20, 30),
-        json.dumps(
-            {"candidates": [[1000, 0, 700, -10000, 0, 0, 120, 0, 20, 30, 100, 30, 2]]},
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode(),
+        empty_bytes,
     )
-    value["eligible"] = False
-    value["eligibility_reason"] = "candidate_set_empty"
+    value.update(
+        eligible=False,
+        eligibility_reason="candidate_set_empty",
+        prefix_failure_reason="candidate_set_empty",
+        candidate_count=0,
+        selected_index=-1,
+        selected_record=None,
+        first_treatment_actions={},
+        first_treatment_guard={
+            "finite": False,
+            "different_bytes": False,
+            "differing_indices": [],
+            "only_arm_linear_xy_differs": False,
+            "arm_action_noncollapsed": False,
+        },
+        preposition_targets={},
+        preposition_target_identity=convergence.identity({}),
+        preposition_target_identities={},
+        primitive_target_crosscheck={"passed": False},
+    )
     return value
 
 

@@ -72,6 +72,8 @@ class _PrefixRun:
     trace: list[dict[str, object]]
     acquisition_input_hashes: list[str]
     failure: str | None
+    input_failure: str | None
+    acquisition_main_event: bool
     continuation_identity: dict[str, object]
     first_actions: dict[str, tuple[float, ...]]
     first_guard: dict[str, object]
@@ -175,6 +177,12 @@ class CartesianConvergenceMujoco:
             and all(value == expected_identity for value in identities.values()),
             "prefix_trace_sha256": expected_trace,
             "first_treatment_guard": pair["first_treatment_guard"],
+            "preposition_targets": pair["preposition_targets"],
+            "preposition_target_identity": pair["preposition_target_identity"],
+            "preposition_target_identities": pair[
+                "preposition_target_identities"
+            ],
+            "bank_pair_sha256": canonical_sha256(pair),
             "pair_identity_valid": prefix_valid,
             "resolved": (complete or hard_stop) and prefix_valid,
             "hard_safety_stop": hard_stop,
@@ -208,6 +216,7 @@ class CartesianConvergenceMujoco:
         failure: str | None = None
         candidate_set: CandidateSet | None = None
         selected_index = -1
+        input_failure: str | None = None
         try:
             backend.contact_ledger.set_enabled(True)
             observation = backend.reset(
@@ -233,13 +242,15 @@ class CartesianConvergenceMujoco:
                     phase_step=phase_step,
                 )
                 input_hashes.append(hashlib.sha256(payload).hexdigest())
-                failure = failure or _input_failure(
+                current_input_failure = _input_failure(
                     backend,
                     observation,
                     payload,
                     supported_only=True,
                     previous_identity=previous_identity,
                 )
+                input_failure = input_failure or current_input_failure
+                failure = failure or current_input_failure
                 previous_identity = (
                     observation.timestamp_ns,
                     observation.sequence_id,
@@ -259,9 +270,9 @@ class CartesianConvergenceMujoco:
                 )
                 trace.append(row)
                 _append_history(history, available, row["applied_action"])
-                failure = failure or _prefix_step_failure(row, backend)
                 if acquisition_tracker.event:
                     failure = failure or "main_event_during_acquisition"
+                failure = failure or _prefix_step_failure(row, backend)
                 if failure is not None:
                     break
             final_payload = policy_input_bytes(
@@ -340,6 +351,8 @@ class CartesianConvergenceMujoco:
                 trace,
                 input_hashes,
                 failure,
+                input_failure,
+                acquisition_tracker.event,
                 identity,
                 first_actions,
                 first_guard,
@@ -413,11 +426,12 @@ class CartesianConvergenceMujoco:
             proposed.append(row["proposed_action"])
             applied.append(row["applied_action"])
             distances.append(_distance_record(run, targets))
+            if row["terminal"]:
+                terminal_reason = _terminal_reason(run.backend)
             hard_failure = _b2_hard_failure(row, run.backend, run.graph)
             if hard_failure is not None:
                 break
             if row["terminal"]:
-                terminal_reason = _terminal_reason(run.backend)
                 break
         carried = carry_forward_records(distances)
         outcome = arm_outcome([value["mean_m"] for value in distances])
@@ -467,6 +481,15 @@ class CartesianConvergenceMujoco:
                 "right_tool_to_right_preposition)"
             ),
             "tool_distances": carried,
+            "preposition_targets": {
+                name: list(value) for name, value in targets.items()
+            },
+            "preposition_target_identity": identity(
+                {name: list(value) for name, value in targets.items()}
+            ),
+            "preposition_target_identities": {
+                name: identity(list(value)) for name, value in targets.items()
+            },
             "first_treatment_action": list(run.first_actions[role]),
             "first_treatment_guard": run.first_guard,
             "proposed_actions": proposed,

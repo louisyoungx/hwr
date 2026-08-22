@@ -46,13 +46,37 @@ AUDIT_BASE_FIELDS = frozenset((
 PREFIX_FIELDS = frozenset((
     "eligible", "candidate_count", "candidate_set_sha256",
     "candidate_bytes_hex", "selected_index", "selected_record",
+    "prefix_failure_reason", "input_failure_reason", "prefix_step_count",
+    "prefix_complete", "prefix_terminal_observed",
+    "prefix_safety_intervention_count", "prefix_action_bounds_valid",
+    "prefix_stale_action_applied_count", "prefix_severe_collision_count",
+    "prefix_invalid_force_count",
+    "prefix_p40_conservation_maximum_absolute_difference",
+    "acquisition_main_event",
     "acquisition_input_hashes", "acquisition_input_sequence_sha256",
     "prefix_trace_sha256", "b0_b1_proposed_action_sha256",
     "b0_b1_applied_action_sha256", "relative_yaw_at_b2",
     "acquisition_base_pose", "acquisition_world_origin",
     "continuation_identity", "first_treatment_actions",
-    "first_treatment_guard", "preposition_targets",
+    "first_treatment_guard", "b2_policy_base_pose", "preposition_targets",
+    "preposition_target_identity", "preposition_target_identities",
     "primitive_target_crosscheck",
+))
+INPUT_FAILURE_REASONS = frozenset((
+    "invalid_policy_visible_input", "supported_source_age_exceeded",
+    "nonmonotonic_observation", "safety_state_not_ok",
+))
+ELIGIBILITY_REASONS = frozenset((
+    "eligible", "natural_latency_mismatch", *INPUT_FAILURE_REASONS,
+    "main_event_during_acquisition", "action_bounds_violation",
+    "stale_action_applied", "severe_collision",
+    "safety_intervention_during_prefix", "runtime_terminal_during_prefix",
+    "invalid_force", "p40_conservation_violation", "candidate_set_empty",
+    "selected_index_out_of_range", "relative_yaw_below_pi_over_6",
+    "primitive_target_crosscheck_failed", "first_treatment_action_ineligible",
+))
+ORDINARY_TERMINAL_REASONS = frozenset((
+    "formal_household_bimanual_success", "formal_household_timeout",
 ))
 
 

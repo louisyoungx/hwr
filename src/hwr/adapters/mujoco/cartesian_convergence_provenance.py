@@ -9,6 +9,8 @@ from typing import Sequence
 import mujoco
 import numpy as np
 
+from hwr.adapters.mujoco.entity_contact_graph import p40_conservation_differences
+from hwr.adapters.mujoco.target_selection_diagnostic import INVALID_GRAPH_FIELDS
 from hwr.core.embodied import DualArmObservation
 from hwr.eval.cartesian_convergence import (
     canonical_sha256,
@@ -96,6 +98,14 @@ def bank_prefix_record(run) -> dict[str, object]:
         if run.candidate_set is None
         else run.candidate_set.canonical_bytes
     )
+    graph_report = run.graph.report()
+    audit = run.backend.task_audit()
+    conservation = p40_conservation_differences(
+        graph_report, run.backend.contact_ledger.report()
+    )
+    targets = {
+        name: list(value) for name, value in run.preposition_targets.items()
+    }
     return {
         "eligible": run.failure is None,
         "eligibility_reason": (
@@ -114,6 +124,33 @@ def bank_prefix_record(run) -> dict[str, object]:
         "selected_record": (
             None if run.candidate is None else asdict(run.candidate)
         ),
+        "prefix_failure_reason": run.failure,
+        "input_failure_reason": run.input_failure,
+        "prefix_step_count": len(run.trace),
+        "prefix_complete": (
+            len(run.trace) == ACQUISITION_STEPS + 400
+            and not any(row["terminal"] for row in run.trace)
+        ),
+        "prefix_terminal_observed": any(row["terminal"] for row in run.trace),
+        "prefix_safety_intervention_count": sum(
+            bool(row["safety_intervened"]) for row in run.trace
+        ),
+        "prefix_action_bounds_valid": all(
+            row["action_bounds_valid"] for row in run.trace
+        ),
+        "prefix_stale_action_applied_count": sum(
+            bool(row["outside_validity_window"])
+            and row["applied_action"] != row["hold_action"]
+            for row in run.trace
+        ),
+        "prefix_severe_collision_count": int(audit["severe_collision_count"]),
+        "prefix_invalid_force_count": sum(
+            int(graph_report[name]) for name in INVALID_GRAPH_FIELDS
+        ),
+        "prefix_p40_conservation_maximum_absolute_difference": float(
+            conservation["maximum_absolute_difference"]
+        ),
+        "acquisition_main_event": run.acquisition_main_event,
         "acquisition_input_hashes": run.acquisition_input_hashes,
         "acquisition_input_sequence_sha256": canonical_sha256(
             run.acquisition_input_hashes
@@ -134,6 +171,7 @@ def bank_prefix_record(run) -> dict[str, object]:
         "relative_yaw_at_b2": wrap_angle(
             run.backend._base_state()[0][2] - run.acquisition_pose[2]
         ),
+        "b2_policy_base_pose": list(run.observation.proprioception.base_pose),
         "acquisition_base_pose": list(run.acquisition_pose),
         "acquisition_world_origin": list(run.acquisition_world_origin),
         "continuation_identity": run.continuation_identity,
@@ -142,9 +180,10 @@ def bank_prefix_record(run) -> dict[str, object]:
             for role, action in run.first_actions.items()
         },
         "first_treatment_guard": run.first_guard,
-        "preposition_targets": {
-            name: list(value)
-            for name, value in run.preposition_targets.items()
+        "preposition_targets": targets,
+        "preposition_target_identity": identity(targets),
+        "preposition_target_identities": {
+            name: identity(value) for name, value in targets.items()
         },
         "primitive_target_crosscheck": run.primitive_target_crosscheck,
     }
