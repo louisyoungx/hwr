@@ -1,0 +1,1234 @@
+{
+  "acquisition_changed": false,
+  "artifacts": {
+    "bank.json": {
+      "bytes": 7160016,
+      "sha256": "ec40d41b2199ac99ea4f88961e5d547f21e1b1942af3968cc4b092bea5bebf69"
+    },
+    "report.json": {
+      "bytes": 1009,
+      "sha256": "084029d0c4eda55b10c885856dc19f2356ade2c31b30b71e070de91cd9d7653d"
+    },
+    "seed-audit.json": {
+      "bytes": 3996474,
+      "sha256": "1b8ca0d93dd4324d0f6e14a1932bbce69b24964bc0aa08a53a9b4bdf2eb69407"
+    }
+  },
+  "b0_b1_prefix_changed": false,
+  "backend_changed": false,
+  "candidate_bytes_changed": false,
+  "candidate_correctness_claim_allowed": false,
+  "candidate_generator_changed": false,
+  "capability_claim_allowed": false,
+  "command": [
+    ".venv/bin/python",
+    "-m",
+    "hwr.apps.evaluate_cartesian_convergence",
+    "--mode",
+    "build-bank",
+    "--output",
+    "runs/research-loop/0010/r0010-p51-e1-bank-s20265101",
+    "--salt-file",
+    "runs/research-loop/0010/.host/p51-e1-salt.txt",
+    "--salt-commitment",
+    "a12c867f79013a830a89ea1e76b7c50c6df260bff2bf9ee502f49a56cc501d2b"
+  ],
+  "contact_or_grasp_claim_allowed": false,
+  "fk_changed": false,
+  "frozen_design": {
+    "b2_steps_per_arm": 100,
+    "bootstrap_replicates": 10000,
+    "bootstrap_seed": 20265102,
+    "cell_count": 12,
+    "latency_match_limit_per_cell": 64,
+    "pair_count": 36,
+    "pairs_per_cell": 3,
+    "plan_id": "R0001-P51-E1-formal",
+    "raw_seed_limit_per_cell": 768,
+    "salt_commitment": "a12c867f79013a830a89ea1e76b7c50c6df260bff2bf9ee502f49a56cc501d2b",
+    "seed_derivation": {
+      "environment_seed": "int63(SHA256(salt || environment || planned_episode_id))",
+      "planned_episode_id": "SHA256(schema || plan_id || task_id || cell_id || candidate_ordinal)",
+      "policy_rng_seed": "int63(SHA256(salt || policy || planned_episode_id))",
+      "role_enters_seed_derivation": false
+    },
+    "seed_schema": "hwr.opaque-episode-seeds/v1"
+  },
+  "frozen_document_blob_matches": true,
+  "frozen_document_commit": "2d1752f2c0c8b9e39d7f3ebaa8e9ff0ec1d13f38",
+  "frozen_document_commit_is_ancestor": true,
+  "frozen_document_content_matches": true,
+  "frozen_document_tree_matches": true,
+  "generalization_claim_allowed": false,
+  "gripper_changed": false,
+  "hardware_safety_claim_allowed": false,
+  "historical_round_trees": {
+    "docs/research-loop/0001": "416912b7dc1c19611bcfc4375028180014a1989b",
+    "docs/research-loop/0002": "6fb603dbd52451fe1749157daf05aa482ca7222f",
+    "docs/research-loop/0003": "f56011eda321ea803bc24051db001e632c1549fb",
+    "docs/research-loop/0004": "611c420e539a53a8c7578cd66aa8bdfe46fe82b7",
+    "docs/research-loop/0005": "0352d379d5754adb03e9158c0fa72393ab322d58",
+    "docs/research-loop/0006": "ee3a6f5b25887f67f812750d2a75424df12823d4",
+    "docs/research-loop/0007": "0a696caa153abc9c13403fbc9bd3c081ce71c327",
+    "docs/research-loop/0008": "65e626cddbcb0ec9c2e17cca5184b7d40950e1c6",
+    "docs/research-loop/0009": "316db8b9ad9739ef491778f641603dbca25e75c9"
+  },
+  "mode": "build-bank",
+  "phase_changed": false,
+  "policy_inference_executed": false,
+  "proposal_id": "R0001-P51-E1",
+  "runtime": {
+    "cpu_count": 18,
+    "device": "cpu",
+    "disk_free_bytes": 92032049152,
+    "mujoco": "3.10.0",
+    "numpy": "2.4.6",
+    "peak_rss_platform_units": 887783424,
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "python": "3.11.0",
+    "wall_seconds": 2185.6171251670166
+  },
+  "safety_changed": false,
+  "schema_version": "hwr.p51-cartesian-convergence-artifacts/v1",
+  "selector_changed": false,
+  "source_commit": "38daff6631c32af2f34ae0cd77578004c0a0768e",
+  "source_identities": {
+    "configs/adapters/mujoco/formal_3d_v1.json": {
+      "bytes": 3051,
+      "path": "configs/adapters/mujoco/formal_3d_v1.json",
+      "sha256": "7984ef2544bb618269681d274257a598b02621371a26de002bfdd8bbf7decab6"
+    },
+    "configs/tasks/formal_3d_v1.json": {
+      "bytes": 5480,
+      "path": "configs/tasks/formal_3d_v1.json",
+      "sha256": "fa180803a86b42bc633dbf119fa596dd74d3b5c18bf4c2e4f75be97dcccb2a7d"
+    },
+    "docs/research-loop/0010/03-experiment.md": {
+      "bytes": 20936,
+      "path": "docs/research-loop/0010/03-experiment.md",
+      "sha256": "9b3b83010a6846ddce21645666f9b37e674424659ebe0b57a4f5208dc66560fd"
+    },
+    "frozen_document": {
+      "blob_matches": true,
+      "commit": "2d1752f2c0c8b9e39d7f3ebaa8e9ff0ec1d13f38",
+      "commit_is_ancestor": true,
+      "content_matches": true,
+      "current": {
+        "bytes": 20936,
+        "sha256": "9b3b83010a6846ddce21645666f9b37e674424659ebe0b57a4f5208dc66560fd"
+      },
+      "current_blob": "98372d4765cd94540e7cc3cde3143c5473254690",
+      "current_tree": "a533abde0fa7c6eac95dc6766d292765c615c6a6",
+      "frozen": {
+        "bytes": 20936,
+        "sha256": "9b3b83010a6846ddce21645666f9b37e674424659ebe0b57a4f5208dc66560fd"
+      },
+      "frozen_blob": "98372d4765cd94540e7cc3cde3143c5473254690",
+      "frozen_tree": "a533abde0fa7c6eac95dc6766d292765c615c6a6",
+      "tree_matches": true
+    },
+    "git_trees": {
+      "assets": "2ece734ce96155cda4dd3484ec8f3e641d7a2b21",
+      "configs": "0f7144b45dcc00c08ba30b5e19403876bcf59122",
+      "src/hwr": "c44bbed62d239def8d546a1127a558ab9d326e90"
+    },
+    "protected_frozen_source": {
+      "base_commit": "2d1752f2c0c8b9e39d7f3ebaa8e9ff0ec1d13f38",
+      "blob_identities": {
+        "assets/household_v1/README.md": {
+          "current_blob": "68be97792d5bb725ef7a32a5c4650f154e89d73b",
+          "frozen_blob": "68be97792d5bb725ef7a32a5c4650f154e89d73b",
+          "matches": true
+        },
+        "assets/household_v1/cleaner_pink/all_purpose_cleaner.png": {
+          "current_blob": "2d2a99eb644c3d954c3353a7938ddf815a0cfdb4",
+          "frozen_blob": "2d2a99eb644c3d954c3353a7938ddf815a0cfdb4",
+          "matches": true
+        },
+        "assets/household_v1/cleaner_pink/cleaner_pink.mtl": {
+          "current_blob": "0e62cb574deaab58fb0c6406bf70e6ac1a78b108",
+          "frozen_blob": "0e62cb574deaab58fb0c6406bf70e6ac1a78b108",
+          "matches": true
+        },
+        "assets/household_v1/cleaner_pink/cleaner_pink.obj": {
+          "current_blob": "aa9ae8a973536c1090070746c80622f7b9a9ce9a",
+          "frozen_blob": "aa9ae8a973536c1090070746c80622f7b9a9ce9a",
+          "matches": true
+        },
+        "assets/household_v1/cleaner_yellow/cleaner_yellow.mtl": {
+          "current_blob": "5e49efbd69ae4a56562d901e930900c1fb23622e",
+          "frozen_blob": "5e49efbd69ae4a56562d901e930900c1fb23622e",
+          "matches": true
+        },
+        "assets/household_v1/cleaner_yellow/cleaner_yellow.obj": {
+          "current_blob": "3ab29804afc78b96b1280285d6e7ae5c7c4241a5",
+          "frozen_blob": "3ab29804afc78b96b1280285d6e7ae5c7c4241a5",
+          "matches": true
+        },
+        "assets/household_v1/cleaner_yellow/multi_cleaner_bottle.png": {
+          "current_blob": "30cda0fab834a45ad442a12730ab6b508b1be05a",
+          "frozen_blob": "30cda0fab834a45ad442a12730ab6b508b1be05a",
+          "matches": true
+        },
+        "assets/household_v1/dining_chair/dining_chair.mtl": {
+          "current_blob": "0a7873c19993942478b84aa9eae800a84c4480f2",
+          "frozen_blob": "0a7873c19993942478b84aa9eae800a84c4480f2",
+          "matches": true
+        },
+        "assets/household_v1/dining_chair/dining_chair.obj": {
+          "current_blob": "76d27dfc03dd511c23e8efbd18c85aa4d14bd9d3",
+          "frozen_blob": "76d27dfc03dd511c23e8efbd18c85aa4d14bd9d3",
+          "matches": true
+        },
+        "assets/household_v1/dining_chair/dining_chair_02.png": {
+          "current_blob": "11590d16447d9bbd6cd80b4963b7560298271d12",
+          "frozen_blob": "11590d16447d9bbd6cd80b4963b7560298271d12",
+          "matches": true
+        },
+        "assets/household_v1/dining_cup/dining_cup.mtl": {
+          "current_blob": "095da3baab485c21d5780639b9f417bbfd69c0ed",
+          "frozen_blob": "095da3baab485c21d5780639b9f417bbfd69c0ed",
+          "matches": true
+        },
+        "assets/household_v1/dining_cup/dining_cup.obj": {
+          "current_blob": "42fcb949d9c23c4e6b47a5a3c25fd0173949047b",
+          "frozen_blob": "42fcb949d9c23c4e6b47a5a3c25fd0173949047b",
+          "matches": true
+        },
+        "assets/household_v1/dining_cup/tea_set_01.png": {
+          "current_blob": "9c93361a37975f73ad958c055a3e77e8a1cf1bf6",
+          "frozen_blob": "9c93361a37975f73ad958c055a3e77e8a1cf1bf6",
+          "matches": true
+        },
+        "assets/household_v1/dining_plate/carved_wooden_plate.png": {
+          "current_blob": "45d335298938aa20f5928f9767d3150f79efaf8f",
+          "frozen_blob": "45d335298938aa20f5928f9767d3150f79efaf8f",
+          "matches": true
+        },
+        "assets/household_v1/dining_plate/dining_plate.mtl": {
+          "current_blob": "90f74b89a2ecadaa4754571cb2fd7bff3ac2e0f8",
+          "frozen_blob": "90f74b89a2ecadaa4754571cb2fd7bff3ac2e0f8",
+          "matches": true
+        },
+        "assets/household_v1/dining_plate/dining_plate.obj": {
+          "current_blob": "96c84cd7f80a4790f9aaaaab9abcdbe307a4a5f7",
+          "frozen_blob": "96c84cd7f80a4790f9aaaaab9abcdbe307a4a5f7",
+          "matches": true
+        },
+        "assets/household_v1/dining_table/dining_table.mtl": {
+          "current_blob": "c9026748414f38ecc7c1a0b960afa2930a051ee4",
+          "frozen_blob": "c9026748414f38ecc7c1a0b960afa2930a051ee4",
+          "matches": true
+        },
+        "assets/household_v1/dining_table/dining_table.obj": {
+          "current_blob": "b1a44d66e88b947d168728e1577de548796739ca",
+          "frozen_blob": "b1a44d66e88b947d168728e1577de548796739ca",
+          "matches": true
+        },
+        "assets/household_v1/dining_table/round_wooden_table_01.png": {
+          "current_blob": "63010c0c6912aeeba1387a9acdfcbac4c9e8d35e",
+          "frozen_blob": "63010c0c6912aeeba1387a9acdfcbac4c9e8d35e",
+          "matches": true
+        },
+        "assets/household_v1/kitchen_cabinet/drawer_cabinet.png": {
+          "current_blob": "f41201a18d35b02c7d98a5e65294a057e7fd5ac7",
+          "frozen_blob": "f41201a18d35b02c7d98a5e65294a057e7fd5ac7",
+          "matches": true
+        },
+        "assets/household_v1/kitchen_cabinet/kitchen_cabinet.mtl": {
+          "current_blob": "8acc3fc1358dba9cbf05b5d230275c22d0075143",
+          "frozen_blob": "8acc3fc1358dba9cbf05b5d230275c22d0075143",
+          "matches": true
+        },
+        "assets/household_v1/kitchen_cabinet/kitchen_cabinet.obj": {
+          "current_blob": "551fc83de183aebe31e7e0814f47e47bfd8f7227",
+          "frozen_blob": "551fc83de183aebe31e7e0814f47e47bfd8f7227",
+          "matches": true
+        },
+        "assets/household_v1/living_sofa/living_sofa.mtl": {
+          "current_blob": "fb7110b7cf74f41e256bb8def0759a78cb91dd36",
+          "frozen_blob": "fb7110b7cf74f41e256bb8def0759a78cb91dd36",
+          "matches": true
+        },
+        "assets/household_v1/living_sofa/living_sofa.obj": {
+          "current_blob": "3a093cc8aa9b7c253034aaf390792153e97e9810",
+          "frozen_blob": "3a093cc8aa9b7c253034aaf390792153e97e9810",
+          "matches": true
+        },
+        "assets/household_v1/living_sofa/sofa_02.png": {
+          "current_blob": "c750c5e1f22e5186289844af078fb441114e3710",
+          "frozen_blob": "c750c5e1f22e5186289844af078fb441114e3710",
+          "matches": true
+        },
+        "assets/household_v1/living_storage_basket/living_storage_basket.mtl": {
+          "current_blob": "04e547c910decbd9f89bfb64449b78e520a95225",
+          "frozen_blob": "04e547c910decbd9f89bfb64449b78e520a95225",
+          "matches": true
+        },
+        "assets/household_v1/living_storage_basket/living_storage_basket.obj": {
+          "current_blob": "c2d713c8c23aca0072d9ca495874e4581ebfa6b4",
+          "frozen_blob": "c2d713c8c23aca0072d9ca495874e4581ebfa6b4",
+          "matches": true
+        },
+        "assets/household_v1/living_storage_basket/wicker_basket_02.png": {
+          "current_blob": "ffa3245873d8373998da81f83571b67b300ff19e",
+          "frozen_blob": "ffa3245873d8373998da81f83571b67b300ff19e",
+          "matches": true
+        },
+        "assets/household_v1/living_tea_table/chinese_tea_table.png": {
+          "current_blob": "47c0687af86c89a935e2054ba86ce50f702fa255",
+          "frozen_blob": "47c0687af86c89a935e2054ba86ce50f702fa255",
+          "matches": true
+        },
+        "assets/household_v1/living_tea_table/living_tea_table.mtl": {
+          "current_blob": "e69cf096e0c695134fe12ee0b848332e85234b8a",
+          "frozen_blob": "e69cf096e0c695134fe12ee0b848332e85234b8a",
+          "matches": true
+        },
+        "assets/household_v1/living_tea_table/living_tea_table.obj": {
+          "current_blob": "825a65aa8a27c64018e5150cf9f2eefa2e9036bb",
+          "frozen_blob": "825a65aa8a27c64018e5150cf9f2eefa2e9036bb",
+          "matches": true
+        },
+        "assets/household_v1/toy_duck/rubber_duck_toy.png": {
+          "current_blob": "dbcfc14e6794fe3c7accb61896a99eafb2e03211",
+          "frozen_blob": "dbcfc14e6794fe3c7accb61896a99eafb2e03211",
+          "matches": true
+        },
+        "assets/household_v1/toy_duck/toy_duck.mtl": {
+          "current_blob": "69e7ad46385ea7d156797356d8b24024362b2314",
+          "frozen_blob": "69e7ad46385ea7d156797356d8b24024362b2314",
+          "matches": true
+        },
+        "assets/household_v1/toy_duck/toy_duck.obj": {
+          "current_blob": "81e204c11a32bcc5be00aa973c77a1ae5f6fe1f3",
+          "frozen_blob": "81e204c11a32bcc5be00aa973c77a1ae5f6fe1f3",
+          "matches": true
+        },
+        "assets/household_v1/toy_football/football.png": {
+          "current_blob": "d1333f3689c84a49644a64bd331ef01e22347f54",
+          "frozen_blob": "d1333f3689c84a49644a64bd331ef01e22347f54",
+          "matches": true
+        },
+        "assets/household_v1/toy_football/toy_football.mtl": {
+          "current_blob": "d5458d1058be1a3294a5b03941708d0223c77494",
+          "frozen_blob": "d5458d1058be1a3294a5b03941708d0223c77494",
+          "matches": true
+        },
+        "assets/household_v1/toy_football/toy_football.obj": {
+          "current_blob": "7500c7343508f7616a1033266fdb1dd9a890fac1",
+          "frozen_blob": "7500c7343508f7616a1033266fdb1dd9a890fac1",
+          "matches": true
+        },
+        "assets/manifests/household_v1.lock.json": {
+          "current_blob": "330e1ab34b7a2a1b52297eed4eee7ecb26a211cf",
+          "frozen_blob": "330e1ab34b7a2a1b52297eed4eee7ecb26a211cf",
+          "matches": true
+        },
+        "assets/manifests/household_v1_sources.json": {
+          "current_blob": "d83c33cd8bc3f9a67108556331b3172dcac107fb",
+          "frozen_blob": "d83c33cd8bc3f9a67108556331b3172dcac107fb",
+          "matches": true
+        },
+        "assets/mujoco/bimanual/dining_tray.xml": {
+          "current_blob": "b2ef17ff0ee00892e0bf1f5532fc1f9143049c64",
+          "frozen_blob": "b2ef17ff0ee00892e0bf1f5532fc1f9143049c64",
+          "matches": true
+        },
+        "assets/mujoco/bimanual/kitchen_drawer.xml": {
+          "current_blob": "25a191812eed8b3a5d423025ba59a24f7238ad25",
+          "frozen_blob": "25a191812eed8b3a5d423025ba59a24f7238ad25",
+          "matches": true
+        },
+        "assets/mujoco/bimanual/living_basket.xml": {
+          "current_blob": "a86dccd031eea317fdc2d18a3e9506447cba2702",
+          "frozen_blob": "a86dccd031eea317fdc2d18a3e9506447cba2702",
+          "matches": true
+        },
+        "assets/mujoco/common/robot_actuators.xml": {
+          "current_blob": "05b68692aed3219c72e7ede56fd72fda7ac1853c",
+          "frozen_blob": "05b68692aed3219c72e7ede56fd72fda7ac1853c",
+          "matches": true
+        },
+        "assets/mujoco/common/robot_assets.xml": {
+          "current_blob": "60691635e99c3d32279c2e52fd5c750d69864a55",
+          "frozen_blob": "60691635e99c3d32279c2e52fd5c750d69864a55",
+          "matches": true
+        },
+        "assets/mujoco/common/robot_body.xml": {
+          "current_blob": "e91da49189754d712476841ef7b7721eddb0a0cc",
+          "frozen_blob": "e91da49189754d712476841ef7b7721eddb0a0cc",
+          "matches": true
+        },
+        "assets/mujoco/common/robot_contacts.xml": {
+          "current_blob": "2e411eb650cd0abe3ee0c5ba902ab4e8b5f9f670",
+          "frozen_blob": "2e411eb650cd0abe3ee0c5ba902ab4e8b5f9f670",
+          "matches": true
+        },
+        "assets/mujoco/common/robot_defaults.xml": {
+          "current_blob": "314604d965b0a7cf8f52c8f3e1548cfdf63cd960",
+          "frozen_blob": "314604d965b0a7cf8f52c8f3e1548cfdf63cd960",
+          "matches": true
+        },
+        "assets/mujoco/common/robot_sensors.xml": {
+          "current_blob": "476ea0c0b4ab4803ca42f541683af09396d40763",
+          "frozen_blob": "476ea0c0b4ab4803ca42f541683af09396d40763",
+          "matches": true
+        },
+        "assets/mujoco/formal/dining_room.xml": {
+          "current_blob": "ca42c09d6690d15dfdd45c05578d290c9b254bf8",
+          "frozen_blob": "ca42c09d6690d15dfdd45c05578d290c9b254bf8",
+          "matches": true
+        },
+        "assets/mujoco/formal/kitchen.xml": {
+          "current_blob": "d6021938114cd34e5495c0322f757cdad1ab79e3",
+          "frozen_blob": "d6021938114cd34e5495c0322f757cdad1ab79e3",
+          "matches": true
+        },
+        "assets/mujoco/formal/living_room.xml": {
+          "current_blob": "9779a87c20b68f2f39e1e94dbb98f3d68c6bdcaf",
+          "frozen_blob": "9779a87c20b68f2f39e1e94dbb98f3d68c6bdcaf",
+          "matches": true
+        },
+        "assets/mujoco/mobile_manipulator_smoke.xml": {
+          "current_blob": "08f8460039fbf5ef666de57a82b2584aa9e894de",
+          "frozen_blob": "08f8460039fbf5ef666de57a82b2584aa9e894de",
+          "matches": true
+        },
+        "configs/adapters/mujoco/bimanual_household_v1.json": {
+          "current_blob": "abf8c659eb9d9572d0748867d9a7121a2791f63c",
+          "frozen_blob": "abf8c659eb9d9572d0748867d9a7121a2791f63c",
+          "matches": true
+        },
+        "configs/adapters/mujoco/formal_3d_v1.json": {
+          "current_blob": "d2ff63a32d2ddef0b0a36f7dbce878b03a8e0c0e",
+          "frozen_blob": "d2ff63a32d2ddef0b0a36f7dbce878b03a8e0c0e",
+          "matches": true
+        },
+        "configs/foundation/imagination-rl-v1.json": {
+          "current_blob": "cd24a26c73bc573afe774e8fd2737678af1a7f04",
+          "frozen_blob": "cd24a26c73bc573afe774e8fd2737678af1a7f04",
+          "matches": true
+        },
+        "configs/foundation/intrinsic-exploration-v1.json": {
+          "current_blob": "8e479bca866eca867fcb4714e54a351d4eb5db6f",
+          "frozen_blob": "8e479bca866eca867fcb4714e54a351d4eb5db6f",
+          "matches": true
+        },
+        "configs/foundation/latent-actor-v1.json": {
+          "current_blob": "18e8b1bbe4a3a08eef9ff53a62056ad1e8fe96a0",
+          "frozen_blob": "18e8b1bbe4a3a08eef9ff53a62056ad1e8fe96a0",
+          "matches": true
+        },
+        "configs/foundation/model-locks.json": {
+          "current_blob": "8b6a58a3b431a7a0e1670ba265429f580e4786ca",
+          "frozen_blob": "8b6a58a3b431a7a0e1670ba265429f580e4786ca",
+          "matches": true
+        },
+        "configs/foundation/model-sources.json": {
+          "current_blob": "b0577d6466ac19a5a8e0b094a55ec2f2316c675f",
+          "frozen_blob": "b0577d6466ac19a5a8e0b094a55ec2f2316c675f",
+          "matches": true
+        },
+        "configs/foundation/online-training-v1.json": {
+          "current_blob": "28f1843128d3466b77ccb51155f679fb4d8da73e",
+          "frozen_blob": "28f1843128d3466b77ccb51155f679fb4d8da73e",
+          "matches": true
+        },
+        "configs/foundation/runtime-v1.json": {
+          "current_blob": "19ccb63519bfa0bc5c15c2c84f6872c851b4f5bc",
+          "frozen_blob": "19ccb63519bfa0bc5c15c2c84f6872c851b4f5bc",
+          "matches": true
+        },
+        "configs/foundation/unified-trainer-v1.json": {
+          "current_blob": "e43474fe2d0a57b830fb99d4c69c089ec9662344",
+          "frozen_blob": "e43474fe2d0a57b830fb99d4c69c089ec9662344",
+          "matches": true
+        },
+        "configs/foundation/visual-objective-v1.json": {
+          "current_blob": "6740ff15ac2c75dc9ba1838267978ab948920b33",
+          "frozen_blob": "6740ff15ac2c75dc9ba1838267978ab948920b33",
+          "matches": true
+        },
+        "configs/foundation/visual-student-v1.json": {
+          "current_blob": "2c241ed2e05f8487f3a7445e2fef72c0f9ef98cf",
+          "frozen_blob": "2c241ed2e05f8487f3a7445e2fef72c0f9ef98cf",
+          "matches": true
+        },
+        "configs/foundation/world-model-v1.json": {
+          "current_blob": "28bf32a96a468b6f4b51d7ebdf35b24add945f48",
+          "frozen_blob": "28bf32a96a468b6f4b51d7ebdf35b24add945f48",
+          "matches": true
+        },
+        "configs/foundation/world-objective-v1.json": {
+          "current_blob": "92a0a357d35fb5195772f7ffcf2af016d99f59dc",
+          "frozen_blob": "92a0a357d35fb5195772f7ffcf2af016d99f59dc",
+          "matches": true
+        },
+        "configs/scenes/formal_3d_v1.json": {
+          "current_blob": "e099f7dabfccfac35ab5aa915567ec800db76aaa",
+          "frozen_blob": "e099f7dabfccfac35ab5aa915567ec800db76aaa",
+          "matches": true
+        },
+        "configs/tasks/bimanual_household_v1.json": {
+          "current_blob": "34f6c5f7736c5b22011f7bba853458f533563be8",
+          "frozen_blob": "34f6c5f7736c5b22011f7bba853458f533563be8",
+          "matches": true
+        },
+        "configs/tasks/formal_3d_v1.json": {
+          "current_blob": "d07718bd55bf1791e9f7021e33aa2abd0761fb61",
+          "frozen_blob": "d07718bd55bf1791e9f7021e33aa2abd0761fb61",
+          "matches": true
+        },
+        "configs/training/formal_visual_v1.json": {
+          "current_blob": "883b63b607ac039e6833cddd2e6de68585fa16ef",
+          "frozen_blob": "883b63b607ac039e6833cddd2e6de68585fa16ef",
+          "matches": true
+        },
+        "configs/training/formal_visual_v1_results.json": {
+          "current_blob": "1126efaee2a476db6588ada0721c716eadf97be9",
+          "frozen_blob": "1126efaee2a476db6588ada0721c716eadf97be9",
+          "matches": true
+        },
+        "configs/training/formal_visual_v2.json": {
+          "current_blob": "7a43d5ca2f365026f2f923a93dbe57b1a0a0ec3a",
+          "frozen_blob": "7a43d5ca2f365026f2f923a93dbe57b1a0a0ec3a",
+          "matches": true
+        },
+        "docs/research-loop/0010/03-experiment.md": {
+          "current_blob": "98372d4765cd94540e7cc3cde3143c5473254690",
+          "frozen_blob": "98372d4765cd94540e7cc3cde3143c5473254690",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/__init__.py": {
+          "current_blob": "7bdb62324fcf4c23233ec0441c743cc99b23b2dd",
+          "frozen_blob": "7bdb62324fcf4c23233ec0441c743cc99b23b2dd",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/backend.py": {
+          "current_blob": "71c0142b735c0395d70e21037066290543be4fba",
+          "frozen_blob": "71c0142b735c0395d70e21037066290543be4fba",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/bimanual_backend.py": {
+          "current_blob": "318c3d0aa7c45ba53bd233aa70288ccfb64140f7",
+          "frozen_blob": "318c3d0aa7c45ba53bd233aa70288ccfb64140f7",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/bimanual_bindings.py": {
+          "current_blob": "1fed0dffbc36ed78c980849d57d7dbaf9de7d51b",
+          "frozen_blob": "1fed0dffbc36ed78c980849d57d7dbaf9de7d51b",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/bindings.py": {
+          "current_blob": "09b0d55ce11b7c80ecc5a9993c99f173846e7b6a",
+          "frozen_blob": "09b0d55ce11b7c80ecc5a9993c99f173846e7b6a",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/contact.py": {
+          "current_blob": "0c9093b1a1e02f2c50f512756eab4721d81d817d",
+          "frozen_blob": "0c9093b1a1e02f2c50f512756eab4721d81d817d",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/contact_ledger.py": {
+          "current_blob": "a4f344208568ef03d96568dc081c0f97d51b3e27",
+          "frozen_blob": "a4f344208568ef03d96568dc081c0f97d51b3e27",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/dual_arm_backend.py": {
+          "current_blob": "39941d7b8721b210ac3c2cd8275069387919f931",
+          "frozen_blob": "39941d7b8721b210ac3c2cd8275069387919f931",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/entity_contact_graph.py": {
+          "current_blob": "2448d99de5abb829ac3d56b783cd905ab009a405",
+          "frozen_blob": "2448d99de5abb829ac3d56b783cd905ab009a405",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/evidence.py": {
+          "current_blob": "c945d2a14177eb3be3e907c562f9c3fc9ca88d9f",
+          "frozen_blob": "c945d2a14177eb3be3e907c562f9c3fc9ca88d9f",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/expert.py": {
+          "current_blob": "5cc784a783e2162e45003fa5af425a9a7a6ab4f8",
+          "frozen_blob": "5cc784a783e2162e45003fa5af425a9a7a6ab4f8",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/formal_expert.py": {
+          "current_blob": "121781bc36eafc7fcf1148a902a2761a717bf25d",
+          "frozen_blob": "121781bc36eafc7fcf1148a902a2761a717bf25d",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/formal_expert_types.py": {
+          "current_blob": "847c020ac0ac792bb01a2653850ef124d09f9f98",
+          "frozen_blob": "847c020ac0ac792bb01a2653850ef124d09f9f98",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/formal_household_backend.py": {
+          "current_blob": "bace9a0fb45352e22c69a5fb532eb97ab5f96b64",
+          "frozen_blob": "bace9a0fb45352e22c69a5fb532eb97ab5f96b64",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/formal_postures.py": {
+          "current_blob": "98137227d4a662dc29ea8f2ce43b07b60a79049e",
+          "frozen_blob": "98137227d4a662dc29ea8f2ce43b07b60a79049e",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/formal_routes.py": {
+          "current_blob": "667bf2928fbd5252e6a526c8f3898de2fc92d6bc",
+          "frozen_blob": "667bf2928fbd5252e6a526c8f3898de2fc92d6bc",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/formal_state.py": {
+          "current_blob": "01fbdf08e9f87e03485cc00c4aba23f763351451",
+          "frozen_blob": "01fbdf08e9f87e03485cc00c4aba23f763351451",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/household_backend.py": {
+          "current_blob": "5dfaaedbd4d5e77ab46ef818bf0ed0664e932486",
+          "frozen_blob": "5dfaaedbd4d5e77ab46ef818bf0ed0664e932486",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/inspection.py": {
+          "current_blob": "60ff35cffebbae0d27fdd232644a0d745762e681",
+          "frozen_blob": "60ff35cffebbae0d27fdd232644a0d745762e681",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/model.py": {
+          "current_blob": "d27a1340656e75b4972402f091eea38f6e445677",
+          "frozen_blob": "d27a1340656e75b4972402f091eea38f6e445677",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/names.py": {
+          "current_blob": "cd913605060828d4d4affa9ebbb18dc8816be9b6",
+          "frozen_blob": "cd913605060828d4d4affa9ebbb18dc8816be9b6",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/rendering.py": {
+          "current_blob": "e7e9c08458537ded5e4ef803b4c9d6214bb3e5ee",
+          "frozen_blob": "e7e9c08458537ded5e4ef803b4c9d6214bb3e5ee",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/scene_preview.py": {
+          "current_blob": "08562405bd06860bf1d654588be00b7d3ef04e34",
+          "frozen_blob": "08562405bd06860bf1d654588be00b7d3ef04e34",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/smoke_trial.py": {
+          "current_blob": "a143e2cf06937f08b7df8e2d42320b47a111661d",
+          "frozen_blob": "a143e2cf06937f08b7df8e2d42320b47a111661d",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/target_selection_diagnostic.py": {
+          "current_blob": "bc9b972859ff8319f518353b28e8881d046c6b6a",
+          "frozen_blob": "bc9b972859ff8319f518353b28e8881d046c6b6a",
+          "matches": true
+        },
+        "src/hwr/adapters/mujoco/training_catalog.py": {
+          "current_blob": "e10915215c2e21db8c8076e4b93057a6285108ef",
+          "frozen_blob": "e10915215c2e21db8c8076e4b93057a6285108ef",
+          "matches": true
+        },
+        "src/hwr/apps/evaluate_cartesian_frame_contract.py": {
+          "current_blob": "8ac1df0693e9632f991c13aadd0751797580b8d3",
+          "frozen_blob": "8ac1df0693e9632f991c13aadd0751797580b8d3",
+          "matches": true
+        },
+        "src/hwr/apps/evaluate_target_selection.py": {
+          "current_blob": "96ba6d2fd98d91c78ee376dee9fef3f8d6f6a634",
+          "frozen_blob": "96ba6d2fd98d91c78ee376dee9fef3f8d6f6a634",
+          "matches": true
+        },
+        "src/hwr/apps/evaluate_tool_kinematics.py": {
+          "current_blob": "69c434c543cac12d7c9a5740edbf58ce96a9e5ae",
+          "frozen_blob": "69c434c543cac12d7c9a5740edbf58ce96a9e5ae",
+          "matches": true
+        },
+        "src/hwr/core/__init__.py": {
+          "current_blob": "416be61720f495028f19487a32fd6bc69706c556",
+          "frozen_blob": "416be61720f495028f19487a32fd6bc69706c556",
+          "matches": true
+        },
+        "src/hwr/core/clock.py": {
+          "current_blob": "2e1f229a26cad2637950c2d9365949534151e52b",
+          "frozen_blob": "2e1f229a26cad2637950c2d9365949534151e52b",
+          "matches": true
+        },
+        "src/hwr/core/embodied.py": {
+          "current_blob": "f9a14d2a8b00fd37e136635b15730cb1379e63e7",
+          "frozen_blob": "f9a14d2a8b00fd37e136635b15730cb1379e63e7",
+          "matches": true
+        },
+        "src/hwr/core/runtime.py": {
+          "current_blob": "447b6689a956a44e9ad05abdceb6f24d2a5c60b7",
+          "frozen_blob": "447b6689a956a44e9ad05abdceb6f24d2a5c60b7",
+          "matches": true
+        },
+        "src/hwr/core/state_snapshot.py": {
+          "current_blob": "e272956584bf07837a2815bb912da94de1c302e1",
+          "frozen_blob": "e272956584bf07837a2815bb912da94de1c302e1",
+          "matches": true
+        },
+        "src/hwr/core/types.py": {
+          "current_blob": "c45be6b94e95bbc944b258ba597ed714f100709f",
+          "frozen_blob": "c45be6b94e95bbc944b258ba597ed714f100709f",
+          "matches": true
+        },
+        "src/hwr/eval/seed_contract.py": {
+          "current_blob": "80638ed2d4871baeac2da2d2955943dee0d498ab",
+          "frozen_blob": "80638ed2d4871baeac2da2d2955943dee0d498ab",
+          "matches": true
+        },
+        "src/hwr/eval/stability.py": {
+          "current_blob": "59876c19d398df9de81c271cd779e961e64ccc3b",
+          "frozen_blob": "59876c19d398df9de81c271cd779e961e64ccc3b",
+          "matches": true
+        },
+        "src/hwr/eval/target_selection.py": {
+          "current_blob": "d7e588ba76ce18882255e3e22b1f86459ab235dd",
+          "frozen_blob": "d7e588ba76ce18882255e3e22b1f86459ab235dd",
+          "matches": true
+        },
+        "src/hwr/eval/target_selection_safety.py": {
+          "current_blob": "b74c4086682cdcd9846107baf25844fe0ae324f7",
+          "frozen_blob": "b74c4086682cdcd9846107baf25844fe0ae324f7",
+          "matches": true
+        },
+        "src/hwr/eval/tool_kinematics.py": {
+          "current_blob": "3e1aceaa4145b781ab5304f4b89ea79f794f0715",
+          "frozen_blob": "3e1aceaa4145b781ab5304f4b89ea79f794f0715",
+          "matches": true
+        },
+        "src/hwr/safety/__init__.py": {
+          "current_blob": "d7a9b32c962348b486d4aa334dcfb93b8fc02d54",
+          "frozen_blob": "d7a9b32c962348b486d4aa334dcfb93b8fc02d54",
+          "matches": true
+        },
+        "src/hwr/safety/dual_arm.py": {
+          "current_blob": "4d7daffd218aae4867a1fc129d5ba713a5bb90b2",
+          "frozen_blob": "4d7daffd218aae4867a1fc129d5ba713a5bb90b2",
+          "matches": true
+        },
+        "src/hwr/safety/supervisor.py": {
+          "current_blob": "602e1563a4eb7a4c71aceee11f6789a1915b32c7",
+          "frozen_blob": "602e1563a4eb7a4c71aceee11f6789a1915b32c7",
+          "matches": true
+        },
+        "src/hwr/scenarios/formal3d.py": {
+          "current_blob": "6209224cd64bf2fa5d1d338bf621dd9150549c13",
+          "frozen_blob": "6209224cd64bf2fa5d1d338bf621dd9150549c13",
+          "matches": true
+        }
+      },
+      "changed_paths": [],
+      "checked_paths": [
+        "assets/household_v1/README.md",
+        "assets/household_v1/cleaner_pink/all_purpose_cleaner.png",
+        "assets/household_v1/cleaner_pink/cleaner_pink.mtl",
+        "assets/household_v1/cleaner_pink/cleaner_pink.obj",
+        "assets/household_v1/cleaner_yellow/cleaner_yellow.mtl",
+        "assets/household_v1/cleaner_yellow/cleaner_yellow.obj",
+        "assets/household_v1/cleaner_yellow/multi_cleaner_bottle.png",
+        "assets/household_v1/dining_chair/dining_chair.mtl",
+        "assets/household_v1/dining_chair/dining_chair.obj",
+        "assets/household_v1/dining_chair/dining_chair_02.png",
+        "assets/household_v1/dining_cup/dining_cup.mtl",
+        "assets/household_v1/dining_cup/dining_cup.obj",
+        "assets/household_v1/dining_cup/tea_set_01.png",
+        "assets/household_v1/dining_plate/carved_wooden_plate.png",
+        "assets/household_v1/dining_plate/dining_plate.mtl",
+        "assets/household_v1/dining_plate/dining_plate.obj",
+        "assets/household_v1/dining_table/dining_table.mtl",
+        "assets/household_v1/dining_table/dining_table.obj",
+        "assets/household_v1/dining_table/round_wooden_table_01.png",
+        "assets/household_v1/kitchen_cabinet/drawer_cabinet.png",
+        "assets/household_v1/kitchen_cabinet/kitchen_cabinet.mtl",
+        "assets/household_v1/kitchen_cabinet/kitchen_cabinet.obj",
+        "assets/household_v1/living_sofa/living_sofa.mtl",
+        "assets/household_v1/living_sofa/living_sofa.obj",
+        "assets/household_v1/living_sofa/sofa_02.png",
+        "assets/household_v1/living_storage_basket/living_storage_basket.mtl",
+        "assets/household_v1/living_storage_basket/living_storage_basket.obj",
+        "assets/household_v1/living_storage_basket/wicker_basket_02.png",
+        "assets/household_v1/living_tea_table/chinese_tea_table.png",
+        "assets/household_v1/living_tea_table/living_tea_table.mtl",
+        "assets/household_v1/living_tea_table/living_tea_table.obj",
+        "assets/household_v1/toy_duck/rubber_duck_toy.png",
+        "assets/household_v1/toy_duck/toy_duck.mtl",
+        "assets/household_v1/toy_duck/toy_duck.obj",
+        "assets/household_v1/toy_football/football.png",
+        "assets/household_v1/toy_football/toy_football.mtl",
+        "assets/household_v1/toy_football/toy_football.obj",
+        "assets/manifests/household_v1.lock.json",
+        "assets/manifests/household_v1_sources.json",
+        "assets/mujoco/bimanual/dining_tray.xml",
+        "assets/mujoco/bimanual/kitchen_drawer.xml",
+        "assets/mujoco/bimanual/living_basket.xml",
+        "assets/mujoco/common/robot_actuators.xml",
+        "assets/mujoco/common/robot_assets.xml",
+        "assets/mujoco/common/robot_body.xml",
+        "assets/mujoco/common/robot_contacts.xml",
+        "assets/mujoco/common/robot_defaults.xml",
+        "assets/mujoco/common/robot_sensors.xml",
+        "assets/mujoco/formal/dining_room.xml",
+        "assets/mujoco/formal/kitchen.xml",
+        "assets/mujoco/formal/living_room.xml",
+        "assets/mujoco/mobile_manipulator_smoke.xml",
+        "configs/adapters/mujoco/bimanual_household_v1.json",
+        "configs/adapters/mujoco/formal_3d_v1.json",
+        "configs/foundation/imagination-rl-v1.json",
+        "configs/foundation/intrinsic-exploration-v1.json",
+        "configs/foundation/latent-actor-v1.json",
+        "configs/foundation/model-locks.json",
+        "configs/foundation/model-sources.json",
+        "configs/foundation/online-training-v1.json",
+        "configs/foundation/runtime-v1.json",
+        "configs/foundation/unified-trainer-v1.json",
+        "configs/foundation/visual-objective-v1.json",
+        "configs/foundation/visual-student-v1.json",
+        "configs/foundation/world-model-v1.json",
+        "configs/foundation/world-objective-v1.json",
+        "configs/scenes/formal_3d_v1.json",
+        "configs/tasks/bimanual_household_v1.json",
+        "configs/tasks/formal_3d_v1.json",
+        "configs/training/formal_visual_v1.json",
+        "configs/training/formal_visual_v1_results.json",
+        "configs/training/formal_visual_v2.json",
+        "docs/research-loop/0010/03-experiment.md",
+        "src/hwr/adapters/mujoco/__init__.py",
+        "src/hwr/adapters/mujoco/backend.py",
+        "src/hwr/adapters/mujoco/bimanual_backend.py",
+        "src/hwr/adapters/mujoco/bimanual_bindings.py",
+        "src/hwr/adapters/mujoco/bindings.py",
+        "src/hwr/adapters/mujoco/contact.py",
+        "src/hwr/adapters/mujoco/contact_ledger.py",
+        "src/hwr/adapters/mujoco/dual_arm_backend.py",
+        "src/hwr/adapters/mujoco/entity_contact_graph.py",
+        "src/hwr/adapters/mujoco/evidence.py",
+        "src/hwr/adapters/mujoco/expert.py",
+        "src/hwr/adapters/mujoco/formal_expert.py",
+        "src/hwr/adapters/mujoco/formal_expert_types.py",
+        "src/hwr/adapters/mujoco/formal_household_backend.py",
+        "src/hwr/adapters/mujoco/formal_postures.py",
+        "src/hwr/adapters/mujoco/formal_routes.py",
+        "src/hwr/adapters/mujoco/formal_state.py",
+        "src/hwr/adapters/mujoco/household_backend.py",
+        "src/hwr/adapters/mujoco/inspection.py",
+        "src/hwr/adapters/mujoco/model.py",
+        "src/hwr/adapters/mujoco/names.py",
+        "src/hwr/adapters/mujoco/rendering.py",
+        "src/hwr/adapters/mujoco/scene_preview.py",
+        "src/hwr/adapters/mujoco/smoke_trial.py",
+        "src/hwr/adapters/mujoco/target_selection_diagnostic.py",
+        "src/hwr/adapters/mujoco/training_catalog.py",
+        "src/hwr/apps/evaluate_cartesian_frame_contract.py",
+        "src/hwr/apps/evaluate_target_selection.py",
+        "src/hwr/apps/evaluate_tool_kinematics.py",
+        "src/hwr/core/__init__.py",
+        "src/hwr/core/clock.py",
+        "src/hwr/core/embodied.py",
+        "src/hwr/core/runtime.py",
+        "src/hwr/core/state_snapshot.py",
+        "src/hwr/core/types.py",
+        "src/hwr/eval/seed_contract.py",
+        "src/hwr/eval/stability.py",
+        "src/hwr/eval/target_selection.py",
+        "src/hwr/eval/target_selection_safety.py",
+        "src/hwr/eval/tool_kinematics.py",
+        "src/hwr/safety/__init__.py",
+        "src/hwr/safety/dual_arm.py",
+        "src/hwr/safety/supervisor.py",
+        "src/hwr/scenarios/formal3d.py"
+      ],
+      "checked_pathspecs": [
+        "src/hwr/eval/target_selection.py",
+        "src/hwr/eval/target_selection_safety.py",
+        "src/hwr/apps/evaluate_target_selection.py",
+        "src/hwr/adapters/mujoco/target_selection_diagnostic.py",
+        "src/hwr/apps/evaluate_cartesian_frame_contract.py",
+        "src/hwr/apps/evaluate_tool_kinematics.py",
+        "src/hwr/eval/tool_kinematics.py",
+        "configs",
+        "assets",
+        "src/hwr/adapters/mujoco",
+        "src/hwr/core",
+        "src/hwr/eval/seed_contract.py",
+        "src/hwr/eval/stability.py",
+        "src/hwr/scenarios/formal3d.py",
+        "src/hwr/safety",
+        "docs/research-loop/0010/03-experiment.md"
+      ],
+      "groups": {
+        "backend": {
+          "changed_paths": [],
+          "matches": true,
+          "pathspecs": [
+            "src/hwr/adapters/mujoco",
+            "src/hwr/core",
+            "src/hwr/eval/seed_contract.py",
+            "src/hwr/eval/stability.py",
+            "src/hwr/scenarios/formal3d.py"
+          ]
+        },
+        "existing_p41_p51_p52": {
+          "changed_paths": [],
+          "matches": true,
+          "pathspecs": [
+            "src/hwr/apps/evaluate_target_selection.py",
+            "src/hwr/adapters/mujoco/target_selection_diagnostic.py",
+            "src/hwr/apps/evaluate_cartesian_frame_contract.py",
+            "src/hwr/apps/evaluate_tool_kinematics.py",
+            "src/hwr/eval/tool_kinematics.py"
+          ]
+        },
+        "frozen_document": {
+          "changed_paths": [],
+          "matches": true,
+          "pathspecs": [
+            "docs/research-loop/0010/03-experiment.md"
+          ]
+        },
+        "mujoco_xml": {
+          "changed_paths": [],
+          "matches": true,
+          "pathspecs": [
+            "assets"
+          ]
+        },
+        "safety": {
+          "changed_paths": [],
+          "matches": true,
+          "pathspecs": [
+            "src/hwr/safety"
+          ]
+        },
+        "selector": {
+          "changed_paths": [],
+          "matches": true,
+          "pathspecs": [
+            "src/hwr/eval/target_selection.py",
+            "src/hwr/eval/target_selection_safety.py"
+          ]
+        },
+        "task_binding": {
+          "changed_paths": [],
+          "matches": true,
+          "pathspecs": [
+            "configs"
+          ]
+        }
+      },
+      "passed": true
+    },
+    "recursive_mujoco_xml": {
+      "clear_dining_table_3d/v1": {
+        "dependencies": [
+          {
+            "bytes": 2353,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_actuators.xml",
+            "sha256": "5a0e8e33e0cd3c3f48eb03b61f2c54149680f934c5d02f437a6712221e64b53e"
+          },
+          {
+            "bytes": 1084,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_assets.xml",
+            "sha256": "05ba873fda32322a3382a06748cd973b340d4510c0a13956361f6ea7b53538cd"
+          },
+          {
+            "bytes": 14003,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_body.xml",
+            "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+          },
+          {
+            "bytes": 1300,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_contacts.xml",
+            "sha256": "4d97b6604e47deedd16f5514db03731b45e4a51d4d74267d5c6909c1380235f9"
+          },
+          {
+            "bytes": 467,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_defaults.xml",
+            "sha256": "440206d217672675c7e0c5e751a5659e017e0388ccb063bbe88fd826bed12ca5"
+          },
+          {
+            "bytes": 137,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_sensors.xml",
+            "sha256": "5ade71352b5996b7d0fa4ed660795b906454ff9e0956ed7efefa29afe9b73d59"
+          },
+          {
+            "bytes": 7717,
+            "includes": [
+              "assets/mujoco/common/robot_actuators.xml",
+              "assets/mujoco/common/robot_assets.xml",
+              "assets/mujoco/common/robot_body.xml",
+              "assets/mujoco/common/robot_contacts.xml",
+              "assets/mujoco/common/robot_defaults.xml",
+              "assets/mujoco/common/robot_sensors.xml"
+            ],
+            "path": "assets/mujoco/formal/dining_room.xml",
+            "sha256": "a93e3a746a8e6b721d225e2006148fbddac6868ffa59dc125611408db97d2236"
+          }
+        ],
+        "entry_model": "assets/mujoco/formal/dining_room.xml",
+        "identity": {
+          "bytes": 1432,
+          "sha256": "9878c43d40a477b9c367f4f3cca6d64c63192de6c47acb92fb757ce0c714bf10"
+        },
+        "schema_version": "hwr.p52-mujoco-xml-inputs/v1"
+      },
+      "store_kitchen_items_3d/v1": {
+        "dependencies": [
+          {
+            "bytes": 2353,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_actuators.xml",
+            "sha256": "5a0e8e33e0cd3c3f48eb03b61f2c54149680f934c5d02f437a6712221e64b53e"
+          },
+          {
+            "bytes": 1084,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_assets.xml",
+            "sha256": "05ba873fda32322a3382a06748cd973b340d4510c0a13956361f6ea7b53538cd"
+          },
+          {
+            "bytes": 14003,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_body.xml",
+            "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+          },
+          {
+            "bytes": 1300,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_contacts.xml",
+            "sha256": "4d97b6604e47deedd16f5514db03731b45e4a51d4d74267d5c6909c1380235f9"
+          },
+          {
+            "bytes": 467,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_defaults.xml",
+            "sha256": "440206d217672675c7e0c5e751a5659e017e0388ccb063bbe88fd826bed12ca5"
+          },
+          {
+            "bytes": 137,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_sensors.xml",
+            "sha256": "5ade71352b5996b7d0fa4ed660795b906454ff9e0956ed7efefa29afe9b73d59"
+          },
+          {
+            "bytes": 8866,
+            "includes": [
+              "assets/mujoco/common/robot_actuators.xml",
+              "assets/mujoco/common/robot_assets.xml",
+              "assets/mujoco/common/robot_body.xml",
+              "assets/mujoco/common/robot_contacts.xml",
+              "assets/mujoco/common/robot_defaults.xml",
+              "assets/mujoco/common/robot_sensors.xml"
+            ],
+            "path": "assets/mujoco/formal/kitchen.xml",
+            "sha256": "3768c8a56ca8e44344433d45beede04c1389d4f65b3252c939382cba70a421f8"
+          }
+        ],
+        "entry_model": "assets/mujoco/formal/kitchen.xml",
+        "identity": {
+          "bytes": 1424,
+          "sha256": "a7ee60c4981255543b533cf2fbf5c41b34bbaa2697d713252ad5d0d431208e0d"
+        },
+        "schema_version": "hwr.p52-mujoco-xml-inputs/v1"
+      },
+      "tidy_living_room_3d/v1": {
+        "dependencies": [
+          {
+            "bytes": 2353,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_actuators.xml",
+            "sha256": "5a0e8e33e0cd3c3f48eb03b61f2c54149680f934c5d02f437a6712221e64b53e"
+          },
+          {
+            "bytes": 1084,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_assets.xml",
+            "sha256": "05ba873fda32322a3382a06748cd973b340d4510c0a13956361f6ea7b53538cd"
+          },
+          {
+            "bytes": 14003,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_body.xml",
+            "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+          },
+          {
+            "bytes": 1300,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_contacts.xml",
+            "sha256": "4d97b6604e47deedd16f5514db03731b45e4a51d4d74267d5c6909c1380235f9"
+          },
+          {
+            "bytes": 467,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_defaults.xml",
+            "sha256": "440206d217672675c7e0c5e751a5659e017e0388ccb063bbe88fd826bed12ca5"
+          },
+          {
+            "bytes": 137,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_sensors.xml",
+            "sha256": "5ade71352b5996b7d0fa4ed660795b906454ff9e0956ed7efefa29afe9b73d59"
+          },
+          {
+            "bytes": 7422,
+            "includes": [
+              "assets/mujoco/common/robot_actuators.xml",
+              "assets/mujoco/common/robot_assets.xml",
+              "assets/mujoco/common/robot_body.xml",
+              "assets/mujoco/common/robot_contacts.xml",
+              "assets/mujoco/common/robot_defaults.xml",
+              "assets/mujoco/common/robot_sensors.xml"
+            ],
+            "path": "assets/mujoco/formal/living_room.xml",
+            "sha256": "0d97256a9dd79e813018cc410aedc04e30f53a8a40220bb1f2563d6e4daa3d82"
+          }
+        ],
+        "entry_model": "assets/mujoco/formal/living_room.xml",
+        "identity": {
+          "bytes": 1432,
+          "sha256": "b2380363bed5a89dcec2378b075554e8d820560bdeec1f4c84f2664d0cfb4dfa"
+        },
+        "schema_version": "hwr.p52-mujoco-xml-inputs/v1"
+      }
+    },
+    "robot_model": {
+      "bytes": 14003,
+      "path": "assets/mujoco/common/robot_body.xml",
+      "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+    },
+    "src/hwr/adapters/mujoco/bindings.py": {
+      "bytes": 3188,
+      "path": "src/hwr/adapters/mujoco/bindings.py",
+      "sha256": "e794a74d9a936befe36aa48d79b5e70a529cf478370974c7fb550054f6016eac"
+    },
+    "src/hwr/adapters/mujoco/cartesian_convergence.py": {
+      "bytes": 29172,
+      "path": "src/hwr/adapters/mujoco/cartesian_convergence.py",
+      "sha256": "38e3408892cf17b84a7bb0cf2c0386fb43ac0e2282c9b5244c98dfe9ce27c9c7"
+    },
+    "src/hwr/adapters/mujoco/cartesian_convergence_provenance.py": {
+      "bytes": 14462,
+      "path": "src/hwr/adapters/mujoco/cartesian_convergence_provenance.py",
+      "sha256": "4ffc6485b19edb8d3eab73e940f6d838eb78346ffdf3ac24faaee7acef1b8008"
+    },
+    "src/hwr/adapters/mujoco/contact_ledger.py": {
+      "bytes": 16293,
+      "path": "src/hwr/adapters/mujoco/contact_ledger.py",
+      "sha256": "9e927f7c146dd3b1619172a8f9fa65459027fefd8ffcdff8f3cd3a7d2178ebfb"
+    },
+    "src/hwr/adapters/mujoco/dual_arm_backend.py": {
+      "bytes": 28700,
+      "path": "src/hwr/adapters/mujoco/dual_arm_backend.py",
+      "sha256": "4c6ed8a13f9c5477e35c8d248887bc493ee215cffcec4c755b62e60afef346c1"
+    },
+    "src/hwr/adapters/mujoco/entity_contact_graph.py": {
+      "bytes": 33590,
+      "path": "src/hwr/adapters/mujoco/entity_contact_graph.py",
+      "sha256": "ef2f4a2f717b64eca1542b7d16b0e2282e4c52d270379e6c4de763d95eaf2743"
+    },
+    "src/hwr/adapters/mujoco/formal_household_backend.py": {
+      "bytes": 33769,
+      "path": "src/hwr/adapters/mujoco/formal_household_backend.py",
+      "sha256": "2e2c1fe58447c01503ce11dfabb796a29417eb83b26de3288076b4e3b1d42982"
+    },
+    "src/hwr/adapters/mujoco/model.py": {
+      "bytes": 3498,
+      "path": "src/hwr/adapters/mujoco/model.py",
+      "sha256": "55c37ea4246a53c319dcce692b470739bef85b22f7708b20fad35547e1d0928b"
+    },
+    "src/hwr/adapters/mujoco/target_selection_diagnostic.py": {
+      "bytes": 27161,
+      "path": "src/hwr/adapters/mujoco/target_selection_diagnostic.py",
+      "sha256": "fa02ee06f006551d52e7cb15e80d09d1d7eaa0197222d1dc2811b393c8eeaf66"
+    },
+    "src/hwr/adapters/mujoco/training_catalog.py": {
+      "bytes": 2960,
+      "path": "src/hwr/adapters/mujoco/training_catalog.py",
+      "sha256": "3da8e45650663bbb2cbbec8b54300bdae9027a77e37e1bf51046bbd63b240eb6"
+    },
+    "src/hwr/apps/evaluate_cartesian_convergence.py": {
+      "bytes": 28505,
+      "path": "src/hwr/apps/evaluate_cartesian_convergence.py",
+      "sha256": "1c689db894ac35c1263c5ab23d6a94b4381559733d6077611f89f3ae4f970230"
+    },
+    "src/hwr/core/embodied.py": {
+      "bytes": 11143,
+      "path": "src/hwr/core/embodied.py",
+      "sha256": "e6d21d453c11df5889e483f3f0a9087e811db5c92cbdef2798f9bffa12f9b7a0"
+    },
+    "src/hwr/core/runtime.py": {
+      "bytes": 4041,
+      "path": "src/hwr/core/runtime.py",
+      "sha256": "d2f77fbe26dabf1c25b3b0ef9b339d37dbd0a96661616b48227545defb150554"
+    },
+    "src/hwr/core/state_snapshot.py": {
+      "bytes": 1653,
+      "path": "src/hwr/core/state_snapshot.py",
+      "sha256": "a42d3b6125a5a53241d29b1e0c0a61b4313c2f342915728befd28e9e2616ca33"
+    },
+    "src/hwr/core/types.py": {
+      "bytes": 9579,
+      "path": "src/hwr/core/types.py",
+      "sha256": "c4d968feabc9f5e4d2ddb25ceae32c367a6c0633008b8df28e4e1056fcd65e52"
+    },
+    "src/hwr/eval/cartesian_convergence.py": {
+      "bytes": 29520,
+      "path": "src/hwr/eval/cartesian_convergence.py",
+      "sha256": "b4acd2731b2f9f8786c1089b15eed7f9bf8dc1f5f6cf663c4f5ec50cf33bfefa"
+    },
+    "src/hwr/eval/cartesian_convergence_validation.py": {
+      "bytes": 37748,
+      "path": "src/hwr/eval/cartesian_convergence_validation.py",
+      "sha256": "00f081c955c16dfc4988bd9e80528173339a8e890007fafab04eb78a5066ccf7"
+    },
+    "src/hwr/eval/seed_contract.py": {
+      "bytes": 11340,
+      "path": "src/hwr/eval/seed_contract.py",
+      "sha256": "b375b630e5b7fb27ddfd1c7a6fdf8d502e3b066c6d047217566105d6ed256175"
+    },
+    "src/hwr/eval/target_selection.py": {
+      "bytes": 28661,
+      "path": "src/hwr/eval/target_selection.py",
+      "sha256": "54961b5e84f29d58efe01ccfe24d04ffcf04b76a36697aac8d24a431ec4c9b4a"
+    },
+    "src/hwr/eval/target_selection_safety.py": {
+      "bytes": 14934,
+      "path": "src/hwr/eval/target_selection_safety.py",
+      "sha256": "feb03653c07b1b2a84dae24362b9772413a688b125a3c414997d854d923d7ee3"
+    },
+    "src/hwr/eval/tool_kinematics.py": {
+      "bytes": 27822,
+      "path": "src/hwr/eval/tool_kinematics.py",
+      "sha256": "8aa1956541f6a666489ce35dc26e1689945c619e34c82e4e4c72a0af9b7731f8"
+    },
+    "src/hwr/safety/dual_arm.py": {
+      "bytes": 2962,
+      "path": "src/hwr/safety/dual_arm.py",
+      "sha256": "9dac6e7597b9150b5f76edc9832ba5c546bcefc28a9d5399fb6ab38cb245eba3"
+    },
+    "src/hwr/safety/supervisor.py": {
+      "bytes": 2728,
+      "path": "src/hwr/safety/supervisor.py",
+      "sha256": "ae1c70c408b4e1c89a8ddfd9075b60a716a99c7933931f4483cdd13842a48c4e"
+    },
+    "src/hwr/scenarios/formal3d.py": {
+      "bytes": 9413,
+      "path": "src/hwr/scenarios/formal3d.py",
+      "sha256": "61bbc54b4b1d06b7d8012d188323a18bc03afc404bcaca058c64d7558b72de71"
+    }
+  },
+  "status": "complete",
+  "target_formula_changed": false,
+  "task_success_claim_allowed": false,
+  "training_executed": false,
+  "velocity_cap_changed": false
+}
