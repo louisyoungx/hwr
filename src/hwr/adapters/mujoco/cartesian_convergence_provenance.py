@@ -189,6 +189,37 @@ def bank_prefix_record(run) -> dict[str, object]:
     }
 
 
+def raw_runtime_step_evidence(
+    b2_step: int,
+    row,
+    backend,
+    tool_distance,
+    hard_failure_reason,
+) -> dict[str, object]:
+    result = backend.result()
+    evidence = {
+        "b2_step": b2_step,
+        "runtime_step": int(row["step"]),
+        "executed": bool(row["executed"]),
+        "terminated": bool(row["terminated"]),
+        "truncated": bool(row["truncated"]),
+        "terminal": bool(row["terminal"]),
+        "observation_timestamp_ns": int(backend._timestamp_ns()),
+        "events": list(row["events"]),
+        "events_sha256": canonical_sha256(row["events"]),
+        "episode_result": None if result is None else asdict(result),
+        "hard_failure_reason": hard_failure_reason,
+        "action_bounds_valid": bool(row["action_bounds_valid"]),
+        "outside_validity_window": bool(row["outside_validity_window"]),
+        "safety_intervened": bool(row["safety_intervened"]),
+        "hold_action": list(row["hold_action"]),
+        "proposed_action": list(row["proposed_action"]),
+        "applied_action": list(row["applied_action"]),
+        "tool_distance": dict(tool_distance),
+    }
+    return {**evidence, "trace_sha256": canonical_sha256(evidence)}
+
+
 def _array_bundle_identity(
     values: Sequence[np.ndarray],
 ) -> dict[str, object]:

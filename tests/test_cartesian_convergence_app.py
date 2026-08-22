@@ -275,19 +275,81 @@ def test_frozen_document_matches_main_commit_and_tamper_fails(
     tmp_path, monkeypatch
 ) -> None:
     app._require_frozen_document(ROOT)
+    valid = {
+        "commit_is_ancestor": True,
+        "content_matches": True,
+        "blob_matches": True,
+        "tree_matches": True,
+    }
+    app._require_frozen_document(tmp_path, valid)
+    for field, message in (
+        ("content_matches", "document content drifted"),
+        ("blob_matches", "document blob drifted"),
+        ("tree_matches", "experiment tree drifted"),
+    ):
+        status = {**valid, field: False}
+        with pytest.raises(RuntimeError, match=message):
+            app._require_frozen_document(tmp_path, status)
+
+
+def test_frozen_document_nonancestor_fails_closed(tmp_path, monkeypatch) -> None:
     expected = (ROOT / app.FROZEN_DOCUMENT_PATH).read_bytes()
     target = tmp_path / app.FROZEN_DOCUMENT_PATH
     target.parent.mkdir(parents=True)
     target.write_bytes(expected)
-    monkeypatch.setattr(
-        app.subprocess,
-        "run",
-        lambda *args, **kwargs: SimpleNamespace(stdout=expected, returncode=0),
-    )
-    app._require_frozen_document(tmp_path)
-    target.write_bytes(expected + b"\ntampered\n")
-    with pytest.raises(RuntimeError, match="document content drifted"):
-        app._require_frozen_document(tmp_path)
+
+    def run(command, **kwargs):
+        del kwargs
+        arguments = tuple(command[1:])
+        if arguments[:2] == ("merge-base", "--is-ancestor"):
+            return SimpleNamespace(stdout=b"", returncode=1)
+        if arguments[0] == "show":
+            return SimpleNamespace(stdout=expected, returncode=0)
+        if arguments[0] == "rev-parse":
+            return SimpleNamespace(stdout="a" * 40 + "\n", returncode=0)
+        raise AssertionError(command)
+
+    monkeypatch.setattr(app.subprocess, "run", run)
+    status = app._frozen_document_status(tmp_path)
+    assert status["commit_is_ancestor"] is False
+    with pytest.raises(RuntimeError, match="not an ancestor"):
+        app._require_frozen_document(tmp_path, status)
+
+
+@pytest.mark.parametrize(
+    ("drift", "message"),
+    (("blob", "document blob drifted"), ("tree", "experiment tree drifted")),
+)
+def test_frozen_document_git_object_drift_fails_closed(
+    tmp_path, monkeypatch, drift, message
+) -> None:
+    expected = (ROOT / app.FROZEN_DOCUMENT_PATH).read_bytes()
+    target = tmp_path / app.FROZEN_DOCUMENT_PATH
+    target.parent.mkdir(parents=True)
+    target.write_bytes(expected)
+
+    def run(command, **kwargs):
+        del kwargs
+        arguments = tuple(command[1:])
+        if arguments[:2] == ("merge-base", "--is-ancestor"):
+            return SimpleNamespace(stdout=b"", returncode=0)
+        if arguments[0] == "show":
+            return SimpleNamespace(stdout=expected, returncode=0)
+        specification = arguments[1]
+        current = specification.startswith("HEAD:")
+        is_tree = specification.endswith("docs/research-loop/0010")
+        changed = current and (
+            drift == "tree" if is_tree else drift == "blob"
+        )
+        return SimpleNamespace(
+            stdout=(("b" if changed else "a") * 40) + "\n",
+            returncode=0,
+        )
+
+    monkeypatch.setattr(app.subprocess, "run", run)
+    status = app._frozen_document_status(tmp_path)
+    with pytest.raises(RuntimeError, match=message):
+        app._require_frozen_document(tmp_path, status)
 
 
 def test_source_tree_identity_and_bank_dependency_drift_fail_closed(
@@ -308,6 +370,10 @@ def test_source_tree_identity_and_bank_dependency_drift_fail_closed(
     )
     app._require_bank_provenance(ROOT, bank, identities)
     del bank["source_identities"]["src/hwr/core/runtime.py"]
+    with pytest.raises(RuntimeError, match="identity drifted"):
+        app._require_bank_provenance(ROOT, bank, identities)
+    bank["source_identities"] = copy.deepcopy(identities)
+    bank["source_identities"]["git_trees"]["src/hwr"] = "0" * 40
     with pytest.raises(RuntimeError, match="identity drifted"):
         app._require_bank_provenance(ROOT, bank, identities)
 

@@ -38,6 +38,7 @@ from hwr.eval.cartesian_convergence import (
     canonical_sha256,
     first_treatment_guard,
     frozen_cells,
+    hard_failure_evidence_matches,
     identity,
     pair_identity,
     preposition_targets,
@@ -45,6 +46,7 @@ from hwr.eval.cartesian_convergence import (
     role_order,
     signed_derivatives,
     treatment_guard_passes,
+    validate_runtime_step_trace,
 )
 from hwr.eval.seed_contract import require_seed_reveal
 from hwr.eval.target_selection import ACTION_MAXIMUM, ACTION_MINIMUM, Candidate
@@ -211,14 +213,21 @@ def _validated_arm(role, arm, pair) -> dict[str, object]:
     proposed, applied = arm.get("proposed_actions"), arm.get("applied_actions")
     if not all(isinstance(value, list) for value in (distances, proposed, applied)):
         raise CartesianConvergenceContractError("terminal raw arrays are missing")
-    executed = int(arm.get("executed_b2_steps", -1))
+    runtime = validate_runtime_step_trace(arm)
+    executed = runtime["executed_b2_steps"]
     if (
         len(distances) != B2_STEPS + 1
+        or arm.get("executed_b2_steps") != executed
         or len(proposed) != executed
         or len(applied) != executed
         or not 0 < executed <= B2_STEPS
     ):
         raise CartesianConvergenceContractError("terminal raw array length differs")
+    if (
+        proposed != runtime["proposed_actions"]
+        or applied != runtime["applied_actions"]
+    ):
+        raise CartesianConvergenceContractError("terminal actions differ from raw trace")
     arrays = [np.asarray(value, np.float64) for value in (*proposed, *applied)]
     if any(value.shape != (16,) or not np.isfinite(value).all() for value in arrays):
         raise CartesianConvergenceContractError("terminal action array differs")
@@ -254,10 +263,26 @@ def _validated_arm(role, arm, pair) -> dict[str, object]:
             raise CartesianConvergenceContractError(f"terminal {name} differs")
     carry = B2_STEPS - executed
     ordinary_reason = arm.get("ordinary_runtime_terminal")
-    if executed < B2_STEPS and arm["hard_guard_passed"]:
-        if ordinary_reason not in ORDINARY_TERMINAL_REASONS:
+    raw_reason = runtime["terminal_reason"]
+    if ordinary_reason != raw_reason:
+        raise CartesianConvergenceContractError("terminal reason differs from raw trace")
+    if hard_reason != runtime["hard_failure_reason"]:
+        raise CartesianConvergenceContractError("hard reason differs from raw trace")
+    if hard_reason is not None and not hard_failure_evidence_matches(
+        hard_reason, runtime["last_step"], arm
+    ):
+        raise CartesianConvergenceContractError("hard reason lacks raw evidence")
+    if executed < B2_STEPS:
+        if runtime["terminal_step"] != executed:
+            raise CartesianConvergenceContractError("truncation lacks terminal evidence")
+        if arm["hard_guard_passed"] and raw_reason not in ORDINARY_TERMINAL_REASONS:
             raise CartesianConvergenceContractError("ordinary terminal reason differs")
-    elif ordinary_reason is not None and ordinary_reason not in ORDINARY_TERMINAL_REASONS:
+        if not arm["hard_guard_passed"] and hard_reason is None:
+            raise CartesianConvergenceContractError("hard terminal reason differs")
+    elif raw_reason is not None and (
+        raw_reason not in ORDINARY_TERMINAL_REASONS
+        and raw_reason != hard_reason
+    ):
         raise CartesianConvergenceContractError("ordinary terminal reason differs")
     if arm.get("carried_forward_step_count") != carry:
         raise CartesianConvergenceContractError("terminal carry-forward count differs")
@@ -292,6 +317,8 @@ def _validated_arm(role, arm, pair) -> dict[str, object]:
         raise CartesianConvergenceContractError("terminal arm target identity differs")
     if carry and tool[executed:] != [tool[executed]] * (carry + 1):
         raise CartesianConvergenceContractError("tool carry-forward values differ")
+    if runtime["tool_distances"] != tool[1 : executed + 1]:
+        raise CartesianConvergenceContractError("tool distances differ from raw trace")
     if signed_derivatives(tool, applied) != arm.get(
         "first_10_applied_nonzero_arm_signed_derivatives"
     ):

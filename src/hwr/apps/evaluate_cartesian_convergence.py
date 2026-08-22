@@ -428,6 +428,12 @@ def _manifest(
         "frozen_document_content_matches": bool(
             identities.get("frozen_document", {}).get("content_matches")
         ),
+        "frozen_document_blob_matches": bool(
+            identities.get("frozen_document", {}).get("blob_matches")
+        ),
+        "frozen_document_tree_matches": bool(
+            identities.get("frozen_document", {}).get("tree_matches")
+        ),
         "command": list(command),
         "runtime": {
             "python": platform.python_version(),
@@ -542,10 +548,28 @@ def _frozen_document_status(root: Path) -> dict[str, object]:
         capture_output=True,
     ).stdout
     actual = (root / FROZEN_DOCUMENT_PATH).read_bytes()
+    frozen_blob = _git_output(
+        root,
+        ("rev-parse", f"{FROZEN_DOCUMENT_COMMIT}:{FROZEN_DOCUMENT_PATH}"),
+    )
+    current_blob = _git_output(
+        root, ("rev-parse", f"HEAD:{FROZEN_DOCUMENT_PATH}")
+    )
+    round_path = FROZEN_DOCUMENT_PATH.parent
+    frozen_tree = _git_output(
+        root, ("rev-parse", f"{FROZEN_DOCUMENT_COMMIT}:{round_path}")
+    )
+    current_tree = _git_output(root, ("rev-parse", f"HEAD:{round_path}"))
     return {
         "commit": FROZEN_DOCUMENT_COMMIT,
         "commit_is_ancestor": ancestor,
         "content_matches": actual == expected,
+        "blob_matches": current_blob == frozen_blob,
+        "tree_matches": current_tree == frozen_tree,
+        "current_blob": current_blob,
+        "frozen_blob": frozen_blob,
+        "current_tree": current_tree,
+        "frozen_tree": frozen_tree,
         "current": _bytes_identity(actual),
         "frozen": _bytes_identity(expected),
     }
@@ -557,6 +581,10 @@ def _require_frozen_document(root: Path, status=None) -> None:
         raise RuntimeError("P51-E1 frozen experiment commit is not an ancestor")
     if not status["content_matches"]:
         raise RuntimeError("P51-E1 frozen experiment document content drifted")
+    if not status["blob_matches"]:
+        raise RuntimeError("P51-E1 frozen experiment document blob drifted")
+    if not status["tree_matches"]:
+        raise RuntimeError("P51-E1 frozen experiment tree drifted")
 
 
 def _require_committed_bank(root: Path, bank_path: Path) -> dict[str, object]:

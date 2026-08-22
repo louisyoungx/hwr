@@ -156,6 +156,10 @@ def test_analysis_rejects_duplicate_identity_and_hard_safety(
     records[-1]["arms"]["frame_fixed"]["severe_collision_count"] = 1
     records[-1]["arms"]["frame_fixed"]["hard_guard_passed"] = False
     records[-1]["arms"]["frame_fixed"]["hard_failure_reason"] = "severe_collision"
+    records[-1]["arms"]["frame_fixed"]["raw_runtime_step_trace"][-1][
+        "hard_failure_reason"
+    ] = "severe_collision"
+    _rehash_runtime_trace(records[-1]["arms"]["frame_fixed"])
     records[-1]["hard_safety_stop"] = True
     rejected = validation.analyze_terminals(_terminal_document(bank, records=records), bank)
     assert rejected["decision"] == "rejected"
@@ -167,6 +171,10 @@ def test_analysis_rejects_duplicate_identity_and_hard_safety(
     records[0]["arms"][role]["hard_guard_passed"] = False
     records[0]["arms"][role]["hard_failure_reason"] = "severe_collision"
     records[0]["arms"][role]["severe_collision_count"] = 1
+    records[0]["arms"][role]["raw_runtime_step_trace"][-1][
+        "hard_failure_reason"
+    ] = "severe_collision"
+    _rehash_runtime_trace(records[0]["arms"][role])
     records[0]["continuation_replay_identities"] = {
         role: records[0]["continuation_identity"]
     }
@@ -329,36 +337,51 @@ def test_unresolved_identity_is_validated_before_inconclusive(monkeypatch) -> No
     assert validation.analyze_terminals(terminals, bank)["decision"] == "invalid"
 
 
-def test_early_stop_requires_frozen_terminal_reason_and_carry(monkeypatch) -> None:
+def test_early_stop_is_recomputed_from_raw_terminal_evidence(monkeypatch) -> None:
     bank = _local_bank(monkeypatch)
     records = _terminal_records(bank, delta=0.20)
     arm = records[0]["arms"]["frame_fixed"]
-    arm["executed_b2_steps"] = 50
-    arm["proposed_actions"] = arm["proposed_actions"][:50]
-    arm["applied_actions"] = arm["applied_actions"][:50]
-    arm["proposed_action_sha256"] = convergence.canonical_sha256(
-        arm["proposed_actions"]
-    )
-    arm["applied_action_sha256"] = convergence.canonical_sha256(
-        arm["applied_actions"]
-    )
-    arm["action_summary"] = convergence.action_summary(
-        arm["proposed_actions"], arm["applied_actions"]
-    )
-    arm["first_10_applied_nonzero_arm_signed_derivatives"] = (
-        convergence.signed_derivatives(
-            arm["tool_distances"], arm["applied_actions"]
-        )
-    )
-    arm["carried_forward_step_count"] = 50
-    arm["symmetric_terminal_carry_forward"] = True
+    _truncate_arm_with_terminal(arm, 50, "formal_household_bimanual_success")
     terminals = _terminal_document(bank, records=records)
-    assert validation.analyze_terminals(terminals, bank)["decision"] == "invalid"
-    arm["ordinary_runtime_terminal"] = "unknown_terminal"
-    assert validation.analyze_terminals(terminals, bank)["decision"] == "invalid"
-    arm["ordinary_runtime_terminal"] = "formal_household_bimanual_success"
+
     result = validation.analyze_terminals(terminals, bank)
     assert result["decision"].startswith(("accepted", "rejected"))
+
+    arm["ordinary_runtime_terminal"] = "unknown_terminal"
+    assert validation.analyze_terminals(terminals, bank)["decision"] == "invalid"
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    ("missing_terminal", "executed_count", "action", "summary", "reason"),
+)
+def test_truncated_terminal_tampering_is_invalid(monkeypatch, tamper) -> None:
+    bank = _local_bank(monkeypatch)
+    records = _terminal_records(bank, delta=0.20)
+    arm = records[0]["arms"]["frame_fixed"]
+    _truncate_arm_with_terminal(arm, 50, "formal_household_bimanual_success")
+    if tamper == "missing_terminal":
+        final = arm["raw_runtime_step_trace"][-1]
+        final.update(
+            terminated=False,
+            terminal=False,
+            episode_result=None,
+        )
+        _rehash_runtime_trace(arm)
+    elif tamper == "executed_count":
+        arm["executed_b2_steps"] = 49
+    elif tamper == "action":
+        arm["proposed_actions"][1][2] = 0.1
+        arm["proposed_action_sha256"] = convergence.canonical_sha256(
+            arm["proposed_actions"]
+        )
+    elif tamper == "summary":
+        arm["action_summary"]["proposed"]["rms"] = 99.0
+    else:
+        arm["ordinary_runtime_terminal"] = "formal_household_timeout"
+
+    terminals = _terminal_document(bank, records=records)
+    assert validation.analyze_terminals(terminals, bank)["decision"] == "invalid"
 
 
 def _terminal_document(bank, delta=0.20, records=None) -> dict[str, object]:
@@ -418,6 +441,10 @@ def _arm(auc: float, pair, role: str) -> dict[str, object]:
         {"left_m": value, "right_m": value, "mean_m": value}
         for value in distances
     ]
+    runtime_trace = [
+        _runtime_step(index, actions[index - 1], tool[index])
+        for index in range(1, 101)
+    ]
     invariants = {
         name: {"sha256": name, "bytes": len(name)}
         for name in ("safety", "cap", "gripper", "phase", "target", "fk", "backend")
@@ -446,11 +473,96 @@ def _arm(auc: float, pair, role: str) -> dict[str, object]:
         "hard_guard_passed": True,
         "hard_failure_reason": None,
         "ordinary_runtime_terminal": None,
+        "raw_runtime_step_trace": runtime_trace,
+        "raw_runtime_step_trace_sha256": convergence.canonical_sha256(
+            runtime_trace
+        ),
         "preposition_targets": pair["preposition_targets"],
         "preposition_target_identity": pair["preposition_target_identity"],
         "preposition_target_identities": pair["preposition_target_identities"],
         "invariant_identities": invariants,
     }
+
+
+def _runtime_step(
+    b2_step: int,
+    action,
+    tool_distance,
+    *,
+    reason: str | None = None,
+) -> dict[str, object]:
+    timestamp = 1_000_000 + b2_step
+    evidence = {
+        "b2_step": b2_step,
+        "runtime_step": 1394 + b2_step,
+        "executed": True,
+        "terminated": reason is not None,
+        "truncated": False,
+        "terminal": reason is not None,
+        "observation_timestamp_ns": timestamp,
+        "events": [],
+        "events_sha256": convergence.canonical_sha256([]),
+        "episode_result": (
+            None
+            if reason is None
+            else {
+                "success": reason == "formal_household_bimanual_success",
+                "reason": reason,
+                "ended_at_ns": timestamp,
+                "metrics": {"steps": float(b2_step)},
+            }
+        ),
+        "hard_failure_reason": None,
+        "action_bounds_valid": True,
+        "outside_validity_window": False,
+        "safety_intervened": False,
+        "hold_action": [0.0] * 16,
+        "proposed_action": list(action),
+        "applied_action": list(action),
+        "tool_distance": dict(tool_distance),
+    }
+    return {**evidence, "trace_sha256": convergence.canonical_sha256(evidence)}
+
+
+def _rehash_runtime_trace(arm) -> None:
+    for row in arm["raw_runtime_step_trace"]:
+        evidence = {name: value for name, value in row.items()
+                    if name != "trace_sha256"}
+        row["trace_sha256"] = convergence.canonical_sha256(evidence)
+    arm["raw_runtime_step_trace_sha256"] = convergence.canonical_sha256(
+        arm["raw_runtime_step_trace"]
+    )
+
+
+def _truncate_arm_with_terminal(arm, executed: int, reason: str) -> None:
+    arm["executed_b2_steps"] = executed
+    arm["proposed_actions"] = arm["proposed_actions"][:executed]
+    arm["applied_actions"] = arm["applied_actions"][:executed]
+    arm["raw_runtime_step_trace"] = arm["raw_runtime_step_trace"][:executed]
+    arm["raw_runtime_step_trace"][-1] = _runtime_step(
+        executed,
+        arm["proposed_actions"][-1],
+        arm["tool_distances"][executed],
+        reason=reason,
+    )
+    arm["ordinary_runtime_terminal"] = reason
+    arm["proposed_action_sha256"] = convergence.canonical_sha256(
+        arm["proposed_actions"]
+    )
+    arm["applied_action_sha256"] = convergence.canonical_sha256(
+        arm["applied_actions"]
+    )
+    arm["action_summary"] = convergence.action_summary(
+        arm["proposed_actions"], arm["applied_actions"]
+    )
+    arm["first_10_applied_nonzero_arm_signed_derivatives"] = (
+        convergence.signed_derivatives(
+            arm["tool_distances"], arm["applied_actions"]
+        )
+    )
+    arm["carried_forward_step_count"] = 100 - executed
+    arm["symmetric_terminal_carry_forward"] = True
+    _rehash_runtime_trace(arm)
 
 
 def _unresolved(pair) -> dict[str, object]:

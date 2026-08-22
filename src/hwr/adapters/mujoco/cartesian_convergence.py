@@ -12,6 +12,7 @@ import numpy as np
 from hwr.adapters.mujoco.cartesian_convergence_provenance import (
     bank_prefix_record,
     continuation_identity,
+    raw_runtime_step_evidence,
 )
 from hwr.adapters.mujoco.entity_contact_graph import p40_conservation_differences
 from hwr.adapters.mujoco.target_selection_diagnostic import (
@@ -388,8 +389,8 @@ class CartesianConvergenceMujoco:
         distances = [_distance_record(run, targets)]
         proposed: list[list[float]] = []
         applied: list[list[float]] = []
+        runtime_trace: list[dict[str, object]] = []
         hard_failure: str | None = None
-        terminal_reason: str | None = None
         for step in range(B2_STEPS):
             payload = policy_input_bytes(
                 run.observation,
@@ -426,9 +427,16 @@ class CartesianConvergenceMujoco:
             proposed.append(row["proposed_action"])
             applied.append(row["applied_action"])
             distances.append(_distance_record(run, targets))
-            if row["terminal"]:
-                terminal_reason = _terminal_reason(run.backend)
             hard_failure = _b2_hard_failure(row, run.backend, run.graph)
+            runtime_trace.append(
+                raw_runtime_step_evidence(
+                    step + 1,
+                    row,
+                    run.backend,
+                    distances[-1],
+                    hard_failure,
+                )
+            )
             if hard_failure is not None:
                 break
             if row["terminal"]:
@@ -474,7 +482,13 @@ class CartesianConvergenceMujoco:
             "role": role,
             "b2_control_step_limit": B2_STEPS,
             "executed_b2_steps": len(proposed),
-            "ordinary_runtime_terminal": terminal_reason,
+            "ordinary_runtime_terminal": (
+                None
+                if not runtime_trace or runtime_trace[-1]["episode_result"] is None
+                else runtime_trace[-1]["episode_result"]["reason"]
+            ),
+            "raw_runtime_step_trace": runtime_trace,
+            "raw_runtime_step_trace_sha256": canonical_sha256(runtime_trace),
             "carried_forward_step_count": B2_STEPS + 1 - len(distances),
             "distance_metric": (
                 "mean(left_tool_to_left_preposition,"
@@ -772,6 +786,3 @@ def _distance_record(
         "right_m": values["right"],
         "mean_m": float(np.mean(list(values.values()))),
     }
-def _terminal_reason(backend) -> str:
-    result = backend.result()
-    return "runtime_terminal" if result is None else result.reason

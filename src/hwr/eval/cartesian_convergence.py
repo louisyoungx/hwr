@@ -385,5 +385,130 @@ def runtime_counter_record(backend, observation, graph) -> dict[str, object]:
     }
 def canonical_sha256(value: object) -> str:
     return hashlib.sha256(canonical_bytes(value)).hexdigest()
+def validate_runtime_step_trace(
+    arm: Mapping[str, object],
+) -> dict[str, object]:
+    trace = arm.get("raw_runtime_step_trace")
+    if not isinstance(trace, list) or not 0 < len(trace) <= B2_STEPS:
+        raise CartesianConvergenceContractError("raw runtime step trace differs")
+    if canonical_sha256(trace) != arm.get("raw_runtime_step_trace_sha256"):
+        raise CartesianConvergenceContractError("raw runtime trace hash differs")
+    expected_runtime_start = target_selection.ACQUISITION_STEPS + 400
+    terminal_reason = None
+    terminal_step = None
+    hard_failure_reason = None
+    for index, raw in enumerate(trace, start=1):
+        if not isinstance(raw, Mapping):
+            raise CartesianConvergenceContractError("raw runtime step differs")
+        evidence = {name: value for name, value in raw.items()
+                    if name != "trace_sha256"}
+        if canonical_sha256(evidence) != raw.get("trace_sha256"):
+            raise CartesianConvergenceContractError("raw runtime step hash differs")
+        flags = tuple(raw.get(name) for name in (
+            "executed", "terminated", "truncated", "terminal"
+        ))
+        if (
+            raw.get("b2_step") != index
+            or raw.get("runtime_step") != expected_runtime_start + index - 1
+            or any(not isinstance(value, bool) for value in flags)
+            or flags[0] is not True
+            or flags[3] != (flags[1] or flags[2])
+        ):
+            raise CartesianConvergenceContractError("raw runtime step position differs")
+        timestamp = raw.get("observation_timestamp_ns")
+        if not isinstance(timestamp, int) or isinstance(timestamp, bool) or timestamp < 0:
+            raise CartesianConvergenceContractError("raw runtime timestamp differs")
+        events = raw.get("events")
+        if not isinstance(events, list) or canonical_sha256(events) != raw.get(
+            "events_sha256"
+        ):
+            raise CartesianConvergenceContractError("raw runtime event hash differs")
+        _validate_runtime_events(events)
+        result = raw.get("episode_result")
+        hard_failure = raw.get("hard_failure_reason")
+        if hard_failure is not None and (
+            not isinstance(hard_failure, str) or not hard_failure
+        ):
+            raise CartesianConvergenceContractError("raw hard failure differs")
+        action_bounds = raw.get("action_bounds_valid")
+        outside_window = raw.get("outside_validity_window")
+        safety_intervened = raw.get("safety_intervened")
+        if any(
+            not isinstance(value, bool)
+            for value in (action_bounds, outside_window, safety_intervened)
+        ):
+            raise CartesianConvergenceContractError("raw runtime guard differs")
+        if flags[3]:
+            if index != len(trace) or not isinstance(result, Mapping):
+                raise CartesianConvergenceContractError("raw runtime terminal differs")
+            terminal_reason = _validate_episode_result(result, timestamp)
+            terminal_step = index
+        elif result is not None:
+            raise CartesianConvergenceContractError("nonterminal step has result")
+        if hard_failure is not None:
+            if index != len(trace):
+                raise CartesianConvergenceContractError("raw hard failure is not terminal")
+            hard_failure_reason = hard_failure
+            terminal_step = index
+    return {
+        "executed_b2_steps": len(trace),
+        "terminal_reason": terminal_reason,
+        "hard_failure_reason": hard_failure_reason,
+        "terminal_step": terminal_step,
+        "proposed_actions": [row["proposed_action"] for row in trace],
+        "applied_actions": [row["applied_action"] for row in trace],
+        "tool_distances": [row["tool_distance"] for row in trace],
+        "last_step": trace[-1],
+    }
+def _validate_runtime_events(events: Sequence[object]) -> None:
+    for event in events:
+        if (
+            not isinstance(event, Mapping)
+            or not isinstance(event.get("timestamp_ns"), int)
+            or isinstance(event.get("timestamp_ns"), bool)
+            or event["timestamp_ns"] < 0
+            or not isinstance(event.get("event_type"), str)
+            or not event["event_type"]
+            or not isinstance(event.get("source"), str)
+            or not event["source"]
+            or not isinstance(event.get("details"), Mapping)
+        ):
+            raise CartesianConvergenceContractError("raw runtime event differs")
+def _validate_episode_result(result: Mapping[str, object], timestamp: int) -> str:
+    if set(result) != {"success", "reason", "ended_at_ns", "metrics"}:
+        raise CartesianConvergenceContractError("raw episode result differs")
+    reason = result["reason"]
+    metrics = result["metrics"]
+    if (
+        not isinstance(result["success"], bool)
+        or not isinstance(reason, str)
+        or not reason
+        or result["ended_at_ns"] != timestamp
+        or not isinstance(metrics, Mapping)
+    ):
+        raise CartesianConvergenceContractError("raw episode result differs")
+    try:
+        finite = all(math.isfinite(float(value)) for value in metrics.values())
+    except (TypeError, ValueError):
+        finite = False
+    if not finite:
+        raise CartesianConvergenceContractError("raw episode result differs")
+    return reason
+def hard_failure_evidence_matches(
+    reason: str, last_step: Mapping[str, object], arm: Mapping[str, object]
+) -> bool:
+    checks = {
+        "action_bounds_violation": not last_step["action_bounds_valid"],
+        "stale_action_applied": bool(last_step["outside_validity_window"])
+        and last_step["applied_action"] != last_step["hold_action"],
+        "severe_collision": int(arm.get("severe_collision_count", 0)) > 0,
+        "safety_intervention": bool(last_step["safety_intervened"]),
+        "invalid_force": int(arm.get("invalid_force_count", 0)) > 0,
+        "p40_conservation_violation": float(
+            arm.get("p40_conservation_maximum_absolute_difference", 0.0)
+        )
+        != 0.0,
+    }
+    return bool(checks.get(reason, False))
 def wrap_angle(value: float) -> float:
     return math.atan2(math.sin(value), math.cos(value))

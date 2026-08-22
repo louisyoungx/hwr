@@ -14,6 +14,8 @@ from hwr.adapters.mujoco.training_catalog import (
     load_default_formal_household_catalogs,
 )
 from hwr.core.embodied import DualArmAction
+from hwr.core.types import EpisodeResult
+from hwr.eval import cartesian_convergence as convergence
 from hwr.eval import target_selection
 from hwr.eval.target_selection import Candidate, PolicyVisibleInput
 from hwr.safety import SafetyLimits
@@ -179,6 +181,95 @@ def test_distance_uses_live_mujoco_grasp_center_sites() -> None:
     assert distance["left_m"] == pytest.approx(0.0)
     assert distance["right_m"] == pytest.approx(0.0)
     assert distance["mean_m"] == pytest.approx(0.0)
+
+
+def test_run_b2_persists_raw_episode_result_terminal(monkeypatch) -> None:
+    candidate = _candidate()
+    targets = {"left": (0.8, 0.1, 0.8), "right": (0.8, -0.1, 0.8)}
+    action = [0.0] * 16
+    action[2] = action[8] = 0.02
+    result = EpisodeResult(
+        True,
+        "formal_household_bimanual_success",
+        2_000,
+        {"steps": 1.0},
+    )
+    backend = SimpleNamespace(
+        _timestamp_ns=lambda: 2_000,
+        result=lambda: result,
+        task_audit=lambda: {"severe_collision_count": 0},
+        contact_ledger=SimpleNamespace(report=lambda: {}),
+        safety=SimpleNamespace(limits=SafetyLimits()),
+        model=SimpleNamespace(nq=1, nv=1, nu=1),
+        _left_tool_site=0,
+        _right_tool_site=1,
+    )
+    graph = SimpleNamespace(report=lambda: {
+        **dict.fromkeys(bridge.INVALID_GRAPH_FIELDS, 0),
+    })
+    run = SimpleNamespace(
+        failure=None,
+        candidate=candidate,
+        observation=SimpleNamespace(proprioception=SimpleNamespace(base_pose=(0, 0, 0))),
+        history=[],
+        history_available=[],
+        policy_rng_seed=7,
+        acquisition_pose=(0.0, 0.0, 0.0),
+        preposition_targets=targets,
+        first_actions={"frame_fixed": tuple(action)},
+        first_guard={},
+        trace=[],
+        backend=backend,
+        graph=graph,
+    )
+    row = {
+        "step": bridge.PREFIX_STEPS,
+        "executed": True,
+        "proposed_action": action,
+        "applied_action": action,
+        "hold_action": [0.0] * 16,
+        "events": [],
+        "safety_intervened": False,
+        "outside_validity_window": False,
+        "action_bounds_valid": True,
+        "terminated": True,
+        "truncated": False,
+        "terminal": True,
+        "_motion_start": object(),
+        "_motion_end": object(),
+    }
+    monkeypatch.setattr(bridge, "policy_input_bytes", lambda *args, **kwargs: b"x")
+    monkeypatch.setattr(
+        bridge,
+        "deserialize_policy_input",
+        lambda payload: SimpleNamespace(base_pose=(0.0, 0.0, 0.0)),
+    )
+    monkeypatch.setattr(bridge, "preposition_targets", lambda *args: targets)
+    monkeypatch.setattr(bridge, "_primitive_action", lambda *args: tuple(action))
+    monkeypatch.setattr(
+        bridge, "_advance", lambda *args: (run.observation, dict(row), None)
+    )
+    monkeypatch.setattr(
+        bridge,
+        "_distance_record",
+        lambda *args: {"left_m": 0.2, "right_m": 0.2, "mean_m": 0.2},
+    )
+    monkeypatch.setattr(bridge, "_b2_hard_failure", lambda *args: None)
+    monkeypatch.setattr(
+        bridge,
+        "p40_conservation_differences",
+        lambda *args: {"maximum_absolute_difference": 0.0},
+    )
+
+    arm = bridge.CartesianConvergenceMujoco._run_b2(
+        SimpleNamespace(), run, "frame_fixed"
+    )
+
+    assert arm["executed_b2_steps"] == 1
+    assert arm["ordinary_runtime_terminal"] == result.reason
+    assert arm["raw_runtime_step_trace"][0]["episode_result"] == result.to_dict()
+    assert arm["raw_runtime_step_trace"][0]["runtime_step"] == bridge.PREFIX_STEPS
+    assert convergence.validate_runtime_step_trace(arm)["terminal_step"] == 1
 
 
 @pytest.mark.parametrize(
