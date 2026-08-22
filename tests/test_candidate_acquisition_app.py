@@ -236,11 +236,13 @@ def test_terminal_ledger_rejects_missing_duplicate_unplanned_and_replacement() -
         "planned_episode_id",
         "task_id",
         "cell_id",
+        "cell_ordinal",
         "replicate_ordinal",
         "candidate_ordinal",
         "environment_seed",
         "policy_rng_seed",
         "planned_latency",
+        "replacement",
     ),
 )
 def test_plan_record_tampering_fails_closed(field: str) -> None:
@@ -257,7 +259,7 @@ def test_plan_record_tampering_fails_closed(field: str) -> None:
         rows[0][field] = (
             {"observation_steps": 2, "action_steps": 1}
             if field == "planned_latency"
-            else "tampered"
+            else True if field == "replacement" else "tampered"
         )
 
         report = app.analyze_acquisition(plan, execution)
@@ -277,11 +279,13 @@ def test_plan_record_tampering_fails_closed(field: str) -> None:
         "planned_episode_id",
         "task_id",
         "cell_id",
+        "cell_ordinal",
         "replicate_ordinal",
         "candidate_ordinal",
         "environment_seed",
         "policy_rng_seed",
         "planned_latency",
+        "replacement",
     ),
 )
 def test_e2_loader_rejects_plan_record_tampering(
@@ -294,10 +298,15 @@ def test_e2_loader_rejects_plan_record_tampering(
     records[0][field] = (
         {"observation_steps": 2, "action_steps": 1}
         if field == "planned_latency"
-        else "tampered"
+        else True if field == "replacement" else "tampered"
     )
     documents = {
-        "manifest.json": {"status": "complete", "source_commit": "a" * 40},
+        "manifest.json": {
+            "status": "complete",
+            "source_commit": "a" * 40,
+            "frozen_document_commit": app.FROZEN_DOCUMENT_COMMIT,
+            "frozen_document_commit_is_ancestor": True,
+        },
         "report.json": {
             "decision": "accepted as immutable acquisition evidence contract"
         },
@@ -312,7 +321,9 @@ def test_e2_loader_rejects_plan_record_tampering(
         app_helpers, "_read_object", lambda path: documents[path.name]
     )
     monkeypatch.setattr(app_helpers, "_verify_artifacts", lambda root, manifest: None)
-    monkeypatch.setattr(app_helpers, "_is_ancestor", lambda root, commit: True)
+    monkeypatch.setattr(
+        app_helpers, "candidate_commit_is_ancestor", lambda *args: True
+    )
     monkeypatch.setattr(
         app_helpers,
         "_require_e1_source_identity",
@@ -321,7 +332,64 @@ def test_e2_loader_rejects_plan_record_tampering(
 
     with pytest.raises(app.CandidateFunnelContractError, match="ledger differs"):
         app_helpers.analyze_candidate_capsule_directory(
-            tmp_path, tmp_path, _identities()
+            tmp_path, tmp_path, _identities(), app.FROZEN_DOCUMENT_COMMIT
+        )
+
+
+@pytest.mark.parametrize(
+    ("manifest_change", "ancestry"),
+    (
+        ({"frozen_document_commit": "f" * 40}, (True, True)),
+        ({"frozen_document_commit_is_ancestor": False}, (True, True)),
+        ({}, (False, True)),
+        ({}, (True, False)),
+    ),
+)
+def test_e2_loader_rejects_forged_manifest_and_invalid_source_lineage(
+    manifest_change: dict[str, object],
+    ancestry: tuple[bool, bool],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hwr.apps as app_helpers
+
+    manifest = {
+        "status": "complete",
+        "source_commit": "a" * 40,
+        "frozen_document_commit": app.FROZEN_DOCUMENT_COMMIT,
+        "frozen_document_commit_is_ancestor": True,
+    }
+    manifest.update(manifest_change)
+    documents = {
+        "manifest.json": manifest,
+        "report.json": {
+            "decision": "accepted as immutable acquisition evidence contract"
+        },
+        "plan.json": {"planned_episode_count": 24, "episodes": []},
+        "capsules.json": {
+            "capsule_count": 24,
+            "episodes": [],
+            "terminals": [],
+        },
+    }
+    results = iter(ancestry)
+    monkeypatch.setattr(
+        app_helpers, "_read_object", lambda path: documents[path.name]
+    )
+    monkeypatch.setattr(
+        app_helpers, "_verify_artifacts", lambda root, value: None
+    )
+    monkeypatch.setattr(
+        app_helpers,
+        "candidate_commit_is_ancestor",
+        lambda *args: next(results),
+    )
+
+    with pytest.raises(
+        app.CandidateFunnelContractError, match="frozen/source ancestry"
+    ):
+        app_helpers.analyze_candidate_capsule_directory(
+            tmp_path, tmp_path, _identities(), app.FROZEN_DOCUMENT_COMMIT
         )
 
 
@@ -618,8 +686,8 @@ def test_funnel_runner_analyzes_twice_and_writes_independent_artifacts(
     monkeypatch.setattr(app, "_source_identities", lambda root: _identities())
     monkeypatch.setattr(app, "_require_clean_source", lambda root, identities: None)
 
-    def analyze(root, capsules, identities):
-        calls.append((root, capsules, identities))
+    def analyze(root, capsules, identities, frozen):
+        calls.append((root, capsules, identities, frozen))
         return analysis, source_identity
 
     monkeypatch.setattr(app, "analyze_candidate_capsule_directory", analyze)

@@ -13,6 +13,7 @@ from hwr.apps import (
     aggregate_candidate_funnels,
     analyze_candidate_capsule_directory,
     candidate_artifact_manifest,
+    candidate_commit_is_ancestor,
     candidate_file_identity as _file_identity,
     candidate_git_tree as _git_tree,
     candidate_json_bytes as _json_bytes,
@@ -67,9 +68,7 @@ FAILURE_SCHEMA = "hwr.p50-acquisition-failure/v1"
 SALT_COMMITMENT = "ed945b2dcfe90c6aab639164da32cc8a1a905df56534c42a443d1bd4753e16a4"
 FROZEN_DOCUMENT_COMMIT = "2d1752f2c0c8b9e39d7f3ebaa8e9ff0ec1d13f38"
 FROZEN_DOCUMENT_PATH = Path("docs/research-loop/0010/03-experiment.md")
-FORMAL_OUTPUT = Path(
-    "runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001"
-)
+FORMAL_OUTPUT = Path("runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001")
 FORMAL_SALT_FILE = Path("runs/research-loop/0010/.host/p50-e1-salt.txt")
 FUNNEL_OUTPUT = Path("runs/research-loop/0010/r0010-p50-e2-funnel-s20265001")
 FUNNEL_INPUT = FORMAL_OUTPUT
@@ -240,10 +239,10 @@ def _run_funnel(arguments: argparse.Namespace) -> dict[str, object]:
         identities = _source_identities(root)
         _require_clean_source(root, identities)
         first, input_identity = analyze_candidate_capsule_directory(
-            root, capsules, identities
+            root, capsules, identities, FROZEN_DOCUMENT_COMMIT
         )
         second, replay_identity = analyze_candidate_capsule_directory(
-            root, capsules, identities
+            root, capsules, identities, FROZEN_DOCUMENT_COMMIT
         )
         deterministic = _json_bytes(first) == _json_bytes(second)
         if input_identity != replay_identity:
@@ -440,6 +439,7 @@ def execute_plan(
                     "planned_episode_id": episode["planned_episode_id"],
                     "task_id": episode["task_id"],
                     "cell_id": episode["cell_id"],
+                    "cell_ordinal": episode["cell_ordinal"],
                     "replicate_ordinal": episode["replicate_ordinal"],
                     "candidate_ordinal": episode["candidate_ordinal"],
                     "environment_seed": episode["environment_seed"],
@@ -616,8 +616,6 @@ def _sampler_for_cell(
 ):
     del observation_latency_steps, action_latency_steps
     return CandidateAcquisitionDiagnostic(task, binding)
-
-
 def _validate_arguments(arguments: argparse.Namespace) -> None:
     if arguments.mode == "acquisition":
         if arguments.output != FORMAL_OUTPUT:
@@ -633,8 +631,6 @@ def _validate_arguments(arguments: argparse.Namespace) -> None:
             f"R0001-P50-E2 requires frozen capsules {FUNNEL_INPUT} "
             f"and output {FUNNEL_OUTPUT}"
         )
-
-
 def _source_identities(root: Path) -> dict[str, object]:
     _, bindings = load_default_formal_household_catalogs(root)
     return {
@@ -653,8 +649,6 @@ def _source_identities(root: Path) -> dict[str, object]:
         },
         "frozen_document": _file_identity(root, root / FROZEN_DOCUMENT_PATH),
     }
-
-
 def _require_clean_source(
     root: Path, identities: Mapping[str, object]
 ) -> None:
@@ -703,8 +697,6 @@ def _require_clean_source(
         "bytes": len(frozen),
     }:
         raise RuntimeError("P50 frozen document content drifted")
-
-
 def _manifest(
     source_commit,
     command,
@@ -729,6 +721,13 @@ def _manifest(
         },
         status=status,
         extra={
+            "frozen_document_commit_is_ancestor": (
+                candidate_commit_is_ancestor(
+                    Path(__file__).resolve().parents[3],
+                    FROZEN_DOCUMENT_COMMIT,
+                    source_commit,
+                )
+            ),
             "seed_lineage": None if plan is None else {
                 "schema_version": SEED_SCHEMA,
                 "plan_id": PLAN_ID,
@@ -753,8 +752,6 @@ def _manifest(
             **CLAIM_FLAGS,
         },
     )
-
-
 def _funnel_manifest(
     source_commit: str,
     command: Sequence[str],
@@ -778,6 +775,13 @@ def _funnel_manifest(
         },
         status=status,
         extra={
+            "frozen_document_commit_is_ancestor": (
+                candidate_commit_is_ancestor(
+                    Path(__file__).resolve().parents[3],
+                    FROZEN_DOCUMENT_COMMIT,
+                    source_commit,
+                )
+            ),
             "source_acquisition": input_identity,
             "gate_source_identity": candidate_gate_source_identity(),
             "report_only": True,
@@ -786,14 +790,11 @@ def _funnel_manifest(
             **CLAIM_FLAGS,
         },
     )
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     result = run(build_parser().parse_args(argv))
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2, sort_keys=True)
     sys.stdout.write("\n")
     return 0 if result["decision"].startswith("accepted") else 2
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

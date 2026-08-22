@@ -113,6 +113,7 @@ class AcquisitionCapsule:
     planned_episode_id: str
     task_id: str
     cell_id: str
+    cell_ordinal: int
     replicate_ordinal: int
     candidate_ordinal: int
     environment_seed: int
@@ -591,6 +592,7 @@ def _finish_episode(
         planned_episode_id=str(plan["planned_episode_id"]),
         task_id=task_id,
         cell_id=str(plan["cell_id"]),
+        cell_ordinal=int(plan["cell_ordinal"]),
         replicate_ordinal=int(plan["replicate_ordinal"]),
         candidate_ordinal=int(plan["candidate_ordinal"]),
         environment_seed=int(plan["environment_seed"]),

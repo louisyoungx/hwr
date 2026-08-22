@@ -88,6 +88,7 @@ def _capsule() -> AcquisitionCapsule:
         planned_episode_id="a" * 64,
         task_id="tidy_living_room_3d/v1",
         cell_id="obs-1-action-1",
+        cell_ordinal=0,
         replicate_ordinal=0,
         candidate_ordinal=2,
         environment_seed=11,
@@ -424,6 +425,7 @@ def _plan() -> dict[str, object]:
     return {
         "planned_episode_id": "a" * 64,
         "cell_id": "cell-00-obs-1-action-1",
+        "cell_ordinal": 0,
         "replicate_ordinal": 0,
         "candidate_ordinal": 0,
         "environment_seed": 11,
@@ -455,6 +457,34 @@ def test_production_episode_uses_two_fresh_backends_and_disables_replay_capture(
         result.primary_summary["capture_payload_sha256"]
     )
     terminal, capsule, _ = persist_candidate_episode(result)
+    expected = _plan()
+    for field in (
+        "planned_episode_id",
+        "cell_id",
+        "cell_ordinal",
+        "replicate_ordinal",
+        "candidate_ordinal",
+        "environment_seed",
+        "policy_rng_seed",
+    ):
+        assert terminal[field] == expected[field]
+        assert capsule[field] == expected[field]
+    assert terminal["task_id"] == "tidy_living_room_3d/v1"
+    assert capsule["task_id"] == "tidy_living_room_3d/v1"
+    assert terminal["replacement"] is False
+    assert capsule["replacement"] is False
+    from hwr.apps import (
+        validate_candidate_record_set,
+        validate_candidate_terminal_ledger,
+    )
+
+    planned = {**expected, "task_id": "tidy_living_room_3d/v1"}
+    assert validate_candidate_terminal_ledger(
+        {"episodes": [planned]}, [terminal]
+    )["passed"] is True
+    assert validate_candidate_record_set(
+        {"episodes": [planned]}, [capsule]
+    )["passed"] is True
     assert terminal["planned_latency"] == {
         "observation_steps": 1,
         "action_steps": 1,

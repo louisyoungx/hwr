@@ -110,10 +110,12 @@ def persist_candidate_episode(result):
         "planned_episode_id": capsule.planned_episode_id,
         "task_id": capsule.task_id,
         "cell_id": capsule.cell_id,
+        "cell_ordinal": capsule.cell_ordinal,
         "replicate_ordinal": capsule.replicate_ordinal,
         "candidate_ordinal": capsule.candidate_ordinal,
         "environment_seed": capsule.environment_seed,
         "policy_rng_seed": capsule.policy_rng_seed,
+        "replacement": False,
         "planned_latency": {
             "observation_steps": capsule.sampled_observation_latency_steps,
             "action_steps": capsule.sampled_action_latency_steps,
@@ -162,8 +164,11 @@ def persist_candidate_episode(result):
         "planned_episode_id": capsule.planned_episode_id,
         "task_id": capsule.task_id,
         "cell_id": capsule.cell_id,
+        "cell_ordinal": capsule.cell_ordinal,
         "replicate_ordinal": capsule.replicate_ordinal,
         "candidate_ordinal": capsule.candidate_ordinal,
+        "environment_seed": capsule.environment_seed,
+        "policy_rng_seed": capsule.policy_rng_seed,
         "replacement": False,
         "resolved": True,
         "trace_step_count": result.trace_step_count,
@@ -225,6 +230,7 @@ def validate_candidate_record_set(plan, records) -> dict[str, object]:
         for field in (
             "task_id",
             "cell_id",
+            "cell_ordinal",
             "replicate_ordinal",
             "candidate_ordinal",
             "environment_seed",
@@ -252,6 +258,15 @@ def validate_candidate_record_set(plan, records) -> dict[str, object]:
                     "field": "planned_latency",
                     "expected": planned_latency,
                     "actual": record.get("planned_latency"),
+                }
+            )
+        if record.get("replacement") is not False:
+            mismatches.append(
+                {
+                    "planned_episode_id": identity,
+                    "field": "replacement",
+                    "expected": False,
+                    "actual": record.get("replacement"),
                 }
             )
     passed = (
@@ -285,13 +300,16 @@ def candidate_artifact_manifest(
     status: str,
     extra: Mapping[str, object],
 ) -> dict[str, object]:
+    if "frozen_document_commit_is_ancestor" not in extra:
+        raise CandidateFunnelContractError(
+            "manifest requires a measured frozen-document ancestry result"
+        )
     return {
         "schema_version": schema,
         "proposal_id": proposal_id,
         "status": status,
         "source_commit": source_commit,
         "frozen_document_commit": frozen_document_commit,
-        "frozen_document_commit_is_ancestor": status == "complete",
         "command": list(command),
         "source_identities": identities,
         "runtime": {
@@ -386,6 +404,7 @@ def analyze_candidate_capsule_directory(
     repository: Path,
     capsule_directory: Path,
     current_identities: Mapping[str, object],
+    frozen_document_commit: str,
 ) -> tuple[dict[str, object], dict[str, object]]:
     manifest = _read_object(capsule_directory / "manifest.json")
     report = _read_object(capsule_directory / "report.json")
@@ -393,8 +412,19 @@ def analyze_candidate_capsule_directory(
     index = _read_object(capsule_directory / "capsules.json")
     _verify_artifacts(capsule_directory, manifest)
     source_commit = str(manifest.get("source_commit", ""))
-    if not _is_ancestor(repository, source_commit):
-        raise CandidateFunnelContractError("E1 source commit is not an ancestor")
+    frozen_to_source = candidate_commit_is_ancestor(
+        repository, frozen_document_commit, source_commit
+    )
+    source_to_head = candidate_commit_is_ancestor(
+        repository, source_commit, "HEAD"
+    )
+    if (
+        manifest.get("frozen_document_commit") != frozen_document_commit
+        or manifest.get("frozen_document_commit_is_ancestor") is not True
+        or not frozen_to_source
+        or not source_to_head
+    ):
+        raise CandidateFunnelContractError("E1 frozen/source ancestry differs")
     _require_e1_source_identity(manifest, current_identities)
     if (
         manifest.get("status") != "complete"
@@ -427,6 +457,9 @@ def analyze_candidate_capsule_directory(
     identity = {
         "path": str(capsule_directory),
         "source_commit": source_commit,
+        "frozen_document_commit": frozen_document_commit,
+        "frozen_to_source_commit_ancestor": frozen_to_source,
+        "source_commit_to_current_head_ancestor": source_to_head,
         "report": _relative_identity(capsule_directory, "report.json"),
         "manifest": _relative_identity(capsule_directory, "manifest.json"),
     }
@@ -527,7 +560,9 @@ def _require_e1_source_identity(manifest, current):
     for key in ("binding", "task_config", "recursive_xml", "frozen_document"):
         if source.get(key) != current.get(key):
             raise CandidateFunnelContractError(f"E1 {key} identity drifted")
-    for name in ("formal_generator", "p41_bridge", "formal_backend"):
+    if set(source.get("sources", ())) != set(current.get("sources", ())):
+        raise CandidateFunnelContractError("E1 source identity set differs")
+    for name in current["sources"]:
         if source["sources"].get(name) != current["sources"].get(name):
             raise CandidateFunnelContractError(f"E1 {name} identity drifted")
 
@@ -539,11 +574,16 @@ def _read_object(path):
     return value
 
 
-def _is_ancestor(root, commit):
-    if len(commit) != 40 or any(value not in "0123456789abcdef" for value in commit):
+def candidate_commit_is_ancestor(root, ancestor, descendant):
+    if any(
+        len(commit) != 40
+        or any(value not in "0123456789abcdef" for value in commit)
+        for commit in (ancestor, descendant)
+        if commit != "HEAD"
+    ):
         return False
     return subprocess.run(
-        ("git", "merge-base", "--is-ancestor", commit, "HEAD"),
+        ("git", "merge-base", "--is-ancestor", ancestor, descendant),
         cwd=root, check=False,
     ).returncode == 0
 
