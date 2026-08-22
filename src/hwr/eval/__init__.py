@@ -1,6 +1,6 @@
 """Closed-loop policy evaluation."""
 
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 from hwr.eval.bimanual import (
     BimanualAcceptanceCriteria,
@@ -35,6 +35,20 @@ from hwr.eval.stability import (
     TargetVolume,
 )
 
+LatencySampler = Callable[[str, int], tuple[int, int]]
+
+
+def formal_latency_sampler(tasks, bindings) -> LatencySampler:
+    from hwr.adapters.mujoco.target_selection_diagnostic import (
+        TargetSelectionDiagnostic,
+    )
+
+    diagnostics = {
+        task_id: TargetSelectionDiagnostic(task, bindings[task_id])
+        for task_id, task in tasks.items()
+    }
+    return lambda task_id, seed: diagnostics[task_id].sample_latencies(seed)
+
 
 def validate_plan_contract(
     plan: Mapping[str, object],
@@ -46,6 +60,7 @@ def validate_plan_contract(
     expected_commitment: str,
     expected_cells: Sequence[tuple[str, int, int]],
     acquisition_steps: int,
+    latency_sampler: LatencySampler,
 ) -> dict[str, object]:
     expected_cells = tuple(expected_cells)
     reveal = plan.get("salt_reveal") if salt is None else salt
@@ -110,7 +125,12 @@ def validate_plan_contract(
         for replicate in range(2)
     ]
     checks["candidate_audit"] = _validate_candidate_audit(
-        episodes, rejected, expected_cell_rows, expected_plan_id, reveal
+        episodes,
+        rejected,
+        expected_cell_rows,
+        expected_plan_id,
+        reveal,
+        latency_sampler,
     )
     if not all(checks.values()):
         raise CandidateFunnelContractError(
@@ -121,7 +141,12 @@ def validate_plan_contract(
 
 
 def _validate_candidate_audit(
-    episodes, rejected, cells, plan_id: str, salt: str
+    episodes,
+    rejected,
+    cells,
+    plan_id: str,
+    salt: str,
+    latency_sampler: LatencySampler,
 ) -> bool:
     checked_environment, checked_policy = set(), set()
     known_cells = {cell["cell_id"] for cell in cells}
@@ -131,8 +156,19 @@ def _validate_candidate_audit(
         or any(
             not isinstance(value, Mapping)
             or value.get("cell_id") not in known_cells
+            or not isinstance(value.get("candidate_ordinal"), int)
+            or isinstance(value.get("candidate_ordinal"), bool)
             for value in (*episodes, *rejected)
         )
+    ):
+        return False
+    cell_ordinals = {cell["cell_id"]: cell["cell_ordinal"] for cell in cells}
+    if [
+        (cell_ordinals[value["cell_id"]], value["candidate_ordinal"])
+        for value in rejected
+    ] != sorted(
+        (cell_ordinals[value["cell_id"]], value["candidate_ordinal"])
+        for value in rejected
     ):
         return False
     for cell in cells:
@@ -142,14 +178,19 @@ def _validate_candidate_audit(
         declined = [
             value for value in rejected if value.get("cell_id") == cell["cell_id"]
         ]
-        cell_records = sorted(
-            (*accepted, *declined),
-            key=lambda value: value.get("candidate_ordinal", -1),
-        )
+        cell_records = [
+            *((value, True) for value in accepted),
+            *((value, False) for value in declined),
+        ]
+        cell_records.sort(key=lambda value: value[0]["candidate_ordinal"])
         if (
-            [value.get("candidate_ordinal") for value in cell_records]
+            [value.get("candidate_ordinal") for value, _ in cell_records]
             != list(range(len(cell_records)))
             or not 2 <= len(cell_records) <= 96
+            or [value.get("candidate_ordinal") for value in accepted]
+            != sorted(value.get("candidate_ordinal") for value in accepted)
+            or [value.get("candidate_ordinal") for value in declined]
+            != sorted(value.get("candidate_ordinal") for value in declined)
             or [value.get("replicate_ordinal") for value in accepted] != [0, 1]
             or accepted[-1].get("candidate_ordinal") != len(cell_records) - 1
             or any(value.get("replacement") is not False for value in accepted)
@@ -162,33 +203,38 @@ def _validate_candidate_audit(
             )
         ):
             return False
-        for record in cell_records:
+        matched_count = 0
+        for record, is_accepted in cell_records:
             ordinal = record.get("candidate_ordinal")
-            if not isinstance(ordinal, int) or isinstance(ordinal, bool):
-                return False
             try:
                 expected_id = planned_episode_id(
                     plan_id, cell["task_id"], cell["cell_id"], ordinal
                 )
                 environment = derive_domain_seed(salt, "environment", expected_id)
                 policy = derive_domain_seed(salt, "policy", expected_id)
-            except (TypeError, ValueError):
+                sampled = tuple(latency_sampler(cell["task_id"], environment))
+            except (KeyError, TypeError, ValueError):
                 return False
+            matched = sampled == (
+                cell["observation_latency_steps"],
+                cell["action_latency_steps"],
+            )
+            matched_count += matched
             common = (
                 record.get("planned_episode_id") == expected_id
                 and record.get("task_id") == cell["task_id"]
                 and record.get("cell_ordinal") == cell["cell_ordinal"]
                 and record.get("environment_seed") == environment
                 and record.get("policy_rng_seed") == policy
+                and (
+                    record.get("sampled_observation_latency_steps"),
+                    record.get("sampled_action_latency_steps"),
+                )
+                == sampled
+                and record.get("latency_matched") is matched
+                and record.get("accepted") is is_accepted
             )
-            matched = (
-                record.get("sampled_observation_latency_steps"),
-                record.get("sampled_action_latency_steps"),
-            ) == (
-                cell["observation_latency_steps"],
-                cell["action_latency_steps"],
-            )
-            if not common or matched != (record in accepted):
+            if not common or matched != is_accepted:
                 return False
             if environment in checked_environment or policy in checked_policy:
                 return False
@@ -196,6 +242,8 @@ def _validate_candidate_audit(
                 return False
             checked_environment.add(environment)
             checked_policy.add(policy)
+        if matched_count != 2:
+            return False
     return True
 
 
@@ -218,6 +266,7 @@ __all__ = [
     "evaluate_bimanual_policy",
     "evaluate_policy",
     "evaluate_formal_visual_policy",
+    "formal_latency_sampler",
     "plan_episode_seeds",
     "planned_episode_id",
     "random_seed_salt",

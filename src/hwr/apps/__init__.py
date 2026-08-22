@@ -483,6 +483,7 @@ def analyze_candidate_capsule_directory(
     capsule_directory: Path,
     current_identities: Mapping[str, object],
     frozen_document_commit: str,
+    latency_sampler,
     required_source_names: Sequence[str] | None = None,
     *,
     expected_plan_schema: str = "hwr.p50-acquisition-plan/v1",
@@ -526,6 +527,7 @@ def analyze_candidate_capsule_directory(
         expected_commitment=expected_commitment,
         expected_cells=expected_cells,
         acquisition_steps=acquisition_steps,
+        latency_sampler=latency_sampler,
     )
     if (
         manifest.get("status") != "complete"

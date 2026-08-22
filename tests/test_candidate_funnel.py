@@ -32,6 +32,25 @@ SALT = "0" * 64
 TEST_COMMITMENT = hashlib.sha256(SALT.encode()).hexdigest()
 
 
+def _latency_sampler(*matched_ordinals: int):
+    values = {}
+    for cell_ordinal, (task_id, observation, action) in enumerate(
+        app.FROZEN_CELLS
+    ):
+        cell_id = f"cell-{cell_ordinal:02d}-obs-{observation}-action-{action}"
+        for ordinal in range(96):
+            identity = app.planned_episode_id(
+                app.PLAN_ID, task_id, cell_id, ordinal
+            )
+            seed = app.derive_domain_seed(SALT, "environment", identity)
+            values[(task_id, seed)] = (
+                (observation, action)
+                if ordinal in matched_ordinals
+                else (3, 3)
+            )
+    return lambda task_id, seed: values[(task_id, seed)]
+
+
 def _plan_and_execution() -> tuple[dict[str, object], dict[str, object]]:
     cells = [
         {
@@ -68,6 +87,8 @@ def _plan_and_execution() -> tuple[dict[str, object], dict[str, object]]:
                         "observation_latency_steps"
                     ],
                     "sampled_action_latency_steps": cell["action_latency_steps"],
+                    "latency_matched": True,
+                    "accepted": True,
                     "replacement": False,
                 }
             )
@@ -136,6 +157,7 @@ def _load_e2(tmp_path: Path) -> None:
         tmp_path,
         {},
         app.FROZEN_DOCUMENT_COMMIT,
+        _latency_sampler(0, 1),
         app.E1_SOURCE_NAMES,
         expected_plan_schema=app.PLAN_SCHEMA,
         expected_proposal_id=app.PROPOSAL_ID,
@@ -571,6 +593,7 @@ def test_e2_loader_rejects_plan_record_tampering(
         "policy_rng_seed",
         "cell",
         "planned_episode_id",
+        "cohort",
     ),
 )
 def test_e2_loader_rejects_synchronized_plan_and_record_tampering(
@@ -590,13 +613,114 @@ def test_e2_loader_rejects_synchronized_plan_and_record_tampering(
         for record in (plan["episodes"][0], terminals[0], records[0]):
             record["cell_id"] = "cell-11-obs-2-action-2"
             record["cell_ordinal"] = 11
-    else:
+    elif tamper == "planned_episode_id":
         for record in (plan["episodes"][0], terminals[0], records[0]):
             record["planned_episode_id"] = "f" * 64
+    else:
+        cell = plan["cells"][0]
+        first = plan["episodes"][0]
+        plan["rejected_seed_audit"].append(
+            {
+                **first,
+                "sampled_observation_latency_steps": 3,
+                "sampled_action_latency_steps": 3,
+                "latency_matched": False,
+                "accepted": False,
+                "rejection_reason": "natural_latency_cell_mismatch",
+            }
+        )
+        plan["rejected_seed_audit"][0].pop("replicate_ordinal")
+        plan["rejected_seed_audit"][0].pop("replacement")
+        for offset, record_set in enumerate(
+            ((plan["episodes"][0], terminals[0], records[0]),
+             (plan["episodes"][1], terminals[1], records[1])),
+            start=1,
+        ):
+            identity = app.planned_episode_id(
+                app.PLAN_ID, cell["task_id"], cell["cell_id"], offset
+            )
+            environment = app.derive_domain_seed(SALT, "environment", identity)
+            policy = app.derive_domain_seed(SALT, "policy", identity)
+            for record in record_set:
+                record.update(
+                    planned_episode_id=identity,
+                    candidate_ordinal=offset,
+                    environment_seed=environment,
+                    policy_rng_seed=policy,
+                )
     _mock_e2_loader(monkeypatch, _e2_documents(plan, execution))
 
     with pytest.raises(CandidateFunnelContractError, match="plan contract"):
         _load_e2(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    (
+        "delete",
+        "environment_seed",
+        "policy_rng_seed",
+        "cell",
+        "planned_episode_id",
+        "cohort",
+    ),
+)
+def test_e1_rejects_synchronized_plan_and_record_tampering(
+    tamper: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(app, "SALT_COMMITMENT", TEST_COMMITMENT)
+    plan, execution = _plan_and_execution()
+    terminals = execution["terminals"]
+    records = execution["capsules"]["episodes"]
+    if tamper == "delete":
+        del plan["episodes"][0]
+        del terminals[0]
+        del records[0]
+    elif tamper in ("environment_seed", "policy_rng_seed"):
+        for row in (plan["episodes"][0], terminals[0], records[0]):
+            row[tamper] += 1
+    elif tamper == "cell":
+        for row in (plan["episodes"][0], terminals[0], records[0]):
+            row["cell_id"] = "cell-11-obs-2-action-2"
+            row["cell_ordinal"] = 11
+    elif tamper == "planned_episode_id":
+        for row in (plan["episodes"][0], terminals[0], records[0]):
+            row["planned_episode_id"] = "f" * 64
+    else:
+        cell = plan["cells"][0]
+        first = plan["episodes"][0]
+        plan["rejected_seed_audit"].append(
+            {
+                **first,
+                "sampled_observation_latency_steps": 3,
+                "sampled_action_latency_steps": 3,
+                "latency_matched": False,
+                "accepted": False,
+                "rejection_reason": "natural_latency_cell_mismatch",
+            }
+        )
+        plan["rejected_seed_audit"][0].pop("replicate_ordinal")
+        plan["rejected_seed_audit"][0].pop("replacement")
+        for offset, rows in enumerate(
+            ((plan["episodes"][0], terminals[0], records[0]),
+             (plan["episodes"][1], terminals[1], records[1])),
+            start=1,
+        ):
+            identity = app.planned_episode_id(
+                app.PLAN_ID, cell["task_id"], cell["cell_id"], offset
+            )
+            environment = app.derive_domain_seed(SALT, "environment", identity)
+            policy = app.derive_domain_seed(SALT, "policy", identity)
+            for row in rows:
+                row.update(
+                    planned_episode_id=identity,
+                    candidate_ordinal=offset,
+                    environment_seed=environment,
+                    policy_rng_seed=policy,
+                )
+
+    with pytest.raises(CandidateFunnelContractError, match="plan contract"):
+        app.analyze_acquisition(plan, execution, _latency_sampler(0, 1))
 
 
 def test_aggregate_requires_twenty_four_unique_episodes_and_twelve_cells() -> None:

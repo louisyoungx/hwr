@@ -36,9 +36,7 @@ from hwr.adapters.mujoco.candidate_acquisition import (
     CandidateAcquisitionDiagnostic,
     mujoco_runtime_version,
 )
-from hwr.adapters.mujoco.training_catalog import (
-    load_default_formal_household_catalogs,
-)
+from hwr.adapters.mujoco.training_catalog import load_default_formal_household_catalogs
 from hwr.eval.seed_contract import (
     SEED_SCHEMA,
     derive_domain_seed,
@@ -46,7 +44,7 @@ from hwr.eval.seed_contract import (
     read_seed_salt,
     require_seed_reveal,
 )
-from hwr.eval import validate_plan_contract
+from hwr.eval import formal_latency_sampler, validate_plan_contract
 from hwr.eval.candidate_funnel import (
     CandidateFunnelContractError,
     candidate_gate_source_identity,
@@ -164,7 +162,10 @@ def _run_acquisition(arguments: argparse.Namespace) -> dict[str, object]:
         require_seed_reveal(SALT_COMMITMENT, salt)
         plan = build_plan(root, salt)
         execution = execute_plan(root, plan)
-        report = analyze_acquisition(plan, execution)
+        sampler = formal_latency_sampler(
+            *load_default_formal_household_catalogs(root)
+        )
+        report = analyze_acquisition(plan, execution, sampler)
         report.update(
             {
                 "source_commit": source_commit,
@@ -241,11 +242,15 @@ def _run_funnel(arguments: argparse.Namespace) -> dict[str, object]:
     try:
         identities = _source_identities(root)
         _require_clean_source(root, identities)
+        sampler = formal_latency_sampler(
+            *load_default_formal_household_catalogs(root)
+        )
         first, input_identity = analyze_candidate_capsule_directory(
             root,
             capsules,
             identities,
             FROZEN_DOCUMENT_COMMIT,
+            sampler,
             E1_SOURCE_NAMES,
             expected_plan_schema=PLAN_SCHEMA,
             expected_proposal_id=PROPOSAL_ID,
@@ -259,6 +264,7 @@ def _run_funnel(arguments: argparse.Namespace) -> dict[str, object]:
             capsules,
             identities,
             FROZEN_DOCUMENT_COMMIT,
+            sampler,
             E1_SOURCE_NAMES,
             expected_plan_schema=PLAN_SCHEMA,
             expected_proposal_id=PROPOSAL_ID,
@@ -338,6 +344,7 @@ def build_plan(root: Path, salt: str) -> dict[str, object]:
     cells, episodes, rejected = [], [], []
     checked_environment: set[int] = set()
     checked_policy: set[int] = set()
+    latency_sampler = formal_latency_sampler(tasks, bindings)
     for cell_ordinal, frozen in enumerate(FROZEN_CELLS):
         task_id, observation_latency, action_latency = frozen
         cell_id = (
@@ -353,12 +360,6 @@ def build_plan(root: Path, salt: str) -> dict[str, object]:
             "replicate_count": 2,
         }
         cells.append(cell)
-        sampler = _sampler_for_cell(
-            tasks[task_id],
-            bindings[task_id],
-            observation_latency,
-            action_latency,
-        )
         accepted = 0
         for candidate_ordinal in range(96):
             identity = planned_episode_id(
@@ -375,8 +376,12 @@ def build_plan(root: Path, salt: str) -> dict[str, object]:
                 raise AcquisitionContractError("checked seed identity collided")
             checked_environment.add(environment_seed)
             checked_policy.add(policy_seed)
-            sampled_observation, sampled_action = sampler.sample_latencies(
-                environment_seed
+            sampled_observation, sampled_action = latency_sampler(
+                task_id, environment_seed
+            )
+            latency_matched = (sampled_observation, sampled_action) == (
+                observation_latency,
+                action_latency,
             )
             record = {
                 "candidate_ordinal": candidate_ordinal,
@@ -388,15 +393,14 @@ def build_plan(root: Path, salt: str) -> dict[str, object]:
                 "policy_rng_seed": policy_seed,
                 "sampled_observation_latency_steps": sampled_observation,
                 "sampled_action_latency_steps": sampled_action,
+                "latency_matched": latency_matched,
             }
-            if (sampled_observation, sampled_action) == (
-                observation_latency,
-                action_latency,
-            ):
+            if latency_matched:
                 episodes.append(
                     {
                         **record,
                         "replicate_ordinal": accepted,
+                        "accepted": True,
                         "replacement": False,
                     }
                 )
@@ -449,6 +453,7 @@ def build_plan(root: Path, salt: str) -> dict[str, object]:
         expected_commitment=SALT_COMMITMENT,
         expected_cells=FROZEN_CELLS,
         acquisition_steps=ACQUISITION_STEPS,
+        latency_sampler=latency_sampler,
     )
     return plan
 def execute_plan(
@@ -505,7 +510,9 @@ def execute_plan(
         "binary_artifacts": binary,
     }
 def analyze_acquisition(
-    plan: Mapping[str, object], execution: Mapping[str, object]
+    plan: Mapping[str, object],
+    execution: Mapping[str, object],
+    latency_sampler,
 ) -> dict[str, object]:
     validate_plan_contract(
         plan,
@@ -516,6 +523,7 @@ def analyze_acquisition(
         expected_commitment=SALT_COMMITMENT,
         expected_cells=FROZEN_CELLS,
         acquisition_steps=ACQUISITION_STEPS,
+        latency_sampler=latency_sampler,
     )
     terminals = execution["terminals"]
     capsules = execution["capsules"]["episodes"]
@@ -653,14 +661,6 @@ def analyze_acquisition(
         ),
         "post_selection_executed": False,
     }
-def _sampler_for_cell(
-    task,
-    binding,
-    observation_latency_steps: int,
-    action_latency_steps: int,
-):
-    del observation_latency_steps, action_latency_steps
-    return CandidateAcquisitionDiagnostic(task, binding)
 def _validate_arguments(arguments: argparse.Namespace) -> None:
     if arguments.mode == "acquisition":
         if arguments.output != FORMAL_OUTPUT:

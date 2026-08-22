@@ -30,6 +30,25 @@ def _catalog() -> tuple[dict[str, object], dict[str, object]]:
     return tasks, dict.fromkeys(app.TASK_IDS, object())
 
 
+def _latency_sampler(*matched_ordinals: int):
+    values = {}
+    for cell_ordinal, (task_id, observation, action) in enumerate(
+        app.FROZEN_CELLS
+    ):
+        cell_id = f"cell-{cell_ordinal:02d}-obs-{observation}-action-{action}"
+        for ordinal in range(96):
+            identity = app.planned_episode_id(
+                app.PLAN_ID, task_id, cell_id, ordinal
+            )
+            seed = app.derive_domain_seed(SALT, "environment", identity)
+            values[(task_id, seed)] = (
+                (observation, action)
+                if ordinal in matched_ordinals
+                else (3, 3)
+            )
+    return lambda task_id, seed: values[(task_id, seed)]
+
+
 def _minimal_plan() -> dict[str, object]:
     return {
         "schema_version": app.PLAN_SCHEMA,
@@ -126,19 +145,11 @@ def test_plan_has_twelve_ordered_cells_and_two_natural_matches(
     )
     monkeypatch.setattr(app, "require_seed_reveal", lambda commitment, salt: None)
     monkeypatch.setattr(app, "SALT_COMMITMENT", TEST_COMMITMENT)
-
-    class Sampler(_Sampler):
-        def sample_latencies(self, seed: int) -> tuple[int, int]:
-            del seed
-            calls = getattr(self.task, "calls", 0)
-            self.task.calls = calls + 1
-            return (3, 3) if calls % 3 == 0 else self.task.target
-
-    def factory(task, binding, observation_latency, action_latency):
-        task.target = (observation_latency, action_latency)
-        return Sampler(task, binding)
-
-    monkeypatch.setattr(app, "_sampler_for_cell", factory)
+    monkeypatch.setattr(
+        app,
+        "formal_latency_sampler",
+        lambda tasks, bindings: _latency_sampler(1, 2),
+    )
 
     plan = app.build_plan(tmp_path, SALT)
 
@@ -173,20 +184,31 @@ def test_plan_stops_after_candidate_ordinal_95(
         lambda root: (tasks, bindings),
     )
     monkeypatch.setattr(app, "require_seed_reveal", lambda commitment, salt: None)
-
-    class Rejecting(_Sampler):
-        def sample_latencies(self, seed: int) -> tuple[int, int]:
-            del seed
-            return (3, 3)
-
     monkeypatch.setattr(
         app,
-        "_sampler_for_cell",
-        lambda task, binding, observation, action: Rejecting(task, binding),
+        "formal_latency_sampler",
+        lambda tasks, bindings: _latency_sampler(),
     )
 
     with pytest.raises(app.AcquisitionContractError, match="ordinal 95"):
         app.build_plan(tmp_path, SALT)
+
+
+def test_real_formal_latency_sampler_builds_a_valid_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = Path(app.__file__).resolve().parents[3]
+    monkeypatch.setattr(app, "SALT_COMMITMENT", TEST_COMMITMENT)
+
+    plan = app.build_plan(root, SALT)
+
+    assert plan["planned_episode_count"] == 24
+    assert all(row["latency_matched"] is True for row in plan["episodes"])
+    assert all(row["accepted"] is True for row in plan["episodes"])
+    assert all(
+        row["latency_matched"] is False and row["accepted"] is False
+        for row in plan["rejected_seed_audit"]
+    )
 
 
 def test_terminal_ledger_rejects_missing_duplicate_unplanned_and_replacement() -> None:
@@ -274,7 +296,9 @@ def test_plan_record_tampering_fails_closed(
             else True if field == "replacement" else "tampered"
         )
 
-        report = app.analyze_acquisition(plan, execution)
+        report = app.analyze_acquisition(
+            plan, execution, _latency_sampler(0, 1)
+        )
 
         assert report["decision"] == "invalid"
         assert report["checks"][check] is False
@@ -283,47 +307,6 @@ def test_plan_record_tampering_fails_closed(
             assert ledger["missing"] and ledger["unplanned"]
         else:
             assert ledger["field_mismatches"][0]["field"] == field
-
-
-@pytest.mark.parametrize(
-    "tamper",
-    (
-        "delete",
-        "environment_seed",
-        "policy_rng_seed",
-        "cell",
-        "planned_episode_id",
-    ),
-)
-def test_synchronized_plan_and_record_tampering_still_fails_closed(
-    tamper: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(app, "SALT_COMMITMENT", TEST_COMMITMENT)
-    plan, execution = _acceptance_fixture()
-    terminals = execution["terminals"]
-    capsules = execution["capsules"]["episodes"]
-    if tamper == "delete":
-        del plan["episodes"][0]
-        del terminals[0]
-        del capsules[0]
-        plan["planned_episode_count"] = 23
-        plan["planned_control_step_count"] = 23 * app.ACQUISITION_STEPS
-        plan["validation_replay_count"] = 23
-        plan["maximum_physical_acquisition_count"] = 46
-        plan["maximum_control_step_count"] = 46 * app.ACQUISITION_STEPS
-    elif tamper in ("environment_seed", "policy_rng_seed"):
-        for record in (plan["episodes"][0], terminals[0], capsules[0]):
-            record[tamper] += 1
-    elif tamper == "cell":
-        for record in (plan["episodes"][0], terminals[0], capsules[0]):
-            record["cell_id"] = "cell-11-obs-2-action-2"
-            record["cell_ordinal"] = 11
-    else:
-        for record in (plan["episodes"][0], terminals[0], capsules[0]):
-            record["planned_episode_id"] = "f" * 64
-
-    with pytest.raises(app.CandidateFunnelContractError, match="plan contract"):
-        app.analyze_acquisition(plan, execution)
 
 
 @pytest.mark.parametrize(
@@ -383,6 +366,7 @@ def test_e2_loader_rejects_forged_manifest_and_invalid_source_lineage(
             tmp_path,
             _identities(),
             app.FROZEN_DOCUMENT_COMMIT,
+            _latency_sampler(0, 1),
             app.E1_SOURCE_NAMES,
             expected_plan_schema=app.PLAN_SCHEMA,
             expected_proposal_id=app.PROPOSAL_ID,
@@ -435,6 +419,8 @@ def _acceptance_fixture() -> tuple[dict[str, object], dict[str, object]]:
                     "sampled_action_latency_steps": cell[
                         "action_latency_steps"
                     ],
+                    "latency_matched": True,
+                    "accepted": True,
                     "replacement": False,
                 }
             )
@@ -524,7 +510,8 @@ def _acceptance_fixture() -> tuple[dict[str, object], dict[str, object]]:
 def test_acceptance_fixture_is_contract_valid(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app, "SALT_COMMITMENT", TEST_COMMITMENT)
     plan, execution = _acceptance_fixture()
-    assert app.analyze_acquisition(plan, execution)["contract_valid"] is True
+    report = app.analyze_acquisition(plan, execution, _latency_sampler(0, 1))
+    assert report["contract_valid"] is True
 
 
 @pytest.mark.parametrize(
@@ -557,7 +544,7 @@ def test_acceptance_rejects_safety_terminal_and_runtime_latency_drift(
         target = target[key]  # type: ignore[index]
     target[path[-1]] = value  # type: ignore[index]
 
-    report = app.analyze_acquisition(plan, execution)
+    report = app.analyze_acquisition(plan, execution, _latency_sampler(0, 1))
 
     assert report["decision"] == "invalid"
     assert report["checks"][check] is False
@@ -694,7 +681,7 @@ def test_runner_writes_hash_bound_capsule_artifacts_and_failure_atomically(
     monkeypatch.setattr(
         app,
         "analyze_acquisition",
-        lambda plan, execution: {
+        lambda plan, execution, sampler: {
             "decision": "accepted as immutable acquisition evidence contract",
             "checks": {"passed": True},
         },
@@ -750,8 +737,10 @@ def test_funnel_runner_analyzes_twice_and_writes_independent_artifacts(
     monkeypatch.setattr(app, "_source_identities", lambda root: _identities())
     monkeypatch.setattr(app, "_require_clean_source", lambda root, identities: None)
 
-    def analyze(root, capsules, identities, frozen, names, **kwargs):
-        calls.append((root, capsules, identities, frozen, names, kwargs))
+    def analyze(root, capsules, identities, frozen, sampler, names, **kwargs):
+        calls.append(
+            (root, capsules, identities, frozen, sampler, names, kwargs)
+        )
         return analysis, source_identity
 
     monkeypatch.setattr(app, "analyze_candidate_capsule_directory", analyze)
