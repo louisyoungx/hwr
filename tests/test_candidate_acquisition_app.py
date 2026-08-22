@@ -185,19 +185,39 @@ def test_terminal_ledger_rejects_missing_duplicate_unplanned_and_replacement() -
         "episodes": [
             {
                 "planned_episode_id": "a" * 64,
+                "task_id": "task-a",
                 "cell_id": "cell-0",
                 "replicate_ordinal": 0,
+                "candidate_ordinal": 3,
+                "environment_seed": 11,
+                "policy_rng_seed": 12,
+                "sampled_observation_latency_steps": 1,
+                "sampled_action_latency_steps": 2,
             },
             {
                 "planned_episode_id": "b" * 64,
+                "task_id": "task-a",
                 "cell_id": "cell-0",
                 "replicate_ordinal": 1,
+                "candidate_ordinal": 4,
+                "environment_seed": 13,
+                "policy_rng_seed": 14,
+                "sampled_observation_latency_steps": 1,
+                "sampled_action_latency_steps": 2,
             },
         ]
     }
     valid = [
-        {"planned_episode_id": "a" * 64, "replacement": False},
-        {"planned_episode_id": "b" * 64, "replacement": False},
+        {
+            **plan["episodes"][0],
+            "planned_latency": {"observation_steps": 1, "action_steps": 2},
+            "replacement": False,
+        },
+        {
+            **plan["episodes"][1],
+            "planned_latency": {"observation_steps": 1, "action_steps": 2},
+            "replacement": False,
+        },
     ]
 
     assert app.validate_candidate_terminal_ledger(plan, valid)["passed"] is True
@@ -210,11 +230,113 @@ def test_terminal_ledger_rejects_missing_duplicate_unplanned_and_replacement() -
         assert app.validate_candidate_terminal_ledger(plan, terminals)["passed"] is False
 
 
+@pytest.mark.parametrize(
+    "field",
+    (
+        "planned_episode_id",
+        "task_id",
+        "cell_id",
+        "replicate_ordinal",
+        "candidate_ordinal",
+        "environment_seed",
+        "policy_rng_seed",
+        "planned_latency",
+    ),
+)
+def test_plan_record_tampering_fails_closed(field: str) -> None:
+    for collection, check in (
+        ("terminals", "planned_terminal_ledger"),
+        ("capsules", "planned_capsule_ledger"),
+    ):
+        plan, execution = _acceptance_fixture()
+        rows = (
+            execution["terminals"]
+            if collection == "terminals"
+            else execution["capsules"]["episodes"]
+        )
+        rows[0][field] = (
+            {"observation_steps": 2, "action_steps": 1}
+            if field == "planned_latency"
+            else "tampered"
+        )
+
+        report = app.analyze_acquisition(plan, execution)
+
+        assert report["decision"] == "invalid"
+        assert report["checks"][check] is False
+        ledger = report["ledger"][collection]
+        if field == "planned_episode_id":
+            assert ledger["missing"] and ledger["unplanned"]
+        else:
+            assert ledger["field_mismatches"][0]["field"] == field
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "planned_episode_id",
+        "task_id",
+        "cell_id",
+        "replicate_ordinal",
+        "candidate_ordinal",
+        "environment_seed",
+        "policy_rng_seed",
+        "planned_latency",
+    ),
+)
+def test_e2_loader_rejects_plan_record_tampering(
+    field: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hwr.apps as app_helpers
+
+    plan, execution = _acceptance_fixture()
+    records = execution["capsules"]["episodes"]
+    records[0][field] = (
+        {"observation_steps": 2, "action_steps": 1}
+        if field == "planned_latency"
+        else "tampered"
+    )
+    documents = {
+        "manifest.json": {"status": "complete", "source_commit": "a" * 40},
+        "report.json": {
+            "decision": "accepted as immutable acquisition evidence contract"
+        },
+        "plan.json": plan,
+        "capsules.json": {
+            "capsule_count": 24,
+            "episodes": records,
+            "terminals": execution["terminals"],
+        },
+    }
+    monkeypatch.setattr(
+        app_helpers, "_read_object", lambda path: documents[path.name]
+    )
+    monkeypatch.setattr(app_helpers, "_verify_artifacts", lambda root, manifest: None)
+    monkeypatch.setattr(app_helpers, "_is_ancestor", lambda root, commit: True)
+    monkeypatch.setattr(
+        app_helpers,
+        "_require_e1_source_identity",
+        lambda manifest, identities: None,
+    )
+
+    with pytest.raises(app.CandidateFunnelContractError, match="ledger differs"):
+        app_helpers.analyze_candidate_capsule_directory(
+            tmp_path, tmp_path, _identities()
+        )
+
+
 def _acceptance_fixture() -> tuple[dict[str, object], dict[str, object]]:
     episodes = [
         {
             "planned_episode_id": f"{index:064x}",
+            "task_id": f"task-{index // 8}",
             "cell_id": f"cell-{index // 2:02d}",
+            "replicate_ordinal": index % 2,
+            "candidate_ordinal": index,
+            "environment_seed": 100 + index,
+            "policy_rng_seed": 200 + index,
+            "sampled_observation_latency_steps": 1,
+            "sampled_action_latency_steps": 1,
         }
         for index in range(24)
     ]
@@ -263,6 +385,7 @@ def _acceptance_fixture() -> tuple[dict[str, object], dict[str, object]]:
     capsules = [
         {
             **episode,
+            "planned_latency": {"observation_steps": 1, "action_steps": 1},
             "offline_candidate_replay_bit_identical": True,
             "same_seed_validation_replay": True,
             "capture_enabled_disabled_identity": True,
@@ -400,8 +523,10 @@ def test_plan_requires_committed_salt_before_catalog_access(
 def test_disk_gate_requires_five_gibibytes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import hwr.apps as app_helpers
+
     monkeypatch.setattr(
-        app.shutil,
+        app_helpers.shutil,
         "disk_usage",
         lambda path: SimpleNamespace(free=5 * 1024**3 - 1),
     )

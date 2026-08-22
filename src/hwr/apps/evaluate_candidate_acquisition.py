@@ -2,7 +2,6 @@
 import argparse
 import importlib.metadata
 import json
-import shutil
 import subprocess
 import sys
 import time
@@ -22,8 +21,10 @@ from hwr.apps import (
     create_candidate_output as _create_output,
     persist_candidate_episode,
     read_bound_blob as _read_bound_blob,
+    require_candidate_disk_capacity as _require_disk_capacity,
     resolve_candidate_path as _resolve,
     validate_candidate_terminal_ledger,
+    validate_candidate_record_set,
 )
 from hwr.adapters.mujoco.candidate_acquisition import (
     CAPSULE_SCHEMA,
@@ -305,8 +306,6 @@ def _run_funnel(arguments: argparse.Namespace) -> dict[str, object]:
         "report_sha256": manifest["artifacts"]["report.json"]["sha256"],
         "manifest_sha256": _sha256(artifacts["manifest.json"]),
     }
-
-
 def build_plan(root: Path, salt: str) -> dict[str, object]:
     require_seed_reveal(SALT_COMMITMENT, salt)
     tasks, bindings = load_default_formal_household_catalogs(root)
@@ -418,8 +417,6 @@ def build_plan(root: Path, salt: str) -> dict[str, object]:
         "episodes": episodes,
         "rejected_seed_audit": rejected,
     }
-
-
 def execute_plan(
     root: Path, plan: Mapping[str, object]
 ) -> dict[str, object]:
@@ -445,6 +442,14 @@ def execute_plan(
                     "cell_id": episode["cell_id"],
                     "replicate_ordinal": episode["replicate_ordinal"],
                     "candidate_ordinal": episode["candidate_ordinal"],
+                    "environment_seed": episode["environment_seed"],
+                    "policy_rng_seed": episode["policy_rng_seed"],
+                    "planned_latency": {
+                        "observation_steps": episode[
+                            "sampled_observation_latency_steps"
+                        ],
+                        "action_steps": episode["sampled_action_latency_steps"],
+                    },
                     "replacement": False,
                     "resolved": False,
                     "error_type": type(error).__name__,
@@ -464,18 +469,18 @@ def execute_plan(
         },
         "binary_artifacts": binary,
     }
-
-
 def analyze_acquisition(
     plan: Mapping[str, object], execution: Mapping[str, object]
 ) -> dict[str, object]:
     terminals = execution["terminals"]
     capsules = execution["capsules"]["episodes"]
-    ledger = validate_candidate_terminal_ledger(plan, terminals)
+    terminal_ledger = validate_candidate_terminal_ledger(plan, terminals)
+    capsule_ledger = validate_candidate_record_set(plan, capsules)
     by_id = {value["planned_episode_id"]: value for value in capsules}
     capsule_complete = len(by_id) == len(plan["episodes"]) == 24
     checks = {
-        "planned_terminal_ledger": bool(ledger["passed"]),
+        "planned_terminal_ledger": bool(terminal_ledger["passed"]),
+        "planned_capsule_ledger": bool(capsule_ledger["passed"]),
         "twelve_cells_complete": (
             len(plan["cells"]) == 12
             and all(
@@ -585,7 +590,10 @@ def analyze_acquisition(
         ),
         "contract_valid": valid,
         "checks": {**checks, "passed": valid},
-        "ledger": ledger,
+        "ledger": {
+            "terminals": terminal_ledger,
+            "capsules": capsule_ledger,
+        },
         "planned_episode_count": plan["planned_episode_count"],
         "planned_acquisition_count": plan["planned_episode_count"],
         "validation_replay_count": plan["planned_episode_count"],
@@ -600,8 +608,6 @@ def analyze_acquisition(
         ),
         "post_selection_executed": False,
     }
-
-
 def _sampler_for_cell(
     task,
     binding,
@@ -781,13 +787,6 @@ def _funnel_manifest(
         },
     )
 
-
-def _require_disk_capacity(output: Path) -> None:
-    parent = output.parent
-    while not parent.exists():
-        parent = parent.parent
-    if shutil.disk_usage(parent).free < 5 * 1024**3:
-        raise RuntimeError("P50-E1 requires at least 5GiB free on the data volume")
 
 def main(argv: Sequence[str] | None = None) -> int:
     result = run(build_parser().parse_args(argv))

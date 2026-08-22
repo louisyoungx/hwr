@@ -237,7 +237,6 @@ def analyze_candidate_funnel(
         "schema_version": FUNNEL_SCHEMA,
         "all_capsule_input_count": len(keyframes) + 1,
         "candidate_keyframe_count": len(keyframes),
-        "capture_count": len(keyframes),
         "all_capsule_inputs": {
             "input_count": len(keyframes) + 1,
             "unique_observation_count": all_identity["unique_observation_count"],

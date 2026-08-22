@@ -361,7 +361,8 @@ def compare_episode_replays(
         for name, field in fields.items()
     }
     checks["fresh_backend_reset"] = (
-        first["backend_run_ordinal"] != second["backend_run_ordinal"]
+        first["_backend_object"] is not second["_backend_object"]
+        and first["backend_run_ordinal"] != second["backend_run_ordinal"]
         and first["reset_count"] == second["reset_count"] == 1
     )
     checks["capture_disabled"] = (
@@ -518,7 +519,9 @@ def _run_acquisition_once(
         conservation = p40_conservation_differences(
             graph_report, ledger_report
         )
+        captured_inputs = (*keyframes, final_payload)
         return {
+            "_backend_object": backend,
             "backend_run_ordinal": backend_run_ordinal,
             "reset_count": 1,
             "capture_persistence_enabled": capture_persistence_enabled,
@@ -531,9 +534,9 @@ def _run_acquisition_once(
                     deserialize_policy_input(payload).observation_timestamp_ns,
                     deserialize_policy_input(payload).sequence_id,
                 )
-                for payload in keyframes
+                for payload in captured_inputs
             ),
-            "capture_payload_sha256": _bytes_sequence_sha256(keyframes),
+            "capture_payload_sha256": _bytes_sequence_sha256(captured_inputs),
             "candidate_bytes": candidate_bytes,
             "candidate_sha256": _sha256(candidate_bytes),
             "candidate_count": 0 if candidate_set is None else len(candidate_set.candidates),

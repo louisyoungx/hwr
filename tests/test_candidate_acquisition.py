@@ -256,6 +256,7 @@ def test_replay_comparison_covers_actions_observations_candidates_and_capture() 
 def _replay_record(run_ordinal: int, capture_enabled: bool) -> dict[str, object]:
     return {
         "backend_run_ordinal": run_ordinal,
+        "_backend_object": object(),
         "reset_count": 1,
         "capture_persistence_enabled": capture_enabled,
         "captures": [object()] if capture_enabled else [],

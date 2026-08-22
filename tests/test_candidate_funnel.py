@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import sys
+from collections import Counter
 from dataclasses import replace
 
 import numpy as np
 import pytest
 
 from hwr.apps import aggregate_candidate_funnels
+from hwr.eval import candidate_funnel, target_selection
 from hwr.eval.candidate_funnel import (
     ANCHOR_REJECTION_STAGES,
     CandidateFunnelContractError,
@@ -193,6 +196,7 @@ def test_full_funnel_is_deterministic_and_traces_one_formal_call() -> None:
     assert report["ranking_ledger"]["formal_merge_call_count"] == 1
     assert report["all_capsule_input_count"] == 3
     assert report["candidate_keyframe_count"] == 2
+    assert "capture_count" not in report
     assert report["all_capsule_inputs"]["includes_a4_final"] is True
     assert report["all_capsule_inputs"]["unique_observation_count"] == 2
     assert report["all_capsule_inputs"]["inputs"][-1]["a4_final_input"] is True
@@ -205,6 +209,131 @@ def test_full_funnel_is_deterministic_and_traces_one_formal_call() -> None:
     assert report["anchor_ledger"]["conservation"]["passed"] is True
     assert report["component_ledger"]["ordinal"]["conservation"]["passed"] is True
     assert report["ranking_ledger"]["conservation"]["passed"] is True
+
+
+def test_production_funnel_has_one_formal_generation_and_only_one_shadow_merge() -> None:
+    first = serialize_policy_input(_input(timestamp=1, sequence=1, phase=1))
+    second = serialize_policy_input(_input(timestamp=2, sequence=2, phase=3))
+    final = serialize_policy_input(_input(timestamp=3, sequence=3, phase=4))
+    official = generate_candidate_set(
+        (first, second),
+        acquisition_base_pose=(0.0, 0.0, 0.0),
+        final_input=final,
+    )
+    calls = Counter()
+
+    def profile(frame, event, argument):
+        del argument
+        if event == "call":
+            if frame.f_code is target_selection.generate_candidate_set.__code__:
+                calls["generate"] += 1
+            elif frame.f_code is target_selection._merge_candidates.__code__:
+                calls["merge"] += 1
+        return profile
+
+    previous = sys.getprofile()
+    try:
+        sys.setprofile(profile)
+        report = analyze_candidate_funnel(
+            (first, second),
+            acquisition_base_pose=(0.0, 0.0, 0.0),
+            final_input=final,
+            expected_candidate_bytes=official.canonical_bytes,
+            expected_selected_index=-1,
+        )
+    finally:
+        sys.setprofile(previous)
+
+    assert calls == {"generate": 1, "merge": 2}
+    assert report["ranking_ledger"]["formal_generator_call_count"] == 1
+    assert report["ranking_ledger"]["formal_merge_call_count"] == 1
+
+
+def _runtime_anchor_stage(
+    *, payload: bytes | None = None, points: np.ndarray | None = None
+) -> str:
+    stages = candidate_funnel._anchor_line_contract()
+    observed = []
+
+    def trace(frame, event, argument):
+        del argument
+        if event == "line":
+            stage = stages.get((frame.f_code.co_name, frame.f_lineno))
+            if stage is not None:
+                if frame.f_code is target_selection._candidate_from_points.__code__:
+                    observed.append(stage)
+                elif frame.f_locals.get("row") == 96 and frame.f_locals.get("column") == 128:
+                    observed.append(stage)
+        return trace
+
+    if payload is not None:
+        function = target_selection._frame_candidates
+        arguments = (
+            target_selection.deserialize_policy_input(payload),
+            (0.0, 0.0, 0.0),
+            0,
+        )
+    else:
+        function = target_selection._candidate_from_points
+        arguments = (points, np.asarray((0.0, 0.0, 0.7)), np.zeros(3), 0.1, 0, 96, 128)
+    previous = sys.gettrace()
+    try:
+        sys.settrace(trace)
+        function(*arguments)
+    finally:
+        sys.settrace(previous)
+    assert len(observed) == 1
+    return observed[0]
+
+
+def test_all_eight_anchor_gates_have_runtime_traced_boundary_counterexamples() -> None:
+    row, column = 96, 128
+    invalid = np.zeros((192, 256), dtype=np.bool_)
+    flat = np.ones((192, 256), dtype="<f4")
+    spread = np.full((192, 256), 1.2, dtype="<f4")
+    spread[row - 2 : row + 3, column - 2 : column + 3] = np.linspace(
+        0.96, 1.04, 25, dtype=np.float32
+    ).reshape(5, 5)
+    support = np.full((192, 256), 1.2, dtype="<f4")
+    support[row - 2 : row + 3, column - 2 : column + 3] = 1.0
+    support_valid = np.ones((192, 256), dtype=np.bool_)
+    support_valid[row - 2, column - 2 : column + 3] = False
+    self_masked = np.full((192, 256), 0.30, dtype="<f4")
+    self_masked[row - 2 : row + 3, column - 2 : column + 3] = 0.20
+    rows, columns = np.indices((6, 6), dtype=np.float64)
+    accepted = np.column_stack((
+        np.full(rows.size, 0.50),
+        (columns.ravel() - 2.5) * 0.01,
+        0.70 + (rows.ravel() - 2.5) * 0.01,
+    ))
+    too_near = accepted.copy()
+    too_near[:, 0] = 0.10
+    cube = np.asarray([
+        (0.45 + x, y, 0.65 + z)
+        for x in (-0.05, 0.05)
+        for y in (-0.05, 0.05)
+        for z in (-0.05, 0.05)
+    ])
+    narrow = accepted.copy()
+    narrow[:, 1:] *= 0.1
+    cases = (
+        ("center_ring_validity", {"payload": serialize_policy_input(_input(valid=invalid))}),
+        ("prominence", {"payload": serialize_policy_input(_input(depth=flat))}),
+        ("center_depth_spread", {"payload": serialize_policy_input(_input(depth=spread))}),
+        ("patch_support_before_self_mask", {
+            "payload": serialize_policy_input(_input(depth=support, valid=support_valid))
+        }),
+        ("support_after_self_mask", {
+            "payload": serialize_policy_input(_input(depth=self_masked))
+        }),
+        ("height_range", {"points": too_near}),
+        ("planarity", {"points": cube}),
+        ("width", {"points": narrow}),
+    )
+
+    assert tuple(_runtime_anchor_stage(**arguments) for _, arguments in cases) == tuple(
+        stage for stage, _ in cases
+    )
 
 
 def test_failed_online_candidate_is_only_labeled_counterfactual() -> None:

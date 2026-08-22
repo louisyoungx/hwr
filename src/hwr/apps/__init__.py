@@ -126,7 +126,10 @@ def persist_candidate_episode(result):
         "runtime_randomization_sha256": capsule.runtime_randomization_sha256,
         "acquisition_base_pose": list(capsule.acquisition_base_pose),
         "captures": captures,
-        "capture_count": len(captures),
+        "all_capsule_input_count": len(captures),
+        "candidate_keyframe_count": sum(
+            not capture.final_input for capture in capsule.captures
+        ),
         "candidate_set": candidate,
         "acquisition_failure": capsule.acquisition_failure,
         "proposed_action_sha256": capsule.proposed_action_sha256,
@@ -188,28 +191,83 @@ def persist_candidate_episode(result):
 
 
 def validate_candidate_terminal_ledger(plan, terminals) -> dict[str, object]:
+    result = validate_candidate_record_set(plan, terminals)
     planned = [str(value["planned_episode_id"]) for value in plan["episodes"]]
     published = [str(value.get("planned_episode_id")) for value in terminals]
-    missing = sorted(set(planned) - set(published))
-    unplanned = sorted(set(published) - set(planned))
-    duplicate_count = len(published) - len(set(published))
     replacement_count = sum(
         bool(value.get("replacement", True)) for value in terminals
     )
+    return {
+        **result,
+        "replacement_count": replacement_count,
+        "passed": result["passed"] and replacement_count == 0,
+    }
+
+
+def validate_candidate_record_set(plan, records) -> dict[str, object]:
+    expected_rows = plan.get("episodes")
+    if not isinstance(expected_rows, list):
+        raise CandidateFunnelContractError("plan episodes are missing")
+    expected_ids = [str(value.get("planned_episode_id")) for value in expected_rows]
+    if len(expected_ids) != len(set(expected_ids)):
+        raise CandidateFunnelContractError("plan Episode identities are duplicated")
+    expected = dict(zip(expected_ids, expected_rows, strict=True))
+    published = [str(value.get("planned_episode_id")) for value in records]
+    duplicate_count = len(published) - len(set(published))
+    missing = sorted(set(expected) - set(published))
+    unplanned = sorted(set(published) - set(expected))
+    mismatches = []
+    for record in records:
+        identity = str(record.get("planned_episode_id"))
+        planned = expected.get(identity)
+        if planned is None:
+            continue
+        for field in (
+            "task_id",
+            "cell_id",
+            "replicate_ordinal",
+            "candidate_ordinal",
+            "environment_seed",
+            "policy_rng_seed",
+        ):
+            if record.get(field) != planned.get(field):
+                mismatches.append(
+                    {
+                        "planned_episode_id": identity,
+                        "field": field,
+                        "expected": planned.get(field),
+                        "actual": record.get(field),
+                    }
+                )
+        planned_latency = {
+            "observation_steps": planned.get(
+                "sampled_observation_latency_steps"
+            ),
+            "action_steps": planned.get("sampled_action_latency_steps"),
+        }
+        if record.get("planned_latency") != planned_latency:
+            mismatches.append(
+                {
+                    "planned_episode_id": identity,
+                    "field": "planned_latency",
+                    "expected": planned_latency,
+                    "actual": record.get("planned_latency"),
+                }
+            )
     passed = (
-        len(published) == len(planned)
+        len(records) == len(expected_rows)
         and not missing
         and not unplanned
         and duplicate_count == 0
-        and replacement_count == 0
+        and not mismatches
     )
     return {
-        "planned_count": len(planned),
-        "published_count": len(published),
+        "planned_count": len(expected_rows),
+        "published_count": len(records),
         "missing": missing,
         "unplanned": unplanned,
         "duplicate_count": duplicate_count,
-        "replacement_count": replacement_count,
+        "field_mismatches": mismatches,
         "passed": passed,
     }
 
@@ -316,6 +374,14 @@ def candidate_sha256(payload: bytes) -> str:
     return _sha256(payload)
 
 
+def require_candidate_disk_capacity(output: Path) -> None:
+    parent = output.parent
+    while not parent.exists():
+        parent = parent.parent
+    if shutil.disk_usage(parent).free < 5 * 1024**3:
+        raise RuntimeError("P50-E1 requires at least 5GiB free on the data volume")
+
+
 def analyze_candidate_capsule_directory(
     repository: Path,
     capsule_directory: Path,
@@ -338,14 +404,26 @@ def analyze_candidate_capsule_directory(
         or index.get("capsule_count") != 24
     ):
         raise CandidateFunnelContractError("E1 evidence is not accepted and complete")
-    planned = {str(value["planned_episode_id"]) for value in plan["episodes"]}
     records = index.get("episodes")
     if not isinstance(records, list):
         raise CandidateFunnelContractError("capsule episodes are missing")
-    record_ids = [str(value.get("planned_episode_id")) for value in records]
-    if len(record_ids) != len(set(record_ids)) or set(record_ids) != planned:
+    record_ledger = validate_candidate_record_set(plan, records)
+    terminal_ledger = validate_candidate_terminal_ledger(
+        plan, index.get("terminals", [])
+    )
+    if not record_ledger["passed"] or not terminal_ledger["passed"]:
         raise CandidateFunnelContractError("capsule Episode ledger differs")
-    episodes = [_analyze_capsule_record(capsule_directory, row) for row in records]
+    planned_by_id = {
+        str(value["planned_episode_id"]): value for value in plan["episodes"]
+    }
+    episodes = [
+        _analyze_capsule_record(
+            capsule_directory,
+            row,
+            planned_by_id[str(row["planned_episode_id"])],
+        )
+        for row in records
+    ]
     identity = {
         "path": str(capsule_directory),
         "source_commit": source_commit,
@@ -358,7 +436,7 @@ def analyze_candidate_capsule_directory(
     }, identity
 
 
-def _analyze_capsule_record(root, record):
+def _analyze_capsule_record(root, record, planned):
     captures, candidate = record.get("captures"), record.get("candidate_set")
     if not isinstance(captures, list) or not isinstance(candidate, Mapping):
         raise CandidateFunnelContractError("capsule record is incomplete")
@@ -406,10 +484,17 @@ def _analyze_capsule_record(root, record):
         selection_permitted=record.get("acquisition_failure") is None,
     )
     return {
-        "planned_episode_id": record["planned_episode_id"],
-        "task_id": record["task_id"],
-        "cell_id": record["cell_id"],
-        "replicate_ordinal": record["replicate_ordinal"],
+        "planned_episode_id": planned["planned_episode_id"],
+        "task_id": planned["task_id"],
+        "cell_id": planned["cell_id"],
+        "replicate_ordinal": planned["replicate_ordinal"],
+        "candidate_ordinal": planned["candidate_ordinal"],
+        "environment_seed": planned["environment_seed"],
+        "policy_rng_seed": planned["policy_rng_seed"],
+        "planned_latency": {
+            "observation_steps": planned["sampled_observation_latency_steps"],
+            "action_steps": planned["sampled_action_latency_steps"],
+        },
         "capture_enabled_disabled_identity": record[
             "capture_enabled_disabled_identity"
         ],
