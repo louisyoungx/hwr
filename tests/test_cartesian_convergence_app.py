@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from hwr.apps import evaluate_cartesian_convergence as app
+from hwr.adapters.mujoco import cartesian_convergence_provenance as provenance
 from hwr.eval import cartesian_convergence as convergence
 from hwr.eval.seed_contract import seed_commitment
 
@@ -358,6 +359,10 @@ def test_source_tree_identity_and_bank_dependency_drift_fail_closed(
     identities = app._source_identities(ROOT)
     assert set(identities["git_trees"]) == {"src/hwr", "configs", "assets"}
     assert app.FROZEN_DOCUMENT_PATH.as_posix() in identities
+    assert identities["protected_frozen_source"]["passed"] is True
+    assert identities["protected_frozen_source"]["changed_paths"] == []
+    assert identities["protected_frozen_source"]["checked_paths"]
+    assert set(provenance.unchanged_flags(identities).values()) == {False}
     bank = {
         "source_commit": "a" * 40,
         "frozen_document_commit": app.FROZEN_DOCUMENT_COMMIT,
@@ -376,6 +381,92 @@ def test_source_tree_identity_and_bank_dependency_drift_fail_closed(
     bank["source_identities"]["git_trees"]["src/hwr"] = "0" * 40
     with pytest.raises(RuntimeError, match="identity drifted"):
         app._require_bank_provenance(ROOT, bank, identities)
+
+
+@pytest.mark.parametrize(
+    ("group", "path", "flag"),
+    (
+        ("selector", "src/hwr/eval/target_selection.py", "selector_changed"),
+        ("task_binding", "configs/tasks/formal_3d_v1.json", "backend_changed"),
+        ("mujoco_xml", "assets/mujoco/formal/kitchen.xml", "backend_changed"),
+        (
+            "backend",
+            "src/hwr/adapters/mujoco/formal_household_backend.py",
+            "backend_changed",
+        ),
+        ("safety", "src/hwr/safety/dual_arm.py", "safety_changed"),
+    ),
+)
+def test_protected_source_drift_fails_closed(
+    monkeypatch, group, path, flag
+) -> None:
+    del group
+    calls = 0
+
+    def tree_entries(root, commit, paths):
+        nonlocal calls
+        del root, commit, paths
+        calls += 1
+        return {path: ("a" if calls == 1 else "b") * 40}
+
+    monkeypatch.setattr(provenance, "_tree_entries", tree_entries)
+    monkeypatch.setattr(provenance, "_git_lines", lambda *args: [path])
+
+    status = provenance.protected_source_status(ROOT, app.FROZEN_DOCUMENT_COMMIT)
+    assert status["passed"] is False
+    assert status["changed_paths"] == [path]
+    with pytest.raises(RuntimeError, match="protected frozen source drifted"):
+        provenance.require_protected_source(status)
+    flags = provenance.unchanged_flags(
+        {"protected_frozen_source": status}
+    )
+    assert flags[flag] is True
+
+
+@pytest.mark.parametrize("mode", ("build-bank", "evaluate"))
+def test_both_modes_require_protected_source(mode, tmp_path, monkeypatch) -> None:
+    output = tmp_path / mode
+    arguments = ["--mode", mode, "--output", str(output)]
+    arguments.extend(
+        (["--salt-file", str(tmp_path / "unread-salt")])
+        if mode == "build-bank"
+        else (["--bank", str(tmp_path / "unread-bank.json")])
+    )
+    parsed = app.build_parser().parse_args(arguments)
+    identities = {
+        "frozen_document": {},
+        "protected_frozen_source": {
+            "passed": False,
+            "changed_paths": ["src/hwr/eval/target_selection.py"],
+            "blob_identities": {"src/hwr/eval/target_selection.py": {}},
+        },
+    }
+    monkeypatch.setattr(app, "_source_commit", lambda root: "f" * 40)
+    monkeypatch.setattr(app, "_source_identities", lambda root: identities)
+    monkeypatch.setattr(app, "_require_frozen_document", lambda *args: None)
+    monkeypatch.setattr(
+        app.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(stdout="", returncode=0),
+    )
+    monkeypatch.setattr(
+        app,
+        "_git_output",
+        lambda root, arguments: app.HISTORICAL_TREES[arguments[-1][5:]],
+    )
+    monkeypatch.setattr(
+        app,
+        "read_seed_salt",
+        lambda path: pytest.fail("protected drift must stop before salt"),
+    )
+    monkeypatch.setattr(
+        app,
+        "_read_json",
+        lambda path: pytest.fail("protected drift must stop before bank"),
+    )
+
+    with pytest.raises(RuntimeError, match="protected frozen source drifted"):
+        app.run(parsed)
 
 
 class _FakeBridge:

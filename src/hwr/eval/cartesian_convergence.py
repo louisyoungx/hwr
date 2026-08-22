@@ -76,7 +76,13 @@ ELIGIBILITY_REASONS = frozenset((
     "primitive_target_crosscheck_failed", "first_treatment_action_ineligible",
 ))
 ORDINARY_TERMINAL_REASONS = frozenset((
-    "formal_household_bimanual_success", "formal_household_timeout",
+    "formal_household_timeout",
+))
+SUCCESS_TERMINAL_REASONS = frozenset(("formal_household_bimanual_success",))
+HARD_FAILURE_REASONS = frozenset((
+    "action_bounds_violation", "stale_action_applied", "severe_collision",
+    "safety_intervention", "invalid_force", "p40_conservation_violation",
+    "nonfinite_runtime_value",
 ))
 
 
@@ -395,8 +401,16 @@ def validate_runtime_step_trace(
         raise CartesianConvergenceContractError("raw runtime trace hash differs")
     expected_runtime_start = target_selection.ACQUISITION_STEPS + 400
     terminal_reason = None
+    ordinary_terminal_reason = None
     terminal_step = None
     hard_failure_reason = None
+    safety_intervention_count = 0
+    stale_action_applied_count = 0
+    action_bounds_valid = True
+    nonfinite_runtime_value_count = 0
+    previous_severe_collision_count = 0
+    previous_invalid_force_count = 0
+    previous_conservation = 0.0
     for index, raw in enumerate(trace, start=1):
         if not isinstance(raw, Mapping):
             raise CartesianConvergenceContractError("raw runtime step differs")
@@ -438,10 +452,51 @@ def validate_runtime_step_trace(
             for value in (action_bounds, outside_window, safety_intervened)
         ):
             raise CartesianConvergenceContractError("raw runtime guard differs")
+        step_guard = _runtime_step_guard(raw)
+        if any((
+            action_bounds != step_guard["action_bounds_valid"],
+            outside_window != step_guard["outside_validity_window"],
+            safety_intervened != step_guard["safety_intervened"],
+        )):
+            raise CartesianConvergenceContractError("raw runtime guard differs")
+        if raw.get("nonfinite_value_count") != step_guard["nonfinite_value_count"]:
+            raise CartesianConvergenceContractError("raw nonfinite count differs")
+        severe = _nonnegative_int(raw.get("severe_collision_count"))
+        invalid_force = _nonnegative_int(raw.get("invalid_force_count"))
+        conservation = _finite_nonnegative(
+            raw.get("p40_conservation_maximum_absolute_difference")
+        )
+        if (
+            severe < previous_severe_collision_count
+            or invalid_force < previous_invalid_force_count
+            or conservation < previous_conservation
+        ):
+            raise CartesianConvergenceContractError("raw runtime counters decreased")
+        previous_severe_collision_count = severe
+        previous_invalid_force_count = invalid_force
+        previous_conservation = conservation
+        reconstructed_reason = _runtime_hard_reason(
+            step_guard, severe, invalid_force, conservation
+        )
+        if hard_failure != reconstructed_reason:
+            raise CartesianConvergenceContractError("raw hard failure differs")
+        safety_intervention_count += int(safety_intervened)
+        stale_action_applied_count += int(step_guard["stale_action_applied"])
+        action_bounds_valid &= step_guard["action_bounds_valid"]
+        nonfinite_runtime_value_count += step_guard["nonfinite_value_count"]
         if flags[3]:
             if index != len(trace) or not isinstance(result, Mapping):
                 raise CartesianConvergenceContractError("raw runtime terminal differs")
-            terminal_reason = _validate_episode_result(result, timestamp)
+            terminal = _validate_episode_result(result, timestamp)
+            terminal_reason = terminal["reason"]
+            ordinary_terminal_reason = terminal["ordinary_reason"]
+            if (
+                terminal_reason in HARD_FAILURE_REASONS
+                and terminal_reason != reconstructed_reason
+            ):
+                raise CartesianConvergenceContractError(
+                    "episode result hard reason differs"
+                )
             terminal_step = index
         elif result is not None:
             raise CartesianConvergenceContractError("nonterminal step has result")
@@ -453,12 +508,22 @@ def validate_runtime_step_trace(
     return {
         "executed_b2_steps": len(trace),
         "terminal_reason": terminal_reason,
+        "ordinary_terminal_reason": ordinary_terminal_reason,
         "hard_failure_reason": hard_failure_reason,
         "terminal_step": terminal_step,
         "proposed_actions": [row["proposed_action"] for row in trace],
         "applied_actions": [row["applied_action"] for row in trace],
         "tool_distances": [row["tool_distance"] for row in trace],
         "last_step": trace[-1],
+        "guard_summary": {
+            "safety_intervention_count": safety_intervention_count,
+            "stale_action_applied_count": stale_action_applied_count,
+            "action_bounds_valid": action_bounds_valid,
+            "severe_collision_count": previous_severe_collision_count,
+            "invalid_force_count": previous_invalid_force_count,
+            "p40_conservation_maximum_absolute_difference": previous_conservation,
+            "nonfinite_runtime_value_count": nonfinite_runtime_value_count,
+        },
     }
 def _validate_runtime_events(events: Sequence[object]) -> None:
     for event in events:
@@ -474,7 +539,9 @@ def _validate_runtime_events(events: Sequence[object]) -> None:
             or not isinstance(event.get("details"), Mapping)
         ):
             raise CartesianConvergenceContractError("raw runtime event differs")
-def _validate_episode_result(result: Mapping[str, object], timestamp: int) -> str:
+def _validate_episode_result(
+    result: Mapping[str, object], timestamp: int
+) -> dict[str, object]:
     if set(result) != {"success", "reason", "ended_at_ns", "metrics"}:
         raise CartesianConvergenceContractError("raw episode result differs")
     reason = result["reason"]
@@ -493,22 +560,112 @@ def _validate_episode_result(result: Mapping[str, object], timestamp: int) -> st
         finite = False
     if not finite:
         raise CartesianConvergenceContractError("raw episode result differs")
-    return reason
-def hard_failure_evidence_matches(
-    reason: str, last_step: Mapping[str, object], arm: Mapping[str, object]
-) -> bool:
-    checks = {
-        "action_bounds_violation": not last_step["action_bounds_valid"],
-        "stale_action_applied": bool(last_step["outside_validity_window"])
-        and last_step["applied_action"] != last_step["hold_action"],
-        "severe_collision": int(arm.get("severe_collision_count", 0)) > 0,
-        "safety_intervention": bool(last_step["safety_intervened"]),
-        "invalid_force": int(arm.get("invalid_force_count", 0)) > 0,
-        "p40_conservation_violation": float(
-            arm.get("p40_conservation_maximum_absolute_difference", 0.0)
-        )
-        != 0.0,
+    if reason not in (
+        ORDINARY_TERMINAL_REASONS
+        | SUCCESS_TERMINAL_REASONS
+        | HARD_FAILURE_REASONS
+    ):
+        raise CartesianConvergenceContractError("raw episode result reason differs")
+    expected_success = reason in SUCCESS_TERMINAL_REASONS
+    if result["success"] != expected_success:
+        raise CartesianConvergenceContractError("raw episode result semantics differ")
+    return {
+        "reason": reason,
+        "success": expected_success,
+        "ordinary_reason": (
+            reason if not expected_success and reason in ORDINARY_TERMINAL_REASONS
+            else None
+        ),
     }
-    return bool(checks.get(reason, False))
+def _runtime_step_guard(raw: Mapping[str, object]) -> dict[str, object]:
+    vectors = []
+    for name in ("proposed_action", "applied_action", "hold_action"):
+        value = np.asarray(raw.get(name), np.float64)
+        vectors.append(value)
+    tool = raw.get("tool_distance")
+    if not isinstance(tool, Mapping) or set(tool) != {"left_m", "right_m", "mean_m"}:
+        raise CartesianConvergenceContractError("raw tool distance differs")
+    numbers = [*vectors, np.asarray(list(tool.values()), np.float64)]
+    nonfinite = sum(
+        int(np.size(value) - np.count_nonzero(np.isfinite(value)))
+        for value in numbers
+    )
+    in_bounds = all(
+        value.shape == (16,)
+        and np.isfinite(value).all()
+        and np.all(value >= target_selection.ACTION_MINIMUM)
+        and np.all(value <= target_selection.ACTION_MAXIMUM)
+        for value in vectors[:2]
+    )
+    events = raw["events"]
+    outside_window = any(
+        event["details"].get("reason") == "outside_validity_window"
+        for event in events
+    )
+    return {
+        "action_bounds_valid": bool(in_bounds),
+        "outside_validity_window": outside_window,
+        "stale_action_applied": outside_window
+        and raw["applied_action"] != raw["hold_action"],
+        "safety_intervened": bool(events),
+        "nonfinite_value_count": nonfinite,
+    }
+def _runtime_hard_reason(guard, severe, invalid_force, conservation):
+    if not guard["action_bounds_valid"]:
+        return "action_bounds_violation"
+    if guard["stale_action_applied"]:
+        return "stale_action_applied"
+    if severe:
+        return "severe_collision"
+    if guard.get("safety_intervened"):
+        return "safety_intervention"
+    if invalid_force:
+        return "invalid_force"
+    if conservation != 0.0:
+        return "p40_conservation_violation"
+    if guard["nonfinite_value_count"]:
+        return "nonfinite_runtime_value"
+    return None
+def _nonnegative_int(value) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise CartesianConvergenceContractError("raw runtime count differs")
+    return value
+def _finite_nonnegative(value) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as error:
+        raise CartesianConvergenceContractError(
+            "raw runtime scalar differs"
+        ) from error
+    if not math.isfinite(result) or result < 0.0:
+        raise CartesianConvergenceContractError("raw runtime scalar differs")
+    return result
+def guard_summary_matches(
+    arm: Mapping[str, object],
+    guard: Mapping[str, object],
+    fields: Sequence[str],
+) -> bool:
+    counters = set(fields) - {
+        "action_bounds_valid",
+        "p40_conservation_maximum_absolute_difference",
+    }
+    try:
+        conservation_matches = (
+            float(arm["p40_conservation_maximum_absolute_difference"])
+            == float(guard["p40_conservation_maximum_absolute_difference"])
+        )
+    except (KeyError, TypeError, ValueError):
+        conservation_matches = False
+    return (
+        isinstance(arm.get("action_bounds_valid"), bool)
+        and arm["action_bounds_valid"] == guard["action_bounds_valid"]
+        and all(
+            isinstance(arm.get(name), int)
+            and not isinstance(arm[name], bool)
+            and arm[name] == guard[name]
+            for name in counters
+        )
+        and conservation_matches
+    )
 def wrap_angle(value: float) -> float:
     return math.atan2(math.sin(value), math.cos(value))

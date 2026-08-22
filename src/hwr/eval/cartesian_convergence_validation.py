@@ -38,7 +38,7 @@ from hwr.eval.cartesian_convergence import (
     canonical_sha256,
     first_treatment_guard,
     frozen_cells,
-    hard_failure_evidence_matches,
+    guard_summary_matches,
     identity,
     pair_identity,
     preposition_targets,
@@ -50,7 +50,6 @@ from hwr.eval.cartesian_convergence import (
 )
 from hwr.eval.seed_contract import require_seed_reveal
 from hwr.eval.target_selection import ACTION_MAXIMUM, ACTION_MINIMUM, Candidate
-
 
 def analyze_terminals(
     terminals: Mapping[str, object], bank: Mapping[str, object]
@@ -237,16 +236,30 @@ def _validated_arm(role, arm, pair) -> dict[str, object]:
     )
     if bool(arm.get("action_bounds_valid")) != computed_bounds:
         raise CartesianConvergenceContractError("terminal action bounds flag differs")
+    guard = runtime["guard_summary"]
+    guard_fields = (
+        "safety_intervention_count",
+        "stale_action_applied_count",
+        "action_bounds_valid",
+        "severe_collision_count",
+        "invalid_force_count",
+        "p40_conservation_maximum_absolute_difference",
+        "nonfinite_runtime_value_count",
+    )
+    if not guard_summary_matches(arm, guard, guard_fields):
+        raise CartesianConvergenceContractError("terminal guard summary differs")
     hard_reason = arm.get("hard_failure_reason")
     observed_hard = any((
-        int(arm.get("severe_collision_count", 0)),
-        int(arm.get("invalid_force_count", 0)),
-        int(arm.get("stale_action_applied_count", 0)),
-        float(arm.get("p40_conservation_maximum_absolute_difference", 0.0)) != 0.0,
-        not bool(arm.get("action_bounds_valid", False)),
+        guard["safety_intervention_count"],
+        guard["stale_action_applied_count"],
+        not guard["action_bounds_valid"],
+        guard["severe_collision_count"],
+        guard["invalid_force_count"],
+        guard["p40_conservation_maximum_absolute_difference"] != 0.0,
+        guard["nonfinite_runtime_value_count"],
         hard_reason is not None,
     ))
-    if bool(arm.get("hard_guard_passed")) == observed_hard:
+    if bool(arm.get("hard_guard_passed")) == bool(observed_hard):
         raise CartesianConvergenceContractError("terminal hard guard differs")
     if canonical_sha256(proposed) != arm.get("proposed_action_sha256"):
         raise CartesianConvergenceContractError("proposed action hash differs")
@@ -263,27 +276,20 @@ def _validated_arm(role, arm, pair) -> dict[str, object]:
             raise CartesianConvergenceContractError(f"terminal {name} differs")
     carry = B2_STEPS - executed
     ordinary_reason = arm.get("ordinary_runtime_terminal")
-    raw_reason = runtime["terminal_reason"]
-    if ordinary_reason != raw_reason:
+    if ordinary_reason != runtime["ordinary_terminal_reason"]:
         raise CartesianConvergenceContractError("terminal reason differs from raw trace")
     if hard_reason != runtime["hard_failure_reason"]:
         raise CartesianConvergenceContractError("hard reason differs from raw trace")
-    if hard_reason is not None and not hard_failure_evidence_matches(
-        hard_reason, runtime["last_step"], arm
-    ):
-        raise CartesianConvergenceContractError("hard reason lacks raw evidence")
     if executed < B2_STEPS:
         if runtime["terminal_step"] != executed:
             raise CartesianConvergenceContractError("truncation lacks terminal evidence")
-        if arm["hard_guard_passed"] and raw_reason not in ORDINARY_TERMINAL_REASONS:
+        if (
+            arm["hard_guard_passed"]
+            and runtime["ordinary_terminal_reason"] not in ORDINARY_TERMINAL_REASONS
+        ):
             raise CartesianConvergenceContractError("ordinary terminal reason differs")
         if not arm["hard_guard_passed"] and hard_reason is None:
             raise CartesianConvergenceContractError("hard terminal reason differs")
-    elif raw_reason is not None and (
-        raw_reason not in ORDINARY_TERMINAL_REASONS
-        and raw_reason != hard_reason
-    ):
-        raise CartesianConvergenceContractError("ordinary terminal reason differs")
     if arm.get("carried_forward_step_count") != carry:
         raise CartesianConvergenceContractError("terminal carry-forward count differs")
     if bool(arm.get("symmetric_terminal_carry_forward")) != bool(carry):
@@ -324,8 +330,6 @@ def _validated_arm(role, arm, pair) -> dict[str, object]:
     ):
         raise CartesianConvergenceContractError("signed derivatives differ")
     return {**arm, **outcome}
-
-
 def _same_number(left, right) -> bool:
     try:
         return float(left) == float(right) and math.isfinite(float(right))
@@ -333,13 +337,17 @@ def _same_number(left, right) -> bool:
         return False
 
 
-def _hard_safety_guards(records: Sequence[Mapping[str, object]]) -> dict[str, object]:
+def _hard_safety_guards(
+    records: Sequence[Mapping[str, object]]
+) -> dict[str, object]:
     totals = {
         "severe_collision_count": 0,
         "invalid_force_count": 0,
+        "safety_intervention_count": 0,
         "stale_action_applied_count": 0,
         "p40_conservation_violation_count": 0,
         "action_bounds_violation_count": 0,
+        "nonfinite_runtime_value_count": 0,
         "nonfinite_metric_count": 0,
         "reported_hard_failure_count": 0,
     }
@@ -348,10 +356,16 @@ def _hard_safety_guards(records: Sequence[Mapping[str, object]]) -> dict[str, ob
         "phase_identity_equal", "target_identity_equal", "fk_identity_equal",
         "backend_identity_equal",
     )
-    invariant_failures = {name: 0 for name in invariants}
+    invariant_failures = dict.fromkeys(invariants, 0)
     for record in records:
         for arm in record.get("arms", {}).values():
-            for name in tuple(totals)[:3]:
+            for name in (
+                "severe_collision_count",
+                "invalid_force_count",
+                "safety_intervention_count",
+                "stale_action_applied_count",
+                "nonfinite_runtime_value_count",
+            ):
                 totals[name] += int(arm.get(name, 0))
             totals["p40_conservation_violation_count"] += int(
                 float(arm.get("p40_conservation_maximum_absolute_difference", math.inf))
@@ -492,7 +506,6 @@ def _delta_row(record: Mapping[str, object]) -> dict[str, object]:
         "delta": delta,
     }
 
-
 def _latency_means(rows: Sequence[Mapping[str, object]], field: str) -> dict[str, float]:
     result = {}
     for latency in LATENCY_VALUES:
@@ -503,13 +516,11 @@ def _latency_means(rows: Sequence[Mapping[str, object]], field: str) -> dict[str
         result[str(latency)] = _mean(cell_means)
     return result
 
-
 def _win_counts(rows, field):
     return {
         str(value): sum(row["win"] for row in rows if row[field] == value)
         for value in LATENCY_VALUES
     }
-
 
 def _analysis(identity, hard_safety, unresolved, continuous, binary, decision):
     return {
@@ -783,8 +794,6 @@ def _prefix_failure_reason(record: Mapping[str, object]) -> str:
     if record.get("prefix_failure_reason") is not None:
         raise CartesianConvergenceContractError("prefix failure reason lacks evidence")
     return "eligible"
-
-
 def _mean(values: Sequence[float]) -> float:
     if not values or not all(math.isfinite(float(value)) for value in values):
         raise CartesianConvergenceContractError("analysis group is empty or nonfinite")

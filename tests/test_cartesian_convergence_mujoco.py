@@ -21,6 +21,78 @@ from hwr.eval.target_selection import Candidate, PolicyVisibleInput
 from hwr.safety import SafetyLimits
 
 
+def test_frozen_plan_has_twelve_cells_and_domain_separated_seeds() -> None:
+    salt = "ab" * 32
+    cells = convergence.frozen_cells()
+    records = [
+        convergence.raw_seed_record(salt, cell, ordinal)
+        for cell in cells
+        for ordinal in range(4)
+    ]
+    assert len(cells) == 12
+    assert [cell.ordinal for cell in cells] == list(range(12))
+    assert {
+        (cell.task_id, cell.observation_latency_steps, cell.action_latency_steps)
+        for cell in cells
+    } == {
+        (task, observation, action)
+        for task in convergence.TASK_IDS
+        for observation in (1, 2)
+        for action in (1, 2)
+    }
+    assert len({record["planned_episode_id"] for record in records}) == 48
+    assert len({record["environment_seed"] for record in records}) == 48
+    assert len({record["policy_rng_seed"] for record in records}) == 48
+    assert not (
+        {record["environment_seed"] for record in records}
+        & {record["policy_rng_seed"] for record in records}
+    )
+    pair = convergence.pair_identity(records[0]["planned_episode_id"])
+    assert convergence.role_order(salt, pair) == convergence.role_order(salt, pair)
+    assert set(convergence.role_order(salt, pair)[1]) == set(convergence.ROLES)
+
+
+def test_targets_and_legacy_treatment_match_frozen_formula() -> None:
+    candidate = Candidate(
+        center=(1.0, 0.0, 0.7), normal=(-1.0, 0.0, 0.0), width=0.12,
+        prominence=0.1, support_count=30, view_count=2, first_frame=0,
+        first_row=20, first_column=30,
+    )
+    targets = convergence.preposition_targets(
+        candidate, (0.0, 0.0, 0.0), (0.1, 0.2, 0.4)
+    )
+    forward = np.asarray((0.9, -0.2)) / np.linalg.norm((0.9, -0.2))
+    normal = np.asarray((-forward[0], -forward[1], 0.0))
+    lateral = np.asarray((-forward[1], forward[0], 0.0))
+    assert targets["left"] == pytest.approx(
+        np.asarray(candidate.center) + 0.18 * normal + 0.12 * lateral
+        + (0.0, 0.0, 0.05)
+    )
+    assert targets["right"] == pytest.approx(
+        np.asarray(candidate.center) + 0.18 * normal - 0.12 * lateral
+        + (0.0, 0.0, 0.05)
+    )
+    legacy = convergence.legacy_transform(
+        (1.0, 1.0, 0.0), 0.08, acquisition_yaw=1.2, current_base_yaw=-0.7
+    )
+    assert np.linalg.norm(legacy) == pytest.approx(0.08)
+    assert legacy[0] == pytest.approx(legacy[1])
+
+
+def test_first_treatment_guard_allows_only_arm_linear_xy() -> None:
+    legacy = np.zeros(16, dtype="<f8")
+    fixed = legacy.copy()
+    legacy[[2, 8]], fixed[[3, 9]] = 0.2, 0.2
+    guard = convergence.first_treatment_guard(legacy, fixed)
+    assert guard["different_bytes"] is True
+    assert guard["only_arm_linear_xy_differs"] is True
+    assert guard["arm_action_noncollapsed"] is True
+    fixed[14] = 0.1
+    assert convergence.first_treatment_guard(
+        legacy, fixed
+    )["only_arm_linear_xy_differs"] is False
+
+
 def test_treatment_injection_calls_same_primitive_and_restores_helper(
     monkeypatch,
 ) -> None:
@@ -260,13 +332,18 @@ def test_run_b2_persists_raw_episode_result_terminal(monkeypatch) -> None:
         "p40_conservation_differences",
         lambda *args: {"maximum_absolute_difference": 0.0},
     )
+    monkeypatch.setattr(
+        provenance,
+        "p40_conservation_differences",
+        lambda *args: {"maximum_absolute_difference": 0.0},
+    )
 
     arm = bridge.CartesianConvergenceMujoco._run_b2(
         SimpleNamespace(), run, "frame_fixed"
     )
 
     assert arm["executed_b2_steps"] == 1
-    assert arm["ordinary_runtime_terminal"] == result.reason
+    assert arm["ordinary_runtime_terminal"] is None
     assert arm["raw_runtime_step_trace"][0]["episode_result"] == result.to_dict()
     assert arm["raw_runtime_step_trace"][0]["runtime_step"] == bridge.PREFIX_STEPS
     assert convergence.validate_runtime_step_trace(arm)["terminal_step"] == 1

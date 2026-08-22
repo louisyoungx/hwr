@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import subprocess
 from dataclasses import asdict
-from typing import Sequence
+from pathlib import Path
+from typing import Mapping, Sequence
 
 import mujoco
 import numpy as np
@@ -23,6 +25,44 @@ from hwr.eval.target_selection import ACQUISITION_STEPS
 
 
 CONTINUATION_SCHEMA = "hwr.p51-cartesian-continuation-identity/v1"
+PROTECTED_GROUP_PATHS = {
+    "selector": (
+        "src/hwr/eval/target_selection.py",
+        "src/hwr/eval/target_selection_safety.py",
+    ),
+    "existing_p41_p51_p52": (
+        "src/hwr/apps/evaluate_target_selection.py",
+        "src/hwr/adapters/mujoco/target_selection_diagnostic.py",
+        "src/hwr/apps/evaluate_cartesian_frame_contract.py",
+        "src/hwr/apps/evaluate_tool_kinematics.py",
+        "src/hwr/eval/tool_kinematics.py",
+    ),
+    "task_binding": ("configs",),
+    "mujoco_xml": ("assets",),
+    "backend": (
+        "src/hwr/adapters/mujoco",
+        "src/hwr/core",
+        "src/hwr/eval/seed_contract.py",
+        "src/hwr/eval/stability.py",
+        "src/hwr/scenarios/formal3d.py",
+    ),
+    "safety": ("src/hwr/safety",),
+    "frozen_document": ("docs/research-loop/0010/03-experiment.md",),
+}
+UNCHANGED_FLAG_GROUPS = {
+    "candidate_generator_changed": ("selector",),
+    "candidate_bytes_changed": ("selector",),
+    "selector_changed": ("selector",),
+    "acquisition_changed": ("selector", "existing_p41_p51_p52"),
+    "b0_b1_prefix_changed": ("selector", "existing_p41_p51_p52"),
+    "phase_changed": ("selector",),
+    "target_formula_changed": ("selector",),
+    "velocity_cap_changed": ("selector",),
+    "gripper_changed": ("selector", "backend"),
+    "fk_changed": ("selector", "existing_p41_p51_p52", "backend", "mujoco_xml"),
+    "backend_changed": ("backend", "task_binding", "mujoco_xml"),
+    "safety_changed": ("safety", "backend"),
+}
 
 
 def continuation_identity(
@@ -193,10 +233,20 @@ def raw_runtime_step_evidence(
     b2_step: int,
     row,
     backend,
+    graph,
     tool_distance,
     hard_failure_reason,
 ) -> dict[str, object]:
     result = backend.result()
+    graph_report = graph.report()
+    invalid_force_count = sum(
+        int(graph_report[name]) for name in INVALID_GRAPH_FIELDS
+    )
+    conservation = float(
+        p40_conservation_differences(
+            graph_report, backend.contact_ledger.report()
+        )["maximum_absolute_difference"]
+    )
     evidence = {
         "b2_step": b2_step,
         "runtime_step": int(row["step"]),
@@ -212,12 +262,137 @@ def raw_runtime_step_evidence(
         "action_bounds_valid": bool(row["action_bounds_valid"]),
         "outside_validity_window": bool(row["outside_validity_window"]),
         "safety_intervened": bool(row["safety_intervened"]),
+        "severe_collision_count": int(
+            backend.task_audit()["severe_collision_count"]
+        ),
+        "invalid_force_count": invalid_force_count,
+        "p40_conservation_maximum_absolute_difference": conservation,
+        "nonfinite_value_count": _nonfinite_runtime_value_count(
+            row, tool_distance
+        ),
         "hold_action": list(row["hold_action"]),
         "proposed_action": list(row["proposed_action"]),
         "applied_action": list(row["applied_action"]),
         "tool_distance": dict(tool_distance),
     }
     return {**evidence, "trace_sha256": canonical_sha256(evidence)}
+
+
+def protected_source_status(root: Path, frozen_commit: str) -> dict[str, object]:
+    pathspecs = tuple(dict.fromkeys(
+        path for paths in PROTECTED_GROUP_PATHS.values() for path in paths
+    ))
+    frozen = _tree_entries(root, frozen_commit, pathspecs)
+    checked_paths = tuple(sorted(frozen))
+    current = _tree_entries(root, "HEAD", checked_paths)
+    changed = _git_lines(
+        root, (
+            "diff", "--name-only", f"{frozen_commit}..HEAD", "--", *checked_paths
+        )
+    )
+    blobs = {
+        path: {
+            "frozen_blob": frozen.get(path),
+            "current_blob": current.get(path),
+            "matches": frozen.get(path) == current.get(path),
+        }
+        for path in sorted(set(frozen) | set(current))
+    }
+    groups = {
+        name: {
+            "pathspecs": list(paths),
+            "changed_paths": [
+                path for path in changed if any(_under(path, item) for item in paths)
+            ],
+            "matches": all(
+                value["matches"]
+                for path, value in blobs.items()
+                if any(_under(path, item) for item in paths)
+            ),
+        }
+        for name, paths in PROTECTED_GROUP_PATHS.items()
+    }
+    return {
+        "base_commit": frozen_commit,
+        "checked_pathspecs": list(pathspecs),
+        "checked_paths": list(checked_paths),
+        "changed_paths": changed,
+        "blob_identities": blobs,
+        "groups": groups,
+        "passed": not changed and all(value["matches"] for value in blobs.values()),
+    }
+
+
+def require_protected_source(status: Mapping[str, object]) -> None:
+    blobs = status.get("blob_identities")
+    groups = status.get("groups")
+    if (
+        status.get("passed") is not True
+        or status.get("changed_paths")
+        or not isinstance(blobs, Mapping)
+        or not blobs
+        or any(value.get("matches") is not True for value in blobs.values())
+        or not isinstance(groups, Mapping)
+        or set(groups) != set(PROTECTED_GROUP_PATHS)
+        or any(value.get("matches") is not True for value in groups.values())
+    ):
+        raise RuntimeError("P51-E1 protected frozen source drifted")
+
+
+def unchanged_flags(identities: Mapping[str, object]) -> dict[str, object]:
+    protected = identities.get("protected_frozen_source")
+    if not isinstance(protected, Mapping):
+        return dict.fromkeys(UNCHANGED_FLAG_GROUPS, None)
+    groups = protected.get("groups")
+    if not isinstance(groups, Mapping):
+        return dict.fromkeys(UNCHANGED_FLAG_GROUPS, None)
+    return {
+        flag: not all(
+            isinstance(groups.get(group), Mapping)
+            and groups[group].get("matches") is True
+            for group in required
+        )
+        for flag, required in UNCHANGED_FLAG_GROUPS.items()
+    }
+
+
+def _tree_entries(root: Path, commit: str, pathspecs) -> dict[str, str]:
+    lines = _git_lines(root, ("ls-tree", "-r", commit, "--", *pathspecs))
+    result = {}
+    for line in lines:
+        metadata, path = line.split("\t", 1)
+        _, kind, blob = metadata.split()
+        if kind == "blob":
+            result[path] = blob
+    return result
+
+
+def _git_lines(root: Path, arguments) -> list[str]:
+    output = subprocess.run(
+        ("git", *arguments),
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    return [line for line in output.splitlines() if line]
+
+
+def _under(path: str, pathspec: str) -> bool:
+    return path == pathspec or path.startswith(pathspec.rstrip("/") + "/")
+
+
+def _nonfinite_runtime_value_count(row, tool_distance) -> int:
+    values = (
+        row["proposed_action"],
+        row["applied_action"],
+        row["hold_action"],
+        tuple(tool_distance.values()),
+    )
+    return sum(
+        int(np.size(value) - np.count_nonzero(np.isfinite(np.asarray(value, np.float64))))
+        for value in values
+    )
 
 
 def _array_bundle_identity(

@@ -21,6 +21,11 @@ import numpy as np
 from hwr.adapters.mujoco.cartesian_convergence import (
     CartesianConvergenceMujoco,
 )
+from hwr.adapters.mujoco.cartesian_convergence_provenance import (
+    protected_source_status,
+    require_protected_source,
+    unchanged_flags,
+)
 from hwr.adapters.mujoco.training_catalog import (
     load_default_formal_household_catalogs,
 )
@@ -110,22 +115,6 @@ CLAIM_FLAGS = {
     "candidate_correctness_claim_allowed": False,
     "contact_or_grasp_claim_allowed": False,
 }
-UNCHANGED_FLAGS = {
-    "candidate_generator_changed": False,
-    "candidate_bytes_changed": False,
-    "selector_changed": False,
-    "acquisition_changed": False,
-    "b0_b1_prefix_changed": False,
-    "phase_changed": False,
-    "target_formula_changed": False,
-    "velocity_cap_changed": False,
-    "gripper_changed": False,
-    "fk_changed": False,
-    "backend_changed": False,
-    "safety_changed": False,
-}
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("build-bank", "evaluate"), required=True)
@@ -161,7 +150,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
             salt = read_seed_salt(salt_path)
             require_seed_reveal(SALT_COMMITMENT, salt)
             bank, seed_audit = build_bank(root, salt, source_commit)
-            report = _bank_report(bank, seed_audit)
+            report = _bank_report(bank, seed_audit, identities)
             artifacts = {
                 "seed-audit.json": _json_bytes(seed_audit),
                 "bank.json": _json_bytes(bank),
@@ -175,7 +164,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
             _require_bank_provenance(root, bank, identities)
             terminals = evaluate_bank(root, bank)
             analysis = analyze_terminals(terminals, bank)
-            report = _evaluation_report(bank, terminals, analysis)
+            report = _evaluation_report(bank, terminals, analysis, identities)
             identities["bank"] = bank_identity
             artifacts = {
                 "terminals.json": _json_bytes(terminals),
@@ -202,7 +191,7 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
             "error_type": type(error).__name__,
             "error": str(error),
             **CLAIM_FLAGS,
-            **UNCHANGED_FLAGS,
+            **unchanged_flags(identities),
         }
         artifacts = {"failure.json": _json_bytes(failure)}
         manifest = _manifest(
@@ -361,7 +350,7 @@ def evaluate_bank(
     }
 
 
-def _bank_report(bank, seed_audit) -> dict[str, object]:
+def _bank_report(bank, seed_audit, identities) -> dict[str, object]:
     feasible = not bank["infeasible_cells"]
     return {
         "schema_version": REPORT_SCHEMA,
@@ -380,11 +369,11 @@ def _bank_report(bank, seed_audit) -> dict[str, object]:
         ),
         "infeasible_cells": bank["infeasible_cells"],
         **CLAIM_FLAGS,
-        **UNCHANGED_FLAGS,
+        **unchanged_flags(identities),
     }
 
 
-def _evaluation_report(bank, terminals, analysis) -> dict[str, object]:
+def _evaluation_report(bank, terminals, analysis, identities) -> dict[str, object]:
     return {
         "schema_version": REPORT_SCHEMA,
         "proposal_id": PROPOSAL_ID,
@@ -400,7 +389,7 @@ def _evaluation_report(bank, terminals, analysis) -> dict[str, object]:
             "within the frozen eligible natural-latency cohort"
         ),
         **CLAIM_FLAGS,
-        **UNCHANGED_FLAGS,
+        **unchanged_flags(identities),
     }
 
 
@@ -477,7 +466,7 @@ def _manifest(
         "source_identities": identities,
         "historical_round_trees": dict(HISTORICAL_TREES),
         **CLAIM_FLAGS,
-        **UNCHANGED_FLAGS,
+        **unchanged_flags(identities),
         "artifacts": {
             name: _bytes_identity(content)
             for name, content in artifacts.items()
@@ -503,6 +492,9 @@ def _source_identities(root: Path) -> dict[str, object]:
     robot = root / "assets/mujoco/common/robot_body.xml"
     values["robot_model"] = _file_identity(root, robot)
     values["frozen_document"] = _frozen_document_status(root)
+    values["protected_frozen_source"] = protected_source_status(
+        root, FROZEN_DOCUMENT_COMMIT
+    )
     values["git_trees"] = {
         path.as_posix(): _git_output(root, ("rev-parse", f"HEAD:{path}"))
         for path in SOURCE_TREES
@@ -523,6 +515,7 @@ def _require_clean_source(
     if status.stdout.strip():
         raise RuntimeError("P51-E1 runner requires clean committed source")
     _require_frozen_document(root, identities["frozen_document"])
+    require_protected_source(identities["protected_frozen_source"])
     for path, expected in HISTORICAL_TREES.items():
         actual = _git_output(root, ("rev-parse", f"HEAD:{path}"))
         if actual != expected:

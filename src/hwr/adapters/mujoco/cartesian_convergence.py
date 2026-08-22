@@ -31,6 +31,7 @@ from hwr.core.embodied import DualArmObservation
 from hwr.eval import target_selection
 from hwr.eval.cartesian_convergence import (
     B2_STEPS,
+    ORDINARY_TERMINAL_REASONS,
     ROLES,
     CartesianConvergenceContractError,
     action_summary,
@@ -433,6 +434,7 @@ class CartesianConvergenceMujoco:
                     step + 1,
                     row,
                     run.backend,
+                    run.graph,
                     distances[-1],
                     hard_failure,
                 )
@@ -484,7 +486,12 @@ class CartesianConvergenceMujoco:
             "executed_b2_steps": len(proposed),
             "ordinary_runtime_terminal": (
                 None
-                if not runtime_trace or runtime_trace[-1]["episode_result"] is None
+                if (
+                    not runtime_trace
+                    or runtime_trace[-1]["episode_result"] is None
+                    or runtime_trace[-1]["episode_result"]["reason"]
+                    not in ORDINARY_TERMINAL_REASONS
+                )
                 else runtime_trace[-1]["episode_result"]["reason"]
             ),
             "raw_runtime_step_trace": runtime_trace,
@@ -515,12 +522,15 @@ class CartesianConvergenceMujoco:
                 signed_derivatives(carried, applied)
             ),
             "action_bounds_valid": all(
-                row["action_bounds_valid"] for row in run.trace
+                row["action_bounds_valid"] for row in runtime_trace
+            ),
+            "safety_intervention_count": sum(
+                bool(row["safety_intervened"]) for row in runtime_trace
             ),
             "stale_action_applied_count": sum(
                 bool(row["outside_validity_window"])
                 and row["applied_action"] != row["hold_action"]
-                for row in run.trace
+                for row in runtime_trace
             ),
             "severe_collision_count": int(
                 audit["severe_collision_count"]
@@ -530,6 +540,9 @@ class CartesianConvergenceMujoco:
             ),
             "p40_conservation_maximum_absolute_difference": float(
                 conservation["maximum_absolute_difference"]
+            ),
+            "nonfinite_runtime_value_count": sum(
+                int(row["nonfinite_value_count"]) for row in runtime_trace
             ),
             "hard_failure_reason": hard_failure,
             "hard_guard_passed": hard_failure is None,
@@ -781,8 +794,5 @@ def _distance_record(
         raise CartesianConvergenceContractError(
             "nonfinite evaluator-private distance"
         )
-    return {
-        "left_m": values["left"],
-        "right_m": values["right"],
-        "mean_m": float(np.mean(list(values.values()))),
-    }
+    return {"left_m": values["left"], "right_m": values["right"],
+            "mean_m": float(np.mean(list(values.values())))}
