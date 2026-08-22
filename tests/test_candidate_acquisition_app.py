@@ -51,6 +51,11 @@ def _identities() -> dict[str, object]:
         "recursive_xml": {},
         "sources": {},
         "historical_research_loop_trees": dict(app.HISTORICAL_TREES),
+        "frozen_document": {
+            "path": app.FROZEN_DOCUMENT_PATH.as_posix(),
+            "sha256": "c" * 64,
+            "bytes": 1,
+        },
     }
 
 
@@ -195,14 +200,112 @@ def test_terminal_ledger_rejects_missing_duplicate_unplanned_and_replacement() -
         {"planned_episode_id": "b" * 64, "replacement": False},
     ]
 
-    assert app.validate_terminal_ledger(plan, valid)["passed"] is True
+    assert app.validate_candidate_terminal_ledger(plan, valid)["passed"] is True
     for terminals in (
         valid[:1],
         [valid[0], valid[0]],
         [*valid, {"planned_episode_id": "c" * 64, "replacement": False}],
         [valid[0], {**valid[1], "replacement": True}],
     ):
-        assert app.validate_terminal_ledger(plan, terminals)["passed"] is False
+        assert app.validate_candidate_terminal_ledger(plan, terminals)["passed"] is False
+
+
+def _acceptance_fixture() -> tuple[dict[str, object], dict[str, object]]:
+    episodes = [
+        {
+            "planned_episode_id": f"{index:064x}",
+            "cell_id": f"cell-{index // 2:02d}",
+        }
+        for index in range(24)
+    ]
+    plan = {
+        "planned_episode_count": 24,
+        "cells": [
+            {"cell_id": f"cell-{index:02d}"} for index in range(12)
+        ],
+        "episodes": episodes,
+    }
+    validation = {
+        "trace_step_count": app.ACQUISITION_STEPS,
+        "runtime_terminal": False,
+        "action_bounds_valid": True,
+        "safety_intervention_count": 0,
+        "stale_action_applied_count": 0,
+        "severe_collision_count": 0,
+        "invalid_force_count": 0,
+        "p40_conservation_maximum_difference": 0.0,
+    }
+    terminals = [
+        {
+            **episode,
+            "replacement": False,
+            "resolved": True,
+            "trace_step_count": app.ACQUISITION_STEPS,
+            "runtime_terminal": False,
+            "planned_latency": {"observation_steps": 1, "action_steps": 1},
+            "runtime_latency": {
+                "observation_steps": 1,
+                "action_steps": 1,
+                "override_inactive": True,
+            },
+            "action_bounds_valid": True,
+            "safety_intervention_count": 0,
+            "stale_action_applied_count": 0,
+            "severe_collision_count": 0,
+            "invalid_force_count": 0,
+            "p40_conservation_maximum_difference": 0.0,
+            "validation_replay": dict(validation),
+            "acquisition_failure": None,
+            "candidate_count": 1,
+        }
+        for episode in episodes
+    ]
+    capsules = [
+        {
+            **episode,
+            "offline_candidate_replay_bit_identical": True,
+            "same_seed_validation_replay": True,
+            "capture_enabled_disabled_identity": True,
+            "anchor_blobs_complete": True,
+        }
+        for episode in episodes
+    ]
+    return plan, {
+        "terminals": terminals,
+        "capsules": {"episodes": capsules},
+    }
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "check"),
+    (
+        (("terminals", 0, "safety_intervention_count"), 1, "safety_intervention_zero"),
+        (
+            ("terminals", 0, "validation_replay", "safety_intervention_count"),
+            1,
+            "safety_intervention_zero",
+        ),
+        (("terminals", 0, "trace_step_count"), 994, "planned_step_terminal_semantics"),
+        (
+            ("terminals", 0, "runtime_latency", "observation_steps"),
+            2,
+            "runtime_latency_matches_plan",
+        ),
+    ),
+)
+def test_acceptance_rejects_safety_terminal_and_runtime_latency_drift(
+    path: tuple[object, ...], value: object, check: str
+) -> None:
+    plan, execution = _acceptance_fixture()
+    target = execution
+    for key in path[:-1]:
+        target = target[key]  # type: ignore[index]
+    target[path[-1]] = value  # type: ignore[index]
+
+    report = app.analyze_acquisition(plan, execution)
+
+    assert report["decision"] == "invalid"
+    assert report["checks"][check] is False
 
 
 def test_clean_gate_uses_all_untracked_files(
@@ -255,6 +358,26 @@ def test_clean_gate_rejects_source_and_history_drift(
     identities["historical_research_loop_trees"] = {}
     with pytest.raises(RuntimeError, match="historical research-loop"):
         app._require_clean_source(tmp_path, identities)
+
+
+def test_runner_binds_clarified_frozen_document_commit() -> None:
+    root = Path(app.__file__).resolve().parents[3]
+    content = (root / app.FROZEN_DOCUMENT_PATH).read_bytes()
+    committed = app.subprocess.run(
+        (
+            "git",
+            "show",
+            f"{app.FROZEN_DOCUMENT_COMMIT}:{app.FROZEN_DOCUMENT_PATH}",
+        ),
+        cwd=root,
+        check=True,
+        capture_output=True,
+    ).stdout
+
+    assert app.FROZEN_DOCUMENT_COMMIT == (
+        "2d1752f2c0c8b9e39d7f3ebaa8e9ff0ec1d13f38"
+    )
+    assert content == committed
 
 
 def test_plan_requires_committed_salt_before_catalog_access(

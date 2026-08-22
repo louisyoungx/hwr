@@ -11,10 +11,7 @@ from hwr.eval.candidate_funnel import (
     CandidateFunnelContractError,
     analyze_candidate_funnel,
     analyze_components,
-    analyze_frame_funnel,
     candidate_gate_source_identity,
-    classify_frame_anchor,
-    classify_candidate_points,
     ranking_ledger,
 )
 from hwr.eval.target_selection import (
@@ -81,109 +78,6 @@ def test_gate_source_contract_is_derived_from_formal_functions() -> None:
     )
     assert identity["anchor_rejection_stage_count"] == 8
     assert identity["component_terminal_stage_count"] == 3
-
-
-def test_frame_ledger_uses_first_rejection_and_conserves_all_anchors() -> None:
-    invalid = np.zeros((192, 256), dtype=np.bool_)
-    payload = serialize_policy_input(_input(valid=invalid))
-
-    _, report = analyze_frame_funnel(payload, (0.0, 0.0, 0.0), 0)
-
-    assert report["enumerated_anchor_count"] == 42 * 58
-    assert report["first_rejection_counts"]["center_ring_validity"] == 42 * 58
-    assert report["raw_candidate_count"] == 0
-    assert report["conservation"]["passed"] is True
-    assert sum(report["first_rejection_counts"].values()) == 42 * 58
-    assert report["stages"][0] == {
-        "stage": "center_ring_validity",
-        "input_count": 42 * 58,
-        "rejection_count": 42 * 58,
-        "survival_count": 0,
-    }
-
-
-def test_prominence_is_the_first_rejection_for_flat_valid_depth() -> None:
-    payload = serialize_policy_input(_input())
-
-    _, report = analyze_frame_funnel(payload, (0.0, 0.0, 0.0), 0)
-
-    assert report["first_rejection_counts"]["prominence"] == 42 * 58
-    assert report["first_rejection_counts"]["center_depth_spread"] == 0
-    assert report["raw_candidate_count"] == 0
-
-
-def test_remaining_pixel_gates_are_exact_first_rejections() -> None:
-    row, column = 96, 128
-    spread = np.full((192, 256), 1.2, dtype="<f4")
-    spread[row - 2 : row + 3, column - 2 : column + 3] = np.linspace(
-        0.96, 1.04, 25, dtype=np.float32
-    ).reshape(5, 5)
-    assert classify_frame_anchor(
-        serialize_policy_input(_input(depth=spread)),
-        (0.0, 0.0, 0.0),
-        frame_ordinal=0,
-        row=row,
-        column=column,
-    ) == "center_depth_spread"
-
-    support = np.full((192, 256), 1.2, dtype="<f4")
-    valid = np.ones((192, 256), dtype=np.bool_)
-    support[row - 2 : row + 3, column - 2 : column + 3] = 1.0
-    valid[row - 2, column - 2 : column + 3] = False
-    assert classify_frame_anchor(
-        serialize_policy_input(_input(depth=support, valid=valid)),
-        (0.0, 0.0, 0.0),
-        frame_ordinal=0,
-        row=row,
-        column=column,
-    ) == "patch_support_before_self_mask"
-
-    self_masked = np.full((192, 256), 0.30, dtype="<f4")
-    self_masked[row - 2 : row + 3, column - 2 : column + 3] = 0.20
-    assert classify_frame_anchor(
-        serialize_policy_input(_input(depth=self_masked)),
-        (0.0, 0.0, 0.0),
-        frame_ordinal=0,
-        row=row,
-        column=column,
-    ) == "support_after_self_mask"
-
-
-def test_candidate_point_gates_hit_height_planarity_width_and_acceptance() -> None:
-    rows, columns = np.indices((6, 6), dtype=np.float64)
-    accepted = np.column_stack(
-        (
-            np.full(rows.size, 0.50),
-            (columns.ravel() - 2.5) * 0.01,
-            0.70 + (rows.ravel() - 2.5) * 0.01,
-        )
-    )
-    too_near = accepted.copy()
-    too_near[:, 0] = 0.10
-    cube = np.asarray(
-        [
-            (0.45 + x, y, 0.65 + z)
-            for x in (-0.05, 0.05)
-            for y in (-0.05, 0.05)
-            for z in (-0.05, 0.05)
-        ],
-        dtype=np.float64,
-    )
-    narrow = accepted.copy()
-    narrow[:, 1:] *= 0.1
-
-    assert classify_candidate_points(
-        too_near, np.asarray((0.0, 0.0, 0.7)), np.zeros(3)
-    ) == "height_range"
-    assert classify_candidate_points(
-        cube, np.asarray((0.0, 0.0, 0.7)), np.zeros(3)
-    ) == "planarity"
-    assert classify_candidate_points(
-        narrow, np.asarray((0.0, 0.0, 0.7)), np.zeros(3)
-    ) == "width"
-    assert classify_candidate_points(
-        accepted, np.asarray((0.0, 0.0, 0.7)), np.zeros(3)
-    ) == "raw_candidate_accepted"
 
 
 def test_component_ledger_tracks_first_terminal_stage_and_conserves() -> None:
@@ -268,7 +162,7 @@ def test_ranking_ledger_enforces_top64_conservation() -> None:
         ranking_ledger(65, 65)
 
 
-def test_full_funnel_is_deterministic_and_preserves_formal_candidate_bytes() -> None:
+def test_full_funnel_is_deterministic_and_traces_one_formal_call() -> None:
     first = serialize_policy_input(_input(timestamp=1, sequence=1, phase=1))
     duplicate = serialize_policy_input(_input(timestamp=1, sequence=1, phase=3))
     final = serialize_policy_input(_input(timestamp=2, sequence=2, phase=4))
@@ -277,7 +171,6 @@ def test_full_funnel_is_deterministic_and_preserves_formal_candidate_bytes() -> 
         acquisition_base_pose=(0.0, 0.0, 0.0),
         final_input=final,
     )
-
     report = analyze_candidate_funnel(
         (first, duplicate),
         acquisition_base_pose=(0.0, 0.0, 0.0),
@@ -296,11 +189,43 @@ def test_full_funnel_is_deterministic_and_preserves_formal_candidate_bytes() -> 
     assert report == replay
     assert report["checks"]["passed"] is True
     assert report["formal_candidate"]["canonical_bytes_bit_identical"] is True
+    assert report["ranking_ledger"]["formal_generator_call_count"] == 1
+    assert report["ranking_ledger"]["formal_merge_call_count"] == 1
+    assert report["all_capsule_input_count"] == 3
+    assert report["candidate_keyframe_count"] == 2
+    assert report["all_capsule_inputs"]["includes_a4_final"] is True
+    assert report["all_capsule_inputs"]["unique_observation_count"] == 2
+    assert report["all_capsule_inputs"]["inputs"][-1]["a4_final_input"] is True
+    assert sum(
+        value["candidate_keyframe"]
+        for value in report["all_capsule_inputs"]["inputs"]
+    ) == 2
     assert report["unique_observation_shadow"]["unique_observation_count"] == 1
     assert report["unique_observation_shadow"]["unique_payload_count"] == 1
     assert report["anchor_ledger"]["conservation"]["passed"] is True
     assert report["component_ledger"]["ordinal"]["conservation"]["passed"] is True
     assert report["ranking_ledger"]["conservation"]["passed"] is True
+
+
+def test_failed_online_candidate_is_only_labeled_counterfactual() -> None:
+    keyframe = serialize_policy_input(_input(timestamp=1, sequence=1))
+    final = serialize_policy_input(_input(timestamp=2, sequence=2, phase=4))
+
+    report = analyze_candidate_funnel(
+        (keyframe,),
+        acquisition_base_pose=(0.0, 0.0, 0.0),
+        final_input=final,
+        expected_candidate_bytes=b"",
+        expected_selected_index=-1,
+        expected_score_sha256="e3b0c44298fc1c149afbf4c8996fb924"
+        "27ae41e4649b934ca495991b7852b855",
+        selection_permitted=False,
+    )
+
+    assert report["formal_candidate"]["generated_online"] is False
+    assert report["formal_candidate"]["candidate_count"] == 0
+    assert report["offline_counterfactual_candidate"]["selected_index_not_used"] is True
+    assert report["checks"]["passed"] is True
 
 
 def test_same_observation_identity_with_different_visible_payload_fails_closed() -> None:

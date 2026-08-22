@@ -99,152 +99,7 @@ def candidate_gate_source_identity() -> dict[str, object]:
         "component_terminal_stage_count": len(COMPONENT_TERMINAL_STAGES),
         "ranking_assignment_count": len(_ranking_line_contract()),
         "instrumentation": "python-line-trace-over-formal-generator-functions",
-        "thresholds_or_gate_math_duplicated": False,
     }
-
-
-def analyze_frame_funnel(
-    payload: bytes,
-    acquisition_base_pose: tuple[float, float, float],
-    frame_ordinal: int,
-) -> tuple[tuple[RawCandidate, ...], dict[str, object]]:
-    frame = deserialize_policy_input(payload)
-    raw, terminal_by_anchor = _trace_frame_candidates(
-        frame, acquisition_base_pose, frame_ordinal
-    )
-    expected = len(range(12, 180, 4)) * len(range(12, 244, 4))
-    counts = Counter(terminal_by_anchor.values())
-    if len(terminal_by_anchor) != expected or set(counts) - set(
-        ANCHOR_TERMINAL_STAGES
-    ):
-        raise CandidateFunnelContractError(
-            "formal frame trace did not classify every enumerated anchor"
-        )
-    rejections = {
-        stage: int(counts.get(stage, 0)) for stage in ANCHOR_REJECTION_STAGES
-    }
-    report = {
-        "frame_ordinal": frame_ordinal,
-        "observation_identity": [
-            frame.observation_timestamp_ns,
-            frame.sequence_id,
-        ],
-        "candidate_visible_sha256": _sha256(candidate_visible_bytes(frame)),
-        "enumerated_anchor_count": expected,
-        "first_rejection_counts": rejections,
-        "stages": _ordered_stage_rows(expected, rejections),
-        "raw_candidate_count": len(raw),
-        "conservation": {
-            "left": expected,
-            "right": sum(rejections.values()) + len(raw),
-            "passed": expected == sum(rejections.values()) + len(raw),
-        },
-    }
-    return raw, report
-
-
-def classify_frame_anchor(
-    payload: bytes,
-    acquisition_base_pose: tuple[float, float, float],
-    *,
-    frame_ordinal: int,
-    row: int,
-    column: int,
-) -> str:
-    frame = deserialize_policy_input(payload)
-    _, terminal_by_anchor = _trace_frame_candidates(
-        frame, acquisition_base_pose, frame_ordinal
-    )
-    try:
-        return terminal_by_anchor[(frame_ordinal, row, column)]
-    except KeyError as error:
-        raise CandidateFunnelContractError("requested anchor was not enumerated") from error
-
-
-def _trace_frame_candidates(
-    frame: PolicyVisibleInput,
-    acquisition_base_pose: tuple[float, float, float],
-    frame_ordinal: int,
-) -> tuple[tuple[RawCandidate, ...], dict[tuple[int, int, int], str]]:
-    line_stages = _anchor_line_contract()
-    terminal_by_anchor: dict[tuple[int, int, int], str] = {}
-
-    def trace(current: FrameType, event: str, argument: object):
-        del argument
-        if event != "line":
-            return trace
-        if current.f_code not in (
-            target_selection._frame_candidates.__code__,
-            target_selection._candidate_from_points.__code__,
-        ):
-            return trace
-        stage = line_stages.get((current.f_code.co_name, current.f_lineno))
-        if stage is not None:
-            key = (
-                int(current.f_locals["ordinal"]),
-                int(current.f_locals["row"]),
-                int(current.f_locals["column"]),
-            )
-            if key in terminal_by_anchor:
-                raise CandidateFunnelContractError(
-                    "anchor entered more than one terminal stage"
-                )
-            terminal_by_anchor[key] = stage
-        return trace
-
-    raw = tuple(_traced_call(trace, target_selection._frame_candidates,
-                             frame, acquisition_base_pose, frame_ordinal))
-    for candidate in raw:
-        key = (candidate.frame_ordinal, candidate.row, candidate.column)
-        if key in terminal_by_anchor:
-            raise CandidateFunnelContractError(
-                "accepted anchor already entered a rejection stage"
-            )
-        terminal_by_anchor[key] = "raw_candidate_accepted"
-    return raw, terminal_by_anchor
-
-
-def classify_candidate_points(
-    points: np.ndarray,
-    camera: np.ndarray,
-    base: np.ndarray,
-) -> str:
-    line_stages = _anchor_line_contract()
-    observed: list[str] = []
-
-    def trace(current: FrameType, event: str, argument: object):
-        del argument
-        if (
-            event == "line"
-            and current.f_code is target_selection._candidate_from_points.__code__
-        ):
-            stage = line_stages.get((current.f_code.co_name, current.f_lineno))
-            if stage is not None:
-                observed.append(stage)
-        return trace
-
-    candidate = _traced_call(
-        trace,
-        target_selection._candidate_from_points,
-        np.asarray(points, np.float64),
-        np.asarray(camera, np.float64),
-        np.asarray(base, np.float64),
-        0.1,
-        0,
-        20,
-        20,
-    )
-    if candidate is not None:
-        if observed:
-            raise CandidateFunnelContractError(
-                "accepted point fixture entered a rejection stage"
-            )
-        return "raw_candidate_accepted"
-    if len(observed) != 1:
-        raise CandidateFunnelContractError(
-            "formal point fixture did not enter exactly one rejection stage"
-        )
-    return observed[0]
 
 
 def analyze_components(
@@ -303,37 +158,39 @@ def analyze_candidate_funnel(
 ) -> dict[str, object]:
     if len(tuple(acquisition_base_pose)) != 3:
         raise CandidateFunnelContractError("acquisition pose must have three values")
+    pose = tuple(float(value) for value in acquisition_base_pose)
     frames = [deserialize_policy_input(payload) for payload in keyframes]
-    identities: dict[tuple[int, int], tuple[str, int]] = {}
-    frame_to_unique: dict[int, int] = {}
-    for ordinal, frame in enumerate(frames):
-        identity = (frame.observation_timestamp_ns, frame.sequence_id)
-        visible_sha256 = _sha256(candidate_visible_bytes(frame))
-        if identity in identities and identities[identity][0] != visible_sha256:
-            raise CandidateFunnelContractError(
-                "observation identity changed candidate-visible payload"
-            )
-        identities.setdefault(identity, (visible_sha256, len(identities)))
-        frame_to_unique[ordinal] = identities[identity][1]
-    raw: list[RawCandidate] = []
-    frame_reports = []
-    for ordinal, payload in enumerate(keyframes):
-        candidates, report = analyze_frame_funnel(
-            payload, tuple(float(value) for value in acquisition_base_pose), ordinal
+    final_value = deserialize_policy_input(final_input)
+    all_identity = _identity_audit((*frames, final_value), len(frames))
+    frame_to_unique = {
+        ordinal: all_identity["ordinal_to_unique"][ordinal]
+        for ordinal in range(len(frames))
+    }
+    formal, raw, frame_reports, ordinal_component, ranking = (
+        _trace_formal_generator(
+            keyframes,
+            pose,
+            final_input,
         )
-        raw.extend(candidates)
-        frame_reports.append(report)
-    component = analyze_components(raw, frame_to_unique)
-    formal, ranking = _trace_ranking(
-        keyframes,
-        tuple(float(value) for value in acquisition_base_pose),
-        final_input,
+    )
+    shadow_raw = tuple(
+        replace(
+            item,
+            frame_ordinal=int(frame_to_unique[item.frame_ordinal]),
+        )
+        for item in raw
+    )
+    shadow = _trace_components(shadow_raw)
+    shadow_views = shadow.pop("_component_view_counts")
+    ordinal_views = ordinal_component.pop("_component_view_counts")
+    component = _component_comparison(
+        ordinal_component, shadow, ordinal_views, shadow_views
     )
     formal_bytes_equal = (
-        expected_candidate_bytes is not None
-        and formal.canonical_bytes == expected_candidate_bytes
+        formal.canonical_bytes == expected_candidate_bytes
+        if selection_permitted
+        else expected_candidate_bytes == b""
     )
-    final_value = deserialize_policy_input(final_input)
     selected = (
         select_candidate_index(
             formal,
@@ -349,6 +206,12 @@ def analyze_candidate_funnel(
         acquisition_base_pose=acquisition_base_pose,
     )
     score_sha256 = _score_sha256(scores)
+    score_equal = (
+        expected_score_sha256 is None
+        or score_sha256 == expected_score_sha256
+        if selection_permitted
+        else expected_score_sha256 == _score_sha256(())
+    )
     anchor = _aggregate_anchor_reports(frame_reports)
     checks = {
         "anchor_conservation": bool(anchor["conservation"]["passed"]),
@@ -359,25 +222,38 @@ def analyze_candidate_funnel(
         "ranking_conservation": bool(ranking["conservation"]["passed"]),
         "formal_candidate_bytes": formal_bytes_equal,
         "selected_index": selected == expected_selected_index,
-        "candidate_scores": (
-            expected_score_sha256 is None
-            or score_sha256 == expected_score_sha256
-        ),
+        "candidate_scores": score_equal,
         "identity_consistency": True,
         "view_count_monotonic": bool(component["view_count_monotonic"]),
         "shadow_candidate_monotonic": bool(
             component["shadow_candidate_monotonic"]
         ),
+        "single_formal_generator_call": (
+            ranking["formal_generator_call_count"] == 1
+            and ranking["formal_merge_call_count"] == 1
+        ),
     }
     return {
         "schema_version": FUNNEL_SCHEMA,
+        "all_capsule_input_count": len(keyframes) + 1,
+        "candidate_keyframe_count": len(keyframes),
         "capture_count": len(keyframes),
+        "all_capsule_inputs": {
+            "input_count": len(keyframes) + 1,
+            "unique_observation_count": all_identity["unique_observation_count"],
+            "unique_payload_count": all_identity["unique_payload_count"],
+            "includes_a4_final": True,
+            "inputs": all_identity["inputs"],
+        },
         "unique_observation_shadow": {
-            "unique_observation_count": len(identities),
-            "unique_payload_count": len(
-                {visible for visible, _ in identities.values()}
+            "candidate_keyframe_count": len(keyframes),
+            "unique_observation_count": len(set(frame_to_unique.values())),
+            "unique_payload_count": all_identity[
+                "candidate_unique_payload_count"
+            ],
+            "duplicate_observation_count": (
+                len(keyframes) - len(set(frame_to_unique.values()))
             ),
-            "duplicate_observation_count": len(keyframes) - len(identities),
             "view_count_monotonic": component["view_count_monotonic"],
             "shadow_candidate_monotonic": component[
                 "shadow_candidate_monotonic"
@@ -388,13 +264,27 @@ def analyze_candidate_funnel(
         "component_ledger": component,
         "ranking_ledger": ranking,
         "formal_candidate": {
-            "candidate_count": len(formal.candidates),
-            "canonical_sha256": formal.candidate_set_sha256,
-            "canonical_byte_count": len(formal.canonical_bytes),
+            "generated_online": selection_permitted,
+            "candidate_count": len(formal.candidates) if selection_permitted else 0,
+            "canonical_sha256": (
+                formal.candidate_set_sha256 if selection_permitted else _sha256(b"")
+            ),
+            "canonical_byte_count": (
+                len(formal.canonical_bytes) if selection_permitted else 0
+            ),
             "canonical_bytes_bit_identical": formal_bytes_equal,
             "selected_index": selected,
             "selected_index_bit_identical": selected == expected_selected_index,
-            "score_bytes_sha256": score_sha256,
+            "score_bytes_sha256": (
+                score_sha256 if selection_permitted else _score_sha256(())
+            ),
+        },
+        "offline_counterfactual_candidate": None
+        if selection_permitted
+        else {
+            "candidate_count": len(formal.candidates),
+            "canonical_sha256": formal.candidate_set_sha256,
+            "selected_index_not_used": True,
         },
         "last_nonempty_stage": _last_nonempty_stage(
             len(raw),
@@ -403,6 +293,255 @@ def analyze_candidate_funnel(
             ranking["retained_candidate_count"],
         ),
         "checks": {**checks, "passed": all(checks.values())},
+    }
+
+
+def _trace_formal_generator(
+    keyframes: Sequence[bytes],
+    acquisition_base_pose: tuple[float, float, float],
+    final_input: bytes,
+) -> tuple[
+    CandidateSet,
+    tuple[RawCandidate, ...],
+    list[dict[str, object]],
+    dict[str, object],
+    dict[str, object],
+]:
+    anchor_lines = _anchor_line_contract()
+    component_contract = _component_line_contract()
+    ranking_lines = _ranking_line_contract()
+    terminals: dict[tuple[int, int, int], str] = {}
+    raw_by_frame: dict[int, tuple[RawCandidate, ...]] = {}
+    component_views, component_rejections = [], Counter()
+    merged_candidates: tuple[Candidate, ...] | None = None
+    ranked_records: tuple[tuple[int, ...], ...] | None = None
+    generate_calls = merge_calls = 0
+
+    def trace(current: FrameType, event: str, argument: object):
+        nonlocal generate_calls, merge_calls, merged_candidates, ranked_records
+        if event == "call":
+            generate_calls += int(current.f_code is generate_candidate_set.__code__)
+            merge_calls += int(current.f_code is target_selection._merge_candidates.__code__)
+        if event == "line":
+            _trace_anchor_terminal(current, anchor_lines, terminals)
+            if current.f_code is target_selection._merge_candidates.__code__:
+                if current.f_lineno == component_contract["component_built"]:
+                    component_views.append(len({
+                        item.frame_ordinal for item in current.f_locals["component"]
+                    }))
+                stage = component_contract["rejections"].get(current.f_lineno)
+                if stage is not None:
+                    component_rejections[stage] += 1
+            if (
+                current.f_code is generate_candidate_set.__code__
+                and current.f_lineno == ranking_lines[1]
+                and "ordered" in current.f_locals
+            ):
+                ranked_records = tuple(
+                    item.canonical_record() for item in current.f_locals["ordered"]
+                )
+        if event == "return":
+            if current.f_code is target_selection._frame_candidates.__code__:
+                ordinal = int(current.f_locals["ordinal"])
+                raw_by_frame[ordinal] = tuple(argument)
+                for candidate in argument:
+                    terminals[(
+                        candidate.frame_ordinal, candidate.row, candidate.column
+                    )] = "raw_candidate_accepted"
+            elif current.f_code is target_selection._merge_candidates.__code__:
+                merged_candidates = tuple(argument)
+        return trace
+
+    formal = _traced_call(
+        trace,
+        generate_candidate_set,
+        keyframes,
+        acquisition_base_pose=acquisition_base_pose,
+        final_input=final_input,
+    )
+    if merged_candidates is None or ranked_records is None:
+        raise CandidateFunnelContractError("formal generator trace is incomplete")
+    raw = tuple(
+        candidate
+        for ordinal in range(len(keyframes))
+        for candidate in raw_by_frame.get(ordinal, ())
+    )
+    frames = [deserialize_policy_input(payload) for payload in keyframes]
+    frame_reports = [
+        _frame_report(
+            frame,
+            ordinal,
+            terminals,
+            len(raw_by_frame.get(ordinal, ())),
+        )
+        for ordinal, frame in enumerate(frames)
+    ]
+    ordinal = _component_report(
+        component_views, component_rejections, len(merged_candidates)
+    )
+    canonical = tuple(item.canonical_record() for item in formal.candidates)
+    if sorted(ranked_records) != sorted(canonical):
+        raise CandidateFunnelContractError(
+            "canonical reorder changed candidate membership"
+        )
+    ranking = {
+        "pre_top64_candidate_count": len(merged_candidates),
+        "retained_candidate_count": len(canonical),
+        "truncated_candidate_count": len(merged_candidates) - len(canonical),
+        "stages": [ranking_ledger(len(merged_candidates), len(canonical))],
+        "canonical_reorder_membership_unchanged": True,
+        "formal_assignment_lines": list(ranking_lines),
+        "formal_generator_call_count": generate_calls,
+        "formal_merge_call_count": merge_calls,
+        "conservation": {
+            "left": len(merged_candidates),
+            "right": len(canonical) + len(merged_candidates) - len(canonical),
+            "passed": len(merged_candidates) >= len(canonical),
+        },
+    }
+    return formal, raw, frame_reports, ordinal, ranking
+
+
+def _trace_anchor_terminal(current, line_stages, terminals) -> None:
+    if current.f_code not in (
+        target_selection._frame_candidates.__code__,
+        target_selection._candidate_from_points.__code__,
+    ):
+        return
+    stage = line_stages.get((current.f_code.co_name, current.f_lineno))
+    if stage is None:
+        return
+    key = (
+        int(current.f_locals["ordinal"]),
+        int(current.f_locals["row"]),
+        int(current.f_locals["column"]),
+    )
+    if key in terminals:
+        raise CandidateFunnelContractError(
+            "anchor entered more than one terminal stage"
+        )
+    terminals[key] = stage
+
+
+def _frame_report(frame, ordinal, terminals, raw_count) -> dict[str, object]:
+    expected = len(range(12, 180, 4)) * len(range(12, 244, 4))
+    counts = Counter(
+        stage for key, stage in terminals.items() if key[0] == ordinal
+    )
+    if sum(counts.values()) != expected:
+        raise CandidateFunnelContractError(
+            "formal frame trace did not classify every enumerated anchor"
+        )
+    rejections = {
+        stage: int(counts.get(stage, 0)) for stage in ANCHOR_REJECTION_STAGES
+    }
+    return {
+        "frame_ordinal": ordinal,
+        "observation_identity": [
+            frame.observation_timestamp_ns,
+            frame.sequence_id,
+        ],
+        "candidate_visible_sha256": _sha256(candidate_visible_bytes(frame)),
+        "enumerated_anchor_count": expected,
+        "first_rejection_counts": rejections,
+        "stages": _ordered_stage_rows(expected, rejections),
+        "raw_candidate_count": raw_count,
+        "conservation": {
+            "left": expected,
+            "right": sum(rejections.values()) + raw_count,
+            "passed": expected == sum(rejections.values()) + raw_count,
+        },
+    }
+
+
+def _component_report(views, rejections, accepted_count) -> dict[str, object]:
+    rejected = {
+        "view_count_lt_2_rejection": int(
+            rejections["view_count_lt_2_rejection"]
+        ),
+        "aggregate_normal_zero_rejection": int(
+            rejections["aggregate_normal_zero_rejection"]
+        ),
+    }
+    component_count = len(views)
+    return {
+        "component_count": component_count,
+        "view_count_lt_2_rejection_count": rejected[
+            "view_count_lt_2_rejection"
+        ],
+        "aggregate_normal_zero_rejection_count": rejected[
+            "aggregate_normal_zero_rejection"
+        ],
+        "pre_top64_candidate_count": accepted_count,
+        "stages": _ordered_stage_rows(component_count, rejected),
+        "conservation": {
+            "left": component_count,
+            "right": sum(rejected.values()) + accepted_count,
+            "passed": component_count == sum(rejected.values()) + accepted_count,
+        },
+        "_component_view_counts": list(views),
+    }
+
+
+def _component_comparison(ordinal, shadow, ordinal_views, shadow_views):
+    if len(ordinal_views) != len(shadow_views):
+        raise CandidateFunnelContractError("shadow component partition differs")
+    view_monotonic = all(
+        shadow_count <= ordinal_count
+        for ordinal_count, shadow_count in zip(
+            ordinal_views, shadow_views, strict=True
+        )
+    )
+    candidate_monotonic = (
+        shadow["pre_top64_candidate_count"]
+        <= ordinal["pre_top64_candidate_count"]
+    )
+    return {
+        "connected_component_built_count": ordinal["component_count"],
+        "ordinal": ordinal,
+        "shadow": shadow,
+        "ordinal_retained_candidate_count": min(
+            ordinal["pre_top64_candidate_count"], 64
+        ),
+        "shadow_retained_candidate_count": min(
+            shadow["pre_top64_candidate_count"], 64
+        ),
+        "view_count_monotonic": view_monotonic,
+        "shadow_candidate_monotonic": candidate_monotonic,
+    }
+
+
+def _identity_audit(
+    inputs: Sequence[PolicyVisibleInput], candidate_count: int
+) -> dict[str, object]:
+    identities: dict[tuple[int, int], tuple[str, int]] = {}
+    ordinal_to_unique = {}
+    candidate_hashes = set()
+    records = []
+    for ordinal, value in enumerate(inputs):
+        identity = (value.observation_timestamp_ns, value.sequence_id)
+        visible = _sha256(candidate_visible_bytes(value))
+        if identity in identities and identities[identity][0] != visible:
+            raise CandidateFunnelContractError(
+                "observation identity changed candidate-visible payload"
+            )
+        identities.setdefault(identity, (visible, len(identities)))
+        ordinal_to_unique[ordinal] = identities[identity][1]
+        if ordinal < candidate_count:
+            candidate_hashes.add(visible)
+        records.append({
+            "input_ordinal": ordinal,
+            "candidate_keyframe": ordinal < candidate_count,
+            "a4_final_input": ordinal == candidate_count,
+            "observation_identity": list(identity),
+            "candidate_visible_sha256": visible,
+        })
+    return {
+        "ordinal_to_unique": ordinal_to_unique,
+        "unique_observation_count": len(identities),
+        "unique_payload_count": len({value[0] for value in identities.values()}),
+        "candidate_unique_payload_count": len(candidate_hashes),
+        "inputs": records,
     }
 
 
@@ -428,97 +567,10 @@ def _trace_components(raw: tuple[RawCandidate, ...]) -> dict[str, object]:
             terminal_counts[stage] += 1
         return trace
 
-    candidates = tuple(
-        _traced_call(trace, target_selection._merge_candidates, raw)
+    candidates = tuple(_traced_call(trace, target_selection._merge_candidates, raw))
+    return _component_report(
+        component_views, terminal_counts, len(candidates)
     )
-    component_count = len(component_views)
-    accepted_count = len(candidates)
-    report = {
-        "component_count": component_count,
-        "view_count_lt_2_rejection_count": int(
-            terminal_counts["view_count_lt_2_rejection"]
-        ),
-        "aggregate_normal_zero_rejection_count": int(
-            terminal_counts["aggregate_normal_zero_rejection"]
-        ),
-        "pre_top64_candidate_count": len(candidates),
-        "stages": _ordered_stage_rows(
-            component_count,
-            {
-                "view_count_lt_2_rejection": int(
-                    terminal_counts["view_count_lt_2_rejection"]
-                ),
-                "aggregate_normal_zero_rejection": int(
-                    terminal_counts["aggregate_normal_zero_rejection"]
-                ),
-            },
-        ),
-        "conservation": {
-            "left": component_count,
-            "right": sum(terminal_counts.values()) + accepted_count,
-            "passed": component_count == sum(terminal_counts.values()) + accepted_count,
-        },
-        "_component_view_counts": component_views,
-    }
-    return report
-
-
-def _trace_ranking(
-    keyframes: Sequence[bytes],
-    acquisition_base_pose: tuple[float, float, float],
-    final_input: bytes,
-) -> tuple[CandidateSet, dict[str, object]]:
-    assignment_lines = _ranking_line_contract()
-    snapshots: dict[int, tuple[tuple[int, ...], ...]] = {}
-
-    def trace(current: FrameType, event: str, argument: object):
-        del argument
-        if (
-            event == "line"
-            and current.f_code is generate_candidate_set.__code__
-            and current.f_lineno in assignment_lines
-            and "ordered" in current.f_locals
-        ):
-            snapshots[current.f_lineno] = tuple(
-                item.canonical_record() for item in current.f_locals["ordered"]
-            )
-        return trace
-
-    formal = _traced_call(
-        trace,
-        generate_candidate_set,
-        keyframes,
-        acquisition_base_pose=acquisition_base_pose,
-        final_input=final_input,
-    )
-    first_line, second_line = assignment_lines
-    retained_ranked = snapshots.get(second_line)
-    if retained_ranked is None:
-        raise CandidateFunnelContractError(
-            "formal ranking trace did not capture retained candidates"
-        )
-    canonical = tuple(item.canonical_record() for item in formal.candidates)
-    if sorted(retained_ranked) != sorted(canonical):
-        raise CandidateFunnelContractError(
-            "canonical reorder changed candidate membership"
-        )
-    pre_count = _pre_top64_count_from_frame_trace(
-        keyframes, acquisition_base_pose
-    )
-    retained = len(canonical)
-    return formal, {
-        "pre_top64_candidate_count": pre_count,
-        "retained_candidate_count": retained,
-        "truncated_candidate_count": pre_count - retained,
-        "stages": [ranking_ledger(pre_count, retained)],
-        "canonical_reorder_membership_unchanged": True,
-        "formal_assignment_lines": [first_line, second_line],
-        "conservation": {
-            "left": pre_count,
-            "right": retained + (pre_count - retained),
-            "passed": pre_count == retained + (pre_count - retained),
-        },
-    }
 
 
 def ranking_ledger(
@@ -535,22 +587,6 @@ def ranking_ledger(
         "rejection_count": pre_top64_candidate_count - retained_candidate_count,
         "survival_count": retained_candidate_count,
     }
-
-
-def _pre_top64_count_from_frame_trace(
-    keyframes: Sequence[bytes],
-    acquisition_base_pose: tuple[float, float, float],
-) -> int:
-    raw = []
-    for ordinal, payload in enumerate(keyframes):
-        raw.extend(
-            target_selection._frame_candidates(
-                deserialize_policy_input(payload),
-                acquisition_base_pose,
-                ordinal,
-            )
-        )
-    return len(target_selection._merge_candidates(raw))
 
 
 def _aggregate_anchor_reports(

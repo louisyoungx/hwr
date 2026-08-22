@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
+import platform
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Mapping, Sequence
+
+import numpy as np
 
 from hwr.eval.candidate_funnel import (
     CandidateFunnelContractError,
@@ -56,6 +61,261 @@ def aggregate_candidate_funnels(
     }
 
 
+def persist_candidate_episode(result):
+    from hwr.adapters.mujoco.candidate_acquisition import (
+        CAPSULE_SCHEMA,
+        EPISODE_SCHEMA,
+        capture_record,
+        replay_candidate_set,
+    )
+    from hwr.eval.target_selection import ACQUISITION_STEPS, CANDIDATE_SCHEMA
+
+    capsule = result.capsule
+    prefix = f"blobs/{capsule.planned_episode_id}"
+    blobs: dict[str, bytes] = {}
+    captures = []
+    for capture in capsule.captures:
+        suffix = f"{capture.capture_ordinal:02d}"
+        policy_path = f"{prefix}/capture-{suffix}-policy.bin"
+        visible_path = f"{prefix}/capture-{suffix}-candidate-visible.bin"
+        blobs[policy_path] = capture.policy_input_bytes
+        blobs[visible_path] = capture.candidate_visible_bytes
+        captures.append(
+            capture_record(
+                capture,
+                policy_blob=policy_path,
+                candidate_visible_blob=visible_path,
+            )
+        )
+    replay = replay_candidate_set(capsule) if capsule.candidate_bytes else None
+    candidate = {
+        "candidate_count": capsule.candidate_count,
+        "selected_index": capsule.selected_index,
+        "score_bytes_sha256": capsule.candidate_score_sha256,
+        "schema_version": CANDIDATE_SCHEMA,
+        "generated_online": capsule.acquisition_failure is None,
+    }
+    if capsule.candidate_bytes:
+        candidate_path = f"{prefix}/candidate-set.json"
+        blobs[candidate_path] = capsule.candidate_bytes
+        candidate.update(
+            {
+                "path": candidate_path,
+                "sha256": capsule.candidate_sha256,
+                "bytes": len(capsule.candidate_bytes),
+            }
+        )
+    record = {
+        "schema_version": CAPSULE_SCHEMA,
+        "planned_episode_id": capsule.planned_episode_id,
+        "task_id": capsule.task_id,
+        "cell_id": capsule.cell_id,
+        "replicate_ordinal": capsule.replicate_ordinal,
+        "candidate_ordinal": capsule.candidate_ordinal,
+        "environment_seed": capsule.environment_seed,
+        "policy_rng_seed": capsule.policy_rng_seed,
+        "planned_latency": {
+            "observation_steps": capsule.sampled_observation_latency_steps,
+            "action_steps": capsule.sampled_action_latency_steps,
+        },
+        "runtime_latency": {
+            "observation_steps": capsule.runtime_observation_latency_steps,
+            "action_steps": capsule.runtime_action_latency_steps,
+            "override_inactive": capsule.latency_override_inactive,
+        },
+        "runtime_randomization_sha256": capsule.runtime_randomization_sha256,
+        "acquisition_base_pose": list(capsule.acquisition_base_pose),
+        "captures": captures,
+        "capture_count": len(captures),
+        "candidate_set": candidate,
+        "acquisition_failure": capsule.acquisition_failure,
+        "proposed_action_sha256": capsule.proposed_action_sha256,
+        "applied_action_sha256": capsule.applied_action_sha256,
+        "observation_identity_trace_sha256": (
+            capsule.observation_identity_trace_sha256
+        ),
+        "primary_run": result.primary_summary,
+        "validation_replay": result.validation_summary,
+        "replay_comparison": result.replay_comparison,
+        "same_seed_validation_replay": capsule.same_seed_validation_replay,
+        "capture_enabled_disabled_identity": (
+            capsule.capture_enabled_disabled_identity
+        ),
+        "offline_candidate_replay_bit_identical": (
+            None
+            if replay is None
+            else replay.canonical_bytes == capsule.candidate_bytes
+            and replay.candidate_set_sha256 == capsule.candidate_sha256
+        ),
+        "anchor_blobs_complete": all(
+            blobs[row[kind]["path"]]
+            and _sha256(blobs[row[kind]["path"]]) == row[kind]["sha256"]
+            for row in captures
+            for kind in ("policy_input", "candidate_visible_input")
+        ),
+    }
+    terminal = {
+        "schema_version": EPISODE_SCHEMA,
+        "planned_episode_id": capsule.planned_episode_id,
+        "task_id": capsule.task_id,
+        "cell_id": capsule.cell_id,
+        "replicate_ordinal": capsule.replicate_ordinal,
+        "candidate_ordinal": capsule.candidate_ordinal,
+        "replacement": False,
+        "resolved": True,
+        "trace_step_count": result.trace_step_count,
+        "planned_step_count": ACQUISITION_STEPS,
+        "unexecuted_step_count": ACQUISITION_STEPS - result.trace_step_count,
+        "runtime_terminal": result.runtime_terminal,
+        "acquisition_failure": capsule.acquisition_failure,
+        "candidate_count": capsule.candidate_count,
+        "selected_index": capsule.selected_index,
+        "action_bounds_valid": result.action_bounds_valid,
+        "stale_action_applied_count": result.stale_action_applied_count,
+        "severe_collision_count": result.severe_collision_count,
+        "invalid_force_count": result.invalid_force_count,
+        "p40_conservation_maximum_difference": (
+            result.p40_conservation_maximum_difference
+        ),
+        "safety_intervention_count": result.safety_intervention_count,
+        "planned_latency": record["planned_latency"],
+        "runtime_latency": record["runtime_latency"],
+        "runtime_randomization_sha256": capsule.runtime_randomization_sha256,
+        "validation_replay": result.validation_summary,
+        "replay_comparison": result.replay_comparison,
+    }
+    return terminal, record, blobs
+
+
+def validate_candidate_terminal_ledger(plan, terminals) -> dict[str, object]:
+    planned = [str(value["planned_episode_id"]) for value in plan["episodes"]]
+    published = [str(value.get("planned_episode_id")) for value in terminals]
+    missing = sorted(set(planned) - set(published))
+    unplanned = sorted(set(published) - set(planned))
+    duplicate_count = len(published) - len(set(published))
+    replacement_count = sum(
+        bool(value.get("replacement", True)) for value in terminals
+    )
+    passed = (
+        len(published) == len(planned)
+        and not missing
+        and not unplanned
+        and duplicate_count == 0
+        and replacement_count == 0
+    )
+    return {
+        "planned_count": len(planned),
+        "published_count": len(published),
+        "missing": missing,
+        "unplanned": unplanned,
+        "duplicate_count": duplicate_count,
+        "replacement_count": replacement_count,
+        "passed": passed,
+    }
+
+
+def candidate_artifact_manifest(
+    *,
+    schema: str,
+    proposal_id: str,
+    source_commit: str,
+    frozen_document_commit: str,
+    command: Sequence[str],
+    identities: Mapping[str, object],
+    artifacts: Mapping[str, bytes],
+    runtime_versions: Mapping[str, str],
+    status: str,
+    extra: Mapping[str, object],
+) -> dict[str, object]:
+    return {
+        "schema_version": schema,
+        "proposal_id": proposal_id,
+        "status": status,
+        "source_commit": source_commit,
+        "frozen_document_commit": frozen_document_commit,
+        "frozen_document_commit_is_ancestor": status == "complete",
+        "command": list(command),
+        "source_identities": identities,
+        "runtime": {
+            "python": platform.python_version(),
+            "numpy": np.__version__,
+            **runtime_versions,
+        },
+        **extra,
+        "artifacts": {
+            name: {"sha256": _sha256(content), "bytes": len(content)}
+            for name, content in sorted(artifacts.items())
+        },
+    }
+
+
+def candidate_source_commit(root: Path) -> str:
+    result = subprocess.run(
+        ("git", "rev-parse", "HEAD"),
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    commit = result.stdout.strip()
+    if len(commit) != 40 or any(value not in "0123456789abcdef" for value in commit):
+        raise RuntimeError("P50 runner requires a full Git source commit")
+    return commit
+
+
+def candidate_git_tree(root: Path, path: str) -> str:
+    return subprocess.run(
+        ("git", "rev-parse", f"HEAD:{path}"),
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def candidate_file_identity(root: Path, path: Path) -> dict[str, object]:
+    content = path.read_bytes()
+    return {
+        "path": path.relative_to(root).as_posix(),
+        "sha256": _sha256(content),
+        "bytes": len(content),
+    }
+
+
+def create_candidate_output(output: Path, artifacts: Mapping[str, bytes]) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    staging = output.with_name(output.name + ".tmp")
+    staging.mkdir()
+    try:
+        for name, content in sorted(artifacts.items()):
+            path = staging / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(path.suffix + ".tmp")
+            with temporary.open("xb") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        os.replace(staging, output)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
+
+def candidate_json_bytes(value: object) -> bytes:
+    return (
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode()
+
+
+def resolve_candidate_path(root: Path, path: Path) -> Path:
+    return path.resolve() if path.is_absolute() else (root / path).resolve()
+
+
+def candidate_sha256(payload: bytes) -> str:
+    return _sha256(payload)
+
+
 def analyze_candidate_capsule_directory(
     repository: Path,
     capsule_directory: Path,
@@ -94,7 +354,7 @@ def analyze_candidate_capsule_directory(
     }
     return {
         "episodes": episodes,
-        "aggregate": aggregate_funnel_reports(episodes),
+        "aggregate": aggregate_candidate_funnels(episodes),
     }, identity
 
 
@@ -122,7 +382,11 @@ def _analyze_capsule_record(root, record):
             raise CandidateFunnelContractError("observation identity changed payload")
         visible_by_identity.setdefault(identity, visible_hash)
         payloads.append(payload)
-    if not ordered or not bool(ordered[-1].get("final_input")):
+    if (
+        not ordered
+        or sum(bool(value.get("final_input")) for value in ordered) != 1
+        or not bool(ordered[-1].get("final_input"))
+    ):
         raise CandidateFunnelContractError("capsule final input is missing")
     funnel = analyze_candidate_funnel(
         tuple(
@@ -132,7 +396,11 @@ def _analyze_capsule_record(root, record):
         ),
         acquisition_base_pose=record["acquisition_base_pose"],
         final_input=payloads[-1],
-        expected_candidate_bytes=read_bound_blob(root, candidate),
+        expected_candidate_bytes=(
+            read_bound_blob(root, candidate)
+            if candidate.get("generated_online") is True
+            else b""
+        ),
         expected_selected_index=int(candidate["selected_index"]),
         expected_score_sha256=str(candidate["score_bytes_sha256"]),
         selection_permitted=record.get("acquisition_failure") is None,
@@ -171,7 +439,7 @@ def _require_e1_source_identity(manifest, current):
     source = manifest.get("source_identities")
     if not isinstance(source, Mapping):
         raise CandidateFunnelContractError("E1 source identities are missing")
-    for key in ("binding", "task_config", "recursive_xml"):
+    for key in ("binding", "task_config", "recursive_xml", "frozen_document"):
         if source.get(key) != current.get(key):
             raise CandidateFunnelContractError(f"E1 {key} identity drifted")
     for name in ("formal_generator", "p41_bridge", "formal_backend"):

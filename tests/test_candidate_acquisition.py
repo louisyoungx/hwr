@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import FrozenInstanceError, replace
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
+from hwr.adapters.mujoco import candidate_acquisition as acquisition
 from hwr.adapters.mujoco.candidate_acquisition import (
     AcquisitionCapsule,
     AcquisitionContractError,
@@ -92,6 +94,10 @@ def _capsule() -> AcquisitionCapsule:
         policy_rng_seed=17,
         sampled_observation_latency_steps=1,
         sampled_action_latency_steps=1,
+        runtime_observation_latency_steps=1,
+        runtime_action_latency_steps=1,
+        latency_override_inactive=True,
+        runtime_randomization_sha256="e" * 64,
         acquisition_base_pose=(0.2, -0.1, 0.3),
         captures=(first, final),
         candidate_bytes=candidate_set.canonical_bytes,
@@ -103,7 +109,7 @@ def _capsule() -> AcquisitionCapsule:
         proposed_action_sha256="b" * 64,
         applied_action_sha256="c" * 64,
         observation_identity_trace_sha256="d" * 64,
-        same_seed_lockstep_replay=True,
+        same_seed_validation_replay=True,
         capture_enabled_disabled_identity=True,
     )
 
@@ -237,23 +243,283 @@ def test_capsule_rejects_noncanonical_payload_and_missing_final_input() -> None:
 
 
 def test_replay_comparison_covers_actions_observations_candidates_and_capture() -> None:
-    capsule = _capsule()
-    first = AcquisitionEpisodeResult(
-        capsule=capsule,
-        trace_step_count=995,
-        action_bounds_valid=True,
-        stale_action_applied_count=0,
-        severe_collision_count=0,
-        invalid_force_count=0,
-        p40_conservation_maximum_difference=0.0,
-        safety_intervention_count=0,
-    )
+    first = _replay_record(0, True)
+    second = _replay_record(1, False)
 
-    assert compare_episode_replays(first, first)["passed"] is True
-    changed = replace(
-        first,
-        capsule=replace(capsule, applied_action_sha256="e" * 64),
-    )
+    assert compare_episode_replays(first, second)["passed"] is True
+    changed = {**second, "applied_action_sha256": "e" * 64}
     report = compare_episode_replays(first, changed)
     assert report["passed"] is False
     assert report["checks"]["applied_action_trace"] is False
+
+
+def _replay_record(run_ordinal: int, capture_enabled: bool) -> dict[str, object]:
+    return {
+        "backend_run_ordinal": run_ordinal,
+        "reset_count": 1,
+        "capture_persistence_enabled": capture_enabled,
+        "captures": [object()] if capture_enabled else [],
+        "environment_seed": 11,
+        "policy_rng_seed": 17,
+        "acquisition_pose": (0.0, 0.0, 0.0),
+        "runtime_randomization_sha256": "a" * 64,
+        "runtime_randomization": {
+            "observation_latency_steps": 1,
+            "action_latency_steps": 1,
+        },
+        "runtime_observation_latency_steps": 1,
+        "runtime_action_latency_steps": 1,
+        "latency_override_inactive": True,
+        "physical_trace_sha256": "b" * 64,
+        "policy_input_trace_sha256": "c" * 64,
+        "observation_identity_trace_sha256": "d" * 64,
+        "capture_identity_sequence": ((1, 1),),
+        "capture_payload_sha256": "e" * 64,
+        "proposed_action_sha256": "f" * 64,
+        "applied_action_sha256": "0" * 64,
+        "candidate_bytes": b"candidate",
+        "candidate_sha256": "1" * 64,
+        "candidate_count": 0,
+        "candidate_score_sha256": "2" * 64,
+        "selected_index": -1,
+        "failure": None,
+        "runtime_terminal": False,
+        "trace_step_count": 995,
+    }
+
+
+class _Ledger:
+    def set_enabled(self, enabled: bool) -> None:
+        assert enabled is True
+
+    def report(self) -> dict[str, object]:
+        return {}
+
+
+class _Backend:
+    def __init__(self, observation, latency=(1, 1), *, terminal=False) -> None:
+        self.observation = observation
+        self.latency = latency
+        self.terminal = terminal
+        self.contact_ledger = _Ledger()
+        self.reset_calls = 0
+        self.closed = False
+        self._after_physics_substep = lambda: None
+
+    def reset(self, *, seed: int, task_id: str):
+        assert seed == 11
+        assert task_id == "tidy_living_room_3d/v1"
+        self.reset_calls += 1
+        return self.observation
+
+    def task_audit(self) -> dict[str, object]:
+        observation, action = self.latency
+        return {
+            "randomization": {
+                "observation_latency_steps": observation,
+                "action_latency_steps": action,
+                "other": 4,
+            },
+            "action_latency_diagnostic": None,
+            "observation_latency_diagnostic": None,
+            "latency_pair_diagnostic": None,
+            "severe_collision_count": 0,
+        }
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _Graph:
+    def reset(self) -> None:
+        pass
+
+    def sample_mujoco_substep(self, model, data) -> None:
+        del model, data
+
+    def report(self) -> dict[str, object]:
+        return {name: 0 for name in acquisition.INVALID_GRAPH_FIELDS}
+
+
+def _install_fake_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    latency: tuple[int, int] = (1, 1),
+    failure: str | None = None,
+    terminal: bool = False,
+    safety_intervened: bool = False,
+):
+    observation = SimpleNamespace(
+        timestamp_ns=1,
+        sequence_id=1,
+        proprioception=SimpleNamespace(base_pose=(0.0, 0.0, 0.0)),
+    )
+    backends = [_Backend(observation, latency, terminal=terminal) for _ in range(2)]
+    monkeypatch.setattr(acquisition, "ACQUISITION_STEPS", 2)
+    monkeypatch.setattr(acquisition, "_graph_from_backend", lambda backend: _Graph())
+    monkeypatch.setattr(
+        acquisition,
+        "_acquisition_phase",
+        lambda step: (1, "A1_panorama", step),
+    )
+    monkeypatch.setattr(
+        acquisition,
+        "policy_input_bytes",
+        lambda observation, history, available, seed, **kwargs: (
+            serialize_policy_input(_input(
+                observation_timestamp_ns=observation.timestamp_ns,
+                sequence_id=observation.sequence_id,
+                phase_index=kwargs["phase_index"],
+                phase_step=kwargs["phase_step"],
+                policy_rng_seed=seed,
+            ))
+        ),
+    )
+    monkeypatch.setattr(
+        acquisition,
+        "_input_failure",
+        lambda *args, **kwargs: failure,
+    )
+    monkeypatch.setattr(
+        acquisition,
+        "_step",
+        lambda backend, graph, observation, action, step: (
+            SimpleNamespace(
+                timestamp_ns=observation.timestamp_ns + 1,
+                sequence_id=observation.sequence_id + 1,
+                proprioception=observation.proprioception,
+            ),
+            {"reset_settling_excluded": False, "substeps": []},
+            {
+                "proposed_action": list(action),
+                "applied_action": list(action),
+                "hold_action": list(action),
+                "proprioception": [float(step)],
+                "events": [],
+                "safety_intervened": safety_intervened,
+                "outside_validity_window": False,
+                "action_bounds_valid": True,
+                "terminated": terminal,
+                "truncated": False,
+                "terminal": terminal,
+                "_motion_start": {},
+                "_motion_end": {},
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        acquisition,
+        "p40_conservation_differences",
+        lambda graph, ledger: {"maximum_absolute_difference": 0.0},
+    )
+    diagnostic = acquisition.CandidateAcquisitionDiagnostic(
+        SimpleNamespace(task_id="tidy_living_room_3d/v1"), object()
+    )
+    monkeypatch.setattr(diagnostic, "_backend", lambda: backends.pop(0))
+    return diagnostic, backends
+
+
+def _plan() -> dict[str, object]:
+    return {
+        "planned_episode_id": "a" * 64,
+        "cell_id": "cell-00-obs-1-action-1",
+        "replicate_ordinal": 0,
+        "candidate_ordinal": 0,
+        "environment_seed": 11,
+        "policy_rng_seed": 17,
+        "sampled_observation_latency_steps": 1,
+        "sampled_action_latency_steps": 1,
+    }
+
+
+def test_production_episode_uses_two_fresh_backends_and_disables_replay_capture(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from hwr.apps import persist_candidate_episode
+
+    diagnostic, backends = _install_fake_runtime(monkeypatch)
+    created = tuple(backends)
+
+    result = diagnostic.run_episode(_plan())
+
+    assert backends == []
+    assert [backend.reset_calls for backend in created] == [1, 1]
+    assert all(backend.closed for backend in created)
+    assert result.replay_comparison["passed"] is True
+    assert result.primary_summary["backend_run_ordinal"] == 0
+    assert result.validation_summary["backend_run_ordinal"] == 1
+    assert result.primary_summary["capture_persistence_enabled"] is True
+    assert result.validation_summary["capture_persistence_enabled"] is False
+    assert result.validation_summary["capture_payload_sha256"] == (
+        result.primary_summary["capture_payload_sha256"]
+    )
+    terminal, capsule, _ = persist_candidate_episode(result)
+    assert terminal["planned_latency"] == {
+        "observation_steps": 1,
+        "action_steps": 1,
+    }
+    assert terminal["runtime_latency"] == {
+        "observation_steps": 1,
+        "action_steps": 1,
+        "override_inactive": True,
+    }
+    assert capsule["primary_run"]["runtime_randomization"] == (
+        capsule["validation_replay"]["runtime_randomization"]
+    )
+
+
+def test_runtime_latency_drift_fails_before_acquisition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    diagnostic, _ = _install_fake_runtime(monkeypatch, latency=(2, 1))
+
+    with pytest.raises(AcquisitionContractError, match="runtime latency") as error:
+        diagnostic.run_episode(_plan())
+
+    assert error.value.details["planned_observation_latency_steps"] == 1
+    assert error.value.details["runtime_observation_latency_steps"] == 2
+
+
+def test_acquisition_failure_does_not_call_formal_candidate_generator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    diagnostic, _ = _install_fake_runtime(
+        monkeypatch, failure="forced_failure", terminal=True
+    )
+    monkeypatch.setattr(
+        acquisition,
+        "generate_candidate_set",
+        lambda *args, **kwargs: pytest.fail("formal candidate generated after failure"),
+    )
+
+    result = diagnostic.run_episode(_plan())
+    from hwr.apps import persist_candidate_episode
+
+    terminal, capsule, blobs = persist_candidate_episode(result)
+
+    assert result.capsule.acquisition_failure == "forced_failure"
+    assert result.capsule.candidate_bytes == b""
+    assert result.capsule.candidate_count == 0
+    assert result.capsule.selected_index == -1
+    assert terminal["runtime_terminal"] is True
+    assert terminal["trace_step_count"] == 1
+    assert capsule["candidate_set"]["generated_online"] is False
+    assert not any(name.endswith("candidate-set.json") for name in blobs)
+
+
+def test_production_safety_and_terminal_are_preserved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    diagnostic, _ = _install_fake_runtime(
+        monkeypatch,
+        failure="safety_intervention_during_acquisition",
+        terminal=True,
+        safety_intervened=True,
+    )
+    result = diagnostic.run_episode(_plan())
+
+    assert result.runtime_terminal is True
+    assert result.trace_step_count == 1
+    assert result.safety_intervention_count == 1
+    assert result.validation_summary["runtime_terminal"] is True
+    assert result.validation_summary["safety_intervention_count"] == 1

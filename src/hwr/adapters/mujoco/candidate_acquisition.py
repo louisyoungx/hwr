@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import struct
 from dataclasses import dataclass
 from typing import Mapping, Sequence
 
@@ -50,6 +51,12 @@ VISIBLE_ARRAYS = (
 
 class AcquisitionContractError(ValueError):
     """Raised when immutable acquisition evidence is incomplete or inconsistent."""
+
+    def __init__(
+        self, message: str, *, details: Mapping[str, object] | None = None
+    ) -> None:
+        super().__init__(message)
+        self.details = {} if details is None else dict(details)
 
 
 @dataclass(frozen=True)
@@ -112,6 +119,10 @@ class AcquisitionCapsule:
     policy_rng_seed: int
     sampled_observation_latency_steps: int
     sampled_action_latency_steps: int
+    runtime_observation_latency_steps: int
+    runtime_action_latency_steps: int
+    latency_override_inactive: bool
+    runtime_randomization_sha256: str
     acquisition_base_pose: tuple[float, float, float]
     captures: tuple[AcquisitionCapture, ...]
     candidate_bytes: bytes
@@ -123,7 +134,7 @@ class AcquisitionCapsule:
     proposed_action_sha256: str
     applied_action_sha256: str
     observation_identity_trace_sha256: str
-    same_seed_lockstep_replay: bool
+    same_seed_validation_replay: bool
     capture_enabled_disabled_identity: bool
 
     def __post_init__(self) -> None:
@@ -138,6 +149,16 @@ class AcquisitionCapsule:
             or self.sampled_action_latency_steps not in (1, 2)
         ):
             raise AcquisitionContractError("planned Episode is outside support cells")
+        if (
+            self.runtime_observation_latency_steps
+            != self.sampled_observation_latency_steps
+            or self.runtime_action_latency_steps
+            != self.sampled_action_latency_steps
+            or not self.latency_override_inactive
+        ):
+            raise AcquisitionContractError("runtime latency differs from plan")
+        if not _is_sha256(self.runtime_randomization_sha256):
+            raise AcquisitionContractError("randomization identity must be SHA-256")
         if len(self.acquisition_base_pose) != 3 or not np.isfinite(
             self.acquisition_base_pose
         ).all():
@@ -153,6 +174,10 @@ class AcquisitionCapsule:
         if self.candidate_count < 0:
             raise AcquisitionContractError("candidate count must be nonnegative")
         if self.candidate_bytes:
+            if self.acquisition_failure is not None:
+                raise AcquisitionContractError(
+                    "failed acquisition cannot publish a formal candidate"
+                )
             if self.candidate_sha256 != _sha256(self.candidate_bytes):
                 raise AcquisitionContractError("candidate bytes identity differs")
             replay = replay_candidate_set(self)
@@ -177,8 +202,16 @@ class AcquisitionCapsule:
                 )
         elif self.candidate_count or self.selected_index != -1:
             raise AcquisitionContractError("missing candidate bytes are inconsistent")
+        elif self.acquisition_failure is None:
+            raise AcquisitionContractError(
+                "successful acquisition must publish formal candidate bytes"
+            )
         elif self.candidate_score_sha256 != _score_sha256(()):
             raise AcquisitionContractError("empty candidate score identity differs")
+        elif self.candidate_sha256 != _sha256(b""):
+            raise AcquisitionContractError("missing candidate bytes identity differs")
+        elif self.candidate_sha256 != _sha256(b""):
+            raise AcquisitionContractError("missing candidate bytes identity differs")
         if not -1 <= self.selected_index < self.candidate_count:
             raise AcquisitionContractError("selected candidate index is invalid")
         for identity in (
@@ -200,6 +233,10 @@ class AcquisitionEpisodeResult:
     invalid_force_count: int
     p40_conservation_maximum_difference: float
     safety_intervention_count: int
+    runtime_terminal: bool = False
+    primary_summary: Mapping[str, object] | None = None
+    validation_summary: Mapping[str, object] | None = None
+    replay_comparison: Mapping[str, object] | None = None
 
     def __post_init__(self) -> None:
         counts = (
@@ -292,30 +329,50 @@ def replay_candidate_set(capsule: AcquisitionCapsule) -> CandidateSet:
 
 
 def compare_episode_replays(
-    first: AcquisitionEpisodeResult,
-    second: AcquisitionEpisodeResult,
+    first: Mapping[str, object],
+    second: Mapping[str, object],
 ) -> dict[str, object]:
-    left, right = first.capsule, second.capsule
-    checks = {
-        "capture_identity_sequence": [
-            capture.observation_identity for capture in left.captures
-        ] == [capture.observation_identity for capture in right.captures],
-        "policy_input_bytes": [
-            capture.policy_input_bytes for capture in left.captures
-        ] == [capture.policy_input_bytes for capture in right.captures],
-        "candidate_visible_bytes": [
-            capture.candidate_visible_bytes for capture in left.captures
-        ] == [capture.candidate_visible_bytes for capture in right.captures],
-        "candidate_bytes": left.candidate_bytes == right.candidate_bytes,
-        "proposed_action_trace": (
-            left.proposed_action_sha256 == right.proposed_action_sha256
-        ),
-        "applied_action_trace": left.applied_action_sha256 == right.applied_action_sha256,
-        "observation_identity_trace": (
-            left.observation_identity_trace_sha256
-            == right.observation_identity_trace_sha256
-        ),
+    fields = {
+        "randomization": "runtime_randomization_sha256",
+        "randomization_content": "runtime_randomization",
+        "environment_seed": "environment_seed",
+        "policy_rng_seed": "policy_rng_seed",
+        "acquisition_base_pose": "acquisition_pose",
+        "observation_latency": "runtime_observation_latency_steps",
+        "action_latency": "runtime_action_latency_steps",
+        "physical_trace": "physical_trace_sha256",
+        "policy_input_trace": "policy_input_trace_sha256",
+        "observation_trace": "observation_identity_trace_sha256",
+        "capture_identity_sequence": "capture_identity_sequence",
+        "capture_payload_bytes": "capture_payload_sha256",
+        "proposed_action_trace": "proposed_action_sha256",
+        "applied_action_trace": "applied_action_sha256",
+        "candidate_bytes": "candidate_bytes",
+        "candidate_identity": "candidate_sha256",
+        "candidate_count": "candidate_count",
+        "candidate_scores": "candidate_score_sha256",
+        "selected_index": "selected_index",
+        "failure": "failure",
+        "runtime_terminal": "runtime_terminal",
+        "trace_step_count": "trace_step_count",
     }
+    checks = {
+        name: first[field] == second[field]
+        for name, field in fields.items()
+    }
+    checks["fresh_backend_reset"] = (
+        first["backend_run_ordinal"] != second["backend_run_ordinal"]
+        and first["reset_count"] == second["reset_count"] == 1
+    )
+    checks["capture_disabled"] = (
+        first["capture_persistence_enabled"] is True
+        and second["capture_persistence_enabled"] is False
+        and not second["captures"]
+    )
+    checks["latency_override_inactive"] = (
+        first["latency_override_inactive"] is True
+        and second["latency_override_inactive"] is True
+    )
     return {"checks": checks, "passed": all(checks.values())}
 
 
@@ -323,17 +380,26 @@ class CandidateAcquisitionDiagnostic(TargetSelectionDiagnostic):
     """Runs the unchanged P41 acquisition while recording immutable evidence."""
 
     def run_episode(self, plan: Mapping[str, object]) -> AcquisitionEpisodeResult:
-        primary = _run_acquisition_once(self, plan)
+        primary = _run_acquisition_once(
+            self, plan, capture_persistence_enabled=True, backend_run_ordinal=0
+        )
+        validation = _run_acquisition_once(
+            self, plan, capture_persistence_enabled=False, backend_run_ordinal=1
+        )
+        comparison = compare_episode_replays(primary, validation)
         return _finish_episode(
             plan, self.task.task_id, primary,
-            replay_equal=bool(primary["controller_replay_equal"]),
-            capture_shadow_equal=bool(primary["capture_shadow_equal"]),
+            validation=validation,
+            comparison=comparison,
         )
 
 
 def _run_acquisition_once(
     diagnostic: CandidateAcquisitionDiagnostic,
     plan: Mapping[str, object],
+    *,
+    capture_persistence_enabled: bool,
+    backend_run_ordinal: int,
 ) -> dict[str, object]:
     backend = diagnostic._backend()
     graph = _graph_from_backend(backend)
@@ -348,30 +414,27 @@ def _run_acquisition_once(
     available: list[bool] = []
     keyframes: list[bytes] = []
     captures: list[AcquisitionCapture] = []
-    proposed, applied, observations, trace = [], [], [], []
+    proposed, applied, observations, payloads, trace = [], [], [], [], []
     failure: str | None = None
     tracker = MainEventTracker()
     previous_identity: tuple[int, int] | None = None
-    replay_state = None
-    disabled_state = None
-    controller_replay_equal = True
-    capture_shadow_equal = True
     try:
         backend.contact_ledger.set_enabled(True)
         observation = backend.reset(
             seed=int(plan["environment_seed"]), task_id=diagnostic.task.task_id
         )
+        reset_audit = backend.task_audit()
+        runtime = _runtime_latency_contract(plan, reset_audit)
         graph.reset()
         acquisition_pose = tuple(observation.proprioception.base_pose)
         state = _AcquisitionState(acquisition_pose)
-        replay_state = _AcquisitionState(acquisition_pose)
-        disabled_state = _AcquisitionState(acquisition_pose)
         for step in range(ACQUISITION_STEPS):
             phase_index, phase, phase_step = _acquisition_phase(step)
             payload = policy_input_bytes(
                 observation, history, available, int(plan["policy_rng_seed"]),
                 phase_index=phase_index, phase_step=phase_step,
             )
+            payloads.append(payload)
             failure = failure or _input_failure(
                 backend, observation, payload, supported_only=True,
                 previous_identity=previous_identity,
@@ -379,26 +442,19 @@ def _run_acquisition_once(
             identity = (observation.timestamp_ns, observation.sequence_id)
             previous_identity = identity
             action, capture = state.action(phase, payload)
-            replay_action, replay_capture = replay_state.action(phase, payload)
-            disabled_action, disabled_capture = disabled_state.action(phase, payload)
-            controller_replay_equal &= (
-                _action_bytes(action) == _action_bytes(replay_action)
-                and capture == replay_capture
-            )
-            capture_shadow_equal &= (
-                _action_bytes(action) == _action_bytes(disabled_action)
-                and capture == disabled_capture
-            )
             if failure is not None:
                 action, capture = _hold(deserialize_policy_input(payload)), False
             if capture:
                 keyframes.append(payload)
-                captures.append(
-                    capture_policy_input(
-                        payload, capture_ordinal=len(captures),
-                        acquisition_phase=phase, final_input=False,
+                if capture_persistence_enabled:
+                    captures.append(
+                        capture_policy_input(
+                            payload,
+                            capture_ordinal=len(captures),
+                            acquisition_phase=phase,
+                            final_input=False,
+                        )
                     )
-                )
             proposed.append(tuple(action))
             observations.append(identity)
             observation, period, row = _step(
@@ -421,46 +477,99 @@ def _run_acquisition_once(
             observation, history, available, int(plan["policy_rng_seed"]),
             phase_index=4, phase_step=5,
         )
-        captures.append(
-            capture_policy_input(
-                final_payload, capture_ordinal=len(captures),
-                acquisition_phase="A4_seal", final_input=True,
+        payloads.append(final_payload)
+        if capture_persistence_enabled:
+            captures.append(
+                capture_policy_input(
+                    final_payload,
+                    capture_ordinal=len(captures),
+                    acquisition_phase="A4_seal",
+                    final_input=True,
+                )
             )
-        )
-        candidate_set = generate_candidate_set(
-            keyframes,
-            acquisition_base_pose=acquisition_pose,
-            final_input=final_payload,
+        candidate_set = (
+            None
+            if failure is not None
+            else generate_candidate_set(
+                keyframes,
+                acquisition_base_pose=acquisition_pose,
+                final_input=final_payload,
+            )
         )
         final_value = deserialize_policy_input(final_payload)
         selected = (
-            -1 if failure is not None else select_candidate_index(
+            -1 if candidate_set is None else select_candidate_index(
                 candidate_set, final_value.base_pose,
                 acquisition_base_pose=acquisition_pose,
             )
         )
-        scores = candidate_scores(
-            candidate_set, final_value.base_pose,
-            acquisition_base_pose=acquisition_pose,
+        scores = (
+            ()
+            if candidate_set is None
+            else candidate_scores(
+                candidate_set, final_value.base_pose,
+                acquisition_base_pose=acquisition_pose,
+            )
+        )
+        candidate_bytes = b"" if candidate_set is None else candidate_set.canonical_bytes
+        graph_report = graph.report()
+        ledger_report = backend.contact_ledger.report()
+        audit = backend.task_audit()
+        conservation = p40_conservation_differences(
+            graph_report, ledger_report
         )
         return {
+            "backend_run_ordinal": backend_run_ordinal,
+            "reset_count": 1,
+            "capture_persistence_enabled": capture_persistence_enabled,
+            "environment_seed": int(plan["environment_seed"]),
+            "policy_rng_seed": int(plan["policy_rng_seed"]),
             "acquisition_pose": acquisition_pose,
             "captures": captures,
-            "keyframes": tuple(keyframes),
-            "final_payload": final_payload,
-            "candidate_set": candidate_set,
+            "capture_identity_sequence": tuple(
+                (
+                    deserialize_policy_input(payload).observation_timestamp_ns,
+                    deserialize_policy_input(payload).sequence_id,
+                )
+                for payload in keyframes
+            ),
+            "capture_payload_sha256": _bytes_sequence_sha256(keyframes),
+            "candidate_bytes": candidate_bytes,
+            "candidate_sha256": _sha256(candidate_bytes),
+            "candidate_count": 0 if candidate_set is None else len(candidate_set.candidates),
             "selected_index": selected,
             "candidate_score_sha256": _score_sha256(scores),
             "failure": failure,
             "proposed_action_sha256": _trace_sha256(proposed),
             "applied_action_sha256": _trace_sha256(applied),
             "observation_identity_trace_sha256": _canonical_sha256(observations),
+            "policy_input_trace_sha256": _bytes_sequence_sha256(payloads),
+            "physical_trace_sha256": _physical_trace_sha256(trace),
+            "trace_step_count": len(trace),
+            "runtime_terminal": bool(trace and trace[-1]["terminal"]),
+            "runtime_randomization": json.loads(
+                json.dumps(reset_audit["randomization"], sort_keys=True)
+            ),
+            **runtime,
             "trace": trace,
-            "audit": backend.task_audit(),
-            "graph_report": graph.report(),
-            "ledger_report": backend.contact_ledger.report(),
-            "controller_replay_equal": controller_replay_equal,
-            "capture_shadow_equal": capture_shadow_equal,
+            "action_bounds_valid": all(
+                bool(row.get("action_bounds_valid", False)) for row in trace
+            ),
+            "stale_action_applied_count": sum(
+                bool(row.get("outside_validity_window"))
+                and row.get("applied_action") != row.get("hold_action")
+                for row in trace
+            ),
+            "severe_collision_count": int(audit["severe_collision_count"]),
+            "invalid_force_count": sum(
+                int(graph_report[name]) for name in INVALID_GRAPH_FIELDS
+            ),
+            "p40_conservation_maximum_difference": float(
+                conservation["maximum_absolute_difference"]
+            ),
+            "safety_intervention_count": sum(
+                bool(row.get("safety_intervened")) for row in trace
+            ),
         }
     finally:
         backend.close()
@@ -471,11 +580,10 @@ def _finish_episode(
     task_id,
     run,
     *,
-    replay_equal,
-    capture_shadow_equal,
+    validation,
+    comparison,
 ) -> AcquisitionEpisodeResult:
-    candidate_set = run["candidate_set"]
-    candidate_bytes = candidate_set.canonical_bytes
+    candidate_bytes = run["candidate_bytes"]
     capsule = AcquisitionCapsule(
         planned_episode_id=str(plan["planned_episode_id"]),
         task_id=task_id,
@@ -488,45 +596,115 @@ def _finish_episode(
             plan["sampled_observation_latency_steps"]
         ),
         sampled_action_latency_steps=int(plan["sampled_action_latency_steps"]),
+        runtime_observation_latency_steps=run["runtime_observation_latency_steps"],
+        runtime_action_latency_steps=run["runtime_action_latency_steps"],
+        latency_override_inactive=run["latency_override_inactive"],
+        runtime_randomization_sha256=run["runtime_randomization_sha256"],
         acquisition_base_pose=run["acquisition_pose"],
         captures=tuple(run["captures"]),
         candidate_bytes=candidate_bytes,
         candidate_sha256=_sha256(candidate_bytes),
-        candidate_count=len(candidate_set.candidates),
+        candidate_count=run["candidate_count"],
         selected_index=run["selected_index"],
         candidate_score_sha256=run["candidate_score_sha256"],
         acquisition_failure=run["failure"],
         proposed_action_sha256=run["proposed_action_sha256"],
         applied_action_sha256=run["applied_action_sha256"],
         observation_identity_trace_sha256=run["observation_identity_trace_sha256"],
-        same_seed_lockstep_replay=replay_equal,
-        capture_enabled_disabled_identity=capture_shadow_equal,
-    )
-    conservation = p40_conservation_differences(
-        run["graph_report"], run["ledger_report"]
+        same_seed_validation_replay=comparison["passed"],
+        capture_enabled_disabled_identity=comparison["passed"],
     )
     return AcquisitionEpisodeResult(
         capsule=capsule,
-        trace_step_count=len(run["trace"]),
-        action_bounds_valid=all(
-            bool(row.get("action_bounds_valid", False)) for row in run["trace"]
-        ),
-        stale_action_applied_count=sum(
-            bool(row.get("outside_validity_window"))
-            and row.get("applied_action") != row.get("hold_action")
-            for row in run["trace"]
-        ),
-        severe_collision_count=int(run["audit"]["severe_collision_count"]),
-        invalid_force_count=sum(
-            int(run["graph_report"][name]) for name in INVALID_GRAPH_FIELDS
-        ),
-        p40_conservation_maximum_difference=float(
-            conservation["maximum_absolute_difference"]
-        ),
-        safety_intervention_count=sum(
-            bool(row.get("safety_intervened")) for row in run["trace"]
-        ),
+        trace_step_count=run["trace_step_count"],
+        action_bounds_valid=run["action_bounds_valid"],
+        stale_action_applied_count=run["stale_action_applied_count"],
+        severe_collision_count=run["severe_collision_count"],
+        invalid_force_count=run["invalid_force_count"],
+        p40_conservation_maximum_difference=run[
+            "p40_conservation_maximum_difference"
+        ],
+        safety_intervention_count=run["safety_intervention_count"],
+        runtime_terminal=run["runtime_terminal"],
+        primary_summary=_run_summary(run),
+        validation_summary=_run_summary(validation),
+        replay_comparison=comparison,
     )
+
+
+def _runtime_latency_contract(plan, audit) -> dict[str, object]:
+    randomization = audit["randomization"]
+    runtime = {
+        "runtime_observation_latency_steps": int(
+            randomization["observation_latency_steps"]
+        ),
+        "runtime_action_latency_steps": int(randomization["action_latency_steps"]),
+        "latency_override_inactive": all(
+            audit[name] is None
+            for name in (
+                "action_latency_diagnostic",
+                "observation_latency_diagnostic",
+                "latency_pair_diagnostic",
+            )
+        ),
+        "runtime_randomization_sha256": _canonical_sha256(randomization),
+    }
+    planned = {
+        "planned_observation_latency_steps": int(
+            plan["sampled_observation_latency_steps"]
+        ),
+        "planned_action_latency_steps": int(plan["sampled_action_latency_steps"]),
+    }
+    if (
+        runtime["runtime_observation_latency_steps"]
+        != planned["planned_observation_latency_steps"]
+        or runtime["runtime_action_latency_steps"]
+        != planned["planned_action_latency_steps"]
+        or not runtime["latency_override_inactive"]
+    ):
+        raise AcquisitionContractError(
+            "runtime latency or override state differs from plan",
+            details={**planned, **runtime},
+        )
+    return {**planned, **runtime}
+
+
+def _run_summary(run) -> dict[str, object]:
+    return {
+        key: run[key]
+        for key in (
+            "backend_run_ordinal",
+            "reset_count",
+            "capture_persistence_enabled",
+            "environment_seed",
+            "policy_rng_seed",
+            "runtime_observation_latency_steps",
+            "runtime_action_latency_steps",
+            "latency_override_inactive",
+            "runtime_randomization_sha256",
+            "runtime_randomization",
+            "physical_trace_sha256",
+            "policy_input_trace_sha256",
+            "observation_identity_trace_sha256",
+            "capture_identity_sequence",
+            "capture_payload_sha256",
+            "proposed_action_sha256",
+            "applied_action_sha256",
+            "candidate_sha256",
+            "candidate_count",
+            "candidate_score_sha256",
+            "selected_index",
+            "trace_step_count",
+            "runtime_terminal",
+            "failure",
+            "action_bounds_valid",
+            "stale_action_applied_count",
+            "severe_collision_count",
+            "invalid_force_count",
+            "p40_conservation_maximum_difference",
+            "safety_intervention_count",
+        )
+    }
 
 
 def mujoco_runtime_version() -> str:
@@ -559,114 +737,21 @@ def capture_record(
     }
 
 
-def persist_episode(
-    result: AcquisitionEpisodeResult,
-) -> tuple[dict[str, object], dict[str, object], dict[str, bytes]]:
-    capsule = result.capsule
-    prefix = f"blobs/{capsule.planned_episode_id}"
-    blobs: dict[str, bytes] = {}
-    captures = []
-    for capture in capsule.captures:
-        suffix = f"{capture.capture_ordinal:02d}"
-        policy_path = f"{prefix}/capture-{suffix}-policy.bin"
-        visible_path = f"{prefix}/capture-{suffix}-candidate-visible.bin"
-        blobs[policy_path] = capture.policy_input_bytes
-        blobs[visible_path] = capture.candidate_visible_bytes
-        captures.append(capture_record(
-            capture, policy_blob=policy_path, candidate_visible_blob=visible_path
-        ))
-    candidate_path = f"{prefix}/candidate-set.json"
-    blobs[candidate_path] = capsule.candidate_bytes
-    replay = replay_candidate_set(capsule)
-    record = {
-        "schema_version": CAPSULE_SCHEMA,
-        "planned_episode_id": capsule.planned_episode_id,
-        "task_id": capsule.task_id,
-        "cell_id": capsule.cell_id,
-        "replicate_ordinal": capsule.replicate_ordinal,
-        "candidate_ordinal": capsule.candidate_ordinal,
-        "environment_seed": capsule.environment_seed,
-        "policy_rng_seed": capsule.policy_rng_seed,
-        "sampled_observation_latency_steps": capsule.sampled_observation_latency_steps,
-        "sampled_action_latency_steps": capsule.sampled_action_latency_steps,
-        "acquisition_base_pose": list(capsule.acquisition_base_pose),
-        "captures": captures,
-        "capture_count": len(captures),
-        "candidate_set": {
-            "path": candidate_path,
-            "sha256": capsule.candidate_sha256,
-            "bytes": len(capsule.candidate_bytes),
-            "candidate_count": capsule.candidate_count,
-            "selected_index": capsule.selected_index,
-            "score_bytes_sha256": capsule.candidate_score_sha256,
-            "schema_version": CANDIDATE_SCHEMA,
-        },
-        "acquisition_failure": capsule.acquisition_failure,
-        "proposed_action_sha256": capsule.proposed_action_sha256,
-        "applied_action_sha256": capsule.applied_action_sha256,
-        "observation_identity_trace_sha256": capsule.observation_identity_trace_sha256,
-        "same_seed_lockstep_replay": capsule.same_seed_lockstep_replay,
-        "capture_enabled_disabled_identity": capsule.capture_enabled_disabled_identity,
-        "offline_candidate_replay_bit_identical": (
-            replay.canonical_bytes == capsule.candidate_bytes
-            and replay.candidate_set_sha256 == capsule.candidate_sha256
-        ),
-        "anchor_blobs_complete": all(
-            blobs[row[kind]["path"]]
-            and _sha256(blobs[row[kind]["path"]]) == row[kind]["sha256"]
-            for row in captures
-            for kind in ("policy_input", "candidate_visible_input")
-        ),
-    }
-    terminal = {
-        "schema_version": EPISODE_SCHEMA,
-        "planned_episode_id": capsule.planned_episode_id,
-        "task_id": capsule.task_id,
-        "cell_id": capsule.cell_id,
-        "replicate_ordinal": capsule.replicate_ordinal,
-        "candidate_ordinal": capsule.candidate_ordinal,
-        "replacement": False,
-        "resolved": True,
-        "trace_step_count": result.trace_step_count,
-        "acquisition_failure": capsule.acquisition_failure,
-        "candidate_count": capsule.candidate_count,
-        "selected_index": capsule.selected_index,
-        "action_bounds_valid": result.action_bounds_valid,
-        "stale_action_applied_count": result.stale_action_applied_count,
-        "severe_collision_count": result.severe_collision_count,
-        "invalid_force_count": result.invalid_force_count,
-        "p40_conservation_maximum_difference": result.p40_conservation_maximum_difference,
-        "safety_intervention_count": result.safety_intervention_count,
-    }
-    return terminal, record, blobs
-
-
-def validate_terminal_ledger(plan, terminals) -> dict[str, object]:
-    planned = [str(value["planned_episode_id"]) for value in plan["episodes"]]
-    published = [str(value.get("planned_episode_id")) for value in terminals]
-    missing = sorted(set(planned) - set(published))
-    unplanned = sorted(set(published) - set(planned))
-    duplicate_count = len(published) - len(set(published))
-    replacement_count = sum(bool(value.get("replacement", True)) for value in terminals)
-    passed = (
-        len(published) == len(planned)
-        and not missing and not unplanned
-        and duplicate_count == 0 and replacement_count == 0
-    )
-    return {
-        "planned_count": len(planned),
-        "published_count": len(published),
-        "missing": missing,
-        "unplanned": unplanned,
-        "duplicate_count": duplicate_count,
-        "replacement_count": replacement_count,
-        "passed": passed,
-    }
-
-
 def _trace_sha256(trace: Sequence[Sequence[float]]) -> str:
     array = np.ascontiguousarray(trace, dtype="<f8")
     return _sha256(array.tobytes())
+
+
+def _bytes_sequence_sha256(payloads: Sequence[bytes]) -> str:
+    digest = hashlib.sha256()
+    for payload in payloads:
+        digest.update(struct.pack("<Q", len(payload)))
+        digest.update(payload)
+    return digest.hexdigest()
+
+
+def _physical_trace_sha256(trace: Sequence[Mapping[str, object]]) -> str:
+    return _canonical_sha256(trace)
 
 
 def _score_sha256(scores: Sequence[float]) -> str:

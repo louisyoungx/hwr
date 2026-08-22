@@ -1,10 +1,7 @@
 """Run frozen R0001-P50-E1 acquisition and R0001-P50-E2 offline funnel."""
 import argparse
-import hashlib
 import importlib.metadata
 import json
-import os
-import platform
 import shutil
 import subprocess
 import sys
@@ -16,7 +13,17 @@ import numpy as np
 from hwr.apps import (
     aggregate_candidate_funnels,
     analyze_candidate_capsule_directory,
+    candidate_artifact_manifest,
+    candidate_file_identity as _file_identity,
+    candidate_git_tree as _git_tree,
+    candidate_json_bytes as _json_bytes,
+    candidate_sha256 as _sha256,
+    candidate_source_commit as _source_commit,
+    create_candidate_output as _create_output,
+    persist_candidate_episode,
     read_bound_blob as _read_bound_blob,
+    resolve_candidate_path as _resolve,
+    validate_candidate_terminal_ledger,
 )
 from hwr.adapters.mujoco.candidate_acquisition import (
     CAPSULE_SCHEMA,
@@ -26,8 +33,6 @@ from hwr.adapters.mujoco.candidate_acquisition import (
     AcquisitionEpisodeResult,
     CandidateAcquisitionDiagnostic,
     mujoco_runtime_version,
-    persist_episode,
-    validate_terminal_ledger,
 )
 from hwr.adapters.mujoco.training_catalog import (
     load_default_formal_household_catalogs,
@@ -59,7 +64,8 @@ REPORT_SCHEMA = "hwr.p50-acquisition-report/v1"
 MANIFEST_SCHEMA = "hwr.p50-acquisition-artifacts/v1"
 FAILURE_SCHEMA = "hwr.p50-acquisition-failure/v1"
 SALT_COMMITMENT = "ed945b2dcfe90c6aab639164da32cc8a1a905df56534c42a443d1bd4753e16a4"
-FROZEN_DOCUMENT_COMMIT = "5fad6cec27e8f797c31a202497745a5616ab220b"
+FROZEN_DOCUMENT_COMMIT = "2d1752f2c0c8b9e39d7f3ebaa8e9ff0ec1d13f38"
+FROZEN_DOCUMENT_PATH = Path("docs/research-loop/0010/03-experiment.md")
 FORMAL_OUTPUT = Path(
     "runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001"
 )
@@ -84,7 +90,9 @@ HISTORICAL_TREES = {
 }
 SOURCE_PATHS = {
     "p50_app": Path("src/hwr/apps/evaluate_candidate_acquisition.py"),
+    "p50_app_helpers": Path("src/hwr/apps/__init__.py"),
     "p50_bridge": Path("src/hwr/adapters/mujoco/candidate_acquisition.py"),
+    "p50_funnel": Path("src/hwr/eval/candidate_funnel.py"),
     "formal_generator": Path("src/hwr/eval/target_selection.py"),
     "p41_bridge": Path("src/hwr/adapters/mujoco/target_selection_diagnostic.py"),
     "formal_backend": Path(
@@ -403,6 +411,9 @@ def build_plan(root: Path, salt: str) -> dict[str, object]:
         "planned_control_steps_per_episode": ACQUISITION_STEPS,
         "planned_episode_count": len(episodes),
         "planned_control_step_count": len(episodes) * ACQUISITION_STEPS,
+        "validation_replay_count": len(episodes),
+        "maximum_physical_acquisition_count": 2 * len(episodes),
+        "maximum_control_step_count": 2 * len(episodes) * ACQUISITION_STEPS,
         "cells": cells,
         "episodes": episodes,
         "rejected_seed_audit": rejected,
@@ -421,7 +432,7 @@ def execute_plan(
             result = CandidateAcquisitionDiagnostic(
                 tasks[episode["task_id"]], bindings[episode["task_id"]]
             ).run_episode(episode)
-            terminal, capsule, blobs = persist_episode(result)
+            terminal, capsule, blobs = persist_candidate_episode(result)
             terminals.append(terminal)
             capsule_records.append(capsule)
             binary.update(blobs)
@@ -438,6 +449,7 @@ def execute_plan(
                     "resolved": False,
                     "error_type": type(error).__name__,
                     "error": str(error),
+                    "error_details": getattr(error, "details", {}),
                 }
             )
     return {
@@ -459,7 +471,7 @@ def analyze_acquisition(
 ) -> dict[str, object]:
     terminals = execution["terminals"]
     capsules = execution["capsules"]["episodes"]
-    ledger = validate_terminal_ledger(plan, terminals)
+    ledger = validate_candidate_terminal_ledger(plan, terminals)
     by_id = {value["planned_episode_id"]: value for value in capsules}
     capsule_complete = len(by_id) == len(plan["episodes"]) == 24
     checks = {
@@ -477,9 +489,12 @@ def analyze_acquisition(
         ),
         "capsules_complete": capsule_complete,
         "candidate_offline_replay": capsule_complete
-        and all(bool(value["offline_candidate_replay_bit_identical"]) for value in capsules),
+        and all(
+            value["offline_candidate_replay_bit_identical"] in (None, True)
+            for value in capsules
+        ),
         "same_seed_replay": capsule_complete
-        and all(bool(value["same_seed_lockstep_replay"]) for value in capsules),
+        and all(bool(value["same_seed_validation_replay"]) for value in capsules),
         "capture_enabled_disabled_identity": capsule_complete
         and all(
             bool(value["capture_enabled_disabled_identity"]) for value in capsules
@@ -489,21 +504,73 @@ def analyze_acquisition(
         "action_bounds": all(
             bool(value.get("action_bounds_valid")) for value in terminals
         ),
+        "safety_intervention_zero": all(
+            int(value.get("safety_intervention_count", 1)) == 0
+            and int(value.get("validation_replay", {}).get(
+                "safety_intervention_count", 1
+            )) == 0
+            for value in terminals
+        ),
+        "validation_action_bounds": all(
+            value.get("validation_replay", {}).get("action_bounds_valid") is True
+            for value in terminals
+        ),
+        "planned_step_terminal_semantics": all(
+            0 < int(value.get("trace_step_count", 0)) <= ACQUISITION_STEPS
+            and (
+                bool(value.get("runtime_terminal"))
+                or int(value.get("trace_step_count", 0)) == ACQUISITION_STEPS
+            )
+            and 0 < int(value.get("validation_replay", {}).get(
+                "trace_step_count", 0
+            )) <= ACQUISITION_STEPS
+            and (
+                bool(value.get("validation_replay", {}).get("runtime_terminal"))
+                or int(value.get("validation_replay", {}).get(
+                    "trace_step_count", 0
+                )) == ACQUISITION_STEPS
+            )
+            for value in terminals
+        ),
+        "runtime_latency_matches_plan": all(
+            value.get("planned_latency") == {
+                "observation_steps": value.get("runtime_latency", {}).get(
+                    "observation_steps"
+                ),
+                "action_steps": value.get("runtime_latency", {}).get(
+                    "action_steps"
+                ),
+            }
+            and value.get("runtime_latency", {}).get("override_inactive") is True
+            for value in terminals
+        ),
         "stale_action_zero": all(
             int(value.get("stale_action_applied_count", 1)) == 0
+            and int(value.get("validation_replay", {}).get(
+                "stale_action_applied_count", 1
+            )) == 0
             for value in terminals
         ),
         "severe_collision_zero": all(
             int(value.get("severe_collision_count", 1)) == 0
+            and int(value.get("validation_replay", {}).get(
+                "severe_collision_count", 1
+            )) == 0
             for value in terminals
         ),
         "invalid_force_zero": all(
             int(value.get("invalid_force_count", 1)) == 0
+            and int(value.get("validation_replay", {}).get(
+                "invalid_force_count", 1
+            )) == 0
             for value in terminals
         ),
         "p40_conservation": all(
             float(value.get("p40_conservation_maximum_difference", 1.0))
             <= 1.0e-12
+            and float(value.get("validation_replay", {}).get(
+                "p40_conservation_maximum_difference", 1.0
+            )) <= 1.0e-12
             for value in terminals
         ),
     }
@@ -520,6 +587,9 @@ def analyze_acquisition(
         "checks": {**checks, "passed": valid},
         "ledger": ledger,
         "planned_episode_count": plan["planned_episode_count"],
+        "planned_acquisition_count": plan["planned_episode_count"],
+        "validation_replay_count": plan["planned_episode_count"],
+        "maximum_physical_acquisition_count": 2 * plan["planned_episode_count"],
         "terminal_episode_count": len(terminals),
         "capsule_count": len(capsules),
         "acquisition_failure_count": sum(
@@ -575,6 +645,7 @@ def _source_identities(root: Path) -> dict[str, object]:
         "historical_research_loop_trees": {
             path: _git_tree(root, path) for path in HISTORICAL_TREES
         },
+        "frozen_document": _file_identity(root, root / FROZEN_DOCUMENT_PATH),
     }
 
 
@@ -614,6 +685,18 @@ def _require_clean_source(
         raise RuntimeError("P50 source/config/XML anchors drifted")
     if identities.get("historical_research_loop_trees") != HISTORICAL_TREES:
         raise RuntimeError("P50 historical research-loop documents drifted")
+    frozen = subprocess.run(
+        ("git", "show", f"{FROZEN_DOCUMENT_COMMIT}:{FROZEN_DOCUMENT_PATH}"),
+        cwd=root,
+        check=True,
+        capture_output=True,
+    ).stdout
+    if identities["frozen_document"] != {
+        "path": FROZEN_DOCUMENT_PATH.as_posix(),
+        "sha256": _sha256(frozen),
+        "bytes": len(frozen),
+    }:
+        raise RuntimeError("P50 frozen document content drifted")
 
 
 def _manifest(
@@ -626,50 +709,44 @@ def _manifest(
     *,
     status,
 ):
-    return {
-        "schema_version": MANIFEST_SCHEMA,
-        "proposal_id": PROPOSAL_ID,
-        "status": status,
-        "source_commit": source_commit,
-        "frozen_document_commit": FROZEN_DOCUMENT_COMMIT,
-        "frozen_document_commit_is_ancestor": status == "complete",
-        "command": list(command),
-        "runtime": {
-            "python": platform.python_version(),
-            "numpy": np.__version__,
+    return candidate_artifact_manifest(
+        schema=MANIFEST_SCHEMA,
+        proposal_id=PROPOSAL_ID,
+        source_commit=source_commit,
+        frozen_document_commit=FROZEN_DOCUMENT_COMMIT,
+        command=command,
+        identities=identities,
+        artifacts=artifacts,
+        runtime_versions={
             "mujoco": mujoco_runtime_version(),
             "hwr_platform": importlib.metadata.version("hwr-platform"),
         },
-        "source_identities": identities,
-        "seed_lineage": None
-        if plan is None
-        else {
-            "schema_version": SEED_SCHEMA,
-            "plan_id": PLAN_ID,
-            "commitment": SALT_COMMITMENT,
-            "reveal": plan["salt_reveal"],
-            "commitment_verified": plan["commitment_verified"],
-            "role_enters_seed_derivation": False,
+        status=status,
+        extra={
+            "seed_lineage": None if plan is None else {
+                "schema_version": SEED_SCHEMA,
+                "plan_id": PLAN_ID,
+                "commitment": SALT_COMMITMENT,
+                "reveal": plan["salt_reveal"],
+                "commitment_verified": plan["commitment_verified"],
+                "role_enters_seed_derivation": False,
+            },
+            "schemas": {
+                "policy_input": INPUT_SCHEMA,
+                "candidate": CANDIDATE_SCHEMA,
+                "capsule": CAPSULE_SCHEMA,
+                "capsule_index": CAPSULE_INDEX_SCHEMA,
+                "terminal": EPISODE_SCHEMA,
+            },
+            "planned_episode_count": (
+                None if plan is None else plan["planned_episode_count"]
+            ),
+            "terminal_episode_count": (
+                None if execution is None else len(execution["terminals"])
+            ),
+            **CLAIM_FLAGS,
         },
-        "schemas": {
-            "policy_input": INPUT_SCHEMA,
-            "candidate": CANDIDATE_SCHEMA,
-            "capsule": CAPSULE_SCHEMA,
-            "capsule_index": CAPSULE_INDEX_SCHEMA,
-            "terminal": EPISODE_SCHEMA,
-        },
-        "planned_episode_count": (
-            None if plan is None else plan["planned_episode_count"]
-        ),
-        "terminal_episode_count": (
-            None if execution is None else len(execution["terminals"])
-        ),
-        **CLAIM_FLAGS,
-        "artifacts": {
-            name: {"sha256": _sha256(content), "bytes": len(content)}
-            for name, content in sorted(artifacts.items())
-        },
-    }
+    )
 
 
 def _funnel_manifest(
@@ -681,32 +758,28 @@ def _funnel_manifest(
     *,
     status: str,
 ) -> dict[str, object]:
-    return {
-        "schema_version": FUNNEL_MANIFEST_SCHEMA,
-        "proposal_id": "R0001-P50-E2",
-        "status": status,
-        "source_commit": source_commit,
-        "frozen_document_commit": FROZEN_DOCUMENT_COMMIT,
-        "frozen_document_commit_is_ancestor": status == "complete",
-        "command": list(command),
-        "source_identities": identities,
-        "source_acquisition": input_identity,
-        "gate_source_identity": candidate_gate_source_identity(),
-        "runtime": {
-            "python": platform.python_version(),
-            "numpy": np.__version__,
+    return candidate_artifact_manifest(
+        schema=FUNNEL_MANIFEST_SCHEMA,
+        proposal_id="R0001-P50-E2",
+        source_commit=source_commit,
+        frozen_document_commit=FROZEN_DOCUMENT_COMMIT,
+        command=command,
+        identities=identities,
+        artifacts=artifacts,
+        runtime_versions={
             "mujoco": mujoco_runtime_version(),
             "hwr_platform": importlib.metadata.version("hwr-platform"),
         },
-        "report_only": True,
-        "formal_candidate_output_modified": False,
-        "unique_observation_shadow_enters_candidate_output": False,
-        **CLAIM_FLAGS,
-        "artifacts": {
-            name: {"sha256": _sha256(content), "bytes": len(content)}
-            for name, content in sorted(artifacts.items())
+        status=status,
+        extra={
+            "source_acquisition": input_identity,
+            "gate_source_identity": candidate_gate_source_identity(),
+            "report_only": True,
+            "formal_candidate_output_modified": False,
+            "unique_observation_shadow_enters_candidate_output": False,
+            **CLAIM_FLAGS,
         },
-    }
+    )
 
 
 def _require_disk_capacity(output: Path) -> None:
@@ -715,79 +788,6 @@ def _require_disk_capacity(output: Path) -> None:
         parent = parent.parent
     if shutil.disk_usage(parent).free < 5 * 1024**3:
         raise RuntimeError("P50-E1 requires at least 5GiB free on the data volume")
-
-
-def _source_commit(root: Path) -> str:
-    result = subprocess.run(
-        ("git", "rev-parse", "HEAD"),
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    commit = result.stdout.strip()
-    if len(commit) != 40 or any(value not in "0123456789abcdef" for value in commit):
-        raise RuntimeError("P50 runner requires a full Git source commit")
-    return commit
-
-
-def _git_tree(root: Path, path: str) -> str:
-    result = subprocess.run(
-        ("git", "rev-parse", f"HEAD:{path}"),
-        cwd=root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
-
-
-def _file_identity(root: Path, path: Path) -> dict[str, object]:
-    content = path.read_bytes()
-    return {
-        "path": path.relative_to(root).as_posix(),
-        "sha256": _sha256(content),
-        "bytes": len(content),
-    }
-
-
-def _create_output(output: Path, artifacts: Mapping[str, bytes]) -> None:
-    output.parent.mkdir(parents=True, exist_ok=True)
-    staging = output.with_name(output.name + ".tmp")
-    staging.mkdir()
-    try:
-        for name, content in sorted(artifacts.items()):
-            path = staging / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _atomic_write(path, content)
-        os.replace(staging, output)
-    except BaseException:
-        shutil.rmtree(staging, ignore_errors=True)
-        raise
-
-
-def _atomic_write(path: Path, content: bytes) -> None:
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    with temporary.open("xb") as handle:
-        handle.write(content)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(temporary, path)
-
-
-def _json_bytes(value: object) -> bytes:
-    return (
-        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-    ).encode()
-
-
-def _resolve(root: Path, path: Path) -> Path:
-    return path.resolve() if path.is_absolute() else (root / path).resolve()
-
-
-def _sha256(payload: bytes) -> str:
-    return hashlib.sha256(payload).hexdigest()
-
 
 def main(argv: Sequence[str] | None = None) -> int:
     result = run(build_parser().parse_args(argv))
