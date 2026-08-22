@@ -778,13 +778,13 @@ def _prefix_failure_reason(record: Mapping[str, object]) -> str:
         failed = value == failure_value if failure_value != "positive" else float(value) > 0.0
         if failed:
             return reason
-    if not record.get("prefix_complete"):
-        raise CartesianConvergenceContractError("incomplete prefix lacks failure evidence")
     if int(record["candidate_count"]) <= 0:
         return "candidate_set_empty"
     selected = int(record["selected_index"])
     if not 0 <= selected < int(record["candidate_count"]):
         return "selected_index_out_of_range"
+    if not record.get("prefix_complete"):
+        raise CartesianConvergenceContractError("incomplete prefix lacks failure evidence")
     if abs(float(record["relative_yaw_at_b2"])) < math.pi / 6.0:
         return "relative_yaw_below_pi_over_6"
     if not record["primitive_target_crosscheck"].get("passed"):

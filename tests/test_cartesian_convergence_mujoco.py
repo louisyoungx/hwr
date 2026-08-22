@@ -16,9 +16,64 @@ from hwr.adapters.mujoco.training_catalog import (
 from hwr.core.embodied import DualArmAction
 from hwr.core.types import EpisodeResult
 from hwr.eval import cartesian_convergence as convergence
+from hwr.eval import cartesian_convergence_validation as validation
 from hwr.eval import target_selection
 from hwr.eval.target_selection import Candidate, PolicyVisibleInput
 from hwr.safety import SafetyLimits
+
+
+@pytest.mark.parametrize(
+    ("failure", "has_candidate", "selected_index"),
+    (
+        ("candidate_set_empty", False, -1),
+        ("selected_index_out_of_range", True, -1),
+    ),
+)
+def test_production_prefix_record_accepts_pre_b0_b1_candidate_failure(
+    monkeypatch, failure, has_candidate, selected_index
+) -> None:
+    candidates = (_candidate(),) if has_candidate else ()
+    record = _production_prefix_record(
+        monkeypatch, failure, candidates, selected_index
+    )
+
+    assert record["prefix_step_count"] == target_selection.ACQUISITION_STEPS
+    assert record["prefix_complete"] is False
+    assert record["eligible"] is False
+    validation._validate_prefix_record(record)
+
+
+@pytest.mark.parametrize(
+    ("failure", "has_candidate", "reported"),
+    (
+        ("candidate_set_empty", False, None),
+        ("candidate_set_empty", False, "selected_index_out_of_range"),
+        ("selected_index_out_of_range", True, None),
+        ("selected_index_out_of_range", True, "candidate_set_empty"),
+    ),
+)
+def test_pre_b0_b1_candidate_failure_rejects_missing_or_forged_reason(
+    monkeypatch, failure, has_candidate, reported
+) -> None:
+    candidates = (_candidate(),) if has_candidate else ()
+    record = _production_prefix_record(monkeypatch, failure, candidates, -1)
+    record["eligibility_reason"] = reported
+    record["prefix_failure_reason"] = reported
+
+    with pytest.raises(convergence.CartesianConvergenceContractError):
+        validation._validate_prefix_record(record)
+
+
+def test_incomplete_prefix_with_candidate_and_no_failure_is_invalid(
+    monkeypatch,
+) -> None:
+    record = _production_prefix_record(monkeypatch, None, (_candidate(),), 0)
+
+    with pytest.raises(
+        convergence.CartesianConvergenceContractError,
+        match="incomplete prefix lacks failure evidence",
+    ):
+        validation._validate_prefix_record(record)
 
 
 def test_frozen_plan_has_twelve_cells_and_domain_separated_seeds() -> None:
@@ -394,6 +449,73 @@ def _candidate() -> Candidate:
         first_row=20,
         first_column=30,
     )
+
+
+def _production_prefix_record(
+    monkeypatch,
+    failure: str | None,
+    candidates: tuple[Candidate, ...],
+    selected_index: int,
+) -> dict[str, object]:
+    document = {
+        "schema_version": target_selection.CANDIDATE_SCHEMA,
+        "acquisition_input_sha256": ["a" * 64],
+        "candidate_count": len(candidates),
+        "candidates": [list(value.canonical_record()) for value in candidates],
+    }
+    candidate_bytes = convergence.canonical_bytes(document)
+    candidate_set = target_selection.CandidateSet(
+        ("a" * 64,),
+        candidates,
+        candidate_bytes,
+        "unused-by-prefix-record",
+    )
+    row = {
+        "proposed_action": [0.0] * 16,
+        "applied_action": [0.0] * 16,
+        "hold_action": [0.0] * 16,
+        "terminal": False,
+        "safety_intervened": False,
+        "outside_validity_window": False,
+        "action_bounds_valid": True,
+    }
+    graph = SimpleNamespace(
+        report=lambda: dict.fromkeys(bridge.INVALID_GRAPH_FIELDS, 0)
+    )
+    backend = SimpleNamespace(
+        task_audit=lambda: {"severe_collision_count": 0},
+        contact_ledger=SimpleNamespace(report=lambda: {}),
+        _base_state=lambda: ((0.0, 0.0, np.pi / 2.0),),
+    )
+    monkeypatch.setattr(
+        provenance,
+        "p40_conservation_differences",
+        lambda *args: {"maximum_absolute_difference": 0.0},
+    )
+    run = bridge._PrefixRun(
+        backend=backend,
+        graph=graph,
+        observation=_observation(),
+        history=[],
+        history_available=[],
+        environment_seed=1,
+        policy_rng_seed=2,
+        acquisition_pose=(0.0, 0.0, 0.0),
+        acquisition_world_origin=(0.0, 0.0, 0.22),
+        candidate_set=candidate_set,
+        selected_index=selected_index,
+        trace=[dict(row) for _ in range(target_selection.ACQUISITION_STEPS)],
+        acquisition_input_hashes=["a" * 64],
+        failure=failure,
+        input_failure=None,
+        acquisition_main_event=False,
+        continuation_identity={},
+        first_actions={},
+        first_guard={},
+        preposition_targets={},
+        primitive_target_crosscheck={"passed": False},
+    )
+    return provenance.bank_prefix_record(run)
 
 
 def _policy_input() -> PolicyVisibleInput:
