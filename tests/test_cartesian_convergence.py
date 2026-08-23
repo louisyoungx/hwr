@@ -32,10 +32,12 @@ def test_equal_cell_bootstrap_and_binary_guards_accept_frozen_effect(
 ) -> None:
     bank = _local_bank(monkeypatch)
     terminals = _terminal_document(bank, delta=0.20)
-
-    first = validation.analyze_terminals(terminals, bank)
+    assert {tuple(record["role_order"]) for record in terminals["records"]} == {
+        convergence.ROLES, tuple(reversed(convergence.ROLES)),
+    }
+    parsed = json.loads(json.dumps(terminals, sort_keys=True))
+    first = validation.analyze_terminals(parsed, bank)
     second = validation.analyze_terminals(terminals, bank)
-
     assert first == second
     assert first["decision"] == (
         "accepted as paired physical Cartesian convergence evidence"
@@ -46,6 +48,10 @@ def test_equal_cell_bootstrap_and_binary_guards_accept_frozen_effect(
     assert first["continuous"]["bootstrap_seed"] == 20_265_102
     assert first["binary"]["frame_fixed_win_count"] == 36
     assert set(first["binary"]["by_latency_combination"].values()) == {9}
+    parsed["records"][0]["role_order"] = list(reversed(
+        parsed["records"][0]["role_order"]
+    ))
+    assert validation.analyze_terminals(parsed, bank)["decision"] == "invalid"
 
 
 def test_analysis_rejects_duplicate_identity_and_hard_safety(
@@ -95,8 +101,7 @@ def test_analysis_rejects_duplicate_identity_and_hard_safety(
     partial = validation.analyze_terminals(
         _terminal_document(bank, records=records[:1]), bank
     )
-    assert partial["decision"] == "rejected"
-    assert partial["identity_guard"]["terminated_by_hard_safety"] is True
+    assert partial["decision"] == "invalid"
 
 
 @pytest.mark.parametrize(

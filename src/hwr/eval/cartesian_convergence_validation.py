@@ -130,8 +130,6 @@ def _validated_terminal_records(terminals, bank):
         "invalid_count": 0,
         "passed": True,
     }
-
-
 def _validate_terminal_pair(record, pair) -> dict[str, object]:
     fields = (
         "pair_id", "planned_episode_id", "task_id", "cell_id",
@@ -165,17 +163,19 @@ def _validate_terminal_pair(record, pair) -> dict[str, object]:
         return dict(record)
     if not record.get("pair_identity_valid"):
         raise CartesianConvergenceContractError("terminal pair identity is invalid")
-    expected_roles = list(pair["role_order"])[: len(arms)]
-    if list(arms) != expected_roles:
+    role_sequence = record.get("role_order")
+    if not isinstance(role_sequence, list) or sorted(role_sequence) != sorted(
+        ROLES
+    ):
         raise CartesianConvergenceContractError("terminal role order differs")
+    if set(arms) != set(ROLES):
+        raise CartesianConvergenceContractError("terminal role set differs")
     normalized_arms = {
-        role: _validated_arm(role, arms[role], pair) for role in expected_roles
+        role: _validated_arm(role, arms[role], pair) for role in role_sequence
     }
     hard_stop = any(not arm["hard_guard_passed"] for arm in normalized_arms.values())
     if bool(record.get("hard_safety_stop")) != hard_stop:
         raise CartesianConvergenceContractError("terminal hard-stop flag differs")
-    if not hard_stop and set(normalized_arms) != set(ROLES):
-        raise CartesianConvergenceContractError("resolved pair omitted a role")
     replay = record.get("continuation_replay_identities")
     if not isinstance(replay, Mapping) or set(replay) != set(normalized_arms):
         raise CartesianConvergenceContractError("continuation replay roles differ")
@@ -203,8 +203,6 @@ def _validate_terminal_pair(record, pair) -> dict[str, object]:
             raise CartesianConvergenceContractError("terminal pair delta differs")
         normalized["delta_i"] = delta
     return normalized
-
-
 def _validated_arm(role, arm, pair) -> dict[str, object]:
     if arm.get("role") != role or arm.get("b2_control_step_limit") != B2_STEPS:
         raise CartesianConvergenceContractError("terminal arm identity differs")
@@ -390,8 +388,6 @@ def _hard_safety_guards(
         "invariant_failures": invariant_failures,
         "passed": not any(totals.values()) and not any(invariant_failures.values()),
     }
-
-
 def _continuous_analysis(records: Sequence[Mapping[str, object]]) -> dict[str, object]:
     rows = [_delta_row(record) for record in records]
     cells = frozen_cells()
