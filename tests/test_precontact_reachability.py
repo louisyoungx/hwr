@@ -212,6 +212,53 @@ def test_input_specs_bind_all_frozen_files() -> None:
         assert hashlib.sha256(payload).hexdigest() == spec["sha256"]
 
 
+def test_input_provenance_only_requires_tracked_bank_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_run = app.subprocess.run
+    ls_files_paths = []
+
+    def recording_run(arguments, *args, **kwargs):
+        if tuple(arguments[:3]) == ("git", "ls-files", "--error-unmatch"):
+            ls_files_paths.append(arguments[3])
+        return original_run(arguments, *args, **kwargs)
+
+    monkeypatch.setattr(app.subprocess, "run", recording_run)
+    inputs = app._input_identities(
+        ROOT,
+        argparse.Namespace(bank=BANK_PATH, terminals=TERMINALS_PATH),
+    )
+    assert set(ls_files_paths) == {
+        app.INPUT_SPECS["bank"]["path"].as_posix(),
+        app.INPUT_SPECS["bank_manifest"]["path"].as_posix(),
+    }
+    producer = _read(
+        ROOT / app.INPUT_SPECS["terminal_manifest"]["path"]
+    )["source_commit"]
+    for name in app.TRACKED_INPUTS:
+        assert inputs[name]["provenance_kind"] == "tracked_committed_artifact"
+        assert inputs[name]["commit"] != ""
+    for name in app.MANIFEST_BOUND_INPUTS:
+        assert (
+            inputs[name]["provenance_kind"]
+            == "manifest_bound_ignored_artifact"
+        )
+        assert inputs[name]["commit"] == producer
+
+
+def test_manifest_bound_inputs_require_producer_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inputs = app._input_identities(
+        ROOT,
+        argparse.Namespace(bank=BANK_PATH, terminals=TERMINALS_PATH),
+    )
+    bank, terminals = _read(BANK_PATH), _read(TERMINALS_PATH)
+    inputs["terminals"]["commit"] = "0" * 40
+    with pytest.raises(RuntimeError, match="producer commit"):
+        app._validate_input_provenance(ROOT, bank, terminals, inputs)
+
+
 def test_nonformal_output_is_rejected_before_analysis(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -257,6 +304,11 @@ def test_pairs_document_and_report_keep_pair_as_sample_unit(
                 "bytes": spec["bytes"],
                 "sha256": spec["sha256"],
                 "commit": "b" * 40,
+                "provenance_kind": (
+                    "tracked_committed_artifact"
+                    if name in app.TRACKED_INPUTS
+                    else "manifest_bound_ignored_artifact"
+                ),
             }
             for name, spec in app.INPUT_SPECS.items()
         },

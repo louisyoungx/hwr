@@ -82,6 +82,10 @@ INPUT_SPECS = {
         "sha256": "821f3cf6fea922a86b4096ee5d0ba9c64b9d8f444eacc98dcfc1f164da1328d2",
     },
 }
+TRACKED_INPUTS = frozenset(("bank", "bank_manifest"))
+MANIFEST_BOUND_INPUTS = frozenset(
+    ("terminals", "terminal_report", "terminal_manifest")
+)
 SOURCE_PATHS = (
     Path("src/hwr/eval/precontact_reachability.py"),
     Path("src/hwr/apps/evaluate_precontact_reachability.py"),
@@ -248,6 +252,7 @@ def _report(
                 "bytes": value["bytes"],
                 "sha256": value["sha256"],
                 "commit": value["commit"],
+                "provenance_kind": value["provenance_kind"],
             }
             for name, value in inputs.items()
         },
@@ -310,6 +315,7 @@ def _manifest(
                 "bytes": value["bytes"],
                 "sha256": value["sha256"],
                 "commit": value["commit"],
+                "provenance_kind": value["provenance_kind"],
             }
             for name, value in inputs.items()
         },
@@ -362,31 +368,32 @@ def _input_identities(root: Path, arguments) -> dict[str, dict[str, object]]:
         if any(identity[field] != INPUT_SPECS[name][field] for field in ("bytes", "sha256")):
             raise ValueError(f"{name} bytes differ from frozen input")
         relative = path.relative_to(root).as_posix()
-        subprocess.run(
-            ("git", "ls-files", "--error-unmatch", relative),
-            cwd=root,
-            check=True,
-            capture_output=True,
-        )
-        if subprocess.run(
-            ("git", "diff", "--quiet", "HEAD", "--", relative),
-            cwd=root,
-            check=False,
-        ).returncode:
-            raise RuntimeError(f"{name} differs from committed bytes")
-        commit = _git_output(root, ("log", "-1", "--format=%H", "--", relative))
-        if not commit or subprocess.run(
-            ("git", "merge-base", "--is-ancestor", commit, "HEAD"),
-            cwd=root,
-            check=False,
-        ).returncode:
-            raise RuntimeError(f"{name} commit is not an ancestor")
         result[name] = {
             "absolute_path": path,
             "path": relative,
-            "commit": commit,
             **identity,
         }
+    producer = _read_json(result["terminal_manifest"]["absolute_path"]).get(
+        "source_commit"
+    )
+    if not _is_commit(producer):
+        raise RuntimeError("terminal producer source commit is invalid")
+    for name in TRACKED_INPUTS:
+        result[name].update(
+            {
+                "commit": _tracked_input_commit(
+                    root, Path(result[name]["absolute_path"]), name
+                ),
+                "provenance_kind": "tracked_committed_artifact",
+            }
+        )
+    for name in MANIFEST_BOUND_INPUTS:
+        result[name].update(
+            {
+                "commit": producer,
+                "provenance_kind": "manifest_bound_ignored_artifact",
+            }
+        )
     return result
 
 
@@ -394,6 +401,21 @@ def _validate_input_provenance(root, bank, terminals, inputs) -> None:
     bank_manifest = _read_json(inputs["bank_manifest"]["absolute_path"])
     terminal_report = _read_json(inputs["terminal_report"]["absolute_path"])
     terminal_manifest = _read_json(inputs["terminal_manifest"]["absolute_path"])
+    producer = terminal_manifest.get("source_commit")
+    if any(
+        inputs[name].get("provenance_kind")
+        != (
+            "tracked_committed_artifact"
+            if name in TRACKED_INPUTS
+            else "manifest_bound_ignored_artifact"
+        )
+        for name in INPUT_SPECS
+    ):
+        raise RuntimeError("input provenance classification differs")
+    if any(
+        inputs[name].get("commit") != producer for name in MANIFEST_BOUND_INPUTS
+    ):
+        raise RuntimeError("ignored artifact producer commit differs")
     if bank_manifest.get("artifacts", {}).get("bank.json") != _public_identity(
         inputs["bank"]
     ):
@@ -423,14 +445,46 @@ def _validate_input_provenance(root, bank, terminals, inputs) -> None:
     for commit in (
         bank.get("source_commit"),
         bank_manifest.get("source_commit"),
-        terminal_manifest.get("source_commit"),
+        producer,
     ):
-        if not isinstance(commit, str) or subprocess.run(
+        if not _is_commit(commit) or subprocess.run(
             ("git", "merge-base", "--is-ancestor", commit, "HEAD"),
             cwd=root,
             check=False,
         ).returncode:
             raise RuntimeError("P51 source commit is not an ancestor")
+
+
+def _tracked_input_commit(root: Path, path: Path, name: str) -> str:
+    relative = path.relative_to(root).as_posix()
+    subprocess.run(
+        ("git", "ls-files", "--error-unmatch", relative),
+        cwd=root,
+        check=True,
+        capture_output=True,
+    )
+    if subprocess.run(
+        ("git", "diff", "--quiet", "HEAD", "--", relative),
+        cwd=root,
+        check=False,
+    ).returncode:
+        raise RuntimeError(f"{name} differs from committed bytes")
+    commit = _git_output(root, ("log", "-1", "--format=%H", "--", relative))
+    if not _is_commit(commit) or subprocess.run(
+        ("git", "merge-base", "--is-ancestor", commit, "HEAD"),
+        cwd=root,
+        check=False,
+    ).returncode:
+        raise RuntimeError(f"{name} commit is not an ancestor")
+    return commit
+
+
+def _is_commit(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 40
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 def _source_identities(root: Path) -> dict[str, object]:
