@@ -1,0 +1,1603 @@
+{
+  "candidate_modified": false,
+  "checks": {
+    "action_latency_complete": true,
+    "all_applied_action_budgets_recomputed": true,
+    "all_bilateral_traces_101": true,
+    "all_distance_traces_101": true,
+    "arm_count_72": true,
+    "bank_pair_count_36": true,
+    "cells_complete": true,
+    "deterministic_pairs_bit_identical": true,
+    "deterministic_report_bit_identical": true,
+    "finite_metrics": true,
+    "input_provenance_passed": true,
+    "latency_combinations_complete": true,
+    "observation_latency_complete": true,
+    "pair_count_36": true,
+    "passed": true,
+    "sample_unit_is_pair": true,
+    "target_identity_reconstructed": true,
+    "tasks_complete": true,
+    "terminal_pair_count_36": true,
+    "unique_pair_samples": true
+  },
+  "closed_loop_capability_episode_executed": false,
+  "contact_or_grasp_claim_allowed": false,
+  "decision": "accepted as bilateral pre-contact reachability measurement evidence",
+  "diagnostic": "precontact_support_deficit_supported",
+  "estimand": "bilateral pre-contact readiness and applied-command support within the fixed P51 frame_fixed cohort",
+  "frozen_thresholds": {
+    "action_scale_m_per_s": 0.3,
+    "applied_action_steps_per_pair": 100,
+    "arm_count": 72,
+    "b3_steps": 50,
+    "b3_velocity_m_per_s": 0.03,
+    "b4_steps": 20,
+    "b4_velocity_m_per_s": 0.02,
+    "contact_transition_nominal_m": 0.095,
+    "control_hz": 20.0,
+    "deficit_rejected_min_ready_pairs": 24,
+    "deficit_rejected_min_ready_pairs_per_task": 6,
+    "distance_steps_per_arm": 101,
+    "pair_count": 36,
+    "ready_distance_m": 0.1,
+    "support_deficit_max_ready_pairs": 6,
+    "support_deficit_max_ready_pairs_per_task": 4,
+    "support_deficit_min_both_negative_margin_pairs": 30
+  },
+  "generalization_claim_allowed": false,
+  "gripper_modified": false,
+  "input_identities": {
+    "bank": {
+      "bytes": 7160016,
+      "commit": "63b6c2dc0221f37b71b4356d0b154ec3e8e97c0a",
+      "path": "runs/research-loop/0010/r0010-p51-e1-bank-s20265101/bank.json",
+      "provenance_kind": "tracked_committed_artifact",
+      "sha256": "09d2fe4e05f2bd8d23ebfe6886fe260d1b34b41771da42992f0f432a8a04f3d3"
+    },
+    "bank_manifest": {
+      "bytes": 53605,
+      "commit": "63b6c2dc0221f37b71b4356d0b154ec3e8e97c0a",
+      "path": "runs/research-loop/0010/r0010-p51-e1-bank-s20265101/manifest.json",
+      "provenance_kind": "tracked_committed_artifact",
+      "sha256": "7e0d5f9c7757b59ceb8d4dfe3ddcba38cc1d1037c43c358e7168d700310d5e45"
+    },
+    "terminal_manifest": {
+      "bytes": 53753,
+      "commit": "63b6c2dc0221f37b71b4356d0b154ec3e8e97c0a",
+      "path": "runs/research-loop/0010/r0010-p51-e1-convergence-s20265101/manifest.json",
+      "provenance_kind": "manifest_bound_ignored_artifact",
+      "sha256": "821f3cf6fea922a86b4096ee5d0ba9c64b9d8f444eacc98dcfc1f164da1328d2"
+    },
+    "terminal_report": {
+      "bytes": 4643,
+      "commit": "63b6c2dc0221f37b71b4356d0b154ec3e8e97c0a",
+      "path": "runs/research-loop/0010/r0010-p51-e1-convergence-s20265101/report.json",
+      "provenance_kind": "manifest_bound_ignored_artifact",
+      "sha256": "3fcac95c2362923d9eb94ef4d7121d5bcb31ea859a308ed352321dfa93771cc9"
+    },
+    "terminals": {
+      "bytes": 26314706,
+      "commit": "63b6c2dc0221f37b71b4356d0b154ec3e8e97c0a",
+      "path": "runs/research-loop/0010/r0010-p51-e1-convergence-s20265101/terminals.json",
+      "provenance_kind": "manifest_bound_ignored_artifact",
+      "sha256": "1c54f93a95bfbf4e08076b3c633b22dce295990a6808a48f0f10de18a2b3c2c7"
+    }
+  },
+  "measurement_only": true,
+  "mujoco_executed": false,
+  "phase_modified": false,
+  "policy_inference_executed": false,
+  "primitive_modified": false,
+  "proposal_id": "R0001-P57",
+  "safety_improvement_claim_allowed": false,
+  "sample_unit": "pair",
+  "schema_version": "hwr.p57-precontact-reachability-report/v1",
+  "source_commit": "bbf6d666f8071fa3a5d26be2d774ceeae2ebc7a1",
+  "summary": {
+    "arm_count": 72,
+    "by_action_latency": {
+      "1": {
+        "arm_count": 36,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 36,
+            "maximum": 0.4309977256585708,
+            "mean": 0.39513397872217126,
+            "minimum": 0.3486734392248524
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 36,
+            "maximum": 0.17951323071016292,
+            "mean": 0.1791327117524199,
+            "minimum": 0.17698870020427857
+          },
+          "contact_transition_margin_m": {
+            "count": 36,
+            "maximum": -0.08198870020427856,
+            "mean": -0.08413271175241993,
+            "minimum": -0.08451323071016292
+          },
+          "d_0_m": {
+            "count": 36,
+            "maximum": 2.9945423650149414,
+            "mean": 2.2802955366296707,
+            "minimum": 1.2926026413902152
+          },
+          "d_100_m": {
+            "count": 36,
+            "maximum": 3.0274608758320274,
+            "mean": 2.1261636902500873,
+            "minimum": 1.0258892741630135
+          },
+          "initial_command_margin_m": {
+            "count": 36,
+            "maximum": -0.9439292021653628,
+            "mean": -1.8851615579075,
+            "minimum": -2.5714070013802472
+          },
+          "minimum_m": {
+            "count": 36,
+            "maximum": 2.9572174833650675,
+            "mean": 2.1000371517909375,
+            "minimum": 1.0258892741630135
+          },
+          "normalized_auc": {
+            "count": 36,
+            "maximum": 1.031800461534474,
+            "mean": 0.969847029873508,
+            "minimum": 0.9014975837799316
+          }
+        },
+        "both_arms_improved_count": 5,
+        "both_arms_improved_rate": 0.2777777777777778,
+        "both_initial_command_margins_negative_count": 18,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 18
+      },
+      "2": {
+        "arm_count": 36,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 36,
+            "maximum": 0.43271220081555894,
+            "mean": 0.3861014872889717,
+            "minimum": 0.34987490255850884
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 36,
+            "maximum": 0.17951323071016279,
+            "mean": 0.1786717205415344,
+            "minimum": 0.17698870020427832
+          },
+          "contact_transition_margin_m": {
+            "count": 36,
+            "maximum": -0.08198870020427831,
+            "mean": -0.08367172054153443,
+            "minimum": -0.08451323071016278
+          },
+          "d_0_m": {
+            "count": 36,
+            "maximum": 3.400694272089616,
+            "mean": 2.2777305958520273,
+            "minimum": 1.0782476291624683
+          },
+          "d_100_m": {
+            "count": 36,
+            "maximum": 3.405736256383822,
+            "mean": 2.1196837880795703,
+            "minimum": 0.7512362489141097
+          },
+          "initial_command_margin_m": {
+            "count": 36,
+            "maximum": -0.7254330230916336,
+            "mean": -1.8916291085630559,
+            "minimum": -3.010679833816681
+          },
+          "minimum_m": {
+            "count": 36,
+            "maximum": 3.4000142816597902,
+            "mean": 2.0950935698569273,
+            "minimum": 0.7512362489141097
+          },
+          "normalized_auc": {
+            "count": 36,
+            "maximum": 1.0329410666279026,
+            "mean": 0.9664062585300867,
+            "minimum": 0.8737244829502605
+          }
+        },
+        "both_arms_improved_count": 5,
+        "both_arms_improved_rate": 0.2777777777777778,
+        "both_initial_command_margins_negative_count": 18,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 18
+      }
+    },
+    "by_cell": {
+      "cell-00-o1-a1": {
+        "arm_count": 6,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 6,
+            "maximum": 0.4309977256585708,
+            "mean": 0.4273803556290208,
+            "minimum": 0.42437301398415483
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 6,
+            "maximum": 0.17951323071016292,
+            "mean": 0.17951323071016256,
+            "minimum": 0.1795132307101621
+          },
+          "contact_transition_margin_m": {
+            "count": 6,
+            "maximum": -0.08451323071016209,
+            "mean": -0.08451323071016255,
+            "minimum": -0.08451323071016292
+          },
+          "d_0_m": {
+            "count": 6,
+            "maximum": 2.3438570830615104,
+            "mean": 2.0167388128543604,
+            "minimum": 1.6880894795249834
+          },
+          "d_100_m": {
+            "count": 6,
+            "maximum": 2.430869939027357,
+            "mean": 1.8993234755195019,
+            "minimum": 1.3567743687602112
+          },
+          "initial_command_margin_m": {
+            "count": 6,
+            "maximum": -1.2637164655408286,
+            "mean": -1.5893584572253394,
+            "minimum": -1.9170867558171734
+          },
+          "minimum_m": {
+            "count": 6,
+            "maximum": 2.3438570830615104,
+            "mean": 1.856290147339383,
+            "minimum": 1.3567743687602112
+          },
+          "normalized_auc": {
+            "count": 6,
+            "maximum": 1.029548054432481,
+            "mean": 0.9730270835406705,
+            "minimum": 0.9133575305776954
+          }
+        },
+        "both_arms_improved_count": 0,
+        "both_arms_improved_rate": 0.0,
+        "both_initial_command_margins_negative_count": 3,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 3
+      },
+      "cell-01-o1-a2": {
+        "arm_count": 6,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 6,
+            "maximum": 0.43271220081555894,
+            "mean": 0.4102107041574697,
+            "minimum": 0.39776360292729807
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 6,
+            "maximum": 0.1795132307101625,
+            "mean": 0.17867172054153446,
+            "minimum": 0.17698870020427837
+          },
+          "contact_transition_margin_m": {
+            "count": 6,
+            "maximum": -0.08198870020427837,
+            "mean": -0.08367172054153445,
+            "minimum": -0.0845132307101625
+          },
+          "d_0_m": {
+            "count": 6,
+            "maximum": 2.5259474504491544,
+            "mean": 2.1130452826060306,
+            "minimum": 1.7451831123431947
+          },
+          "d_100_m": {
+            "count": 6,
+            "maximum": 2.6112459600881013,
+            "mean": 1.9740546492213964,
+            "minimum": 1.4150382680261744
+          },
+          "initial_command_margin_m": {
+            "count": 6,
+            "maximum": -1.3450268036136426,
+            "mean": -1.7028345784485612,
+            "minimum": -2.0932352496335955
+          },
+          "minimum_m": {
+            "count": 6,
+            "maximum": 2.5257818851476177,
+            "mean": 1.9409946188648501,
+            "minimum": 1.4150382680261744
+          },
+          "normalized_auc": {
+            "count": 6,
+            "maximum": 1.0251745215684662,
+            "mean": 0.9683122072932977,
+            "minimum": 0.912164650495833
+          }
+        },
+        "both_arms_improved_count": 0,
+        "both_arms_improved_rate": 0.0,
+        "both_initial_command_margins_negative_count": 3,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 3
+      },
+      "cell-02-o2-a1": {
+        "arm_count": 6,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 6,
+            "maximum": 0.38485029532314907,
+            "mean": 0.3796651222080143,
+            "minimum": 0.3717900271106837
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 6,
+            "maximum": 0.17951323071016262,
+            "mean": 0.17951323071016237,
+            "minimum": 0.17951323071016204
+          },
+          "contact_transition_margin_m": {
+            "count": 6,
+            "maximum": -0.08451323071016204,
+            "mean": -0.08451323071016238,
+            "minimum": -0.08451323071016262
+          },
+          "d_0_m": {
+            "count": 6,
+            "maximum": 2.558676238151257,
+            "mean": 2.1874130122551514,
+            "minimum": 1.811381354835047
+          },
+          "d_100_m": {
+            "count": 6,
+            "maximum": 2.549897140579865,
+            "mean": 1.9687655930800894,
+            "minimum": 1.4112714023613413
+          },
+          "initial_command_margin_m": {
+            "count": 6,
+            "maximum": -1.4395913277243633,
+            "mean": -1.8077478900471373,
+            "minimum": -2.173825942828108
+          },
+          "minimum_m": {
+            "count": 6,
+            "maximum": 2.549897140579865,
+            "mean": 1.9687655930800894,
+            "minimum": 1.4112714023613413
+          },
+          "normalized_auc": {
+            "count": 6,
+            "maximum": 1.0006766313563107,
+            "mean": 0.9527655400155074,
+            "minimum": 0.9014975837799316
+          }
+        },
+        "both_arms_improved_count": 3,
+        "both_arms_improved_rate": 1.0,
+        "both_initial_command_margins_negative_count": 3,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 3
+      },
+      "cell-03-o2-a2": {
+        "arm_count": 6,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 6,
+            "maximum": 0.36411298643464085,
+            "mean": 0.3589438319410252,
+            "minimum": 0.3528146060708347
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 6,
+            "maximum": 0.17951323071016267,
+            "mean": 0.17951323071016242,
+            "minimum": 0.179513230710162
+          },
+          "contact_transition_margin_m": {
+            "count": 6,
+            "maximum": -0.08451323071016201,
+            "mean": -0.08451323071016241,
+            "minimum": -0.08451323071016267
+          },
+          "d_0_m": {
+            "count": 6,
+            "maximum": 2.161501872311691,
+            "mean": 1.5997432398788425,
+            "minimum": 1.0782476291624683
+          },
+          "d_100_m": {
+            "count": 6,
+            "maximum": 2.0777511533126374,
+            "mean": 1.367336624824414,
+            "minimum": 0.7512362489141097
+          },
+          "initial_command_margin_m": {
+            "count": 6,
+            "maximum": -0.7254330230916336,
+            "mean": -1.2407994079378175,
+            "minimum": -1.7973888858770504
+          },
+          "minimum_m": {
+            "count": 6,
+            "maximum": 2.0777511533126374,
+            "mean": 1.367336624824414,
+            "minimum": 0.7512362489141097
+          },
+          "normalized_auc": {
+            "count": 6,
+            "maximum": 0.9847318803023,
+            "mean": 0.9311119279104411,
+            "minimum": 0.8737244829502605
+          }
+        },
+        "both_arms_improved_count": 3,
+        "both_arms_improved_rate": 1.0,
+        "both_initial_command_margins_negative_count": 3,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 3
+      },
+      "cell-04-o1-a1": {
+        "arm_count": 6,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 6,
+            "maximum": 0.4198214205516228,
+            "mean": 0.3805110281717945,
+            "minimum": 0.3560888381034505
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 6,
+            "maximum": 0.17951323071016279,
+            "mean": 0.17951323071016256,
+            "minimum": 0.17951323071016229
+          },
+          "contact_transition_margin_m": {
+            "count": 6,
+            "maximum": -0.08451323071016228,
+            "mean": -0.08451323071016255,
+            "minimum": -0.08451323071016278
+          },
+          "d_0_m": {
+            "count": 6,
+            "maximum": 2.954018155673686,
+            "mean": 2.245265517511499,
+            "minimum": 1.6487280015642267
+          },
+          "d_100_m": {
+            "count": 6,
+            "maximum": 2.9941828889516438,
+            "mean": 2.1436236265250517,
+            "minimum": 1.3997003673100017
+          },
+          "initial_command_margin_m": {
+            "count": 6,
+            "maximum": -1.2926391634607763,
+            "mean": -1.8647544893397046,
+            "minimum": -2.5341967351220633
+          },
+          "minimum_m": {
+            "count": 6,
+            "maximum": 2.953515965346253,
+            "mean": 2.1062180809521376,
+            "minimum": 1.3997003673100017
+          },
+          "normalized_auc": {
+            "count": 6,
+            "maximum": 1.031800461534474,
+            "mean": 0.98275543932481,
+            "minimum": 0.928290223832855
+          }
+        },
+        "both_arms_improved_count": 0,
+        "both_arms_improved_rate": 0.0,
+        "both_initial_command_margins_negative_count": 3,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 3
+      },
+      "cell-05-o1-a2": {
+        "arm_count": 6,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 6,
+            "maximum": 0.3892338241493199,
+            "mean": 0.3866217279389382,
+            "minimum": 0.38160901694026217
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 6,
+            "maximum": 0.17951323071016279,
+            "mean": 0.17951323071016248,
+            "minimum": 0.17951323071016206
+          },
+          "contact_transition_margin_m": {
+            "count": 6,
+            "maximum": -0.08451323071016206,
+            "mean": -0.08451323071016248,
+            "minimum": -0.08451323071016278
+          },
+          "d_0_m": {
+            "count": 6,
+            "maximum": 2.8376114355130926,
+            "mean": 2.429296642592588,
+            "minimum": 2.047210522640517
+          },
+          "d_100_m": {
+            "count": 6,
+            "maximum": 2.932402353021718,
+            "mean": 2.3281716666091437,
+            "minimum": 1.7426179226537581
+          },
+          "initial_command_margin_m": {
+            "count": 6,
+            "maximum": -1.6581881799132843,
+            "mean": -2.04267491465365,
+            "minimum": -2.4483776113637727
+          },
+          "minimum_m": {
+            "count": 6,
+            "maximum": 2.837421704570413,
+            "mean": 2.281151204383677,
+            "minimum": 1.7426179226537581
+          },
+          "normalized_auc": {
+            "count": 6,
+            "maximum": 1.026769740542453,
+            "mean": 0.9817155054709356,
+            "minimum": 0.9342057727175038
+          }
+        },
+        "both_arms_improved_count": 0,
+        "both_arms_improved_rate": 0.0,
+        "both_initial_command_margins_negative_count": 3,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 3
+      },
+      "cell-06-o2-a1": {
+        "arm_count": 6,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 6,
+            "maximum": 0.4080116772132537,
+            "mean": 0.38408079693949615,
+            "minimum": 0.3486734392248524
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 6,
+            "maximum": 0.1795132307101627,
+            "mean": 0.17951323071016254,
+            "minimum": 0.17951323071016229
+          },
+          "contact_transition_margin_m": {
+            "count": 6,
+            "maximum": -0.08451323071016228,
+            "mean": -0.08451323071016252,
+            "minimum": -0.0845132307101627
+          },
+          "d_0_m": {
+            "count": 6,
+            "maximum": 2.9572174833650675,
+            "mean": 2.211533944333935,
+            "minimum": 1.2926026413902152
+          },
+          "d_100_m": {
+            "count": 6,
+            "maximum": 3.0274608758320274,
+            "mean": 2.0978643391279115,
+            "minimum": 1.0258892741630135
+          },
+          "initial_command_margin_m": {
+            "count": 6,
+            "maximum": -0.9439292021653628,
+            "mean": -1.8274531473944384,
+            "minimum": -2.549205806151814
+          },
+          "minimum_m": {
+            "count": 6,
+            "maximum": 2.9572174833650675,
+            "mean": 2.0569282726077485,
+            "minimum": 1.0258892741630135
+          },
+          "normalized_auc": {
+            "count": 6,
+            "maximum": 1.0317608926196438,
+            "mean": 0.9748528334933771,
+            "minimum": 0.909169717090878
+          }
+        },
+        "both_arms_improved_count": 0,
+        "both_arms_improved_rate": 0.0,
+        "both_initial_command_margins_negative_count": 3,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 3
+      },
+      "cell-07-o2-a2": {
+        "arm_count": 6,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 6,
+            "maximum": 0.41351144281054264,
+            "mean": 0.3743999843623864,
+            "minimum": 0.34987490255850884
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 6,
+            "maximum": 0.17951323071016262,
+            "mean": 0.17951323071016242,
+            "minimum": 0.1795132307101623
+          },
+          "contact_transition_margin_m": {
+            "count": 6,
+            "maximum": -0.08451323071016231,
+            "mean": -0.08451323071016244,
+            "minimum": -0.08451323071016262
+          },
+          "d_0_m": {
+            "count": 6,
+            "maximum": 3.0213598100736516,
+            "mean": 2.1239503425205557,
+            "minimum": 1.4501018802006402
+          },
+          "d_100_m": {
+            "count": 6,
+            "maximum": 3.0647354138221865,
+            "mean": 2.0169050752990043,
+            "minimum": 1.2063788528250114
+          },
+          "initial_command_margin_m": {
+            "count": 6,
+            "maximum": -1.0902882724825327,
+            "mean": -1.7495503581581697,
+            "minimum": -2.607848367263109
+          },
+          "minimum_m": {
+            "count": 6,
+            "maximum": 3.0210832653824924,
+            "mean": 1.9795010382556748,
+            "minimum": 1.2063788528250114
+          },
+          "normalized_auc": {
+            "count": 6,
+            "maximum": 1.0329410666279026,
+            "mean": 0.9782104678499159,
+            "minimum": 0.9282425886738679
+          }
+        },
+        "both_arms_improved_count": 0,
+        "both_arms_improved_rate": 0.0,
+        "both_initial_command_margins_negative_count": 3,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 3
+      },
+      "cell-08-o1-a1": {
+        "arm_count": 6,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 6,
+            "maximum": 0.4231353636346943,
+            "mean": 0.3964634732610047,
+            "minimum": 0.3590661055120322
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 6,
+            "maximum": 0.1795132307101626,
+            "mean": 0.17881113393691528,
+            "minimum": 0.17740694039042107
+          },
+          "contact_transition_margin_m": {
+            "count": 6,
+            "maximum": -0.08240694039042107,
+            "mean": -0.0838111339369153,
+            "minimum": -0.08451323071016259
+          },
+          "d_0_m": {
+            "count": 6,
+            "maximum": 2.9945423650149414,
+            "mean": 2.5409027920998892,
+            "minimum": 1.7973879473607748
+          },
+          "d_100_m": {
+            "count": 6,
+            "maximum": 2.948426001658818,
+            "mean": 2.3695109276730557,
+            "minimum": 1.5606200585257972
+          },
+          "initial_command_margin_m": {
+            "count": 6,
+            "maximum": -1.4383218418487425,
+            "mean": -2.1444393188388844,
+            "minimum": -2.5714070013802472
+          },
+          "minimum_m": {
+            "count": 6,
+            "maximum": 2.948426001658818,
+            "mean": 2.3524690694662302,
+            "minimum": 1.5606200585257972
+          },
+          "normalized_auc": {
+            "count": 6,
+            "maximum": 1.0314872420699903,
+            "mean": 0.9716916591243051,
+            "minimum": 0.9272915480478552
+          }
+        },
+        "both_arms_improved_count": 1,
+        "both_arms_improved_rate": 0.3333333333333333,
+        "both_initial_command_margins_negative_count": 3,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 3
+      },
+      "cell-09-o1-a2": {
+        "arm_count": 6,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 6,
+            "maximum": 0.42441476524490807,
+            "mean": 0.4070184519529725,
+            "minimum": 0.39001443827293464
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 6,
+            "maximum": 0.1795132307101624,
+            "mean": 0.1778302103729064,
+            "minimum": 0.17698870020427837
+          },
+          "contact_transition_margin_m": {
+            "count": 6,
+            "maximum": -0.08198870020427837,
+            "mean": -0.08283021037290639,
+            "minimum": -0.0845132307101624
+          },
+          "d_0_m": {
+            "count": 6,
+            "maximum": 3.400694272089616,
+            "mean": 2.8633780916069598,
+            "minimum": 2.5092409514067087
+          },
+          "d_100_m": {
+            "count": 6,
+            "maximum": 3.405736256383822,
+            "mean": 2.6299536314111935,
+            "minimum": 2.0342135843628064
+          },
+          "initial_command_margin_m": {
+            "count": 6,
+            "maximum": -2.0848261861618007,
+            "mean": -2.456359639653987,
+            "minimum": -3.010679833816681
+          },
+          "minimum_m": {
+            "count": 6,
+            "maximum": 3.4000142816597902,
+            "mean": 2.628999968957188,
+            "minimum": 2.0342135843628064
+          },
+          "normalized_auc": {
+            "count": 6,
+            "maximum": 1.0035954338638227,
+            "mean": 0.9626627325160785,
+            "minimum": 0.9146494820346651
+          }
+        },
+        "both_arms_improved_count": 2,
+        "both_arms_improved_rate": 0.6666666666666666,
+        "both_initial_command_margins_negative_count": 3,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 3
+      },
+      "cell-10-o2-a1": {
+        "arm_count": 6,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 6,
+            "maximum": 0.42647576713355645,
+            "mean": 0.40270309612369704,
+            "minimum": 0.38917594869380084
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 6,
+            "maximum": 0.17951323071016234,
+            "mean": 0.17793221373695423,
+            "minimum": 0.17698870020427857
+          },
+          "contact_transition_margin_m": {
+            "count": 6,
+            "maximum": -0.08198870020427856,
+            "mean": -0.08293221373695424,
+            "minimum": -0.08451323071016234
+          },
+          "d_0_m": {
+            "count": 6,
+            "maximum": 2.804905949378143,
+            "mean": 2.4799191407231906,
+            "minimum": 2.0852201628653684
+          },
+          "d_100_m": {
+            "count": 6,
+            "maximum": 2.8596601266381407,
+            "mean": 2.277894179574917,
+            "minimum": 1.7409693704821225
+          },
+          "initial_command_margin_m": {
+            "count": 6,
+            "maximum": -1.6960442141715675,
+            "mean": -2.077216044599494,
+            "minimum": -2.412448376834409
+          },
+          "minimum_m": {
+            "count": 6,
+            "maximum": 2.8048060269598993,
+            "mean": 2.2595517473000384,
+            "minimum": 1.7409693704821225
+          },
+          "normalized_auc": {
+            "count": 6,
+            "maximum": 1.0163842242759416,
+            "mean": 0.9639896237423783,
+            "minimum": 0.9156911680381784
+          }
+        },
+        "both_arms_improved_count": 1,
+        "both_arms_improved_rate": 0.3333333333333333,
+        "both_initial_command_margins_negative_count": 3,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 3
+      },
+      "cell-11-o2-a2": {
+        "arm_count": 6,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 6,
+            "maximum": 0.3943798957934176,
+            "mean": 0.3794142233810385,
+            "minimum": 0.3549114994724932
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 6,
+            "maximum": 0.17698870020427865,
+            "mean": 0.17698870020427848,
+            "minimum": 0.17698870020427832
+          },
+          "contact_transition_margin_m": {
+            "count": 6,
+            "maximum": -0.08198870020427831,
+            "mean": -0.0819887002042785,
+            "minimum": -0.08198870020427865
+          },
+          "d_0_m": {
+            "count": 6,
+            "maximum": 2.8770720685264246,
+            "mean": 2.5369699759071893,
+            "minimum": 2.1546381275194966
+          },
+          "d_100_m": {
+            "count": 6,
+            "maximum": 2.9031376948948013,
+            "mean": 2.4016810811122706,
+            "minimum": 1.881939684292035
+          },
+          "initial_command_margin_m": {
+            "count": 6,
+            "maximum": -1.7997266280470035,
+            "mean": -2.1575557525261506,
+            "minimum": -2.482692172733007
+          },
+          "minimum_m": {
+            "count": 6,
+            "maximum": 2.876632266747382,
+            "mean": 2.372577963855763,
+            "minimum": 1.881939684292035
+          },
+          "normalized_auc": {
+            "count": 6,
+            "maximum": 1.0258202701401655,
+            "mean": 0.9764247101398512,
+            "minimum": 0.9317268773323887
+          }
+        },
+        "both_arms_improved_count": 0,
+        "both_arms_improved_rate": 0.0,
+        "both_initial_command_margins_negative_count": 3,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 3
+      }
+    },
+    "by_latency_combination": {
+      "o1-a1": {
+        "arm_count": 18,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 18,
+            "maximum": 0.4309977256585708,
+            "mean": 0.4014516190206067,
+            "minimum": 0.3560888381034505
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 18,
+            "maximum": 0.17951323071016292,
+            "mean": 0.17927919845241347,
+            "minimum": 0.17740694039042107
+          },
+          "contact_transition_margin_m": {
+            "count": 18,
+            "maximum": -0.08240694039042107,
+            "mean": -0.08427919845241347,
+            "minimum": -0.08451323071016292
+          },
+          "d_0_m": {
+            "count": 18,
+            "maximum": 2.9945423650149414,
+            "mean": 2.2676357074885827,
+            "minimum": 1.6487280015642267
+          },
+          "d_100_m": {
+            "count": 18,
+            "maximum": 2.9941828889516438,
+            "mean": 2.137486009905869,
+            "minimum": 1.3567743687602112
+          },
+          "initial_command_margin_m": {
+            "count": 18,
+            "maximum": -1.2637164655408286,
+            "mean": -1.866184088467976,
+            "minimum": -2.5714070013802472
+          },
+          "minimum_m": {
+            "count": 18,
+            "maximum": 2.953515965346253,
+            "mean": 2.1049924325859166,
+            "minimum": 1.3567743687602112
+          },
+          "normalized_auc": {
+            "count": 18,
+            "maximum": 1.031800461534474,
+            "mean": 0.9758247273299284,
+            "minimum": 0.9133575305776954
+          }
+        },
+        "both_arms_improved_count": 1,
+        "both_arms_improved_rate": 0.1111111111111111,
+        "both_initial_command_margins_negative_count": 9,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 9
+      },
+      "o1-a2": {
+        "arm_count": 18,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 18,
+            "maximum": 0.43271220081555894,
+            "mean": 0.40128362801646017,
+            "minimum": 0.38160901694026217
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 18,
+            "maximum": 0.17951323071016279,
+            "mean": 0.1786717205415344,
+            "minimum": 0.17698870020427837
+          },
+          "contact_transition_margin_m": {
+            "count": 18,
+            "maximum": -0.08198870020427837,
+            "mean": -0.08367172054153443,
+            "minimum": -0.08451323071016278
+          },
+          "d_0_m": {
+            "count": 18,
+            "maximum": 3.400694272089616,
+            "mean": 2.468573338935193,
+            "minimum": 1.7451831123431947
+          },
+          "d_100_m": {
+            "count": 18,
+            "maximum": 3.405736256383822,
+            "mean": 2.3107266490805776,
+            "minimum": 1.4150382680261744
+          },
+          "initial_command_margin_m": {
+            "count": 18,
+            "maximum": -1.3450268036136426,
+            "mean": -2.0672897109187325,
+            "minimum": -3.010679833816681
+          },
+          "minimum_m": {
+            "count": 18,
+            "maximum": 3.4000142816597902,
+            "mean": 2.283715264068571,
+            "minimum": 1.4150382680261744
+          },
+          "normalized_auc": {
+            "count": 18,
+            "maximum": 1.026769740542453,
+            "mean": 0.9708968150934373,
+            "minimum": 0.912164650495833
+          }
+        },
+        "both_arms_improved_count": 2,
+        "both_arms_improved_rate": 0.2222222222222222,
+        "both_initial_command_margins_negative_count": 9,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 9
+      },
+      "o2-a1": {
+        "arm_count": 18,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 18,
+            "maximum": 0.42647576713355645,
+            "mean": 0.3888163384237358,
+            "minimum": 0.3486734392248524
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 18,
+            "maximum": 0.1795132307101627,
+            "mean": 0.17898622505242642,
+            "minimum": 0.17698870020427857
+          },
+          "contact_transition_margin_m": {
+            "count": 18,
+            "maximum": -0.08198870020427856,
+            "mean": -0.08398622505242638,
+            "minimum": -0.0845132307101627
+          },
+          "d_0_m": {
+            "count": 18,
+            "maximum": 2.9572174833650675,
+            "mean": 2.292955365770759,
+            "minimum": 1.2926026413902152
+          },
+          "d_100_m": {
+            "count": 18,
+            "maximum": 3.0274608758320274,
+            "mean": 2.1148413705943057,
+            "minimum": 1.0258892741630135
+          },
+          "initial_command_margin_m": {
+            "count": 18,
+            "maximum": -0.9439292021653628,
+            "mean": -1.904139027347023,
+            "minimum": -2.549205806151814
+          },
+          "minimum_m": {
+            "count": 18,
+            "maximum": 2.9572174833650675,
+            "mean": 2.0950818709959584,
+            "minimum": 1.0258892741630135
+          },
+          "normalized_auc": {
+            "count": 18,
+            "maximum": 1.0317608926196438,
+            "mean": 0.9638693324170876,
+            "minimum": 0.9014975837799316
+          }
+        },
+        "both_arms_improved_count": 4,
+        "both_arms_improved_rate": 0.4444444444444444,
+        "both_initial_command_margins_negative_count": 9,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 9
+      },
+      "o2-a2": {
+        "arm_count": 18,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 18,
+            "maximum": 0.41351144281054264,
+            "mean": 0.3709193465614833,
+            "minimum": 0.34987490255850884
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 18,
+            "maximum": 0.17951323071016267,
+            "mean": 0.17867172054153446,
+            "minimum": 0.17698870020427832
+          },
+          "contact_transition_margin_m": {
+            "count": 18,
+            "maximum": -0.08198870020427831,
+            "mean": -0.08367172054153443,
+            "minimum": -0.08451323071016267
+          },
+          "d_0_m": {
+            "count": 18,
+            "maximum": 3.0213598100736516,
+            "mean": 2.0868878527688626,
+            "minimum": 1.0782476291624683
+          },
+          "d_100_m": {
+            "count": 18,
+            "maximum": 3.0647354138221865,
+            "mean": 1.9286409270785632,
+            "minimum": 0.7512362489141097
+          },
+          "initial_command_margin_m": {
+            "count": 18,
+            "maximum": -0.7254330230916336,
+            "mean": -1.715968506207379,
+            "minimum": -2.607848367263109
+          },
+          "minimum_m": {
+            "count": 18,
+            "maximum": 3.0210832653824924,
+            "mean": 1.906471875645284,
+            "minimum": 0.7512362489141097
+          },
+          "normalized_auc": {
+            "count": 18,
+            "maximum": 1.0329410666279026,
+            "mean": 0.9619157019667361,
+            "minimum": 0.8737244829502605
+          }
+        },
+        "both_arms_improved_count": 3,
+        "both_arms_improved_rate": 0.3333333333333333,
+        "both_initial_command_margins_negative_count": 9,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 9
+      }
+    },
+    "by_observation_latency": {
+      "1": {
+        "arm_count": 36,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 36,
+            "maximum": 0.43271220081555894,
+            "mean": 0.4013676235185335,
+            "minimum": 0.3560888381034505
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 36,
+            "maximum": 0.17951323071016292,
+            "mean": 0.17897545949697394,
+            "minimum": 0.17698870020427837
+          },
+          "contact_transition_margin_m": {
+            "count": 36,
+            "maximum": -0.08198870020427837,
+            "mean": -0.08397545949697396,
+            "minimum": -0.08451323071016292
+          },
+          "d_0_m": {
+            "count": 36,
+            "maximum": 3.400694272089616,
+            "mean": 2.368104523211888,
+            "minimum": 1.6487280015642267
+          },
+          "d_100_m": {
+            "count": 36,
+            "maximum": 3.405736256383822,
+            "mean": 2.2241063294932233,
+            "minimum": 1.3567743687602112
+          },
+          "initial_command_margin_m": {
+            "count": 36,
+            "maximum": -1.2637164655408286,
+            "mean": -1.9667368996933545,
+            "minimum": -3.010679833816681
+          },
+          "minimum_m": {
+            "count": 36,
+            "maximum": 3.4000142816597902,
+            "mean": 2.1943538483272444,
+            "minimum": 1.3567743687602112
+          },
+          "normalized_auc": {
+            "count": 36,
+            "maximum": 1.031800461534474,
+            "mean": 0.9733607712116827,
+            "minimum": 0.912164650495833
+          }
+        },
+        "both_arms_improved_count": 3,
+        "both_arms_improved_rate": 0.16666666666666666,
+        "both_initial_command_margins_negative_count": 18,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 18
+      },
+      "2": {
+        "arm_count": 36,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 36,
+            "maximum": 0.42647576713355645,
+            "mean": 0.3798678424926095,
+            "minimum": 0.3486734392248524
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 36,
+            "maximum": 0.1795132307101627,
+            "mean": 0.1788289727969804,
+            "minimum": 0.17698870020427832
+          },
+          "contact_transition_margin_m": {
+            "count": 36,
+            "maximum": -0.08198870020427831,
+            "mean": -0.08382897279698041,
+            "minimum": -0.0845132307101627
+          },
+          "d_0_m": {
+            "count": 36,
+            "maximum": 3.0213598100736516,
+            "mean": 2.1899216092698106,
+            "minimum": 1.0782476291624683
+          },
+          "d_100_m": {
+            "count": 36,
+            "maximum": 3.0647354138221865,
+            "mean": 2.0217411488364343,
+            "minimum": 0.7512362489141097
+          },
+          "initial_command_margin_m": {
+            "count": 36,
+            "maximum": -0.7254330230916336,
+            "mean": -1.8100537667772012,
+            "minimum": -2.607848367263109
+          },
+          "minimum_m": {
+            "count": 36,
+            "maximum": 3.0210832653824924,
+            "mean": 2.000776873320621,
+            "minimum": 0.7512362489141097
+          },
+          "normalized_auc": {
+            "count": 36,
+            "maximum": 1.0329410666279026,
+            "mean": 0.9628925171919117,
+            "minimum": 0.8737244829502605
+          }
+        },
+        "both_arms_improved_count": 7,
+        "both_arms_improved_rate": 0.3888888888888889,
+        "both_initial_command_margins_negative_count": 18,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 18
+      }
+    },
+    "by_task": {
+      "clear_dining_table_3d/v1": {
+        "arm_count": 24,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 24,
+            "maximum": 0.4198214205516228,
+            "mean": 0.38140338435315385,
+            "minimum": 0.3486734392248524
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 24,
+            "maximum": 0.17951323071016279,
+            "mean": 0.17951323071016248,
+            "minimum": 0.17951323071016206
+          },
+          "contact_transition_margin_m": {
+            "count": 24,
+            "maximum": -0.08451323071016206,
+            "mean": -0.08451323071016252,
+            "minimum": -0.08451323071016278
+          },
+          "d_0_m": {
+            "count": 24,
+            "maximum": 3.0213598100736516,
+            "mean": 2.2525116117396444,
+            "minimum": 1.2926026413902152
+          },
+          "d_100_m": {
+            "count": 24,
+            "maximum": 3.0647354138221865,
+            "mean": 2.146641176890278,
+            "minimum": 1.0258892741630135
+          },
+          "initial_command_margin_m": {
+            "count": 24,
+            "maximum": -0.9439292021653628,
+            "mean": -1.8711082273864905,
+            "minimum": -2.607848367263109
+          },
+          "minimum_m": {
+            "count": 24,
+            "maximum": 3.0210832653824924,
+            "mean": 2.1059496490498097,
+            "minimum": 1.0258892741630135
+          },
+          "normalized_auc": {
+            "count": 24,
+            "maximum": 1.0329410666279026,
+            "mean": 0.9793835615347598,
+            "minimum": 0.909169717090878
+          }
+        },
+        "both_arms_improved_count": 0,
+        "both_arms_improved_rate": 0.0,
+        "both_initial_command_margins_negative_count": 12,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 12
+      },
+      "store_kitchen_items_3d/v1": {
+        "arm_count": 24,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 24,
+            "maximum": 0.42647576713355645,
+            "mean": 0.3963998111796782,
+            "minimum": 0.3549114994724932
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 24,
+            "maximum": 0.1795132307101626,
+            "mean": 0.17789056456276361,
+            "minimum": 0.17698870020427832
+          },
+          "contact_transition_margin_m": {
+            "count": 24,
+            "maximum": -0.08198870020427831,
+            "mean": -0.08289056456276361,
+            "minimum": -0.08451323071016259
+          },
+          "d_0_m": {
+            "count": 24,
+            "maximum": 3.400694272089616,
+            "mean": 2.6052925000843072,
+            "minimum": 1.7973879473607748
+          },
+          "d_100_m": {
+            "count": 24,
+            "maximum": 3.405736256383822,
+            "mean": 2.4197599549428594,
+            "minimum": 1.5606200585257972
+          },
+          "initial_command_margin_m": {
+            "count": 24,
+            "maximum": -1.4383218418487425,
+            "mean": -2.2088926889046285,
+            "minimum": -3.010679833816681
+          },
+          "minimum_m": {
+            "count": 24,
+            "maximum": 3.4000142816597902,
+            "mean": 2.403399687394805,
+            "minimum": 1.5606200585257972
+          },
+          "normalized_auc": {
+            "count": 24,
+            "maximum": 1.0314872420699903,
+            "mean": 0.9686921813806532,
+            "minimum": 0.9146494820346651
+          }
+        },
+        "both_arms_improved_count": 4,
+        "both_arms_improved_rate": 0.3333333333333333,
+        "both_initial_command_margins_negative_count": 12,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 12
+      },
+      "tidy_living_room_3d/v1": {
+        "arm_count": 24,
+        "arm_metrics": {
+          "actual_applied_command_budget_m": {
+            "count": 24,
+            "maximum": 0.43271220081555894,
+            "mean": 0.3940500034838825,
+            "minimum": 0.3528146060708347
+          },
+          "contact_to_preposition_distance_m": {
+            "count": 24,
+            "maximum": 0.17951323071016292,
+            "mean": 0.17930285316800545,
+            "minimum": 0.17698870020427837
+          },
+          "contact_transition_margin_m": {
+            "count": 24,
+            "maximum": -0.08198870020427837,
+            "mean": -0.08430285316800545,
+            "minimum": -0.08451323071016292
+          },
+          "d_0_m": {
+            "count": 24,
+            "maximum": 2.558676238151257,
+            "mean": 1.9792350868985966,
+            "minimum": 1.0782476291624683
+          },
+          "d_100_m": {
+            "count": 24,
+            "maximum": 2.6112459600881013,
+            "mean": 1.8023700856613505,
+            "minimum": 0.7512362489141097
+          },
+          "initial_command_margin_m": {
+            "count": 24,
+            "maximum": -0.7254330230916336,
+            "mean": -1.5851850834147136,
+            "minimum": -2.173825942828108
+          },
+          "minimum_m": {
+            "count": 24,
+            "maximum": 2.549897140579865,
+            "mean": 1.7833467460271841,
+            "minimum": 0.7512362489141097
+          },
+          "normalized_auc": {
+            "count": 24,
+            "maximum": 1.029548054432481,
+            "mean": 0.9563041896899791,
+            "minimum": 0.8737244829502605
+          }
+        },
+        "both_arms_improved_count": 6,
+        "both_arms_improved_rate": 0.5,
+        "both_initial_command_margins_negative_count": 12,
+        "both_initial_command_margins_negative_rate": 1.0,
+        "endpoint_bilateral_ready_count": 0,
+        "endpoint_bilateral_ready_rate": 0.0,
+        "ever_bilateral_ready_count": 0,
+        "ever_bilateral_ready_rate": 0.0,
+        "pair_count": 12
+      }
+    },
+    "overall": {
+      "arm_count": 72,
+      "arm_metrics": {
+        "actual_applied_command_budget_m": {
+          "count": 72,
+          "maximum": 0.43271220081555894,
+          "mean": 0.39061773300557145,
+          "minimum": 0.3486734392248524
+        },
+        "contact_to_preposition_distance_m": {
+          "count": 72,
+          "maximum": 0.17951323071016292,
+          "mean": 0.1789022161469772,
+          "minimum": 0.17698870020427832
+        },
+        "contact_transition_margin_m": {
+          "count": 72,
+          "maximum": -0.08198870020427831,
+          "mean": -0.08390221614697718,
+          "minimum": -0.08451323071016292
+        },
+        "d_0_m": {
+          "count": 72,
+          "maximum": 3.400694272089616,
+          "mean": 2.279013066240849,
+          "minimum": 1.0782476291624683
+        },
+        "d_100_m": {
+          "count": 72,
+          "maximum": 3.405736256383822,
+          "mean": 2.122923739164829,
+          "minimum": 0.7512362489141097
+        },
+        "initial_command_margin_m": {
+          "count": 72,
+          "maximum": -0.7254330230916336,
+          "mean": -1.8883953332352779,
+          "minimum": -3.010679833816681
+        },
+        "minimum_m": {
+          "count": 72,
+          "maximum": 3.4000142816597902,
+          "mean": 2.097565360823933,
+          "minimum": 0.7512362489141097
+        },
+        "normalized_auc": {
+          "count": 72,
+          "maximum": 1.0329410666279026,
+          "mean": 0.9681266442017973,
+          "minimum": 0.8737244829502605
+        }
+      },
+      "both_arms_improved_count": 10,
+      "both_arms_improved_rate": 0.2777777777777778,
+      "both_initial_command_margins_negative_count": 36,
+      "both_initial_command_margins_negative_rate": 1.0,
+      "endpoint_bilateral_ready_count": 0,
+      "endpoint_bilateral_ready_rate": 0.0,
+      "ever_bilateral_ready_count": 0,
+      "ever_bilateral_ready_rate": 0.0,
+      "pair_count": 36
+    },
+    "pair_count": 36
+  },
+  "task_capability_claim_allowed": false,
+  "training_executed": false,
+  "velocity_modified": false
+}

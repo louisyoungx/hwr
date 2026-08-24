@@ -1,0 +1,306 @@
+{
+  "artifacts": {
+    "failure.json": {
+      "bytes": 1430,
+      "sha256": "4931e98cfaf7bde8c2fadcaf81f65dc35add7843a7d4b34801309aa2b288701f"
+    }
+  },
+  "command": [
+    "/Users/louis/Developer/AIWorkspace/50-housework-robot/.venv/bin/python",
+    "-m",
+    "hwr.apps.evaluate_entity_candidate_coverage",
+    "--plan",
+    "runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001/plan.json",
+    "--historical-capsules",
+    "runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001/capsules.json",
+    "--output",
+    "runs/research-loop/0011/r0011-p50-e3-entity-coverage-s20265003"
+  ],
+  "episode_count": 0,
+  "fixed_inputs": {
+    "capsules": {
+      "bytes": 794512,
+      "path": "runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001/capsules.json",
+      "sha256": "223cb403def742b82f6c8cfe1916b204b76bb29304e2fc94d64318b58ee74cbf"
+    },
+    "e1_manifest": {
+      "bytes": 186310,
+      "path": "runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001/manifest.json",
+      "sha256": "cefb4855305103fe6b205446295372d0e1060ba3e0f0e90d740264f715350d86"
+    },
+    "e1_report": {
+      "bytes": 2218,
+      "path": "runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001/report.json",
+      "sha256": "b9649a5198bd9a755dd030ea0ef39422c3a5eb09e0a6633e69aa57f5cc87f4d0"
+    },
+    "e2_report": {
+      "bytes": 1163653,
+      "path": "runs/research-loop/0010/r0010-p50-e2-funnel-s20265001/report.json",
+      "sha256": "4c7f36d20356d2f0f9c83d024412da5ec3a95dea8714e9a04d91d0cd686d0e39"
+    },
+    "plan": {
+      "bytes": 138145,
+      "path": "runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001/plan.json",
+      "sha256": "5eec1d65527a837667d2e53d015c8cb38672a42c3856155ae279921c6b6413ab"
+    }
+  },
+  "frozen_document_commit": "88992a773ee2b0f214dba7975cdddf25f282d679",
+  "frozen_document_commit_is_ancestor": true,
+  "measurement_evidence_accepted": false,
+  "physical_acquisition_count": 0,
+  "preflight_only": true,
+  "proposal_id": "R0001-P50-E3",
+  "runtime": {
+    "hwr_platform": "0.1.0",
+    "mujoco": "3.10.0",
+    "numpy": "2.4.6",
+    "python": "3.11.0"
+  },
+  "schema_version": "hwr.p50-e3-preflight-artifacts/v1",
+  "source_commit": "e16e3ae2ad33fc95c12bcb4a5e5d48527b62fb0b",
+  "source_gate": {
+    "clean_committed_source": true,
+    "frozen_document_ancestor": true,
+    "frozen_document_blob": "2ea08a0ab8fea5b0444d4ba7b162e4129e5765b8",
+    "historical_research_loop_trees": {
+      "docs/research-loop/0001": "416912b7dc1c19611bcfc4375028180014a1989b",
+      "docs/research-loop/0002": "6fb603dbd52451fe1749157daf05aa482ca7222f",
+      "docs/research-loop/0003": "f56011eda321ea803bc24051db001e632c1549fb",
+      "docs/research-loop/0004": "611c420e539a53a8c7578cd66aa8bdfe46fe82b7",
+      "docs/research-loop/0005": "0352d379d5754adb03e9158c0fa72393ab322d58",
+      "docs/research-loop/0006": "ee3a6f5b25887f67f812750d2a75424df12823d4",
+      "docs/research-loop/0007": "0a696caa153abc9c13403fbc9bd3c081ce71c327",
+      "docs/research-loop/0008": "65e626cddbcb0ec9c2e17cca5184b7d40950e1c6",
+      "docs/research-loop/0009": "316db8b9ad9739ef491778f641603dbca25e75c9",
+      "docs/research-loop/0010": "8a193a24788027d715750c3cd89c2509e71fdbda"
+    },
+    "passed": true,
+    "target_config_xml_unchanged": true
+  },
+  "source_identities": {
+    "binding": {
+      "bytes": 3051,
+      "path": "configs/adapters/mujoco/formal_3d_v1.json",
+      "sha256": "7984ef2544bb618269681d274257a598b02621371a26de002bfdd8bbf7decab6"
+    },
+    "frozen_document": {
+      "bytes": 19984,
+      "path": "docs/research-loop/0011/03-experiment.md",
+      "sha256": "d9a628ad8fe202237cc102f494199f7fd031a95ca8f2545a7504a01afa52e3b9"
+    },
+    "historical_research_loop_trees": {
+      "docs/research-loop/0001": "416912b7dc1c19611bcfc4375028180014a1989b",
+      "docs/research-loop/0002": "6fb603dbd52451fe1749157daf05aa482ca7222f",
+      "docs/research-loop/0003": "f56011eda321ea803bc24051db001e632c1549fb",
+      "docs/research-loop/0004": "611c420e539a53a8c7578cd66aa8bdfe46fe82b7",
+      "docs/research-loop/0005": "0352d379d5754adb03e9158c0fa72393ab322d58",
+      "docs/research-loop/0006": "ee3a6f5b25887f67f812750d2a75424df12823d4",
+      "docs/research-loop/0007": "0a696caa153abc9c13403fbc9bd3c081ce71c327",
+      "docs/research-loop/0008": "65e626cddbcb0ec9c2e17cca5184b7d40950e1c6",
+      "docs/research-loop/0009": "316db8b9ad9739ef491778f641603dbca25e75c9",
+      "docs/research-loop/0010": "8a193a24788027d715750c3cd89c2509e71fdbda"
+    },
+    "recursive_xml": {
+      "clear_dining_table_3d/v1": {
+        "dependencies": [
+          {
+            "bytes": 2353,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_actuators.xml",
+            "sha256": "5a0e8e33e0cd3c3f48eb03b61f2c54149680f934c5d02f437a6712221e64b53e"
+          },
+          {
+            "bytes": 1084,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_assets.xml",
+            "sha256": "05ba873fda32322a3382a06748cd973b340d4510c0a13956361f6ea7b53538cd"
+          },
+          {
+            "bytes": 14003,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_body.xml",
+            "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+          },
+          {
+            "bytes": 1300,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_contacts.xml",
+            "sha256": "4d97b6604e47deedd16f5514db03731b45e4a51d4d74267d5c6909c1380235f9"
+          },
+          {
+            "bytes": 467,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_defaults.xml",
+            "sha256": "440206d217672675c7e0c5e751a5659e017e0388ccb063bbe88fd826bed12ca5"
+          },
+          {
+            "bytes": 137,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_sensors.xml",
+            "sha256": "5ade71352b5996b7d0fa4ed660795b906454ff9e0956ed7efefa29afe9b73d59"
+          },
+          {
+            "bytes": 7717,
+            "includes": [
+              "assets/mujoco/common/robot_actuators.xml",
+              "assets/mujoco/common/robot_assets.xml",
+              "assets/mujoco/common/robot_body.xml",
+              "assets/mujoco/common/robot_contacts.xml",
+              "assets/mujoco/common/robot_defaults.xml",
+              "assets/mujoco/common/robot_sensors.xml"
+            ],
+            "path": "assets/mujoco/formal/dining_room.xml",
+            "sha256": "a93e3a746a8e6b721d225e2006148fbddac6868ffa59dc125611408db97d2236"
+          }
+        ],
+        "entry_model": "assets/mujoco/formal/dining_room.xml",
+        "identity": {
+          "bytes": 1432,
+          "sha256": "9878c43d40a477b9c367f4f3cca6d64c63192de6c47acb92fb757ce0c714bf10"
+        },
+        "schema_version": "hwr.p52-mujoco-xml-inputs/v1"
+      },
+      "store_kitchen_items_3d/v1": {
+        "dependencies": [
+          {
+            "bytes": 2353,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_actuators.xml",
+            "sha256": "5a0e8e33e0cd3c3f48eb03b61f2c54149680f934c5d02f437a6712221e64b53e"
+          },
+          {
+            "bytes": 1084,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_assets.xml",
+            "sha256": "05ba873fda32322a3382a06748cd973b340d4510c0a13956361f6ea7b53538cd"
+          },
+          {
+            "bytes": 14003,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_body.xml",
+            "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+          },
+          {
+            "bytes": 1300,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_contacts.xml",
+            "sha256": "4d97b6604e47deedd16f5514db03731b45e4a51d4d74267d5c6909c1380235f9"
+          },
+          {
+            "bytes": 467,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_defaults.xml",
+            "sha256": "440206d217672675c7e0c5e751a5659e017e0388ccb063bbe88fd826bed12ca5"
+          },
+          {
+            "bytes": 137,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_sensors.xml",
+            "sha256": "5ade71352b5996b7d0fa4ed660795b906454ff9e0956ed7efefa29afe9b73d59"
+          },
+          {
+            "bytes": 8866,
+            "includes": [
+              "assets/mujoco/common/robot_actuators.xml",
+              "assets/mujoco/common/robot_assets.xml",
+              "assets/mujoco/common/robot_body.xml",
+              "assets/mujoco/common/robot_contacts.xml",
+              "assets/mujoco/common/robot_defaults.xml",
+              "assets/mujoco/common/robot_sensors.xml"
+            ],
+            "path": "assets/mujoco/formal/kitchen.xml",
+            "sha256": "3768c8a56ca8e44344433d45beede04c1389d4f65b3252c939382cba70a421f8"
+          }
+        ],
+        "entry_model": "assets/mujoco/formal/kitchen.xml",
+        "identity": {
+          "bytes": 1424,
+          "sha256": "a7ee60c4981255543b533cf2fbf5c41b34bbaa2697d713252ad5d0d431208e0d"
+        },
+        "schema_version": "hwr.p52-mujoco-xml-inputs/v1"
+      },
+      "tidy_living_room_3d/v1": {
+        "dependencies": [
+          {
+            "bytes": 2353,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_actuators.xml",
+            "sha256": "5a0e8e33e0cd3c3f48eb03b61f2c54149680f934c5d02f437a6712221e64b53e"
+          },
+          {
+            "bytes": 1084,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_assets.xml",
+            "sha256": "05ba873fda32322a3382a06748cd973b340d4510c0a13956361f6ea7b53538cd"
+          },
+          {
+            "bytes": 14003,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_body.xml",
+            "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+          },
+          {
+            "bytes": 1300,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_contacts.xml",
+            "sha256": "4d97b6604e47deedd16f5514db03731b45e4a51d4d74267d5c6909c1380235f9"
+          },
+          {
+            "bytes": 467,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_defaults.xml",
+            "sha256": "440206d217672675c7e0c5e751a5659e017e0388ccb063bbe88fd826bed12ca5"
+          },
+          {
+            "bytes": 137,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_sensors.xml",
+            "sha256": "5ade71352b5996b7d0fa4ed660795b906454ff9e0956ed7efefa29afe9b73d59"
+          },
+          {
+            "bytes": 7422,
+            "includes": [
+              "assets/mujoco/common/robot_actuators.xml",
+              "assets/mujoco/common/robot_assets.xml",
+              "assets/mujoco/common/robot_body.xml",
+              "assets/mujoco/common/robot_contacts.xml",
+              "assets/mujoco/common/robot_defaults.xml",
+              "assets/mujoco/common/robot_sensors.xml"
+            ],
+            "path": "assets/mujoco/formal/living_room.xml",
+            "sha256": "0d97256a9dd79e813018cc410aedc04e30f53a8a40220bb1f2563d6e4daa3d82"
+          }
+        ],
+        "entry_model": "assets/mujoco/formal/living_room.xml",
+        "identity": {
+          "bytes": 1432,
+          "sha256": "b2380363bed5a89dcec2378b075554e8d820560bdeec1f4c84f2664d0cfb4dfa"
+        },
+        "schema_version": "hwr.p52-mujoco-xml-inputs/v1"
+      }
+    },
+    "sources": {
+      "formal_generator": {
+        "bytes": 28661,
+        "path": "src/hwr/eval/target_selection.py",
+        "sha256": "54961b5e84f29d58efe01ccfe24d04ffcf04b76a36697aac8d24a431ec4c9b4a"
+      },
+      "mapping": {
+        "bytes": 7616,
+        "path": "src/hwr/adapters/mujoco/entity_candidate_mapping.py",
+        "sha256": "b74ff4a6335bf6a95d05029d2a5153a40ffddea7362eea4259829b0a23965ad0"
+      },
+      "preflight_app": {
+        "bytes": 13723,
+        "path": "src/hwr/apps/evaluate_entity_candidate_coverage.py",
+        "sha256": "d7987476bbb3f328bc08d6f4c3b300afde99e089a07b2df6a09d5128f40189e7"
+      }
+    },
+    "task_config": {
+      "bytes": 5480,
+      "path": "configs/tasks/formal_3d_v1.json",
+      "sha256": "fa180803a86b42bc633dbf119fa596dd74d3b5c18bf4c2e4f75be97dcccb2a7d"
+    }
+  },
+  "status": "failed"
+}

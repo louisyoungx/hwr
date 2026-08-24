@@ -1,0 +1,47 @@
+{
+  "decision": "inconclusive_design_infeasible",
+  "episode_count": 0,
+  "error": "frozen entity mapping preflight is infeasible",
+  "error_details": {
+    "completed_task_count": 2,
+    "completed_tasks": [
+      {
+        "body_count": 30,
+        "decision": "mapping_preflight_passed",
+        "geom_count": 70,
+        "mapping_sha256": "38a355fc7b561f35751efdf0703479de4c6430afe66942540113db12543f2cb7",
+        "task_id": "tidy_living_room_3d/v1"
+      },
+      {
+        "body_count": 32,
+        "decision": "mapping_preflight_passed",
+        "geom_count": 72,
+        "mapping_sha256": "75324ff46e8dcf3599492b55bbd8ab2ebcbe8998b79a3aadb0cf4101f96b27cd",
+        "task_id": "clear_dining_table_3d/v1"
+      }
+    ],
+    "conflict": {
+      "body_id": 30,
+      "body_name": "kitchen_drawer",
+      "first": {
+        "instance": "drawer",
+        "label": "articulation:drawer",
+        "role": "articulation"
+      },
+      "second": {
+        "instance": null,
+        "label": "target_container",
+        "role": "target_container"
+      },
+      "task_id": "store_kitchen_items_3d/v1"
+    },
+    "episode_count": 0,
+    "failed_task_id": "store_kitchen_items_3d/v1",
+    "physical_acquisition_count": 0
+  },
+  "measurement_evidence_accepted": false,
+  "physical_acquisition_count": 0,
+  "proposal_id": "R0001-P50-E3",
+  "reason": "frozen_body_role_conflict",
+  "schema_version": "hwr.p50-e3-preflight-failure/v1"
+}

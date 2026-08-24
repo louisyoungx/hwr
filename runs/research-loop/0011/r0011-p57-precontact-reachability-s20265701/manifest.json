@@ -1,0 +1,156 @@
+{
+  "artifacts": {
+    "pairs.json": {
+      "bytes": 1954854,
+      "sha256": "d2cae19d21492bea39972bbe3e50e06aa7f19eedf617fbd8dd6c708d8543ddb3"
+    },
+    "report.json": {
+      "bytes": 54041,
+      "sha256": "15fcfb3a0e9b706f9fbfdd9e2dd69a50d096db3435b6cb73100a69fb9697a39d"
+    }
+  },
+  "candidate_modified": false,
+  "closed_loop_capability_episode_executed": false,
+  "command": [
+    ".venv/bin/python",
+    "-m",
+    "hwr.apps.evaluate_precontact_reachability",
+    "--bank",
+    "runs/research-loop/0010/r0010-p51-e1-bank-s20265101/bank.json",
+    "--terminals",
+    "runs/research-loop/0010/r0010-p51-e1-convergence-s20265101/terminals.json",
+    "--output",
+    "runs/research-loop/0011/r0011-p57-precontact-reachability-s20265701"
+  ],
+  "contact_or_grasp_claim_allowed": false,
+  "frozen_design": {
+    "action_scale_m_per_s": 0.3,
+    "applied_action_steps_per_pair": 100,
+    "arm_count": 72,
+    "b3_steps": 50,
+    "b3_velocity_m_per_s": 0.03,
+    "b4_steps": 20,
+    "b4_velocity_m_per_s": 0.02,
+    "contact_transition_nominal_m": 0.095,
+    "control_hz": 20.0,
+    "deficit_rejected_min_ready_pairs": 24,
+    "deficit_rejected_min_ready_pairs_per_task": 6,
+    "distance_steps_per_arm": 101,
+    "pair_count": 36,
+    "ready_distance_m": 0.1,
+    "support_deficit_max_ready_pairs": 6,
+    "support_deficit_max_ready_pairs_per_task": 4,
+    "support_deficit_min_both_negative_margin_pairs": 30
+  },
+  "frozen_document_commit": "88992a773ee2b0f214dba7975cdddf25f282d679",
+  "generalization_claim_allowed": false,
+  "gripper_modified": false,
+  "input_identities": {
+    "bank": {
+      "bytes": 7160016,
+      "commit": "63b6c2dc0221f37b71b4356d0b154ec3e8e97c0a",
+      "path": "runs/research-loop/0010/r0010-p51-e1-bank-s20265101/bank.json",
+      "provenance_kind": "tracked_committed_artifact",
+      "sha256": "09d2fe4e05f2bd8d23ebfe6886fe260d1b34b41771da42992f0f432a8a04f3d3"
+    },
+    "bank_manifest": {
+      "bytes": 53605,
+      "commit": "63b6c2dc0221f37b71b4356d0b154ec3e8e97c0a",
+      "path": "runs/research-loop/0010/r0010-p51-e1-bank-s20265101/manifest.json",
+      "provenance_kind": "tracked_committed_artifact",
+      "sha256": "7e0d5f9c7757b59ceb8d4dfe3ddcba38cc1d1037c43c358e7168d700310d5e45"
+    },
+    "terminal_manifest": {
+      "bytes": 53753,
+      "commit": "63b6c2dc0221f37b71b4356d0b154ec3e8e97c0a",
+      "path": "runs/research-loop/0010/r0010-p51-e1-convergence-s20265101/manifest.json",
+      "provenance_kind": "manifest_bound_ignored_artifact",
+      "sha256": "821f3cf6fea922a86b4096ee5d0ba9c64b9d8f444eacc98dcfc1f164da1328d2"
+    },
+    "terminal_report": {
+      "bytes": 4643,
+      "commit": "63b6c2dc0221f37b71b4356d0b154ec3e8e97c0a",
+      "path": "runs/research-loop/0010/r0010-p51-e1-convergence-s20265101/report.json",
+      "provenance_kind": "manifest_bound_ignored_artifact",
+      "sha256": "3fcac95c2362923d9eb94ef4d7121d5bcb31ea859a308ed352321dfa93771cc9"
+    },
+    "terminals": {
+      "bytes": 26314706,
+      "commit": "63b6c2dc0221f37b71b4356d0b154ec3e8e97c0a",
+      "path": "runs/research-loop/0010/r0010-p51-e1-convergence-s20265101/terminals.json",
+      "provenance_kind": "manifest_bound_ignored_artifact",
+      "sha256": "1c54f93a95bfbf4e08076b3c633b22dce295990a6808a48f0f10de18a2b3c2c7"
+    }
+  },
+  "measurement_only": true,
+  "mujoco_executed": false,
+  "phase_modified": false,
+  "policy_inference_executed": false,
+  "primitive_modified": false,
+  "proposal_id": "R0001-P57",
+  "runtime": {
+    "cpu_count": 18,
+    "device": "cpu",
+    "disk_free_bytes": 68660551680,
+    "numpy": "2.4.6",
+    "peak_rss_bytes": 293273600,
+    "peak_rss_platform_units": 293273600,
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "python": "3.11.0",
+    "tracemalloc_peak_bytes": 72394026,
+    "wall_seconds": 8.866050041979179
+  },
+  "safety_improvement_claim_allowed": false,
+  "schema_version": "hwr.p57-precontact-reachability-artifacts/v1",
+  "source_commit": "bbf6d666f8071fa3a5d26be2d774ceeae2ebc7a1",
+  "source_identities": {
+    "docs/research-loop/0011/03-experiment.md": {
+      "bytes": 19984,
+      "path": "docs/research-loop/0011/03-experiment.md",
+      "sha256": "d9a628ad8fe202237cc102f494199f7fd031a95ca8f2545a7504a01afa52e3b9"
+    },
+    "frozen_document": {
+      "blob_matches": true,
+      "commit": "88992a773ee2b0f214dba7975cdddf25f282d679",
+      "commit_is_ancestor": true,
+      "content_matches": true,
+      "current": {
+        "bytes": 19984,
+        "sha256": "d9a628ad8fe202237cc102f494199f7fd031a95ca8f2545a7504a01afa52e3b9"
+      },
+      "frozen": {
+        "bytes": 19984,
+        "sha256": "d9a628ad8fe202237cc102f494199f7fd031a95ca8f2545a7504a01afa52e3b9"
+      }
+    },
+    "src/hwr/apps/evaluate_precontact_reachability.py": {
+      "bytes": 21928,
+      "path": "src/hwr/apps/evaluate_precontact_reachability.py",
+      "sha256": "9045db16141b7efae05ea09c848d44fdb675e9c988da1f994878a7352c25c452"
+    },
+    "src/hwr/eval/cartesian_convergence.py": {
+      "bytes": 29520,
+      "path": "src/hwr/eval/cartesian_convergence.py",
+      "sha256": "b4acd2731b2f9f8786c1089b15eed7f9bf8dc1f5f6cf663c4f5ec50cf33bfefa"
+    },
+    "src/hwr/eval/cartesian_convergence_validation.py": {
+      "bytes": 37758,
+      "path": "src/hwr/eval/cartesian_convergence_validation.py",
+      "sha256": "405b4e647a600e93e197084c946501b710a1615f807a33f8edf28b061ad435a4"
+    },
+    "src/hwr/eval/precontact_reachability.py": {
+      "bytes": 20177,
+      "path": "src/hwr/eval/precontact_reachability.py",
+      "sha256": "a0efe6da2193198431ee4c30ea1ad45a562bc3df4ef64d65b58b117e038986f5"
+    },
+    "src/hwr/eval/target_selection.py": {
+      "bytes": 28661,
+      "path": "src/hwr/eval/target_selection.py",
+      "sha256": "54961b5e84f29d58efe01ccfe24d04ffcf04b76a36697aac8d24a431ec4c9b4a"
+    }
+  },
+  "status": "complete",
+  "task_capability_claim_allowed": false,
+  "training_executed": false,
+  "velocity_modified": false
+}
