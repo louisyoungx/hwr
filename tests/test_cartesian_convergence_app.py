@@ -286,11 +286,11 @@ def test_frozen_document_matches_main_commit_and_tamper_fails(
     for field, message in (
         ("content_matches", "document content drifted"),
         ("blob_matches", "document blob drifted"),
-        ("tree_matches", "experiment tree drifted"),
     ):
         status = {**valid, field: False}
         with pytest.raises(RuntimeError, match=message):
             app._require_frozen_document(tmp_path, status)
+    app._require_frozen_document(tmp_path, {**valid, "tree_matches": False})
 
 
 def test_frozen_document_nonancestor_fails_closed(tmp_path, monkeypatch) -> None:
@@ -319,7 +319,7 @@ def test_frozen_document_nonancestor_fails_closed(tmp_path, monkeypatch) -> None
 
 @pytest.mark.parametrize(
     ("drift", "message"),
-    (("blob", "document blob drifted"), ("tree", "experiment tree drifted")),
+    (("blob", "document blob drifted"),),
 )
 def test_frozen_document_git_object_drift_fails_closed(
     tmp_path, monkeypatch, drift, message
@@ -351,6 +351,38 @@ def test_frozen_document_git_object_drift_fails_closed(
     status = app._frozen_document_status(tmp_path)
     with pytest.raises(RuntimeError, match=message):
         app._require_frozen_document(tmp_path, status)
+
+
+def test_completed_round_tree_growth_does_not_change_frozen_document(
+    tmp_path, monkeypatch
+) -> None:
+    expected = (ROOT / app.FROZEN_DOCUMENT_PATH).read_bytes()
+    target = tmp_path / app.FROZEN_DOCUMENT_PATH
+    target.parent.mkdir(parents=True)
+    target.write_bytes(expected)
+
+    def run(command, **kwargs):
+        del kwargs
+        arguments = tuple(command[1:])
+        if arguments[:2] == ("merge-base", "--is-ancestor"):
+            return SimpleNamespace(stdout=b"", returncode=0)
+        if arguments[0] == "show":
+            return SimpleNamespace(stdout=expected, returncode=0)
+        specification = arguments[1]
+        is_current_tree = (
+            specification == "HEAD:docs/research-loop/0010"
+        )
+        return SimpleNamespace(
+            stdout=(("b" if is_current_tree else "a") * 40) + "\n",
+            returncode=0,
+        )
+
+    monkeypatch.setattr(app.subprocess, "run", run)
+    status = app._frozen_document_status(tmp_path)
+    assert status["content_matches"] is True
+    assert status["blob_matches"] is True
+    assert status["tree_matches"] is False
+    app._require_frozen_document(tmp_path, status)
 
 
 def test_source_tree_identity_and_bank_dependency_drift_fail_closed(

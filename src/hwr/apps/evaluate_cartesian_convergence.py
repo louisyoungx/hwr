@@ -576,8 +576,6 @@ def _require_frozen_document(root: Path, status=None) -> None:
         raise RuntimeError("P51-E1 frozen experiment document content drifted")
     if not status["blob_matches"]:
         raise RuntimeError("P51-E1 frozen experiment document blob drifted")
-    if not status["tree_matches"]:
-        raise RuntimeError("P51-E1 frozen experiment tree drifted")
 
 
 def _require_committed_bank(root: Path, bank_path: Path) -> dict[str, object]:
