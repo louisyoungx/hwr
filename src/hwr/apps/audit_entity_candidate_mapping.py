@@ -18,7 +18,6 @@ import tracemalloc
 from pathlib import Path
 from typing import Mapping, Sequence
 
-import mujoco
 import numpy as np
 
 from hwr.adapters.mujoco.entity_candidate_mapping import (
