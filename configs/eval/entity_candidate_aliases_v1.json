@@ -1,0 +1,155 @@
+{
+  "schema_version": "hwr.p50-e4-entity-candidate-aliases/v1",
+  "proposal_id": "R0001-P50-E4",
+  "tasks": [
+    {
+      "task_id": "tidy_living_room_3d/v1",
+      "aliases": [
+        {
+          "source_visual_geom": "toy_duck_visual",
+          "canonical_exact_claimed_geom": "toy_duck_collision",
+          "role": "manipulated_object",
+          "instance": "duck"
+        },
+        {
+          "source_visual_geom": "toy_football_visual",
+          "canonical_exact_claimed_geom": "toy_football_collision",
+          "role": "manipulated_object",
+          "instance": "football"
+        },
+        {
+          "source_visual_geom": "storage_basket_visual",
+          "canonical_exact_claimed_geom": "basket_bottom_collision",
+          "role": "target_container",
+          "instance": null
+        }
+      ],
+      "task_visible_inventory": [
+        {
+          "geom": "toy_duck_visual",
+          "role": "manipulated_object",
+          "instance": "duck"
+        },
+        {
+          "geom": "toy_football_visual",
+          "role": "manipulated_object",
+          "instance": "football"
+        },
+        {
+          "geom": "storage_basket_visual",
+          "role": "target_container",
+          "instance": null
+        }
+      ]
+    },
+    {
+      "task_id": "clear_dining_table_3d/v1",
+      "aliases": [
+        {
+          "source_visual_geom": "dining_cup_visual",
+          "canonical_exact_claimed_geom": "dining_cup_collision",
+          "role": "manipulated_object",
+          "instance": "cup"
+        },
+        {
+          "source_visual_geom": "dining_plate_visual",
+          "canonical_exact_claimed_geom": "dining_plate_collision",
+          "role": "manipulated_object",
+          "instance": "plate"
+        }
+      ],
+      "task_visible_inventory": [
+        {
+          "geom": "dining_cup_visual",
+          "role": "manipulated_object",
+          "instance": "cup"
+        },
+        {
+          "geom": "dining_plate_visual",
+          "role": "manipulated_object",
+          "instance": "plate"
+        },
+        {
+          "geom": "cup_holder",
+          "role": "target_container",
+          "instance": null
+        },
+        {
+          "geom": "plate_holder",
+          "role": "target_container",
+          "instance": null
+        }
+      ]
+    },
+    {
+      "task_id": "store_kitchen_items_3d/v1",
+      "aliases": [
+        {
+          "source_visual_geom": "cleaner_yellow_visual",
+          "canonical_exact_claimed_geom": "cleaner_yellow_collision",
+          "role": "manipulated_object",
+          "instance": "cleaner_yellow"
+        },
+        {
+          "source_visual_geom": "cleaner_pink_visual",
+          "canonical_exact_claimed_geom": "cleaner_pink_collision",
+          "role": "manipulated_object",
+          "instance": "cleaner_pink"
+        },
+        {
+          "source_visual_geom": "drawer_handle_visual",
+          "canonical_exact_claimed_geom": "drawer_handle",
+          "role": "articulation",
+          "instance": "drawer"
+        }
+      ],
+      "task_visible_inventory": [
+        {
+          "geom": "cleaner_yellow_visual",
+          "role": "manipulated_object",
+          "instance": "cleaner_yellow"
+        },
+        {
+          "geom": "cleaner_pink_visual",
+          "role": "manipulated_object",
+          "instance": "cleaner_pink"
+        },
+        {
+          "geom": "drawer_handle_visual",
+          "role": "articulation",
+          "instance": "drawer"
+        },
+        {
+          "geom": "drawer_bottom",
+          "role": "target_container",
+          "instance": null
+        },
+        {
+          "geom": "drawer_front",
+          "role": "target_container",
+          "instance": null
+        },
+        {
+          "geom": "drawer_back",
+          "role": "target_container",
+          "instance": null
+        },
+        {
+          "geom": "drawer_left",
+          "role": "target_container",
+          "instance": null
+        },
+        {
+          "geom": "drawer_right",
+          "role": "target_container",
+          "instance": null
+        },
+        {
+          "geom": "drawer_divider",
+          "role": "target_container",
+          "instance": null
+        }
+      ]
+    }
+  ]
+}
