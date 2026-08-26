@@ -395,6 +395,12 @@ def test_real_three_scene_inventory_guards_and_determinism() -> None:
     assert evaluation["report"]["decision"] == (
         "accepted as exact-geom evaluator mapping contract"
     )
+    guards = evaluation["report"]["negative_guards"]
+    assert guards["illegal_object_type_case_count"] == 3
+    assert guards["illegal_object_types_fail_closed"] is True
+    assert evaluation["report"]["checks"][
+        "illegal_segmentation_object_types_fail_closed"
+    ] is True
     assert evaluation["report"]["checks"]["all_mapping_contract_gates"] is True
     kitchen = first[app.TASK_IDS[2]]
     drawer = next(
@@ -456,19 +462,14 @@ def test_sites_background_and_illegal_object_types_are_unknown() -> None:
     )["role"] == "unknown"
 
 
-def test_semantic_guard_failure_rejects_and_isolation_failure_invalidates(
+def test_illegal_type_guard_rejects_and_isolation_failure_invalidates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _, bindings, aliases = _real_contract()
     monkeypatch.setattr(
         app,
-        "negative_guard_audit",
-        lambda tables: {
-            "guard_count": 1,
-            "mismatch_count": 1,
-            "mismatches": [{}],
-            "records": [{}],
-        },
+        "classify_segmentation_entity",
+        lambda table, object_id, object_type: {"role": "robot"},
     )
     rejected = app.evaluate_mapping_contract(
         bindings, aliases, {"passed": True}
@@ -531,7 +532,16 @@ def test_frozen_document_history_and_input_provenance_are_complete() -> None:
     assert frozen["commit_is_ancestor"] is True
     assert frozen["content_matches"] is True
     assert frozen["blob_matches"] is True
-    assert identities["historical_research_loop_trees"] == app.HISTORICAL_TREES
+    context = identities["frozen_context"]
+    assert context["commit_is_ancestor"] is True
+    assert context["content_matches"] is True
+    assert context["blob_matches"] is True
+    trees = identities["historical_research_loop_trees"]
+    assert trees["actual_matches_context"] is True
+    assert trees["actual"] == trees["declared_by_frozen_context"]
+    assert list(trees["actual"]) == [
+        f"docs/research-loop/{index:04d}" for index in range(1, 12)
+    ]
     assert set(identities["recursive_xml"]) == set(app.TASK_IDS)
     assert {
         "aliases",
@@ -539,11 +549,89 @@ def test_frozen_document_history_and_input_provenance_are_complete() -> None:
         "task_config",
         "mapping",
         "audit_app",
+        "frozen_context",
         "frozen_document",
     } <= set(identities["files"])
     for record in identities["files"].values():
         assert record["bytes"] > 0
         assert len(record["sha256"]) == 64
+
+
+def test_context_tree_inventory_requires_exact_order_and_valid_hashes() -> None:
+    root = Path(__file__).resolve().parents[1]
+    content = (root / app.FROZEN_CONTEXT_PATH).read_text(encoding="utf-8")
+    parsed = app._context_tree_inventory(content)
+
+    assert list(parsed) == [
+        f"docs/research-loop/{index:04d}" for index in range(1, 12)
+    ]
+    with pytest.raises(RuntimeError, match="incomplete"):
+        app._context_tree_inventory(
+            content.replace(
+                "| `docs/research-loop/0011/` "
+                "| `85bb445726ecb8e35ff4d8e90606874e2ee36fe4` |\n",
+                "",
+            )
+        )
+    with pytest.raises(RuntimeError, match="invalid"):
+        app._context_tree_inventory(
+            content.replace(
+                "416912b7dc1c19611bcfc4375028180014a1989b",
+                "not-a-tree",
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "field", ("commit_is_ancestor", "content_matches", "blob_matches")
+)
+def test_source_gate_rejects_each_frozen_context_identity_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+) -> None:
+    valid = {
+        "commit_is_ancestor": True,
+        "content_matches": True,
+        "blob_matches": True,
+    }
+    identities = {
+        "frozen_document": valid,
+        "frozen_context": {**valid, field: False},
+        "historical_research_loop_trees": {"actual_matches_context": True},
+    }
+    monkeypatch.setattr(
+        app.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(stdout="", returncode=0),
+    )
+
+    with pytest.raises(RuntimeError, match="frozen context drifted"):
+        app._require_clean_source(tmp_path, identities)
+
+
+def test_source_gate_rejects_tree_inventory_not_matching_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    valid = {
+        "commit_is_ancestor": True,
+        "content_matches": True,
+        "blob_matches": True,
+    }
+    identities = {
+        "frozen_document": valid,
+        "frozen_context": valid,
+        "historical_research_loop_trees": {"actual_matches_context": False},
+    }
+    monkeypatch.setattr(
+        app.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(stdout="", returncode=0),
+    )
+
+    with pytest.raises(RuntimeError, match="historical research trees"):
+        app._require_clean_source(tmp_path, identities)
 
 
 def test_output_and_staging_overwrite_are_rejected(tmp_path: Path) -> None:

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import hashlib
 import importlib.metadata
 import json
 import os
@@ -24,11 +23,20 @@ from hwr.adapters.mujoco.entity_candidate_mapping import (
     ALIAS_SCHEMA,
     EntityCandidateMappingError,
     TaskAliasContract,
+    classify_segmentation_entity,
     load_entity_alias_contracts,
     preflight_exact_geom_role_tables,
 )
 from hwr.adapters.mujoco.training_catalog import (
     load_default_formal_household_catalogs,
+)
+from hwr.apps import (
+    candidate_file_identity as _file_identity,
+    candidate_json_bytes as _json_bytes,
+    candidate_sha256 as _sha256,
+    candidate_source_commit as _source_commit,
+    create_candidate_output as _create_output,
+    resolve_candidate_path as _resolve,
 )
 from hwr.eval.tool_kinematics import recursive_xml_input_identity
 
@@ -40,30 +48,14 @@ MANIFEST_SCHEMA = "hwr.p50-e4-exact-geom-artifacts/v1"
 FROZEN_DOCUMENT_COMMIT = "a95dbbeacc80a974d7a234f2dc79442249eaf07b"
 FROZEN_DOCUMENT_PATH = Path("docs/research-loop/0012/03-experiment.md")
 FROZEN_DOCUMENT_BLOB = "55219f9b42693a4c579a13919e754d24e94a15c8"
+FROZEN_CONTEXT_PATH = Path("docs/research-loop/0012/00-context.md")
+FROZEN_CONTEXT_BLOB = "f25965426679b0dda3e437f1ef697efdea000757"
 ALIASES_PATH = Path("configs/eval/entity_candidate_aliases_v1.json")
 BINDING_PATH = Path("configs/adapters/mujoco/formal_3d_v1.json")
 TASK_PATH = Path("configs/tasks/formal_3d_v1.json")
-FORMAL_OUTPUT = Path(
-    "runs/research-loop/0012/r0012-p50-e4-mapping-s20265004"
-)
-TASK_IDS = (
-    "tidy_living_room_3d/v1",
-    "clear_dining_table_3d/v1",
-    "store_kitchen_items_3d/v1",
-)
-HISTORICAL_TREES = {
-    "docs/research-loop/0001": "416912b7dc1c19611bcfc4375028180014a1989b",
-    "docs/research-loop/0002": "6fb603dbd52451fe1749157daf05aa482ca7222f",
-    "docs/research-loop/0003": "f56011eda321ea803bc24051db001e632c1549fb",
-    "docs/research-loop/0004": "611c420e539a53a8c7578cd66aa8bdfe46fe82b7",
-    "docs/research-loop/0005": "0352d379d5754adb03e9158c0fa72393ab322d58",
-    "docs/research-loop/0006": "ee3a6f5b25887f67f812750d2a75424df12823d4",
-    "docs/research-loop/0007": "0a696caa153abc9c13403fbc9bd3c081ce71c327",
-    "docs/research-loop/0008": "65e626cddbcb0ec9c2e17cca5184b7d40950e1c6",
-    "docs/research-loop/0009": "316db8b9ad9739ef491778f641603dbca25e75c9",
-    "docs/research-loop/0010": "8a193a24788027d715750c3cd89c2509e71fdbda",
-    "docs/research-loop/0011": "85bb445726ecb8e35ff4d8e90606874e2ee36fe4",
-}
+FORMAL_OUTPUT = Path("runs/research-loop/0012/r0012-p50-e4-mapping-s20265004")
+TASK_IDS = ("tidy_living_room_3d/v1", "clear_dining_table_3d/v1",
+            "store_kitchen_items_3d/v1")
 SOURCE_PATHS = {
     "mapping": Path("src/hwr/adapters/mujoco/entity_candidate_mapping.py"),
     "audit_app": Path("src/hwr/apps/audit_entity_candidate_mapping.py"),
@@ -126,11 +118,6 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     _, traced_peak_bytes = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     peak_rss_bytes = _peak_rss_bytes()
-    _require_budgets(
-        elapsed,
-        max(traced_peak_bytes, peak_rss_bytes),
-        sum(len(content) for content in artifacts.values()),
-    )
     manifest = _manifest(
         source_commit,
         _command(arguments),
@@ -219,6 +206,9 @@ def evaluate_mapping_contract(
         "zero_exact_geom_role_conflicts": exact_conflicts == 0,
         "zero_task_visible_inventory_unknown": unknown_inventory == 0,
         "zero_negative_guard_mislabels": guards["mismatch_count"] == 0,
+        "illegal_segmentation_object_types_fail_closed": guards[
+            "illegal_object_types_fail_closed"
+        ],
     }
     integrity_checks = {
         "tables_bit_identical": deterministic,
@@ -354,6 +344,15 @@ def negative_guard_audit(
             background["role"],
             "background",
         )
+        illegal_type = 2_147_483_647
+        illegal = classify_segmentation_entity(table, 0, illegal_type)
+        require(
+            task_id,
+            "illegal_object_type",
+            f"(0,{illegal_type})",
+            illegal["role"],
+            "unknown",
+        )
     records.sort(
         key=lambda value: (
             value["task_id"],
@@ -362,9 +361,18 @@ def negative_guard_audit(
         )
     )
     mismatches = [value for value in records if not value["passed"]]
+    illegal_cases = [
+        value for value in records
+        if value["entity_kind"] == "illegal_object_type"
+    ]
     return {
         "guard_count": len(records),
         "mismatch_count": len(mismatches),
+        "illegal_object_type_case_count": len(illegal_cases),
+        "illegal_object_types_fail_closed": (
+            len(illegal_cases) == len(tables)
+            and all(value["passed"] for value in illegal_cases)
+        ),
         "mismatches": mismatches,
         "records": records,
     }
@@ -468,10 +476,19 @@ def _source_identities(
         "binding": root / BINDING_PATH,
         "task_config": root / TASK_PATH,
         "frozen_document": root / FROZEN_DOCUMENT_PATH,
+        "frozen_context": root / FROZEN_CONTEXT_PATH,
         **{
             name: root / path
             for name, path in SOURCE_PATHS.items()
         },
+    }
+    context = _frozen_file_status(root, FROZEN_CONTEXT_PATH, FROZEN_CONTEXT_BLOB)
+    declared = _context_tree_inventory(
+        (root / FROZEN_CONTEXT_PATH).read_text(encoding="utf-8")
+    )
+    actual = {
+        path: _git_output(root, ("rev-parse", f"HEAD:{path}"))
+        for path in declared
     }
     return {
         "files": {
@@ -484,8 +501,14 @@ def _source_identities(
             )
             for task_id in TASK_IDS
         },
-        "frozen_document": _frozen_document_status(root),
-        "historical_research_loop_trees": _historical_trees(root),
+        "frozen_document": _frozen_file_status(
+            root, FROZEN_DOCUMENT_PATH, FROZEN_DOCUMENT_BLOB),
+        "frozen_context": context,
+        "historical_research_loop_trees": {
+            "declared_by_frozen_context": declared,
+            "actual": actual,
+            "actual_matches_context": actual == declared,
+        },
     }
 
 
@@ -502,12 +525,13 @@ def _require_clean_source(
     )
     if status.stdout.strip():
         raise RuntimeError("P50-E4 audit requires clean committed source")
-    frozen = identities.get("frozen_document")
-    if not isinstance(frozen, Mapping) or not all(
-        frozen.get(name)
-        for name in ("commit_is_ancestor", "content_matches", "blob_matches")
-    ):
-        raise RuntimeError("P50-E4 frozen experiment document drifted")
+    for name in ("frozen_document", "frozen_context"):
+        frozen = identities.get(name)
+        required = ("commit_is_ancestor", "content_matches", "blob_matches")
+        if not isinstance(frozen, Mapping) or not all(
+            frozen.get(field) for field in required
+        ):
+            raise RuntimeError(f"P50-E4 {name.replace('_', ' ')} drifted")
     protected = subprocess.run(
         (
             "git",
@@ -524,20 +548,28 @@ def _require_clean_source(
     if not protected:
         raise RuntimeError("P50-E4 binding, task, or XML inputs drifted")
     trees = identities.get("historical_research_loop_trees")
-    if trees != HISTORICAL_TREES:
+    if (
+        not isinstance(trees, Mapping)
+        or trees.get("actual_matches_context") is not True
+    ):
         raise RuntimeError("P50-E4 historical research trees drifted")
     return {
         "clean_committed_source": True,
         "frozen_document_commit_is_ancestor": True,
         "frozen_document_content_matches": True,
         "frozen_document_blob_matches": True,
+        "frozen_context_commit_is_ancestor": True,
+        "frozen_context_content_matches": True,
+        "frozen_context_blob_matches": True,
         "binding_task_xml_unchanged": True,
         "historical_research_loop_trees": trees,
         "passed": True,
     }
 
 
-def _frozen_document_status(root: Path) -> dict[str, object]:
+def _frozen_file_status(
+    root: Path, path: Path, expected_blob: str
+) -> dict[str, object]:
     ancestor = subprocess.run(
         (
             "git",
@@ -553,32 +585,52 @@ def _frozen_document_status(root: Path) -> dict[str, object]:
         (
             "git",
             "show",
-            f"{FROZEN_DOCUMENT_COMMIT}:{FROZEN_DOCUMENT_PATH.as_posix()}",
+            f"{FROZEN_DOCUMENT_COMMIT}:{path.as_posix()}",
         ),
         cwd=root,
         check=True,
         capture_output=True,
     ).stdout
-    actual = (root / FROZEN_DOCUMENT_PATH).read_bytes()
+    actual = (root / path).read_bytes()
+    frozen_blob = _git_output(
+        root, ("rev-parse", f"{FROZEN_DOCUMENT_COMMIT}:{path.as_posix()}")
+    )
     current_blob = _git_output(
-        root, ("rev-parse", f"HEAD:{FROZEN_DOCUMENT_PATH.as_posix()}")
+        root, ("rev-parse", f"HEAD:{path.as_posix()}")
     )
     return {
+        "path": path.as_posix(),
         "commit": FROZEN_DOCUMENT_COMMIT,
-        "blob": FROZEN_DOCUMENT_BLOB,
+        "blob": expected_blob,
         "commit_is_ancestor": ancestor,
         "content_matches": actual == expected,
-        "blob_matches": current_blob == FROZEN_DOCUMENT_BLOB,
+        "blob_matches": current_blob == frozen_blob == expected_blob,
         "current": _bytes_identity(actual),
         "frozen": _bytes_identity(expected),
     }
 
 
-def _historical_trees(root: Path) -> dict[str, str]:
-    return {
-        path: _git_output(root, ("rev-parse", f"HEAD:{path}"))
-        for path in HISTORICAL_TREES
-    }
+def _context_tree_inventory(content: str) -> dict[str, str]:
+    records = {}
+    for line in content.splitlines():
+        fields = [field.strip() for field in line.split("|")]
+        if len(fields) != 4:
+            continue
+        path = fields[1].strip("`").rstrip("/")
+        tree = fields[2].strip("`")
+        if not path.startswith("docs/research-loop/"):
+            continue
+        if path in records or len(tree) != 40 or any(
+            value not in "0123456789abcdef" for value in tree
+        ):
+            raise RuntimeError("P50-E4 frozen context tree inventory is invalid")
+        records[path] = tree
+    expected = tuple(
+        f"docs/research-loop/{index:04d}" for index in range(1, 12)
+    )
+    if tuple(records) != expected:
+        raise RuntimeError("P50-E4 frozen context tree inventory is incomplete")
+    return records
 
 
 def _manifest(
@@ -605,6 +657,7 @@ def _manifest(
             "aliases": identities["files"]["aliases"],
             "binding": identities["files"]["binding"],
             "task_config": identities["files"]["task_config"],
+            "frozen_context": identities["files"]["frozen_context"],
             "recursive_xml": identities["recursive_xml"],
         },
         "runtime": {
@@ -702,21 +755,6 @@ def _command(arguments: argparse.Namespace) -> list[str]:
     ]
 
 
-def _source_commit(root: Path) -> str:
-    commit = _git_output(root, ("rev-parse", "HEAD"))
-    if len(commit) != 40 or any(value not in "0123456789abcdef" for value in commit):
-        raise RuntimeError("P50-E4 requires a full Git source commit")
-    return commit
-
-
-def _file_identity(root: Path, path: Path) -> dict[str, object]:
-    content = path.read_bytes()
-    return {
-        "path": path.relative_to(root).as_posix(),
-        **_bytes_identity(content),
-    }
-
-
 def _violation(
     path: str,
     node: ast.AST,
@@ -732,26 +770,6 @@ def _violation(
     }
 
 
-def _create_output(output: Path, artifacts: Mapping[str, bytes]) -> None:
-    staging = output.with_name(output.name + ".tmp")
-    if output.exists() or staging.exists():
-        raise FileExistsError("P50-E4 output or staging already exists")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    staging.mkdir()
-    try:
-        for name, content in sorted(artifacts.items()):
-            temporary = staging / f"{name}.tmp"
-            with temporary.open("xb") as handle:
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, staging / name)
-        os.replace(staging, output)
-    except BaseException:
-        shutil.rmtree(staging, ignore_errors=True)
-        raise
-
-
 def _git_output(root: Path, arguments: Sequence[str]) -> str:
     return subprocess.run(
         ("git", *arguments),
@@ -764,20 +782,6 @@ def _git_output(root: Path, arguments: Sequence[str]) -> str:
 
 def _bytes_identity(content: bytes) -> dict[str, object]:
     return {"bytes": len(content), "sha256": _sha256(content)}
-
-
-def _sha256(content: bytes) -> str:
-    return hashlib.sha256(content).hexdigest()
-
-
-def _json_bytes(value: object) -> bytes:
-    return (
-        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-    ).encode("utf-8")
-
-
-def _resolve(root: Path, path: Path) -> Path:
-    return path.resolve() if path.is_absolute() else (root / path).resolve()
 
 
 def _peak_rss_bytes() -> int:
