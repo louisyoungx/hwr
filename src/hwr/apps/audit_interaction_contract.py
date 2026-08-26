@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import importlib.metadata
 import json
@@ -19,9 +20,16 @@ from typing import Mapping, Sequence
 import numpy as np
 
 from hwr.eval.interaction_contract import (
+    CANDIDATE_FIELDS,
+    PRIMITIVE_ARGUMENTS,
+    PRIMITIVE_PHASES,
     PROPOSAL_ID,
     REPORT_SCHEMA,
+    SELECTOR_ARGUMENTS,
+    SERIALIZED_POLICY_FIELDS,
     audit_interaction_contract,
+    runtime_predicates_verified,
+    source_requirement_fields,
 )
 
 MODULE_NAME = "hwr.apps.audit_interaction_contract"
@@ -82,8 +90,6 @@ UNCHANGED_FLAGS = {
 WALL_TIME_LIMIT_SECONDS = 60.0
 RSS_LIMIT_BYTES = 1024**3
 ARTIFACT_LIMIT_BYTES = 10 * 1024**2
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--contract", type=Path, required=True)
@@ -110,8 +116,9 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     tasks = _read_json(root / TASK_CONFIGURATION)
     bindings = _read_json(root / BINDING_CONFIGURATION)
     sources = _source_documents(root)
-    first = audit_interaction_contract(contract, tasks, bindings, sources)
-    second = audit_interaction_contract(contract, tasks, bindings, sources)
+    source_audit = build_source_audit(sources, source_requirement_fields(contract))
+    first = audit_interaction_contract(contract, tasks, bindings, source_audit)
+    second = audit_interaction_contract(contract, tasks, bindings, source_audit)
     deterministic = _canonical_bytes(first) == _canonical_bytes(second)
     if not deterministic:
         raise RuntimeError("P61 deterministic replay differs")
@@ -384,6 +391,268 @@ def _source_documents(root: Path) -> dict[str, str]:
     return {
         path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
         for path in sorted((root / "src/hwr").rglob("*.py"))
+    }
+
+
+def build_source_audit(
+    source_documents: Mapping[str, str],
+    requirements: Mapping[str, frozenset[str]],
+) -> dict[str, object]:
+    target_path = "src/hwr/eval/target_selection.py"
+    backend_path = "src/hwr/adapters/mujoco/formal_household_backend.py"
+    stability_path = "src/hwr/eval/stability.py"
+    required = (target_path, backend_path, stability_path)
+    if any(path not in source_documents for path in required):
+        raise ValueError("source audit is missing a required source")
+    trees = {
+        path: ast.parse(source, filename=path)
+        for path, source in source_documents.items()
+    }
+    target = trees[target_path]
+    candidate_fields = _class_fields(target, "Candidate")
+    policy_fields = _class_fields(target, "PolicyVisibleInput")
+    primitive_arguments = _function_arguments(target, "primitive_action")
+    selector_arguments = _function_arguments(target, "select_candidate_index")
+    primitive_body = _function_node(target, "primitive_action")
+    selector_body = _function_node(target, "select_candidate_index")
+    phases = tuple(item[0] for item in _literal_assignment(target, "PHASES"))
+    primitive_consumed = _node_symbols(primitive_body) & set(primitive_arguments)
+    selector_consumed = _node_symbols(selector_body) & set(selector_arguments)
+    caller_contract = {
+        "candidate_role_fields": set(candidate_fields) & requirements["role_fields"],
+        "selector_role_fields": selector_consumed & requirements["role_fields"],
+        "primitive_interaction_fields":
+            primitive_consumed & requirements["interaction_fields"],
+        "primitive_destination_fields":
+            primitive_consumed & requirements["destination_fields"],
+        "primitive_threshold_fields":
+            primitive_consumed & requirements["threshold_fields"],
+        "primitive_interaction_types":
+            _literal_strings(primitive_body) & requirements["interaction_types"],
+    }
+    callers = _direct_callers(trees, caller_contract)
+    importers = _interaction_contract_importers(trees)
+    checks = {
+        "candidate_schema_audited": bool(candidate_fields),
+        "policy_schema_audited": bool(policy_fields),
+        "primitive_signature_audited": bool(primitive_arguments),
+        "selector_signature_audited": bool(selector_arguments),
+        "direct_call_graph_resolved": bool(callers),
+        "runtime_predicate_surface_verified": runtime_predicates_verified(
+            trees[backend_path], trees[stability_path]
+        ),
+        "evaluator_annotation_isolated": importers
+        <= {"src/hwr/apps/audit_interaction_contract.py"},
+    }
+    return {
+        "analysis_scope": {
+            "kind": "finite_static_same_function_direct_calls",
+            "included": [
+                "class fields",
+                "function signatures",
+                "literal primitive phases",
+                "same-function direct selector and primitive calls",
+                "direct argument names and consumed semantic fields",
+            ],
+            "excluded": [
+                "cross-function dataflow",
+                "dynamic dispatch",
+                "reflection",
+                "runtime values",
+                "whole-program planner proof",
+            ],
+        },
+        "candidate_fields": list(candidate_fields),
+        "serialized_policy_input_fields": list(policy_fields),
+        "primitive_function_arguments": list(primitive_arguments),
+        "selector_function_arguments": list(selector_arguments),
+        "primitive_consumed_arguments": sorted(primitive_consumed),
+        "selector_consumed_arguments": sorted(selector_consumed),
+        "primitive_phases": list(phases),
+        "direct_call_graph": {"callers": callers},
+        "interaction_contract_importers": sorted(importers),
+        "checks": checks,
+        "frozen_reference": {
+            "candidate_fields_match": candidate_fields == CANDIDATE_FIELDS,
+            "policy_fields_match": policy_fields == SERIALIZED_POLICY_FIELDS,
+            "primitive_arguments_match": primitive_arguments == PRIMITIVE_ARGUMENTS,
+            "selector_arguments_match": selector_arguments == SELECTOR_ARGUMENTS,
+            "primitive_phases_match": phases == PRIMITIVE_PHASES,
+        },
+    }
+
+
+def _direct_callers(
+    trees: Mapping[str, ast.Module],
+    contract: Mapping[str, set[str]],
+) -> list[dict[str, object]]:
+    records = []
+    for path, tree in sorted(trees.items()):
+        for qualname, function in _functions(tree):
+            selector_calls = _direct_calls(function, "select_candidate_index")
+            primitive_calls = _direct_calls(function, "primitive_action")
+            if not selector_calls or not primitive_calls:
+                continue
+            selector_names = _call_argument_names(selector_calls)
+            primitive_names = _call_argument_names(primitive_calls)
+            role_fields = sorted(
+                selector_names & contract["selector_role_fields"]
+            )
+            interaction_fields = sorted(
+                primitive_names & contract["primitive_interaction_fields"]
+            )
+            destination_fields = sorted(
+                primitive_names & contract["primitive_destination_fields"]
+            )
+            threshold_fields = sorted(
+                primitive_names & contract["primitive_threshold_fields"]
+            )
+            interaction_types = (
+                sorted(contract["primitive_interaction_types"])
+                if interaction_fields else []
+            )
+            records.append(
+                {
+                    "caller_id": f"{path}:{qualname}",
+                    "path": path,
+                    "function": qualname,
+                    "selector_call_lines": [call.lineno for call in selector_calls],
+                    "primitive_call_lines": [call.lineno for call in primitive_calls],
+                    "selector_argument_names": sorted(selector_names),
+                    "primitive_argument_names": sorted(primitive_names),
+                    "candidate_role_fields": sorted(contract["candidate_role_fields"]),
+                    "selected_entity_role_fields": role_fields,
+                    "interaction_type_fields": interaction_fields,
+                    "destination_target_fields": destination_fields,
+                    "articulation_threshold_fields": threshold_fields,
+                    "selected_entity_role_available":
+                        bool(contract["candidate_role_fields"] and role_fields),
+                    "interaction_types": interaction_types,
+                    "destination_target_available": bool(destination_fields),
+                    "articulation_threshold_available": bool(threshold_fields),
+                    "planner_call_state_available":
+                        bool(contract["candidate_role_fields"] and role_fields),
+                }
+            )
+    return records
+
+
+def _functions(tree: ast.Module) -> list[tuple[str, ast.FunctionDef]]:
+    result = []
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            result.append((node.name, node))
+        elif isinstance(node, ast.ClassDef):
+            result.extend(
+                (f"{node.name}.{item.name}", item)
+                for item in node.body
+                if isinstance(item, ast.FunctionDef)
+            )
+    return result
+
+
+def _direct_calls(function: ast.FunctionDef, name: str) -> list[ast.Call]:
+    nested = {
+        item
+        for item in ast.walk(function)
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))
+        and item is not function
+    }
+    return [
+        item
+        for item in ast.walk(function)
+        if isinstance(item, ast.Call)
+        and _call_name(item) == name
+        and not any(item in set(ast.walk(node)) for node in nested)
+    ]
+
+
+def _call_argument_names(calls: Sequence[ast.Call]) -> set[str]:
+    names = set()
+    for call in calls:
+        for argument in call.args:
+            names.update(_node_symbols(argument))
+        for keyword in call.keywords:
+            if keyword.arg:
+                names.add(keyword.arg)
+            names.update(_node_symbols(keyword.value))
+    return names
+
+
+def _call_name(call: ast.Call) -> str | None:
+    if isinstance(call.func, ast.Name):
+        return call.func.id
+    return call.func.attr if isinstance(call.func, ast.Attribute) else None
+
+
+def _literal_strings(node: ast.AST) -> set[str]:
+    return {
+        item.value
+        for item in ast.walk(node)
+        if isinstance(item, ast.Constant) and isinstance(item.value, str)
+    }
+
+
+def _interaction_contract_importers(
+    trees: Mapping[str, ast.Module],
+) -> set[str]:
+    importers = set()
+    for path, tree in trees.items():
+        modules = {
+            module
+            for node in ast.walk(tree)
+            for module in _import_modules(node)
+        }
+        if "hwr.eval.interaction_contract" in modules:
+            importers.add(path)
+    return importers
+
+
+def _import_modules(node: ast.AST) -> list[str]:
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names]
+    if isinstance(node, ast.ImportFrom) and node.module:
+        return [node.module]
+    return []
+
+
+def _class_fields(tree: ast.Module, name: str) -> tuple[str, ...]:
+    node = next(
+        item for item in tree.body
+        if isinstance(item, ast.ClassDef) and item.name == name
+    )
+    return tuple(
+        item.target.id for item in node.body
+        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name)
+    )
+
+
+def _function_node(tree: ast.Module, name: str) -> ast.FunctionDef:
+    return next(
+        item for item in ast.walk(tree)
+        if isinstance(item, ast.FunctionDef) and item.name == name
+    )
+
+
+def _function_arguments(tree: ast.Module, name: str) -> tuple[str, ...]:
+    node = _function_node(tree, name)
+    arguments = (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+    return tuple(argument.arg for argument in arguments)
+
+
+def _literal_assignment(tree: ast.Module, name: str) -> object:
+    node = next(
+        item for item in tree.body
+        if isinstance(item, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == name
+                for target in item.targets)
+    )
+    return ast.literal_eval(node.value)
+
+
+def _node_symbols(node: ast.AST) -> set[str]:
+    return {item.id for item in ast.walk(node) if isinstance(item, ast.Name)} | {
+        item.attr for item in ast.walk(node) if isinstance(item, ast.Attribute)
     }
 
 

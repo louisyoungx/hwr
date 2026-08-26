@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 import copy
 import math
-from pathlib import Path
 from typing import Mapping, Sequence
 
 from hwr.eval.stability import StabilityConfig
@@ -76,16 +75,19 @@ def audit_interaction_contract(
     contract: Mapping[str, object],
     tasks_configuration: Mapping[str, object],
     bindings_configuration: Mapping[str, object],
-    source_documents: Mapping[str, str],
+    source_audit: Mapping[str, object],
 ) -> dict[str, object]:
     try:
         transitions = _reconstruct_transitions(
             contract, tasks_configuration, bindings_configuration
         )
-        source_audit = _audit_sources(source_documents)
-        initial = _audit_initial_microinteraction(contract, tasks_configuration)
+        _require_source_audit(source_audit)
+        initial = _audit_initial_microinteraction(
+            contract, tasks_configuration, source_audit
+        )
         full_task = _audit_full_task(transitions, source_audit)
         boundaries = _validate_boundaries(contract)
+        source_checks = source_audit["checks"]
         checks = {
             "seven_transitions_reconstructed": len(transitions) == 7,
             "stable_transition_ids_unique": tuple(
@@ -93,39 +95,25 @@ def audit_interaction_contract(
             ) == tuple(item[0] for item in TRANSITION_BLUEPRINTS),
             "task_configuration_reconstruction_passed": True,
             "binding_configuration_reconstruction_passed": True,
-            "runtime_predicate_reconstruction_passed": source_audit[
+            "runtime_predicate_reconstruction_passed": source_checks[
                 "runtime_predicate_surface_verified"
             ],
             "four_information_boundaries_exact": True,
-            "primitive_signature_verified": source_audit[
-                "primitive_signature_verified"
+            "candidate_schema_audited": source_checks["candidate_schema_audited"],
+            "policy_schema_audited": source_checks["policy_schema_audited"],
+            "primitive_signature_audited": source_checks[
+                "primitive_signature_audited"
             ],
-            "candidate_fields_verified": source_audit[
-                "candidate_fields_verified"
+            "selector_signature_audited": source_checks[
+                "selector_signature_audited"
             ],
-            "serialized_policy_fields_verified": source_audit[
-                "serialized_policy_fields_verified"
+            "direct_call_graph_resolved": source_checks[
+                "direct_call_graph_resolved"
             ],
-            "primitive_phases_verified": source_audit[
-                "primitive_phases_verified"
-            ],
-            "candidate_has_no_private_identity": source_audit[
-                "candidate_has_no_private_identity"
-            ],
-            "primitive_input_excludes_private_fields": source_audit[
-                "primitive_input_excludes_private_fields"
-            ],
-            "primitive_callers_exclude_private_fields": source_audit[
-                "primitive_callers_exclude_private_fields"
-            ],
-            "selector_boundary_excludes_private_fields": source_audit[
-                "selector_boundary_excludes_private_fields"
-            ],
-            "evaluator_annotation_isolated": source_audit[
+            "direct_call_scope_declared": source_audit["analysis_scope"]["kind"]
+            == "finite_static_same_function_direct_calls",
+            "evaluator_annotation_isolated": source_checks[
                 "evaluator_annotation_isolated"
-            ],
-            "no_validated_external_planner": not source_audit[
-                "validated_external_planner_present"
             ],
             "initial_microinteraction_annotation_unique": initial["passed"],
             "full_task_assessed_transition_by_transition":
@@ -137,10 +125,10 @@ def audit_interaction_contract(
         )
         if not valid:
             decision = "invalid"
-        elif gap and not source_audit["validated_external_planner_present"]:
+        elif gap:
             decision = "accepted as interaction-contract gap evidence"
         elif (full_task["all_transitions_uniquely_expressible"]
-              and source_audit["validated_external_planner_present"]):
+              and initial["validated_external_planner_present"]):
             decision = "rejected"
         else:
             decision = "invalid"
@@ -387,6 +375,7 @@ def _validate_boundaries(
 def _audit_initial_microinteraction(
     contract: Mapping[str, object],
     tasks_configuration: Mapping[str, object],
+    source_audit: Mapping[str, object],
 ) -> dict[str, object]:
     expected = [
         _micro_annotation(
@@ -422,11 +411,25 @@ def _audit_initial_microinteraction(
         set(item["allowed_entity_instance_or_roles"]) <= known[item["task_id"]]
         for item in expected
     )
+    caller_records = source_audit["direct_call_graph"]["callers"]
+    caller_role_available = any(
+        record["selected_entity_role_available"]
+        for record in caller_records
+    )
+    planner_present = any(
+        record["planner_call_state_available"]
+        for record in caller_records
+    )
     return {
         "passed": roles_valid and len(expected) == 3,
         "evaluator_only_annotation_available_for_all_tasks": roles_valid,
-        "caller_role_gap_present": True,
-        "validated_external_planner_present": False,
+        "caller_role_gap_present": not caller_role_available,
+        "validated_external_planner_present": planner_present,
+        "supporting_direct_callers": [
+            record["caller_id"]
+            for record in caller_records
+            if record["selected_entity_role_available"]
+        ],
         "annotations": expected,
     }
 
@@ -447,28 +450,57 @@ def _audit_full_task(
     transitions: Sequence[Mapping[str, object]],
     source_audit: Mapping[str, object],
 ) -> dict[str, object]:
+    callers = source_audit["direct_call_graph"]["callers"]
     rows = []
     for transition in transitions:
         destination_required = (
             transition["interaction_type"] == "pick-transport-place"
         )
+        compatible = [
+            record
+            for record in callers
+            if _caller_supports_transition(record, transition)
+        ]
+        role_available = any(
+            record["selected_entity_role_available"] for record in callers
+        )
+        interaction_available = any(
+            transition["interaction_type"] in record["interaction_types"]
+            for record in callers
+        )
+        destination_available = any(
+            (
+                record["destination_target_available"]
+                if destination_required
+                else record["articulation_threshold_available"]
+            )
+            for record in callers
+        )
+        reasons = []
+        if not role_available:
+            reasons.append("direct_caller_has_no_entity_or_role_identity")
+        if not interaction_available:
+            reasons.append("direct_caller_has_no_required_interaction_type")
+        if not destination_available:
+            reasons.append(
+                "direct_caller_has_no_destination_target"
+                if destination_required
+                else "direct_caller_has_no_articulation_threshold"
+            )
+        if role_available and interaction_available and destination_available and not compatible:
+            reasons.append("no_single_direct_caller_combines_required_fields")
         rows.append(
             {
                 "transition_id": transition["transition_id"],
-                "selected_entity_role_available": False,
-                "interaction_type_available": False,
-                "destination_available": False,
+                "selected_entity_role_available": role_available,
+                "interaction_type_available": interaction_available,
+                "destination_available": destination_available,
                 "destination_required": destination_required,
-                "uniquely_expressible_and_implementable": False,
-                "gap_reasons": [
-                    "candidate_has_no_entity_or_role_identity",
-                    "primitive_has_no_interaction_selector",
-                    (
-                        "primitive_has_no_destination_target"
-                        if destination_required
-                        else "primitive_has_no_articulation_threshold"
-                    ),
+                "uniquely_expressible_and_implementable": bool(compatible),
+                "supporting_direct_callers": [
+                    record["caller_id"] for record in compatible
                 ],
+                "gap_reasons": reasons,
             }
         )
     all_expressible = all(
@@ -479,281 +511,118 @@ def _audit_full_task(
         "transitions": rows,
         "all_transitions_uniquely_expressible": all_expressible,
         "contract_gap_present": not all_expressible,
-        "current_primitive_arguments": list(
-            source_audit["primitive_function_arguments"]
-        ),
-        "current_candidate_fields": list(source_audit["candidate_fields"]),
-        "current_primitive_phases": list(source_audit["primitive_phases"]),
+        "analysis_scope": source_audit["analysis_scope"],
+        "current_primitive_arguments": source_audit["primitive_function_arguments"],
+        "current_candidate_fields": source_audit["candidate_fields"],
+        "current_primitive_phases": source_audit["primitive_phases"],
     }
 
 
-def _audit_sources(
-    source_documents: Mapping[str, str],
-) -> dict[str, object]:
-    target_path = "src/hwr/eval/target_selection.py"
-    backend_path = "src/hwr/adapters/mujoco/formal_household_backend.py"
-    stability_path = "src/hwr/eval/stability.py"
-    for path in (target_path, backend_path, stability_path):
-        if path not in source_documents:
-            raise InteractionContractError(f"source audit is missing {path}")
-    trees = {
-        path: _parse_source(path, source)
-        for path, source in source_documents.items()
-    }
-    target_tree = trees[target_path]
-    candidate_fields = _class_fields(target_tree, "Candidate")
-    policy_fields = _class_fields(target_tree, "PolicyVisibleInput")
-    primitive_arguments = _function_arguments(target_tree, "primitive_action")
-    selector_arguments = _function_arguments(target_tree, "select_candidate_index")
-    phases = tuple(
-        item[0] for item in _literal_assignment(target_tree, "PHASES")
+def _caller_supports_transition(
+    caller: Mapping[str, object], transition: Mapping[str, object]
+) -> bool:
+    destination_required = transition["interaction_type"] == "pick-transport-place"
+    return (
+        caller["selected_entity_role_available"]
+        and transition["interaction_type"] in caller["interaction_types"]
+        and (
+            caller["destination_target_available"]
+            if destination_required
+            else caller["articulation_threshold_available"]
+        )
     )
-    calls = _function_calls(trees, "primitive_action")
-    selector_calls = _function_calls(trees, "select_candidate_index")
-    private_signature = PRIVATE_ARGUMENT_TOKENS & set(primitive_arguments)
-    private_selector_signature = PRIVATE_ARGUMENT_TOKENS & set(selector_arguments)
-    private_call_keywords = {
-        keyword
-        for call in calls
-        for keyword in call["keywords"]
-        if keyword in PRIVATE_ARGUMENT_TOKENS
+
+
+def _require_source_audit(source_audit: Mapping[str, object]) -> None:
+    required = {
+        "analysis_scope", "candidate_fields", "serialized_policy_input_fields",
+        "primitive_function_arguments", "selector_function_arguments",
+        "primitive_phases", "direct_call_graph", "checks",
     }
-    private_selector_keywords = {
-        keyword
-        for call in selector_calls
-        for keyword in call["keywords"]
-        if keyword in PRIVATE_ARGUMENT_TOKENS
-    }
-    runtime_verified = _runtime_predicates_verified(
-        trees[backend_path], trees[stability_path]
-    )
-    isolation_imports = _interaction_contract_imports(trees)
-    allowed_imports = {"src/hwr/apps/audit_interaction_contract.py"}
-    planner_present = bool(
-        private_signature
-        or private_selector_signature
-        or private_call_keywords
-        or private_selector_keywords
-    )
+    if not required <= set(source_audit):
+        raise InteractionContractError("source audit is incomplete")
+
+
+def source_requirement_fields(
+    contract: Mapping[str, object],
+) -> dict[str, frozenset[str]]:
+    boundaries = contract.get("information_boundaries")
+    transitions = contract.get("transitions")
+    if not isinstance(boundaries, Mapping) or not isinstance(transitions, list):
+        raise InteractionContractError("source requirements are missing")
+    private = boundaries.get("evaluator_private")
+    if not isinstance(private, Mapping) or not isinstance(private.get("fields"), list):
+        raise InteractionContractError("private source requirements are missing")
+    fields = frozenset(str(field) for field in private["fields"])
     return {
-        "candidate_fields": list(candidate_fields),
-        "serialized_policy_input_fields": list(policy_fields),
-        "primitive_function_arguments": list(primitive_arguments),
-        "selector_function_arguments": list(selector_arguments),
-        "primitive_phases": list(phases),
-        "primitive_call_sites": calls,
-        "selector_call_sites": selector_calls,
-        "interaction_contract_importers": sorted(isolation_imports),
-        "primitive_signature_verified": primitive_arguments == PRIMITIVE_ARGUMENTS,
-        "candidate_fields_verified": candidate_fields == CANDIDATE_FIELDS,
-        "serialized_policy_fields_verified": policy_fields == SERIALIZED_POLICY_FIELDS,
-        "primitive_phases_verified": phases == PRIMITIVE_PHASES,
-        "candidate_has_no_private_identity": not (
-            PRIVATE_ARGUMENT_TOKENS & set(candidate_fields)
+        "role_fields": fields
+        & frozenset(("task_transition_id", "object_or_articulation_identity")),
+        "interaction_fields": frozenset(("interaction_type",)),
+        "destination_fields": fields & frozenset(("destination_target_identity",)),
+        "threshold_fields": fields & frozenset(("drawer_requirement",)),
+        "interaction_types": frozenset(
+            str(transition["interaction_type"])
+            for transition in transitions
+            if isinstance(transition, Mapping)
         ),
-        "primitive_input_excludes_private_fields": not private_signature,
-        "primitive_callers_exclude_private_fields": (
-            bool(calls) and not private_call_keywords
-            and _calls_match_boundary(calls, PRIMITIVE_ARGUMENTS)
-        ),
-        "selector_boundary_excludes_private_fields": (
-            selector_arguments == SELECTOR_ARGUMENTS
-            and bool(selector_calls)
-            and not private_selector_signature
-            and not private_selector_keywords
-            and _calls_match_boundary(selector_calls, SELECTOR_ARGUMENTS)
-        ),
-        "runtime_predicate_surface_verified": runtime_verified,
-        "evaluator_annotation_isolated": isolation_imports <= allowed_imports,
-        "validated_external_planner_present": planner_present,
     }
 
 
-def _runtime_predicates_verified(backend: ast.Module, stability: ast.Module) -> bool:
-    backend_methods = _class_method_names(
-        backend, "MujocoFormalHouseholdDualArmBackend"
-    )
-    target_methods = _class_method_names(stability, "TargetVolume")
-    placement_methods = _class_method_names(
-        stability, "MultiObjectStabilityCriterion"
-    )
+def runtime_predicates_verified(
+    backend: ast.Module, stability: ast.Module
+) -> bool:
     task_result = _method_node(
         backend, "MujocoFormalHouseholdDualArmBackend", "_task_result_after_step"
     )
-    placement_sample = _method_node(
+    placement = _method_node(
         backend, "MujocoFormalHouseholdDualArmBackend", "_placement_sample"
     )
     articulation = _method_node(
         backend, "MujocoFormalHouseholdDualArmBackend", "_articulation_satisfied"
     )
     stable = _method_node(stability, "MultiObjectStabilityCriterion", "_stable")
-    result_calls = {
-        node.func.attr
-        for node in ast.walk(task_result)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-    }
-    articulation_comparators = {
-        type(operator).__name__
-        for node in ast.walk(articulation)
-        if isinstance(node, ast.Compare)
-        for operator in node.ops
-    }
-    stable_comparators = {
-        type(operator).__name__
-        for node in ast.walk(stable)
-        if isinstance(node, ast.Compare)
-        for operator in node.ops
-    }
     return (
-        {"_task_result_after_step", "_placement_sample", "_articulation_satisfied"}
-        <= backend_methods
-        and "contains" in target_methods
-        and {"update", "_stable"} <= placement_methods
-        and {"_articulation_satisfied", "update"} <= result_calls
-        and {
-            "object_geoms", "target_sites", "geom_xpos", "qvel", "site_xpos",
-            "site_size", "TargetVolume", "PlacementSample",
-        } <= _node_symbols(placement_sample)
-        and {"_articulation_position", "minimum_position"} <= _node_symbols(articulation)
-        and "GtE" in articulation_comparators
-        and {"target", "contains", "max_linear_speed", "max_angular_speed"}
+        {"_articulation_satisfied", "update"} <= _called_attributes(task_result)
+        and {"TargetVolume", "PlacementSample", "target_sites"}
+        <= _node_symbols(placement)
+        and {"_articulation_position", "minimum_position"}
+        <= _node_symbols(articulation)
+        and any(
+            isinstance(operator, ast.GtE)
+            for node in ast.walk(articulation)
+            if isinstance(node, ast.Compare)
+            for operator in node.ops
+        )
+        and {"contains", "max_linear_speed", "max_angular_speed"}
         <= _node_symbols(stable)
-        and "LtE" in stable_comparators
     )
 
 
-def _function_calls(
-    trees: Mapping[str, ast.Module], function_name: str
-) -> list[dict[str, object]]:
-    calls = []
-    for path, tree in sorted(trees.items()):
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            name = (
-                node.func.id
-                if isinstance(node.func, ast.Name)
-                else (
-                    node.func.attr
-                    if isinstance(node.func, ast.Attribute)
-                    else None
-                )
-            )
-            if name != function_name:
-                continue
-            calls.append(
-                {
-                    "path": path,
-                    "line": node.lineno,
-                    "positional_argument_count": len(node.args),
-                    "keywords": sorted(
-                        keyword.arg
-                        for keyword in node.keywords
-                        if keyword.arg is not None
-                    ),
-                }
-            )
-    return calls
+def _called_attributes(node: ast.AST) -> set[str]:
+    return {
+        item.func.attr
+        for item in ast.walk(node)
+        if isinstance(item, ast.Call) and isinstance(item.func, ast.Attribute)
+    }
 
 
-def _calls_match_boundary(
-    calls: Sequence[Mapping[str, object]], arguments: Sequence[str]
-) -> bool:
-    allowed = set(arguments)
-    return all(
-        int(call["positional_argument_count"]) <= len(arguments)
-        and set(call["keywords"]) <= allowed for call in calls
+def _method_node(
+    tree: ast.Module, class_name: str, name: str
+) -> ast.FunctionDef:
+    class_node = next(
+        item for item in tree.body
+        if isinstance(item, ast.ClassDef) and item.name == class_name
     )
-
-
-def _interaction_contract_imports(
-    trees: Mapping[str, ast.Module],
-) -> set[str]:
-    importers = set()
-    for path, tree in trees.items():
-        for node in ast.walk(tree):
-            modules = []
-            if isinstance(node, ast.Import):
-                modules = [alias.name for alias in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                modules = [node.module]
-            if any(
-                module == "hwr.eval.interaction_contract"
-                or module.startswith("hwr.eval.interaction_contract.")
-                for module in modules
-            ):
-                importers.add(path)
-    return importers
-
-
-def _parse_source(path: str, source: str) -> ast.Module:
-    try:
-        return ast.parse(source, filename=path)
-    except SyntaxError as error:
-        raise InteractionContractError(f"source audit cannot parse {path}") from error
+    return next(
+        item for item in class_node.body
+        if isinstance(item, ast.FunctionDef) and item.name == name
+    )
 
 
 def _node_symbols(node: ast.AST) -> set[str]:
     return {item.id for item in ast.walk(node) if isinstance(item, ast.Name)} | {
         item.attr for item in ast.walk(node) if isinstance(item, ast.Attribute)
     }
-
-
-def _class_fields(tree: ast.Module, name: str) -> tuple[str, ...]:
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef) and node.name == name:
-            return tuple(
-                item.target.id
-                for item in node.body
-                if isinstance(item, ast.AnnAssign)
-                and isinstance(item.target, ast.Name)
-            )
-    raise InteractionContractError(f"source audit cannot find class {name}")
-
-
-def _function_arguments(tree: ast.Module, name: str) -> tuple[str, ...]:
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == name:
-            arguments = (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
-            return tuple(argument.arg for argument in arguments)
-    raise InteractionContractError(f"source audit cannot find function {name}")
-
-
-def _literal_assignment(tree: ast.Module, name: str) -> object:
-    for node in tree.body:
-        if (
-            isinstance(node, ast.Assign)
-            and len(node.targets) == 1
-            and isinstance(node.targets[0], ast.Name)
-            and node.targets[0].id == name
-        ):
-            try:
-                return ast.literal_eval(node.value)
-            except (ValueError, TypeError) as error:
-                raise InteractionContractError(
-                    f"source audit cannot evaluate {name}"
-                ) from error
-    raise InteractionContractError(f"source audit cannot find assignment {name}")
-
-
-def _class_method_names(tree: ast.Module, name: str) -> set[str]:
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef) and node.name == name:
-            return {
-                item.name for item in node.body if isinstance(item, ast.FunctionDef)
-            }
-    raise InteractionContractError(f"source audit cannot find class {name}")
-
-
-def _method_node(tree: ast.Module, class_name: str, name: str) -> ast.FunctionDef:
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef) and node.name == class_name:
-            for item in node.body:
-                if isinstance(item, ast.FunctionDef) and item.name == name:
-                    return item
-    raise InteractionContractError(
-        f"source audit cannot find method {class_name}.{name}"
-    )
 
 
 def _indexed_objects(
