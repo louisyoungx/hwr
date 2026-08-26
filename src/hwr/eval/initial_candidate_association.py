@@ -81,9 +81,14 @@ def reconstruct_candidate_support(
         ),
     )[:64]
     ordered = tuple(sorted(ordered, key=lambda item: item.candidate.canonical_key()))
-    if tuple(item.candidate for item in ordered) != official.candidates:
+    if tuple(
+        item.candidate.canonical_record() for item in ordered
+    ) != tuple(candidate.canonical_record() for candidate in official.candidates):
         raise ValueError("candidate support reconstruction differs")
-    return official, ordered
+    return official, tuple(
+        CandidateSupport(candidate, item.raw_support)
+        for candidate, item in zip(official.candidates, ordered, strict=True)
+    )
 
 
 def associate_candidates(

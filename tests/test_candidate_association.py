@@ -43,32 +43,29 @@ def test_backend_binds_segmentation_to_returned_observation_identity() -> None:
     assert segmentation.dtype == np.int32
 
 
-def test_support_reconstruction_matches_committed_nonempty_capsule() -> None:
+def test_support_reconstruction_matches_all_committed_capsules() -> None:
     import json
 
     document = json.loads((P50 / "capsules.json").read_text())
-    episode = next(
-        item for item in document["episodes"]
-        if item["candidate_set"]["candidate_count"] > 0
-    )
-    payloads = [
-        (P50 / capture["policy_input"]["path"]).read_bytes()
-        for capture in episode["captures"]
-    ]
-    candidate_set, supports = reconstruct_candidate_support(
-        payloads[:-1],
-        acquisition_base_pose=episode["acquisition_base_pose"],
-        final_input=payloads[-1],
-    )
+    for episode in document["episodes"]:
+        payloads = [
+            (P50 / capture["policy_input"]["path"]).read_bytes()
+            for capture in episode["captures"]
+        ]
+        candidate_set, supports = reconstruct_candidate_support(
+            payloads[:-1],
+            acquisition_base_pose=episode["acquisition_base_pose"],
+            final_input=payloads[-1],
+        )
 
-    assert candidate_set.candidate_set_sha256 == episode["candidate_set"]["sha256"]
-    assert len(supports) == episode["candidate_set"]["candidate_count"]
-    assert sum(item.candidate.support_count for item in supports) == sum(
-        len(raw.rows) for item in supports for raw in item.raw_support
-    )
-    assert deserialize_policy_input(payloads[-1]).sequence_id == (
-        episode["captures"][-1]["sequence_id"]
-    )
+        assert candidate_set.candidate_set_sha256 == episode["candidate_set"]["sha256"]
+        assert len(supports) == episode["candidate_set"]["candidate_count"]
+        assert sum(item.candidate.support_count for item in supports) == sum(
+            len(raw.rows) for item in supports for raw in item.raw_support
+        )
+        assert deserialize_policy_input(payloads[-1]).sequence_id == (
+            episode["captures"][-1]["sequence_id"]
+        )
 
 
 def test_association_counts_every_support_pixel_and_applies_ratio() -> None:
