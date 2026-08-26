@@ -1,0 +1,4164 @@
+{
+  "proposal_id": "R0001-P50-E4",
+  "schema_version": "hwr.p50-e4-exact-geom-tables/v1",
+  "task_order": [
+    "tidy_living_room_3d/v1",
+    "clear_dining_table_3d/v1",
+    "store_kitchen_items_3d/v1"
+  ],
+  "tasks": [
+    {
+      "alias_count": 3,
+      "background": {
+        "instance": null,
+        "label": "background",
+        "object_id": -1,
+        "object_type": -1,
+        "role": "background"
+      },
+      "bodies": [
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "geom_ids": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "geom_roles": [
+            "floor_support",
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "geom_ids": [
+            4,
+            5,
+            6,
+            7
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "geom_ids": [
+            8,
+            9,
+            10,
+            11
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 3,
+          "body_name": "wheel_front_left",
+          "body_root_id": 1,
+          "geom_ids": [
+            12
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 4,
+          "body_name": "wheel_rear_left",
+          "body_root_id": 1,
+          "geom_ids": [
+            13
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 5,
+          "body_name": "wheel_front_right",
+          "body_root_id": 1,
+          "geom_ids": [
+            14
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 6,
+          "body_name": "wheel_rear_right",
+          "body_root_id": 1,
+          "geom_ids": [
+            15
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 7,
+          "body_name": "right_shoulder_pan_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            16
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 8,
+          "body_name": "right_upper_arm_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            17
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 9,
+          "body_name": "right_forearm_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            18
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 10,
+          "body_name": "right_wrist_roll_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            19
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 11,
+          "body_name": "right_wrist_pitch_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            20
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 12,
+          "body_name": "right_wrist_yaw_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            21
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 13,
+          "body_name": "right_gripper_palm",
+          "body_root_id": 1,
+          "geom_ids": [
+            22,
+            23
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "geom_ids": [
+            24,
+            25,
+            26,
+            27,
+            28
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "geom_ids": [
+            29,
+            30,
+            31,
+            32,
+            33
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 16,
+          "body_name": "left_shoulder_pan_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            34
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 17,
+          "body_name": "left_upper_arm_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            35
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 18,
+          "body_name": "left_forearm_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            36
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 19,
+          "body_name": "left_wrist_roll_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            37
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 20,
+          "body_name": "left_wrist_pitch_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            38
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 21,
+          "body_name": "left_wrist_yaw_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            39
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 22,
+          "body_name": "left_gripper_palm",
+          "body_root_id": 1,
+          "geom_ids": [
+            40,
+            41
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "geom_ids": [
+            42,
+            43,
+            44,
+            45,
+            46
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "geom_ids": [
+            47,
+            48,
+            49,
+            50,
+            51
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 25,
+          "body_name": "sofa",
+          "body_root_id": 25,
+          "geom_ids": [
+            52,
+            53,
+            54,
+            55,
+            56
+          ],
+          "geom_roles": [
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 26,
+          "body_name": "tea_table",
+          "body_root_id": 26,
+          "geom_ids": [
+            57,
+            58,
+            59
+          ],
+          "geom_roles": [
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 27,
+          "body_name": "storage_basket",
+          "body_root_id": 27,
+          "geom_ids": [
+            60,
+            61,
+            62,
+            63,
+            64,
+            65
+          ],
+          "geom_roles": [
+            "target_container"
+          ]
+        },
+        {
+          "body_id": 28,
+          "body_name": "toy_duck",
+          "body_root_id": 28,
+          "geom_ids": [
+            66,
+            67
+          ],
+          "geom_roles": [
+            "manipulated_object"
+          ]
+        },
+        {
+          "body_id": 29,
+          "body_name": "toy_football",
+          "body_root_id": 29,
+          "geom_ids": [
+            68,
+            69
+          ],
+          "geom_roles": [
+            "manipulated_object"
+          ]
+        }
+      ],
+      "body_count": 30,
+      "exact_claim_count": 44,
+      "exact_geom_role_conflict_count": 0,
+      "geom_count": 70,
+      "geoms": [
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "canonical_exact_claimed_geom": "floor",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.floor_support",
+          "geom_id": 0,
+          "geom_name": "floor",
+          "instance": null,
+          "label": "floor_support",
+          "role": "floor_support"
+        },
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 1,
+          "geom_name": "wall_north",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 2,
+          "geom_name": "wall_west",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 3,
+          "geom_name": "rug_visual",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "chassis_collision",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 4,
+          "geom_name": "chassis_collision",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "body_box_collision",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 5,
+          "geom_name": "body_box_collision",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "body_front_panel",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 6,
+          "geom_name": "body_front_panel",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "bumper_front",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 7,
+          "geom_name": "bumper_front",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "camera_head_pedestal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 8,
+          "geom_name": "camera_head_pedestal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "camera_head_housing",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 9,
+          "geom_name": "camera_head_housing",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "camera_rgb_lens",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 10,
+          "geom_name": "camera_rgb_lens",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "camera_depth_lens",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 11,
+          "geom_name": "camera_depth_lens",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 3,
+          "body_name": "wheel_front_left",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "wheel_front_left_geom",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 12,
+          "geom_name": "wheel_front_left_geom",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 4,
+          "body_name": "wheel_rear_left",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "wheel_rear_left_geom",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 13,
+          "geom_name": "wheel_rear_left_geom",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 5,
+          "body_name": "wheel_front_right",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "wheel_front_right_geom",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 14,
+          "geom_name": "wheel_front_right_geom",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 6,
+          "body_name": "wheel_rear_right",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "wheel_rear_right_geom",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 15,
+          "geom_name": "wheel_rear_right_geom",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 7,
+          "body_name": "right_shoulder_pan_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 16,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 8,
+          "body_name": "right_upper_arm_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 17,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 9,
+          "body_name": "right_forearm_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 18,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 10,
+          "body_name": "right_wrist_roll_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 19,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 11,
+          "body_name": "right_wrist_pitch_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 20,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 12,
+          "body_name": "right_wrist_yaw_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 21,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 13,
+          "body_name": "right_gripper_palm",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_palm_shell",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 22,
+          "geom_name": "right_gripper_palm_shell",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 13,
+          "body_name": "right_gripper_palm",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_wrist_adapter",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 23,
+          "geom_name": "right_gripper_wrist_adapter",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_knuckle",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 24,
+          "geom_name": "right_gripper_left_knuckle",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_proximal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 25,
+          "geom_name": "right_gripper_left_proximal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_distal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 26,
+          "geom_name": "right_gripper_left_distal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_tip",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 27,
+          "geom_name": "right_gripper_left_tip",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_pad",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 28,
+          "geom_name": "right_gripper_left_pad",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_knuckle",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 29,
+          "geom_name": "right_gripper_right_knuckle",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_proximal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 30,
+          "geom_name": "right_gripper_right_proximal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_distal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 31,
+          "geom_name": "right_gripper_right_distal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_tip",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 32,
+          "geom_name": "right_gripper_right_tip",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_pad",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 33,
+          "geom_name": "right_gripper_right_pad",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 16,
+          "body_name": "left_shoulder_pan_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 34,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 17,
+          "body_name": "left_upper_arm_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 35,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 18,
+          "body_name": "left_forearm_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 36,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 19,
+          "body_name": "left_wrist_roll_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 37,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 20,
+          "body_name": "left_wrist_pitch_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 38,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 21,
+          "body_name": "left_wrist_yaw_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 39,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 22,
+          "body_name": "left_gripper_palm",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_palm_shell",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 40,
+          "geom_name": "left_gripper_palm_shell",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 22,
+          "body_name": "left_gripper_palm",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_wrist_adapter",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 41,
+          "geom_name": "left_gripper_wrist_adapter",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_knuckle",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 42,
+          "geom_name": "left_gripper_left_knuckle",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_proximal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 43,
+          "geom_name": "left_gripper_left_proximal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_distal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 44,
+          "geom_name": "left_gripper_left_distal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_tip",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 45,
+          "geom_name": "left_gripper_left_tip",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_pad",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 46,
+          "geom_name": "left_gripper_left_pad",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_knuckle",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 47,
+          "geom_name": "left_gripper_right_knuckle",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_proximal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 48,
+          "geom_name": "left_gripper_right_proximal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_distal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 49,
+          "geom_name": "left_gripper_right_distal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_tip",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 50,
+          "geom_name": "left_gripper_right_tip",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_pad",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 51,
+          "geom_name": "left_gripper_right_pad",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 25,
+          "body_name": "sofa",
+          "body_root_id": 25,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 52,
+          "geom_name": "sofa_visual",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 25,
+          "body_name": "sofa",
+          "body_root_id": 25,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 53,
+          "geom_name": "sofa_seat_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 25,
+          "body_name": "sofa",
+          "body_root_id": 25,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 54,
+          "geom_name": "sofa_back_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 25,
+          "body_name": "sofa",
+          "body_root_id": 25,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 55,
+          "geom_name": "sofa_left_arm_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 25,
+          "body_name": "sofa",
+          "body_root_id": 25,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 56,
+          "geom_name": "sofa_right_arm_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 26,
+          "body_name": "tea_table",
+          "body_root_id": 26,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 57,
+          "geom_name": "tea_table_visual",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 26,
+          "body_name": "tea_table",
+          "body_root_id": 26,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 58,
+          "geom_name": "tea_table_top_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 26,
+          "body_name": "tea_table",
+          "body_root_id": 26,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 59,
+          "geom_name": "tea_table_base_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 27,
+          "body_name": "storage_basket",
+          "body_root_id": 27,
+          "canonical_exact_claimed_geom": "basket_bottom_collision",
+          "claim_kind": "alias",
+          "claim_source": "frozen_one_hop_same_body_alias",
+          "geom_id": 60,
+          "geom_name": "storage_basket_visual",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 27,
+          "body_name": "storage_basket",
+          "body_root_id": 27,
+          "canonical_exact_claimed_geom": "basket_bottom_collision",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 61,
+          "geom_name": "basket_bottom_collision",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 27,
+          "body_name": "storage_basket",
+          "body_root_id": 27,
+          "canonical_exact_claimed_geom": "basket_front_collision",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 62,
+          "geom_name": "basket_front_collision",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 27,
+          "body_name": "storage_basket",
+          "body_root_id": 27,
+          "canonical_exact_claimed_geom": "basket_back_collision",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 63,
+          "geom_name": "basket_back_collision",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 27,
+          "body_name": "storage_basket",
+          "body_root_id": 27,
+          "canonical_exact_claimed_geom": "basket_left_collision",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 64,
+          "geom_name": "basket_left_collision",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 27,
+          "body_name": "storage_basket",
+          "body_root_id": 27,
+          "canonical_exact_claimed_geom": "basket_right_collision",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 65,
+          "geom_name": "basket_right_collision",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 28,
+          "body_name": "toy_duck",
+          "body_root_id": 28,
+          "canonical_exact_claimed_geom": "toy_duck_collision",
+          "claim_kind": "alias",
+          "claim_source": "frozen_one_hop_same_body_alias",
+          "geom_id": 66,
+          "geom_name": "toy_duck_visual",
+          "instance": "duck",
+          "label": "object:duck",
+          "role": "manipulated_object"
+        },
+        {
+          "body_id": 28,
+          "body_name": "toy_duck",
+          "body_root_id": 28,
+          "canonical_exact_claimed_geom": "toy_duck_collision",
+          "claim_kind": "exact",
+          "claim_source": "binding.objects.duck.collision_geom",
+          "geom_id": 67,
+          "geom_name": "toy_duck_collision",
+          "instance": "duck",
+          "label": "object:duck",
+          "role": "manipulated_object"
+        },
+        {
+          "body_id": 29,
+          "body_name": "toy_football",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": "toy_football_collision",
+          "claim_kind": "alias",
+          "claim_source": "frozen_one_hop_same_body_alias",
+          "geom_id": 68,
+          "geom_name": "toy_football_visual",
+          "instance": "football",
+          "label": "object:football",
+          "role": "manipulated_object"
+        },
+        {
+          "body_id": 29,
+          "body_name": "toy_football",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": "toy_football_collision",
+          "claim_kind": "exact",
+          "claim_source": "binding.objects.football.collision_geom",
+          "geom_id": 69,
+          "geom_name": "toy_football_collision",
+          "instance": "football",
+          "label": "object:football",
+          "role": "manipulated_object"
+        }
+      ],
+      "schema_version": "hwr.p50-e4-exact-geom-role-table/v1",
+      "sha256": "2358debe91f6e97dd22175383a5a4b24781c291db5a3699acb544452d2021250",
+      "site_count": 4,
+      "sites": [
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 0,
+          "site_name": "base_imu"
+        },
+        {
+          "body_id": 13,
+          "body_name": "right_gripper_palm",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 1,
+          "site_name": "right_grasp_center"
+        },
+        {
+          "body_id": 22,
+          "body_name": "left_gripper_palm",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 2,
+          "site_name": "left_grasp_center"
+        },
+        {
+          "body_id": 27,
+          "body_name": "storage_basket",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 3,
+          "site_name": "living_target_volume"
+        }
+      ],
+      "task_id": "tidy_living_room_3d/v1",
+      "task_visible_inventory_count": 3,
+      "task_visible_inventory_unknown_count": 0
+    },
+    {
+      "alias_count": 2,
+      "background": {
+        "instance": null,
+        "label": "background",
+        "object_id": -1,
+        "object_type": -1,
+        "role": "background"
+      },
+      "bodies": [
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "geom_ids": [
+            0,
+            1,
+            2
+          ],
+          "geom_roles": [
+            "floor_support",
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "geom_ids": [
+            3,
+            4,
+            5,
+            6
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "geom_ids": [
+            7,
+            8,
+            9,
+            10
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 3,
+          "body_name": "wheel_front_left",
+          "body_root_id": 1,
+          "geom_ids": [
+            11
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 4,
+          "body_name": "wheel_rear_left",
+          "body_root_id": 1,
+          "geom_ids": [
+            12
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 5,
+          "body_name": "wheel_front_right",
+          "body_root_id": 1,
+          "geom_ids": [
+            13
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 6,
+          "body_name": "wheel_rear_right",
+          "body_root_id": 1,
+          "geom_ids": [
+            14
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 7,
+          "body_name": "right_shoulder_pan_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            15
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 8,
+          "body_name": "right_upper_arm_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            16
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 9,
+          "body_name": "right_forearm_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            17
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 10,
+          "body_name": "right_wrist_roll_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            18
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 11,
+          "body_name": "right_wrist_pitch_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            19
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 12,
+          "body_name": "right_wrist_yaw_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            20
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 13,
+          "body_name": "right_gripper_palm",
+          "body_root_id": 1,
+          "geom_ids": [
+            21,
+            22
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "geom_ids": [
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "geom_ids": [
+            28,
+            29,
+            30,
+            31,
+            32
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 16,
+          "body_name": "left_shoulder_pan_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            33
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 17,
+          "body_name": "left_upper_arm_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            34
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 18,
+          "body_name": "left_forearm_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            35
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 19,
+          "body_name": "left_wrist_roll_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            36
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 20,
+          "body_name": "left_wrist_pitch_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            37
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 21,
+          "body_name": "left_wrist_yaw_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            38
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 22,
+          "body_name": "left_gripper_palm",
+          "body_root_id": 1,
+          "geom_ids": [
+            39,
+            40
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "geom_ids": [
+            41,
+            42,
+            43,
+            44,
+            45
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "geom_ids": [
+            46,
+            47,
+            48,
+            49,
+            50
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 25,
+          "body_name": "dining_table",
+          "body_root_id": 25,
+          "geom_ids": [
+            51,
+            52,
+            53,
+            54
+          ],
+          "geom_roles": [
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 26,
+          "body_name": "chair_west",
+          "body_root_id": 26,
+          "geom_ids": [
+            55,
+            56,
+            57
+          ],
+          "geom_roles": [
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 27,
+          "body_name": "chair_north",
+          "body_root_id": 27,
+          "geom_ids": [
+            58,
+            59,
+            60
+          ],
+          "geom_roles": [
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 28,
+          "body_name": "chair_east",
+          "body_root_id": 28,
+          "geom_ids": [
+            61,
+            62,
+            63
+          ],
+          "geom_roles": [
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 29,
+          "body_name": "dining_cup",
+          "body_root_id": 29,
+          "geom_ids": [
+            64,
+            65
+          ],
+          "geom_roles": [
+            "manipulated_object"
+          ]
+        },
+        {
+          "body_id": 30,
+          "body_name": "dining_plate",
+          "body_root_id": 30,
+          "geom_ids": [
+            66,
+            67
+          ],
+          "geom_roles": [
+            "manipulated_object"
+          ]
+        },
+        {
+          "body_id": 31,
+          "body_name": "sideboard",
+          "body_root_id": 31,
+          "geom_ids": [
+            68,
+            69,
+            70,
+            71
+          ],
+          "geom_roles": [
+            "other_furniture",
+            "target_container"
+          ]
+        }
+      ],
+      "body_count": 32,
+      "exact_claim_count": 41,
+      "exact_geom_role_conflict_count": 0,
+      "geom_count": 72,
+      "geoms": [
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "canonical_exact_claimed_geom": "floor",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.floor_support",
+          "geom_id": 0,
+          "geom_name": "floor",
+          "instance": null,
+          "label": "floor_support",
+          "role": "floor_support"
+        },
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 1,
+          "geom_name": "wall_north",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 2,
+          "geom_name": "wall_west",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "chassis_collision",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 3,
+          "geom_name": "chassis_collision",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "body_box_collision",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 4,
+          "geom_name": "body_box_collision",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "body_front_panel",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 5,
+          "geom_name": "body_front_panel",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "bumper_front",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 6,
+          "geom_name": "bumper_front",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "camera_head_pedestal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 7,
+          "geom_name": "camera_head_pedestal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "camera_head_housing",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 8,
+          "geom_name": "camera_head_housing",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "camera_rgb_lens",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 9,
+          "geom_name": "camera_rgb_lens",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "camera_depth_lens",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 10,
+          "geom_name": "camera_depth_lens",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 3,
+          "body_name": "wheel_front_left",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "wheel_front_left_geom",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 11,
+          "geom_name": "wheel_front_left_geom",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 4,
+          "body_name": "wheel_rear_left",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "wheel_rear_left_geom",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 12,
+          "geom_name": "wheel_rear_left_geom",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 5,
+          "body_name": "wheel_front_right",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "wheel_front_right_geom",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 13,
+          "geom_name": "wheel_front_right_geom",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 6,
+          "body_name": "wheel_rear_right",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "wheel_rear_right_geom",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 14,
+          "geom_name": "wheel_rear_right_geom",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 7,
+          "body_name": "right_shoulder_pan_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 15,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 8,
+          "body_name": "right_upper_arm_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 16,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 9,
+          "body_name": "right_forearm_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 17,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 10,
+          "body_name": "right_wrist_roll_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 18,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 11,
+          "body_name": "right_wrist_pitch_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 19,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 12,
+          "body_name": "right_wrist_yaw_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 20,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 13,
+          "body_name": "right_gripper_palm",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_palm_shell",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 21,
+          "geom_name": "right_gripper_palm_shell",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 13,
+          "body_name": "right_gripper_palm",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_wrist_adapter",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 22,
+          "geom_name": "right_gripper_wrist_adapter",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_knuckle",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 23,
+          "geom_name": "right_gripper_left_knuckle",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_proximal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 24,
+          "geom_name": "right_gripper_left_proximal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_distal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 25,
+          "geom_name": "right_gripper_left_distal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_tip",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 26,
+          "geom_name": "right_gripper_left_tip",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_pad",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 27,
+          "geom_name": "right_gripper_left_pad",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_knuckle",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 28,
+          "geom_name": "right_gripper_right_knuckle",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_proximal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 29,
+          "geom_name": "right_gripper_right_proximal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_distal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 30,
+          "geom_name": "right_gripper_right_distal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_tip",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 31,
+          "geom_name": "right_gripper_right_tip",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_pad",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 32,
+          "geom_name": "right_gripper_right_pad",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 16,
+          "body_name": "left_shoulder_pan_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 33,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 17,
+          "body_name": "left_upper_arm_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 34,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 18,
+          "body_name": "left_forearm_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 35,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 19,
+          "body_name": "left_wrist_roll_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 36,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 20,
+          "body_name": "left_wrist_pitch_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 37,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 21,
+          "body_name": "left_wrist_yaw_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 38,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 22,
+          "body_name": "left_gripper_palm",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_palm_shell",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 39,
+          "geom_name": "left_gripper_palm_shell",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 22,
+          "body_name": "left_gripper_palm",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_wrist_adapter",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 40,
+          "geom_name": "left_gripper_wrist_adapter",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_knuckle",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 41,
+          "geom_name": "left_gripper_left_knuckle",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_proximal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 42,
+          "geom_name": "left_gripper_left_proximal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_distal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 43,
+          "geom_name": "left_gripper_left_distal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_tip",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 44,
+          "geom_name": "left_gripper_left_tip",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_pad",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 45,
+          "geom_name": "left_gripper_left_pad",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_knuckle",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 46,
+          "geom_name": "left_gripper_right_knuckle",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_proximal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 47,
+          "geom_name": "left_gripper_right_proximal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_distal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 48,
+          "geom_name": "left_gripper_right_distal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_tip",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 49,
+          "geom_name": "left_gripper_right_tip",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_pad",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 50,
+          "geom_name": "left_gripper_right_pad",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 25,
+          "body_name": "dining_table",
+          "body_root_id": 25,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 51,
+          "geom_name": "dining_table_visual",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 25,
+          "body_name": "dining_table",
+          "body_root_id": 25,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 52,
+          "geom_name": "dining_table_top_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 25,
+          "body_name": "dining_table",
+          "body_root_id": 25,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 53,
+          "geom_name": "dining_table_pedestal_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 25,
+          "body_name": "dining_table",
+          "body_root_id": 25,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 54,
+          "geom_name": "dining_table_base_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 26,
+          "body_name": "chair_west",
+          "body_root_id": 26,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 55,
+          "geom_name": "chair_west_visual",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 26,
+          "body_name": "chair_west",
+          "body_root_id": 26,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 56,
+          "geom_name": "chair_west_seat_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 26,
+          "body_name": "chair_west",
+          "body_root_id": 26,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 57,
+          "geom_name": "chair_west_back_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 27,
+          "body_name": "chair_north",
+          "body_root_id": 27,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 58,
+          "geom_name": "chair_north_visual",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 27,
+          "body_name": "chair_north",
+          "body_root_id": 27,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 59,
+          "geom_name": "chair_north_seat_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 27,
+          "body_name": "chair_north",
+          "body_root_id": 27,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 60,
+          "geom_name": "chair_north_back_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 28,
+          "body_name": "chair_east",
+          "body_root_id": 28,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 61,
+          "geom_name": "chair_east_visual",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 28,
+          "body_name": "chair_east",
+          "body_root_id": 28,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 62,
+          "geom_name": "chair_east_seat_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 28,
+          "body_name": "chair_east",
+          "body_root_id": 28,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 63,
+          "geom_name": "chair_east_back_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 29,
+          "body_name": "dining_cup",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": "dining_cup_collision",
+          "claim_kind": "alias",
+          "claim_source": "frozen_one_hop_same_body_alias",
+          "geom_id": 64,
+          "geom_name": "dining_cup_visual",
+          "instance": "cup",
+          "label": "object:cup",
+          "role": "manipulated_object"
+        },
+        {
+          "body_id": 29,
+          "body_name": "dining_cup",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": "dining_cup_collision",
+          "claim_kind": "exact",
+          "claim_source": "binding.objects.cup.collision_geom",
+          "geom_id": 65,
+          "geom_name": "dining_cup_collision",
+          "instance": "cup",
+          "label": "object:cup",
+          "role": "manipulated_object"
+        },
+        {
+          "body_id": 30,
+          "body_name": "dining_plate",
+          "body_root_id": 30,
+          "canonical_exact_claimed_geom": "dining_plate_collision",
+          "claim_kind": "alias",
+          "claim_source": "frozen_one_hop_same_body_alias",
+          "geom_id": 66,
+          "geom_name": "dining_plate_visual",
+          "instance": "plate",
+          "label": "object:plate",
+          "role": "manipulated_object"
+        },
+        {
+          "body_id": 30,
+          "body_name": "dining_plate",
+          "body_root_id": 30,
+          "canonical_exact_claimed_geom": "dining_plate_collision",
+          "claim_kind": "exact",
+          "claim_source": "binding.objects.plate.collision_geom",
+          "geom_id": 67,
+          "geom_name": "dining_plate_collision",
+          "instance": "plate",
+          "label": "object:plate",
+          "role": "manipulated_object"
+        },
+        {
+          "body_id": 31,
+          "body_name": "sideboard",
+          "body_root_id": 31,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 68,
+          "geom_name": "sideboard_top",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 31,
+          "body_name": "sideboard",
+          "body_root_id": 31,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 69,
+          "geom_name": "sideboard_body",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 31,
+          "body_name": "sideboard",
+          "body_root_id": 31,
+          "canonical_exact_claimed_geom": "cup_holder",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 70,
+          "geom_name": "cup_holder",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 31,
+          "body_name": "sideboard",
+          "body_root_id": 31,
+          "canonical_exact_claimed_geom": "plate_holder",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 71,
+          "geom_name": "plate_holder",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        }
+      ],
+      "schema_version": "hwr.p50-e4-exact-geom-role-table/v1",
+      "sha256": "cbf5e98a0696ad535506de59af7ac9ed3317f4b632c484b2992c251e3969eeda",
+      "site_count": 5,
+      "sites": [
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 0,
+          "site_name": "base_imu"
+        },
+        {
+          "body_id": 13,
+          "body_name": "right_gripper_palm",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 1,
+          "site_name": "right_grasp_center"
+        },
+        {
+          "body_id": 22,
+          "body_name": "left_gripper_palm",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 2,
+          "site_name": "left_grasp_center"
+        },
+        {
+          "body_id": 31,
+          "body_name": "sideboard",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 3,
+          "site_name": "cup_target_volume"
+        },
+        {
+          "body_id": 31,
+          "body_name": "sideboard",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 4,
+          "site_name": "plate_target_volume"
+        }
+      ],
+      "task_id": "clear_dining_table_3d/v1",
+      "task_visible_inventory_count": 4,
+      "task_visible_inventory_unknown_count": 0
+    },
+    {
+      "alias_count": 3,
+      "background": {
+        "instance": null,
+        "label": "background",
+        "object_id": -1,
+        "object_type": -1,
+        "role": "background"
+      },
+      "bodies": [
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "geom_ids": [
+            0,
+            1,
+            2
+          ],
+          "geom_roles": [
+            "floor_support",
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "geom_ids": [
+            3,
+            4,
+            5,
+            6
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "geom_ids": [
+            7,
+            8,
+            9,
+            10
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 3,
+          "body_name": "wheel_front_left",
+          "body_root_id": 1,
+          "geom_ids": [
+            11
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 4,
+          "body_name": "wheel_rear_left",
+          "body_root_id": 1,
+          "geom_ids": [
+            12
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 5,
+          "body_name": "wheel_front_right",
+          "body_root_id": 1,
+          "geom_ids": [
+            13
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 6,
+          "body_name": "wheel_rear_right",
+          "body_root_id": 1,
+          "geom_ids": [
+            14
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 7,
+          "body_name": "right_shoulder_pan_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            15
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 8,
+          "body_name": "right_upper_arm_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            16
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 9,
+          "body_name": "right_forearm_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            17
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 10,
+          "body_name": "right_wrist_roll_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            18
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 11,
+          "body_name": "right_wrist_pitch_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            19
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 12,
+          "body_name": "right_wrist_yaw_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            20
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 13,
+          "body_name": "right_gripper_palm",
+          "body_root_id": 1,
+          "geom_ids": [
+            21,
+            22
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "geom_ids": [
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "geom_ids": [
+            28,
+            29,
+            30,
+            31,
+            32
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 16,
+          "body_name": "left_shoulder_pan_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            33
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 17,
+          "body_name": "left_upper_arm_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            34
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 18,
+          "body_name": "left_forearm_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            35
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 19,
+          "body_name": "left_wrist_roll_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            36
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 20,
+          "body_name": "left_wrist_pitch_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            37
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 21,
+          "body_name": "left_wrist_yaw_link",
+          "body_root_id": 1,
+          "geom_ids": [
+            38
+          ],
+          "geom_roles": []
+        },
+        {
+          "body_id": 22,
+          "body_name": "left_gripper_palm",
+          "body_root_id": 1,
+          "geom_ids": [
+            39,
+            40
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "geom_ids": [
+            41,
+            42,
+            43,
+            44,
+            45
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "geom_ids": [
+            46,
+            47,
+            48,
+            49,
+            50
+          ],
+          "geom_roles": [
+            "robot"
+          ]
+        },
+        {
+          "body_id": 25,
+          "body_name": "cabinet_main",
+          "body_root_id": 25,
+          "geom_ids": [
+            51,
+            52
+          ],
+          "geom_roles": [
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 26,
+          "body_name": "cabinet_left",
+          "body_root_id": 26,
+          "geom_ids": [
+            53,
+            54
+          ],
+          "geom_roles": [
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 27,
+          "body_name": "counter_bank",
+          "body_root_id": 27,
+          "geom_ids": [
+            55,
+            56,
+            57
+          ],
+          "geom_roles": [
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 28,
+          "body_name": "island",
+          "body_root_id": 28,
+          "geom_ids": [
+            58,
+            59,
+            60
+          ],
+          "geom_roles": [
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 29,
+          "body_name": "kitchen_drawer_frame",
+          "body_root_id": 29,
+          "geom_ids": [
+            61,
+            62,
+            63,
+            64
+          ],
+          "geom_roles": [
+            "other_furniture"
+          ]
+        },
+        {
+          "body_id": 30,
+          "body_name": "kitchen_drawer",
+          "body_root_id": 29,
+          "geom_ids": [
+            65,
+            66,
+            67,
+            68,
+            69,
+            70,
+            71,
+            72
+          ],
+          "geom_roles": [
+            "articulation",
+            "target_container"
+          ]
+        },
+        {
+          "body_id": 31,
+          "body_name": "cleaner_yellow",
+          "body_root_id": 31,
+          "geom_ids": [
+            73,
+            74
+          ],
+          "geom_roles": [
+            "manipulated_object"
+          ]
+        },
+        {
+          "body_id": 32,
+          "body_name": "cleaner_pink",
+          "body_root_id": 32,
+          "geom_ids": [
+            75,
+            76
+          ],
+          "geom_roles": [
+            "manipulated_object"
+          ]
+        }
+      ],
+      "body_count": 33,
+      "exact_claim_count": 46,
+      "exact_geom_role_conflict_count": 0,
+      "geom_count": 77,
+      "geoms": [
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "canonical_exact_claimed_geom": "floor",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.floor_support",
+          "geom_id": 0,
+          "geom_name": "floor",
+          "instance": null,
+          "label": "floor_support",
+          "role": "floor_support"
+        },
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 1,
+          "geom_name": "wall_north",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 0,
+          "body_name": "world",
+          "body_root_id": 0,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 2,
+          "geom_name": "wall_west",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "chassis_collision",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 3,
+          "geom_name": "chassis_collision",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "body_box_collision",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 4,
+          "geom_name": "body_box_collision",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "body_front_panel",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 5,
+          "geom_name": "body_front_panel",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "bumper_front",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 6,
+          "geom_name": "bumper_front",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "camera_head_pedestal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 7,
+          "geom_name": "camera_head_pedestal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "camera_head_housing",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 8,
+          "geom_name": "camera_head_housing",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "camera_rgb_lens",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 9,
+          "geom_name": "camera_rgb_lens",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 2,
+          "body_name": "top_camera_head",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "camera_depth_lens",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 10,
+          "geom_name": "camera_depth_lens",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 3,
+          "body_name": "wheel_front_left",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "wheel_front_left_geom",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 11,
+          "geom_name": "wheel_front_left_geom",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 4,
+          "body_name": "wheel_rear_left",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "wheel_rear_left_geom",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 12,
+          "geom_name": "wheel_rear_left_geom",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 5,
+          "body_name": "wheel_front_right",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "wheel_front_right_geom",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 13,
+          "geom_name": "wheel_front_right_geom",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 6,
+          "body_name": "wheel_rear_right",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "wheel_rear_right_geom",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 14,
+          "geom_name": "wheel_rear_right_geom",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 7,
+          "body_name": "right_shoulder_pan_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 15,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 8,
+          "body_name": "right_upper_arm_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 16,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 9,
+          "body_name": "right_forearm_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 17,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 10,
+          "body_name": "right_wrist_roll_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 18,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 11,
+          "body_name": "right_wrist_pitch_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 19,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 12,
+          "body_name": "right_wrist_yaw_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 20,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 13,
+          "body_name": "right_gripper_palm",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_palm_shell",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 21,
+          "geom_name": "right_gripper_palm_shell",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 13,
+          "body_name": "right_gripper_palm",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_wrist_adapter",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 22,
+          "geom_name": "right_gripper_wrist_adapter",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_knuckle",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 23,
+          "geom_name": "right_gripper_left_knuckle",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_proximal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 24,
+          "geom_name": "right_gripper_left_proximal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_distal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 25,
+          "geom_name": "right_gripper_left_distal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_tip",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 26,
+          "geom_name": "right_gripper_left_tip",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 14,
+          "body_name": "right_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_left_pad",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 27,
+          "geom_name": "right_gripper_left_pad",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_knuckle",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 28,
+          "geom_name": "right_gripper_right_knuckle",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_proximal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 29,
+          "geom_name": "right_gripper_right_proximal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_distal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 30,
+          "geom_name": "right_gripper_right_distal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_tip",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 31,
+          "geom_name": "right_gripper_right_tip",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 15,
+          "body_name": "right_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "right_gripper_right_pad",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 32,
+          "geom_name": "right_gripper_right_pad",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 16,
+          "body_name": "left_shoulder_pan_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 33,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 17,
+          "body_name": "left_upper_arm_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 34,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 18,
+          "body_name": "left_forearm_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 35,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 19,
+          "body_name": "left_wrist_roll_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 36,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 20,
+          "body_name": "left_wrist_pitch_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 37,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 21,
+          "body_name": "left_wrist_yaw_link",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "unknown",
+          "claim_source": null,
+          "geom_id": 38,
+          "geom_name": null,
+          "instance": null,
+          "label": "unknown",
+          "role": "unknown"
+        },
+        {
+          "body_id": 22,
+          "body_name": "left_gripper_palm",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_palm_shell",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 39,
+          "geom_name": "left_gripper_palm_shell",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 22,
+          "body_name": "left_gripper_palm",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_wrist_adapter",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 40,
+          "geom_name": "left_gripper_wrist_adapter",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_knuckle",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 41,
+          "geom_name": "left_gripper_left_knuckle",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_proximal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 42,
+          "geom_name": "left_gripper_left_proximal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_distal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 43,
+          "geom_name": "left_gripper_left_distal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_tip",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 44,
+          "geom_name": "left_gripper_left_tip",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 23,
+          "body_name": "left_gripper_left_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_left_pad",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 45,
+          "geom_name": "left_gripper_left_pad",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_knuckle",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 46,
+          "geom_name": "left_gripper_right_knuckle",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_proximal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 47,
+          "geom_name": "left_gripper_right_proximal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_distal",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 48,
+          "geom_name": "left_gripper_right_distal",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_tip",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 49,
+          "geom_name": "left_gripper_right_tip",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 24,
+          "body_name": "left_gripper_right_finger",
+          "body_root_id": 1,
+          "canonical_exact_claimed_geom": "left_gripper_right_pad",
+          "claim_kind": "exact",
+          "claim_source": "robot_root",
+          "geom_id": 50,
+          "geom_name": "left_gripper_right_pad",
+          "instance": null,
+          "label": "robot",
+          "role": "robot"
+        },
+        {
+          "body_id": 25,
+          "body_name": "cabinet_main",
+          "body_root_id": 25,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 51,
+          "geom_name": "cabinet_main_visual",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 25,
+          "body_name": "cabinet_main",
+          "body_root_id": 25,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 52,
+          "geom_name": "cabinet_main_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 26,
+          "body_name": "cabinet_left",
+          "body_root_id": 26,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 53,
+          "geom_name": "cabinet_left_visual",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 26,
+          "body_name": "cabinet_left",
+          "body_root_id": 26,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 54,
+          "geom_name": "cabinet_left_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 27,
+          "body_name": "counter_bank",
+          "body_root_id": 27,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 55,
+          "geom_name": "counter_bank_visual",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 27,
+          "body_name": "counter_bank",
+          "body_root_id": 27,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 56,
+          "geom_name": "counter_bank_collision",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 27,
+          "body_name": "counter_bank",
+          "body_root_id": 27,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 57,
+          "geom_name": "counter_worktop",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 28,
+          "body_name": "island",
+          "body_root_id": 28,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 58,
+          "geom_name": "island_base",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 28,
+          "body_name": "island",
+          "body_root_id": 28,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 59,
+          "geom_name": "island_worktop",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 28,
+          "body_name": "island",
+          "body_root_id": 28,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 60,
+          "geom_name": "island_sink",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 29,
+          "body_name": "kitchen_drawer_frame",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 61,
+          "geom_name": "drawer_frame_left",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 29,
+          "body_name": "kitchen_drawer_frame",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 62,
+          "geom_name": "drawer_frame_right",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 29,
+          "body_name": "kitchen_drawer_frame",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 63,
+          "geom_name": "drawer_frame_top",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 29,
+          "body_name": "kitchen_drawer_frame",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": null,
+          "claim_kind": "fallback",
+          "claim_source": null,
+          "geom_id": 64,
+          "geom_name": "drawer_frame_back",
+          "instance": null,
+          "label": "other_furniture",
+          "role": "other_furniture"
+        },
+        {
+          "body_id": 30,
+          "body_name": "kitchen_drawer",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": "drawer_bottom",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 65,
+          "geom_name": "drawer_bottom",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 30,
+          "body_name": "kitchen_drawer",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": "drawer_front",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 66,
+          "geom_name": "drawer_front",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 30,
+          "body_name": "kitchen_drawer",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": "drawer_back",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 67,
+          "geom_name": "drawer_back",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 30,
+          "body_name": "kitchen_drawer",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": "drawer_left",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 68,
+          "geom_name": "drawer_left",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 30,
+          "body_name": "kitchen_drawer",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": "drawer_right",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 69,
+          "geom_name": "drawer_right",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 30,
+          "body_name": "kitchen_drawer",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": "drawer_divider",
+          "claim_kind": "exact",
+          "claim_source": "binding.allowed_robot_contact_roles.target_container",
+          "geom_id": 70,
+          "geom_name": "drawer_divider",
+          "instance": null,
+          "label": "target_container",
+          "role": "target_container"
+        },
+        {
+          "body_id": 30,
+          "body_name": "kitchen_drawer",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": "drawer_handle",
+          "claim_kind": "alias",
+          "claim_source": "frozen_one_hop_same_body_alias",
+          "geom_id": 71,
+          "geom_name": "drawer_handle_visual",
+          "instance": "drawer",
+          "label": "articulation:drawer",
+          "role": "articulation"
+        },
+        {
+          "body_id": 30,
+          "body_name": "kitchen_drawer",
+          "body_root_id": 29,
+          "canonical_exact_claimed_geom": "drawer_handle",
+          "claim_kind": "exact",
+          "claim_source": "binding.articulation.handle_geom",
+          "geom_id": 72,
+          "geom_name": "drawer_handle",
+          "instance": "drawer",
+          "label": "articulation:drawer",
+          "role": "articulation"
+        },
+        {
+          "body_id": 31,
+          "body_name": "cleaner_yellow",
+          "body_root_id": 31,
+          "canonical_exact_claimed_geom": "cleaner_yellow_collision",
+          "claim_kind": "alias",
+          "claim_source": "frozen_one_hop_same_body_alias",
+          "geom_id": 73,
+          "geom_name": "cleaner_yellow_visual",
+          "instance": "cleaner_yellow",
+          "label": "object:cleaner_yellow",
+          "role": "manipulated_object"
+        },
+        {
+          "body_id": 31,
+          "body_name": "cleaner_yellow",
+          "body_root_id": 31,
+          "canonical_exact_claimed_geom": "cleaner_yellow_collision",
+          "claim_kind": "exact",
+          "claim_source": "binding.objects.cleaner_yellow.collision_geom",
+          "geom_id": 74,
+          "geom_name": "cleaner_yellow_collision",
+          "instance": "cleaner_yellow",
+          "label": "object:cleaner_yellow",
+          "role": "manipulated_object"
+        },
+        {
+          "body_id": 32,
+          "body_name": "cleaner_pink",
+          "body_root_id": 32,
+          "canonical_exact_claimed_geom": "cleaner_pink_collision",
+          "claim_kind": "alias",
+          "claim_source": "frozen_one_hop_same_body_alias",
+          "geom_id": 75,
+          "geom_name": "cleaner_pink_visual",
+          "instance": "cleaner_pink",
+          "label": "object:cleaner_pink",
+          "role": "manipulated_object"
+        },
+        {
+          "body_id": 32,
+          "body_name": "cleaner_pink",
+          "body_root_id": 32,
+          "canonical_exact_claimed_geom": "cleaner_pink_collision",
+          "claim_kind": "exact",
+          "claim_source": "binding.objects.cleaner_pink.collision_geom",
+          "geom_id": 76,
+          "geom_name": "cleaner_pink_collision",
+          "instance": "cleaner_pink",
+          "label": "object:cleaner_pink",
+          "role": "manipulated_object"
+        }
+      ],
+      "schema_version": "hwr.p50-e4-exact-geom-role-table/v1",
+      "sha256": "90ff0118b61964eee77bb73c932cf4bbe122967ce087e706a69d3c70175c1f80",
+      "site_count": 5,
+      "sites": [
+        {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 0,
+          "site_name": "base_imu"
+        },
+        {
+          "body_id": 13,
+          "body_name": "right_gripper_palm",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 1,
+          "site_name": "right_grasp_center"
+        },
+        {
+          "body_id": 22,
+          "body_name": "left_gripper_palm",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 2,
+          "site_name": "left_grasp_center"
+        },
+        {
+          "body_id": 30,
+          "body_name": "kitchen_drawer",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 3,
+          "site_name": "yellow_target_volume"
+        },
+        {
+          "body_id": 30,
+          "body_name": "kitchen_drawer",
+          "instance": null,
+          "label": "unknown_site",
+          "role": "unknown_site",
+          "site_id": 4,
+          "site_name": "pink_target_volume"
+        }
+      ],
+      "task_id": "store_kitchen_items_3d/v1",
+      "task_visible_inventory_count": 9,
+      "task_visible_inventory_unknown_count": 0
+    }
+  ]
+}

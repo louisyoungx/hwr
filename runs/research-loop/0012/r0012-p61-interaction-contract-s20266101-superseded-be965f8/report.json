@@ -1,0 +1,187 @@
+{
+  "action_changed": false,
+  "allowed_claim": "whether the evaluator and generic primitive information contract contains a gap",
+  "candidate_changed": false,
+  "capability_claim_allowed": false,
+  "checks": {
+    "binding_configuration_reconstruction_passed": true,
+    "candidate_fields_verified": true,
+    "candidate_has_no_private_identity": true,
+    "deterministic_reconstruction_bit_identical": true,
+    "evaluator_annotation_isolated": true,
+    "four_information_boundaries_exact": true,
+    "full_task_assessed_transition_by_transition": true,
+    "initial_microinteraction_annotation_unique": true,
+    "no_validated_external_planner": true,
+    "passed": true,
+    "primitive_callers_exclude_private_fields": true,
+    "primitive_input_excludes_private_fields": true,
+    "primitive_phases_verified": true,
+    "primitive_signature_verified": true,
+    "runtime_predicate_reconstruction_passed": true,
+    "selector_boundary_excludes_private_fields": true,
+    "serialized_policy_fields_verified": true,
+    "seven_transitions_reconstructed": true,
+    "stable_transition_ids_unique": true,
+    "task_configuration_reconstruction_passed": true
+  },
+  "command": [
+    ".venv/bin/python",
+    "-m",
+    "hwr.apps.audit_interaction_contract",
+    "--contract",
+    "configs/eval/interaction_contract_v1.json",
+    "--output",
+    "runs/research-loop/0012/r0012-p61-interaction-contract-s20266101"
+  ],
+  "decision": "accepted as interaction-contract gap evidence",
+  "entity_coverage_claim_allowed": false,
+  "evidence_scope": "static evaluator and primitive information contract only",
+  "full_task_contract": {
+    "all_transitions_uniquely_expressible": false,
+    "contract_gap_present": true,
+    "current_candidate_fields": [
+      "center",
+      "normal",
+      "width",
+      "prominence",
+      "support_count",
+      "view_count",
+      "first_frame",
+      "first_row",
+      "first_column"
+    ],
+    "current_primitive_arguments": [
+      "serialized_input",
+      "candidate",
+      "acquisition_base_pose",
+      "post_selection_step"
+    ],
+    "current_primitive_phases": [
+      "B0_orient",
+      "B1_approach",
+      "B2_preposition",
+      "B3_contact_approach",
+      "B4_close",
+      "B5_pull",
+      "B6_retract",
+      "B7_stop"
+    ],
+    "transition_count": 7,
+    "transitions": [
+      {
+        "destination_available": false,
+        "destination_required": true,
+        "gap_reasons": [
+          "candidate_has_no_entity_or_role_identity",
+          "primitive_has_no_interaction_selector",
+          "primitive_has_no_destination_target"
+        ],
+        "interaction_type_available": false,
+        "selected_entity_role_available": false,
+        "transition_id": "R0001-P61-T01",
+        "uniquely_expressible_and_implementable": false
+      },
+      {
+        "destination_available": false,
+        "destination_required": true,
+        "gap_reasons": [
+          "candidate_has_no_entity_or_role_identity",
+          "primitive_has_no_interaction_selector",
+          "primitive_has_no_destination_target"
+        ],
+        "interaction_type_available": false,
+        "selected_entity_role_available": false,
+        "transition_id": "R0001-P61-T02",
+        "uniquely_expressible_and_implementable": false
+      },
+      {
+        "destination_available": false,
+        "destination_required": true,
+        "gap_reasons": [
+          "candidate_has_no_entity_or_role_identity",
+          "primitive_has_no_interaction_selector",
+          "primitive_has_no_destination_target"
+        ],
+        "interaction_type_available": false,
+        "selected_entity_role_available": false,
+        "transition_id": "R0001-P61-T03",
+        "uniquely_expressible_and_implementable": false
+      },
+      {
+        "destination_available": false,
+        "destination_required": true,
+        "gap_reasons": [
+          "candidate_has_no_entity_or_role_identity",
+          "primitive_has_no_interaction_selector",
+          "primitive_has_no_destination_target"
+        ],
+        "interaction_type_available": false,
+        "selected_entity_role_available": false,
+        "transition_id": "R0001-P61-T04",
+        "uniquely_expressible_and_implementable": false
+      },
+      {
+        "destination_available": false,
+        "destination_required": false,
+        "gap_reasons": [
+          "candidate_has_no_entity_or_role_identity",
+          "primitive_has_no_interaction_selector",
+          "primitive_has_no_articulation_threshold"
+        ],
+        "interaction_type_available": false,
+        "selected_entity_role_available": false,
+        "transition_id": "R0001-P61-T05",
+        "uniquely_expressible_and_implementable": false
+      },
+      {
+        "destination_available": false,
+        "destination_required": true,
+        "gap_reasons": [
+          "candidate_has_no_entity_or_role_identity",
+          "primitive_has_no_interaction_selector",
+          "primitive_has_no_destination_target"
+        ],
+        "interaction_type_available": false,
+        "selected_entity_role_available": false,
+        "transition_id": "R0001-P61-T06",
+        "uniquely_expressible_and_implementable": false
+      },
+      {
+        "destination_available": false,
+        "destination_required": true,
+        "gap_reasons": [
+          "candidate_has_no_entity_or_role_identity",
+          "primitive_has_no_interaction_selector",
+          "primitive_has_no_destination_target"
+        ],
+        "interaction_type_available": false,
+        "selected_entity_role_available": false,
+        "transition_id": "R0001-P61-T07",
+        "uniquely_expressible_and_implementable": false
+      }
+    ]
+  },
+  "generalization_claim_allowed": false,
+  "hardware_safety_claim_allowed": false,
+  "initial_microinteraction_contract": {
+    "caller_role_gap_present": true,
+    "evaluator_only_annotation_available_for_all_tasks": true,
+    "passed": true,
+    "validated_external_planner_present": false
+  },
+  "policy_inference_executed": false,
+  "primitive_changed": false,
+  "proposal_id": "R0001-P61",
+  "reward_changed": false,
+  "runtime_changed": false,
+  "safety_changed": false,
+  "schema_version": "hwr.p61-interaction-contract-report/v1",
+  "selector_changed": false,
+  "source_commit": "be965f868c3c21e234130d6b5e9f725bf73efc78",
+  "task_or_binding_changed": false,
+  "task_success_claim_allowed": false,
+  "termination_changed": false,
+  "training_executed": false,
+  "validation_error": null
+}

@@ -1,0 +1,266 @@
+{
+  "action_changed": false,
+  "artifacts": {
+    "report.json": {
+      "bytes": 7235,
+      "sha256": "d9a760eaa30198eda95d20e90a4ebf4c9d9f5bcd2e118b6e139446866545719a"
+    },
+    "transitions.json": {
+      "bytes": 22033,
+      "sha256": "1cc139e7f8b02a6325d16282f9b7882e9736c40d03f56644c1739d79ee7bcc0a"
+    }
+  },
+  "budgets": {
+    "artifact_bytes_before_manifest": 29268,
+    "artifact_limit_bytes": 10485760,
+    "elapsed_seconds": 3.2905998330097646,
+    "process_peak_rss_bytes": 289521664,
+    "rss_limit_bytes": 1073741824,
+    "tracemalloc_peak_bytes": 111789215,
+    "wall_time_limit_seconds": 60.0
+  },
+  "candidate_changed": false,
+  "capability_claim_allowed": false,
+  "command": [
+    ".venv/bin/python",
+    "-m",
+    "hwr.apps.audit_interaction_contract",
+    "--contract",
+    "configs/eval/interaction_contract_v1.json",
+    "--output",
+    "runs/research-loop/0012/r0012-p61-interaction-contract-s20266101"
+  ],
+  "created_unix_seconds": 1787720442.120527,
+  "decision": "accepted as interaction-contract gap evidence",
+  "entity_coverage_claim_allowed": false,
+  "environment": {
+    "mujoco": "3.10.0",
+    "numpy": "2.4.6",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "python": "3.11.0"
+  },
+  "generalization_claim_allowed": false,
+  "hardware_safety_claim_allowed": false,
+  "policy_inference_executed": false,
+  "primitive_changed": false,
+  "proposal_id": "R0001-P61",
+  "provenance": {
+    "checks": {
+      "all_inputs_match_head": true,
+      "all_inputs_tracked": true,
+      "frozen_context_blob_matches": true,
+      "frozen_context_content_matches": true,
+      "frozen_document_blob_matches": true,
+      "frozen_document_commit_is_ancestor": true,
+      "frozen_document_content_matches": true,
+      "historical_trees_match": true,
+      "passed": true,
+      "source_commit_matches_head": true,
+      "workspace_clean": true
+    },
+    "frozen_context": {
+      "blob_matches": true,
+      "commit": "a95dbbeacc80a974d7a234f2dc79442249eaf07b",
+      "content_matches": true,
+      "current": {
+        "bytes": 10246,
+        "sha256": "6c4c3f74fc587096b17fd1a35ca34fb360d574576c95ecceebf26c9b651ab91a"
+      },
+      "current_blob": "f25965426679b0dda3e437f1ef697efdea000757",
+      "frozen": {
+        "bytes": 10246,
+        "sha256": "6c4c3f74fc587096b17fd1a35ca34fb360d574576c95ecceebf26c9b651ab91a"
+      },
+      "frozen_blob": "f25965426679b0dda3e437f1ef697efdea000757",
+      "path": "docs/research-loop/0012/00-context.md"
+    },
+    "frozen_document": {
+      "blob_matches": true,
+      "commit": "a95dbbeacc80a974d7a234f2dc79442249eaf07b",
+      "content_matches": true,
+      "current": {
+        "bytes": 21406,
+        "sha256": "6cfab1b612327867196577021ba2ed4c6091b77aca27af760fd6400daf393c50"
+      },
+      "current_blob": "55219f9b42693a4c579a13919e754d24e94a15c8",
+      "frozen": {
+        "bytes": 21406,
+        "sha256": "6cfab1b612327867196577021ba2ed4c6091b77aca27af760fd6400daf393c50"
+      },
+      "frozen_blob": "55219f9b42693a4c579a13919e754d24e94a15c8",
+      "path": "docs/research-loop/0012/03-experiment.md"
+    },
+    "historical_trees": {
+      "docs/research-loop/0001": {
+        "current_tree": "416912b7dc1c19611bcfc4375028180014a1989b",
+        "expected_tree": "416912b7dc1c19611bcfc4375028180014a1989b"
+      },
+      "docs/research-loop/0002": {
+        "current_tree": "6fb603dbd52451fe1749157daf05aa482ca7222f",
+        "expected_tree": "6fb603dbd52451fe1749157daf05aa482ca7222f"
+      },
+      "docs/research-loop/0003": {
+        "current_tree": "f56011eda321ea803bc24051db001e632c1549fb",
+        "expected_tree": "f56011eda321ea803bc24051db001e632c1549fb"
+      },
+      "docs/research-loop/0004": {
+        "current_tree": "611c420e539a53a8c7578cd66aa8bdfe46fe82b7",
+        "expected_tree": "611c420e539a53a8c7578cd66aa8bdfe46fe82b7"
+      },
+      "docs/research-loop/0005": {
+        "current_tree": "0352d379d5754adb03e9158c0fa72393ab322d58",
+        "expected_tree": "0352d379d5754adb03e9158c0fa72393ab322d58"
+      },
+      "docs/research-loop/0006": {
+        "current_tree": "ee3a6f5b25887f67f812750d2a75424df12823d4",
+        "expected_tree": "ee3a6f5b25887f67f812750d2a75424df12823d4"
+      },
+      "docs/research-loop/0007": {
+        "current_tree": "0a696caa153abc9c13403fbc9bd3c081ce71c327",
+        "expected_tree": "0a696caa153abc9c13403fbc9bd3c081ce71c327"
+      },
+      "docs/research-loop/0008": {
+        "current_tree": "65e626cddbcb0ec9c2e17cca5184b7d40950e1c6",
+        "expected_tree": "65e626cddbcb0ec9c2e17cca5184b7d40950e1c6"
+      },
+      "docs/research-loop/0009": {
+        "current_tree": "316db8b9ad9739ef491778f641603dbca25e75c9",
+        "expected_tree": "316db8b9ad9739ef491778f641603dbca25e75c9"
+      },
+      "docs/research-loop/0010": {
+        "current_tree": "8a193a24788027d715750c3cd89c2509e71fdbda",
+        "expected_tree": "8a193a24788027d715750c3cd89c2509e71fdbda"
+      },
+      "docs/research-loop/0011": {
+        "current_tree": "85bb445726ecb8e35ff4d8e90606874e2ee36fe4",
+        "expected_tree": "85bb445726ecb8e35ff4d8e90606874e2ee36fe4"
+      }
+    },
+    "inputs": {
+      "configs/adapters/mujoco/formal_3d_v1.json": {
+        "blob_matches_head": true,
+        "bytes": 3051,
+        "head_blob": "d2ff63a32d2ddef0b0a36f7dbce878b03a8e0c0e",
+        "path": "configs/adapters/mujoco/formal_3d_v1.json",
+        "sha256": "7984ef2544bb618269681d274257a598b02621371a26de002bfdd8bbf7decab6",
+        "tracked": true,
+        "working_blob": "d2ff63a32d2ddef0b0a36f7dbce878b03a8e0c0e"
+      },
+      "configs/eval/interaction_contract_v1.json": {
+        "blob_matches_head": true,
+        "bytes": 18151,
+        "head_blob": "276ed15f767a457e5356a6c8b231a912aaeec8dd",
+        "path": "configs/eval/interaction_contract_v1.json",
+        "sha256": "b2fe3ee514f49550fd5efaef457414b91dff0b1de4e3575d8b377cc2e050a6e5",
+        "tracked": true,
+        "working_blob": "276ed15f767a457e5356a6c8b231a912aaeec8dd"
+      },
+      "configs/tasks/formal_3d_v1.json": {
+        "blob_matches_head": true,
+        "bytes": 5480,
+        "head_blob": "d07718bd55bf1791e9f7021e33aa2abd0761fb61",
+        "path": "configs/tasks/formal_3d_v1.json",
+        "sha256": "fa180803a86b42bc633dbf119fa596dd74d3b5c18bf4c2e4f75be97dcccb2a7d",
+        "tracked": true,
+        "working_blob": "d07718bd55bf1791e9f7021e33aa2abd0761fb61"
+      },
+      "src/hwr/adapters/mujoco/bindings.py": {
+        "blob_matches_head": true,
+        "bytes": 3188,
+        "head_blob": "09b0d55ce11b7c80ecc5a9993c99f173846e7b6a",
+        "path": "src/hwr/adapters/mujoco/bindings.py",
+        "sha256": "e794a74d9a936befe36aa48d79b5e70a529cf478370974c7fb550054f6016eac",
+        "tracked": true,
+        "working_blob": "09b0d55ce11b7c80ecc5a9993c99f173846e7b6a"
+      },
+      "src/hwr/adapters/mujoco/cartesian_convergence.py": {
+        "blob_matches_head": true,
+        "bytes": 29172,
+        "head_blob": "1d1550d2d68b4d13137185668dc843c65071d8e2",
+        "path": "src/hwr/adapters/mujoco/cartesian_convergence.py",
+        "sha256": "38e3408892cf17b84a7bb0cf2c0386fb43ac0e2282c9b5244c98dfe9ce27c9c7",
+        "tracked": true,
+        "working_blob": "1d1550d2d68b4d13137185668dc843c65071d8e2"
+      },
+      "src/hwr/adapters/mujoco/formal_household_backend.py": {
+        "blob_matches_head": true,
+        "bytes": 33769,
+        "head_blob": "bace9a0fb45352e22c69a5fb532eb97ab5f96b64",
+        "path": "src/hwr/adapters/mujoco/formal_household_backend.py",
+        "sha256": "2e2c1fe58447c01503ce11dfabb796a29417eb83b26de3288076b4e3b1d42982",
+        "tracked": true,
+        "working_blob": "bace9a0fb45352e22c69a5fb532eb97ab5f96b64"
+      },
+      "src/hwr/adapters/mujoco/target_selection_diagnostic.py": {
+        "blob_matches_head": true,
+        "bytes": 27161,
+        "head_blob": "bc9b972859ff8319f518353b28e8881d046c6b6a",
+        "path": "src/hwr/adapters/mujoco/target_selection_diagnostic.py",
+        "sha256": "fa02ee06f006551d52e7cb15e80d09d1d7eaa0197222d1dc2811b393c8eeaf66",
+        "tracked": true,
+        "working_blob": "bc9b972859ff8319f518353b28e8881d046c6b6a"
+      },
+      "src/hwr/apps/audit_interaction_contract.py": {
+        "blob_matches_head": true,
+        "bytes": 28218,
+        "head_blob": "4831e16961c4e80a9734655c501aad127e8c527f",
+        "path": "src/hwr/apps/audit_interaction_contract.py",
+        "sha256": "dbae011046d6c87e26ecd0ee4da0558b23af93664f5bd89554b68145a81a770a",
+        "tracked": true,
+        "working_blob": "4831e16961c4e80a9734655c501aad127e8c527f"
+      },
+      "src/hwr/eval/interaction_contract.py": {
+        "blob_matches_head": true,
+        "bytes": 26645,
+        "head_blob": "76a18740b40d0bfa4cb20c7fbdf3835f00b9d7ad",
+        "path": "src/hwr/eval/interaction_contract.py",
+        "sha256": "7e4015dddf16878a16fadb39d2798b88c5c975a03f88184f605122e19b2cb392",
+        "tracked": true,
+        "working_blob": "76a18740b40d0bfa4cb20c7fbdf3835f00b9d7ad"
+      },
+      "src/hwr/eval/stability.py": {
+        "blob_matches_head": true,
+        "bytes": 4099,
+        "head_blob": "59876c19d398df9de81c271cd779e961e64ccc3b",
+        "path": "src/hwr/eval/stability.py",
+        "sha256": "b12ae3e9eb3748bb08095d42862c1d06750fb06c83a58a86e953392f2e42d9e6",
+        "tracked": true,
+        "working_blob": "59876c19d398df9de81c271cd779e961e64ccc3b"
+      },
+      "src/hwr/eval/target_selection.py": {
+        "blob_matches_head": true,
+        "bytes": 28661,
+        "head_blob": "d7e588ba76ce18882255e3e22b1f86459ab235dd",
+        "path": "src/hwr/eval/target_selection.py",
+        "sha256": "54961b5e84f29d58efe01ccfe24d04ffcf04b76a36697aac8d24a431ec4c9b4a",
+        "tracked": true,
+        "working_blob": "d7e588ba76ce18882255e3e22b1f86459ab235dd"
+      },
+      "src/hwr/scenarios/formal3d.py": {
+        "blob_matches_head": true,
+        "bytes": 9413,
+        "head_blob": "6209224cd64bf2fa5d1d338bf621dd9150549c13",
+        "path": "src/hwr/scenarios/formal3d.py",
+        "sha256": "61bbc54b4b1d06b7d8012d188323a18bc03afc404bcaca058c64d7558b72de71",
+        "tracked": true,
+        "working_blob": "6209224cd64bf2fa5d1d338bf621dd9150549c13"
+      }
+    },
+    "source_tree": {
+      "path": "src/hwr",
+      "python_file_count": 274,
+      "tree": "0ba8aa04b330d05f6f51ae11199029cdeb249e26"
+    }
+  },
+  "reward_changed": false,
+  "runtime_changed": false,
+  "safety_changed": false,
+  "schema_version": "hwr.p61-interaction-contract-artifacts/v1",
+  "selector_changed": false,
+  "source_commit": "6bf0400f51a25bfb6f45e951299c410efd5c2c7a",
+  "status": "complete",
+  "task_or_binding_changed": false,
+  "task_success_claim_allowed": false,
+  "termination_changed": false,
+  "training_executed": false
+}

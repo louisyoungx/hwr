@@ -1,0 +1,581 @@
+{
+  "artifacts": {
+    "report.json": {
+      "bytes": 24538,
+      "sha256": "96fdc3abde155e09715bb7e1314c9b6cbef26dffdeda193f6dc336e4cd767402"
+    },
+    "tables.json": {
+      "bytes": 119541,
+      "sha256": "88540ddb87e6df129eaaa9666b0011598a422629b1085c27b7b844e735918fbc"
+    }
+  },
+  "capability_claim_allowed": false,
+  "command": [
+    ".venv/bin/python",
+    "-m",
+    "hwr.apps.audit_entity_candidate_mapping",
+    "--aliases",
+    "configs/eval/entity_candidate_aliases_v1.json",
+    "--output",
+    "runs/research-loop/0012/r0012-p50-e4-mapping-s20265004"
+  ],
+  "entity_coverage_claim_allowed": false,
+  "frozen_design": {
+    "action_count": 0,
+    "alias_hops": 1,
+    "alias_schema": "hwr.p50-e4-entity-candidate-aliases/v1",
+    "episode_count": 0,
+    "exact_geom_claims_only": true,
+    "expected_alias_count": 8,
+    "same_body_alias_required": true,
+    "task_order": [
+      "tidy_living_room_3d/v1",
+      "clear_dining_table_3d/v1",
+      "store_kitchen_items_3d/v1"
+    ]
+  },
+  "frozen_document_commit": "a95dbbeacc80a974d7a234f2dc79442249eaf07b",
+  "generalization_claim_allowed": false,
+  "hardware_safety_claim_allowed": false,
+  "input_identities": {
+    "aliases": {
+      "bytes": 4217,
+      "path": "configs/eval/entity_candidate_aliases_v1.json",
+      "sha256": "8256189ef39126d53d2c5606e4fbfe8838a3b5b2bd4d99268fa91606a279f6c8"
+    },
+    "binding": {
+      "bytes": 3051,
+      "path": "configs/adapters/mujoco/formal_3d_v1.json",
+      "sha256": "7984ef2544bb618269681d274257a598b02621371a26de002bfdd8bbf7decab6"
+    },
+    "frozen_context": {
+      "bytes": 10246,
+      "path": "docs/research-loop/0012/00-context.md",
+      "sha256": "6c4c3f74fc587096b17fd1a35ca34fb360d574576c95ecceebf26c9b651ab91a"
+    },
+    "recursive_xml": {
+      "clear_dining_table_3d/v1": {
+        "dependencies": [
+          {
+            "bytes": 2353,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_actuators.xml",
+            "sha256": "5a0e8e33e0cd3c3f48eb03b61f2c54149680f934c5d02f437a6712221e64b53e"
+          },
+          {
+            "bytes": 1084,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_assets.xml",
+            "sha256": "05ba873fda32322a3382a06748cd973b340d4510c0a13956361f6ea7b53538cd"
+          },
+          {
+            "bytes": 14003,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_body.xml",
+            "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+          },
+          {
+            "bytes": 1300,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_contacts.xml",
+            "sha256": "4d97b6604e47deedd16f5514db03731b45e4a51d4d74267d5c6909c1380235f9"
+          },
+          {
+            "bytes": 467,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_defaults.xml",
+            "sha256": "440206d217672675c7e0c5e751a5659e017e0388ccb063bbe88fd826bed12ca5"
+          },
+          {
+            "bytes": 137,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_sensors.xml",
+            "sha256": "5ade71352b5996b7d0fa4ed660795b906454ff9e0956ed7efefa29afe9b73d59"
+          },
+          {
+            "bytes": 7717,
+            "includes": [
+              "assets/mujoco/common/robot_actuators.xml",
+              "assets/mujoco/common/robot_assets.xml",
+              "assets/mujoco/common/robot_body.xml",
+              "assets/mujoco/common/robot_contacts.xml",
+              "assets/mujoco/common/robot_defaults.xml",
+              "assets/mujoco/common/robot_sensors.xml"
+            ],
+            "path": "assets/mujoco/formal/dining_room.xml",
+            "sha256": "a93e3a746a8e6b721d225e2006148fbddac6868ffa59dc125611408db97d2236"
+          }
+        ],
+        "entry_model": "assets/mujoco/formal/dining_room.xml",
+        "identity": {
+          "bytes": 1432,
+          "sha256": "9878c43d40a477b9c367f4f3cca6d64c63192de6c47acb92fb757ce0c714bf10"
+        },
+        "schema_version": "hwr.p52-mujoco-xml-inputs/v1"
+      },
+      "store_kitchen_items_3d/v1": {
+        "dependencies": [
+          {
+            "bytes": 2353,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_actuators.xml",
+            "sha256": "5a0e8e33e0cd3c3f48eb03b61f2c54149680f934c5d02f437a6712221e64b53e"
+          },
+          {
+            "bytes": 1084,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_assets.xml",
+            "sha256": "05ba873fda32322a3382a06748cd973b340d4510c0a13956361f6ea7b53538cd"
+          },
+          {
+            "bytes": 14003,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_body.xml",
+            "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+          },
+          {
+            "bytes": 1300,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_contacts.xml",
+            "sha256": "4d97b6604e47deedd16f5514db03731b45e4a51d4d74267d5c6909c1380235f9"
+          },
+          {
+            "bytes": 467,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_defaults.xml",
+            "sha256": "440206d217672675c7e0c5e751a5659e017e0388ccb063bbe88fd826bed12ca5"
+          },
+          {
+            "bytes": 137,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_sensors.xml",
+            "sha256": "5ade71352b5996b7d0fa4ed660795b906454ff9e0956ed7efefa29afe9b73d59"
+          },
+          {
+            "bytes": 8866,
+            "includes": [
+              "assets/mujoco/common/robot_actuators.xml",
+              "assets/mujoco/common/robot_assets.xml",
+              "assets/mujoco/common/robot_body.xml",
+              "assets/mujoco/common/robot_contacts.xml",
+              "assets/mujoco/common/robot_defaults.xml",
+              "assets/mujoco/common/robot_sensors.xml"
+            ],
+            "path": "assets/mujoco/formal/kitchen.xml",
+            "sha256": "3768c8a56ca8e44344433d45beede04c1389d4f65b3252c939382cba70a421f8"
+          }
+        ],
+        "entry_model": "assets/mujoco/formal/kitchen.xml",
+        "identity": {
+          "bytes": 1424,
+          "sha256": "a7ee60c4981255543b533cf2fbf5c41b34bbaa2697d713252ad5d0d431208e0d"
+        },
+        "schema_version": "hwr.p52-mujoco-xml-inputs/v1"
+      },
+      "tidy_living_room_3d/v1": {
+        "dependencies": [
+          {
+            "bytes": 2353,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_actuators.xml",
+            "sha256": "5a0e8e33e0cd3c3f48eb03b61f2c54149680f934c5d02f437a6712221e64b53e"
+          },
+          {
+            "bytes": 1084,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_assets.xml",
+            "sha256": "05ba873fda32322a3382a06748cd973b340d4510c0a13956361f6ea7b53538cd"
+          },
+          {
+            "bytes": 14003,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_body.xml",
+            "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+          },
+          {
+            "bytes": 1300,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_contacts.xml",
+            "sha256": "4d97b6604e47deedd16f5514db03731b45e4a51d4d74267d5c6909c1380235f9"
+          },
+          {
+            "bytes": 467,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_defaults.xml",
+            "sha256": "440206d217672675c7e0c5e751a5659e017e0388ccb063bbe88fd826bed12ca5"
+          },
+          {
+            "bytes": 137,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_sensors.xml",
+            "sha256": "5ade71352b5996b7d0fa4ed660795b906454ff9e0956ed7efefa29afe9b73d59"
+          },
+          {
+            "bytes": 7422,
+            "includes": [
+              "assets/mujoco/common/robot_actuators.xml",
+              "assets/mujoco/common/robot_assets.xml",
+              "assets/mujoco/common/robot_body.xml",
+              "assets/mujoco/common/robot_contacts.xml",
+              "assets/mujoco/common/robot_defaults.xml",
+              "assets/mujoco/common/robot_sensors.xml"
+            ],
+            "path": "assets/mujoco/formal/living_room.xml",
+            "sha256": "0d97256a9dd79e813018cc410aedc04e30f53a8a40220bb1f2563d6e4daa3d82"
+          }
+        ],
+        "entry_model": "assets/mujoco/formal/living_room.xml",
+        "identity": {
+          "bytes": 1432,
+          "sha256": "b2380363bed5a89dcec2378b075554e8d820560bdeec1f4c84f2664d0cfb4dfa"
+        },
+        "schema_version": "hwr.p52-mujoco-xml-inputs/v1"
+      }
+    },
+    "task_config": {
+      "bytes": 5480,
+      "path": "configs/tasks/formal_3d_v1.json",
+      "sha256": "fa180803a86b42bc633dbf119fa596dd74d3b5c18bf4c2e4f75be97dcccb2a7d"
+    }
+  },
+  "policy_inference_executed": false,
+  "proposal_id": "R0001-P50-E4",
+  "runtime": {
+    "cpu_count": 18,
+    "device": "cpu",
+    "disk_free_bytes": 113858035712,
+    "hwr_platform": "0.1.0",
+    "mujoco": "3.10.0",
+    "numpy": "2.4.6",
+    "peak_rss_bytes": 368132096,
+    "peak_rss_platform_units": 368132096,
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "python": "3.11.0",
+    "tracemalloc_peak_bytes": 5907233,
+    "wall_seconds": 1.701241916976869
+  },
+  "schema_version": "hwr.p50-e4-exact-geom-artifacts/v1",
+  "source_commit": "6bf0400f51a25bfb6f45e951299c410efd5c2c7a",
+  "source_gate": {
+    "binding_task_xml_unchanged": true,
+    "clean_committed_source": true,
+    "frozen_context_blob_matches": true,
+    "frozen_context_commit_is_ancestor": true,
+    "frozen_context_content_matches": true,
+    "frozen_document_blob_matches": true,
+    "frozen_document_commit_is_ancestor": true,
+    "frozen_document_content_matches": true,
+    "historical_research_loop_trees": {
+      "actual": {
+        "docs/research-loop/0001": "416912b7dc1c19611bcfc4375028180014a1989b",
+        "docs/research-loop/0002": "6fb603dbd52451fe1749157daf05aa482ca7222f",
+        "docs/research-loop/0003": "f56011eda321ea803bc24051db001e632c1549fb",
+        "docs/research-loop/0004": "611c420e539a53a8c7578cd66aa8bdfe46fe82b7",
+        "docs/research-loop/0005": "0352d379d5754adb03e9158c0fa72393ab322d58",
+        "docs/research-loop/0006": "ee3a6f5b25887f67f812750d2a75424df12823d4",
+        "docs/research-loop/0007": "0a696caa153abc9c13403fbc9bd3c081ce71c327",
+        "docs/research-loop/0008": "65e626cddbcb0ec9c2e17cca5184b7d40950e1c6",
+        "docs/research-loop/0009": "316db8b9ad9739ef491778f641603dbca25e75c9",
+        "docs/research-loop/0010": "8a193a24788027d715750c3cd89c2509e71fdbda",
+        "docs/research-loop/0011": "85bb445726ecb8e35ff4d8e90606874e2ee36fe4"
+      },
+      "actual_matches_context": true,
+      "declared_by_frozen_context": {
+        "docs/research-loop/0001": "416912b7dc1c19611bcfc4375028180014a1989b",
+        "docs/research-loop/0002": "6fb603dbd52451fe1749157daf05aa482ca7222f",
+        "docs/research-loop/0003": "f56011eda321ea803bc24051db001e632c1549fb",
+        "docs/research-loop/0004": "611c420e539a53a8c7578cd66aa8bdfe46fe82b7",
+        "docs/research-loop/0005": "0352d379d5754adb03e9158c0fa72393ab322d58",
+        "docs/research-loop/0006": "ee3a6f5b25887f67f812750d2a75424df12823d4",
+        "docs/research-loop/0007": "0a696caa153abc9c13403fbc9bd3c081ce71c327",
+        "docs/research-loop/0008": "65e626cddbcb0ec9c2e17cca5184b7d40950e1c6",
+        "docs/research-loop/0009": "316db8b9ad9739ef491778f641603dbca25e75c9",
+        "docs/research-loop/0010": "8a193a24788027d715750c3cd89c2509e71fdbda",
+        "docs/research-loop/0011": "85bb445726ecb8e35ff4d8e90606874e2ee36fe4"
+      }
+    },
+    "passed": true
+  },
+  "source_identities": {
+    "files": {
+      "aliases": {
+        "bytes": 4217,
+        "path": "configs/eval/entity_candidate_aliases_v1.json",
+        "sha256": "8256189ef39126d53d2c5606e4fbfe8838a3b5b2bd4d99268fa91606a279f6c8"
+      },
+      "audit_app": {
+        "bytes": 26542,
+        "path": "src/hwr/apps/audit_entity_candidate_mapping.py",
+        "sha256": "0052e5251c44f958fb7bbac05fef7bd278dfd959be3f6381d294e42f84f05af2"
+      },
+      "binding": {
+        "bytes": 3051,
+        "path": "configs/adapters/mujoco/formal_3d_v1.json",
+        "sha256": "7984ef2544bb618269681d274257a598b02621371a26de002bfdd8bbf7decab6"
+      },
+      "frozen_context": {
+        "bytes": 10246,
+        "path": "docs/research-loop/0012/00-context.md",
+        "sha256": "6c4c3f74fc587096b17fd1a35ca34fb360d574576c95ecceebf26c9b651ab91a"
+      },
+      "frozen_document": {
+        "bytes": 21406,
+        "path": "docs/research-loop/0012/03-experiment.md",
+        "sha256": "6cfab1b612327867196577021ba2ed4c6091b77aca27af760fd6400daf393c50"
+      },
+      "mapping": {
+        "bytes": 26981,
+        "path": "src/hwr/adapters/mujoco/entity_candidate_mapping.py",
+        "sha256": "f4320ef9e3f5f1efbea5c7bc2c951b62f7a2d35995524c2c03b8a369beec2270"
+      },
+      "task_config": {
+        "bytes": 5480,
+        "path": "configs/tasks/formal_3d_v1.json",
+        "sha256": "fa180803a86b42bc633dbf119fa596dd74d3b5c18bf4c2e4f75be97dcccb2a7d"
+      }
+    },
+    "frozen_context": {
+      "blob": "f25965426679b0dda3e437f1ef697efdea000757",
+      "blob_matches": true,
+      "commit": "a95dbbeacc80a974d7a234f2dc79442249eaf07b",
+      "commit_is_ancestor": true,
+      "content_matches": true,
+      "current": {
+        "bytes": 10246,
+        "sha256": "6c4c3f74fc587096b17fd1a35ca34fb360d574576c95ecceebf26c9b651ab91a"
+      },
+      "frozen": {
+        "bytes": 10246,
+        "sha256": "6c4c3f74fc587096b17fd1a35ca34fb360d574576c95ecceebf26c9b651ab91a"
+      },
+      "path": "docs/research-loop/0012/00-context.md"
+    },
+    "frozen_document": {
+      "blob": "55219f9b42693a4c579a13919e754d24e94a15c8",
+      "blob_matches": true,
+      "commit": "a95dbbeacc80a974d7a234f2dc79442249eaf07b",
+      "commit_is_ancestor": true,
+      "content_matches": true,
+      "current": {
+        "bytes": 21406,
+        "sha256": "6cfab1b612327867196577021ba2ed4c6091b77aca27af760fd6400daf393c50"
+      },
+      "frozen": {
+        "bytes": 21406,
+        "sha256": "6cfab1b612327867196577021ba2ed4c6091b77aca27af760fd6400daf393c50"
+      },
+      "path": "docs/research-loop/0012/03-experiment.md"
+    },
+    "historical_research_loop_trees": {
+      "actual": {
+        "docs/research-loop/0001": "416912b7dc1c19611bcfc4375028180014a1989b",
+        "docs/research-loop/0002": "6fb603dbd52451fe1749157daf05aa482ca7222f",
+        "docs/research-loop/0003": "f56011eda321ea803bc24051db001e632c1549fb",
+        "docs/research-loop/0004": "611c420e539a53a8c7578cd66aa8bdfe46fe82b7",
+        "docs/research-loop/0005": "0352d379d5754adb03e9158c0fa72393ab322d58",
+        "docs/research-loop/0006": "ee3a6f5b25887f67f812750d2a75424df12823d4",
+        "docs/research-loop/0007": "0a696caa153abc9c13403fbc9bd3c081ce71c327",
+        "docs/research-loop/0008": "65e626cddbcb0ec9c2e17cca5184b7d40950e1c6",
+        "docs/research-loop/0009": "316db8b9ad9739ef491778f641603dbca25e75c9",
+        "docs/research-loop/0010": "8a193a24788027d715750c3cd89c2509e71fdbda",
+        "docs/research-loop/0011": "85bb445726ecb8e35ff4d8e90606874e2ee36fe4"
+      },
+      "actual_matches_context": true,
+      "declared_by_frozen_context": {
+        "docs/research-loop/0001": "416912b7dc1c19611bcfc4375028180014a1989b",
+        "docs/research-loop/0002": "6fb603dbd52451fe1749157daf05aa482ca7222f",
+        "docs/research-loop/0003": "f56011eda321ea803bc24051db001e632c1549fb",
+        "docs/research-loop/0004": "611c420e539a53a8c7578cd66aa8bdfe46fe82b7",
+        "docs/research-loop/0005": "0352d379d5754adb03e9158c0fa72393ab322d58",
+        "docs/research-loop/0006": "ee3a6f5b25887f67f812750d2a75424df12823d4",
+        "docs/research-loop/0007": "0a696caa153abc9c13403fbc9bd3c081ce71c327",
+        "docs/research-loop/0008": "65e626cddbcb0ec9c2e17cca5184b7d40950e1c6",
+        "docs/research-loop/0009": "316db8b9ad9739ef491778f641603dbca25e75c9",
+        "docs/research-loop/0010": "8a193a24788027d715750c3cd89c2509e71fdbda",
+        "docs/research-loop/0011": "85bb445726ecb8e35ff4d8e90606874e2ee36fe4"
+      }
+    },
+    "recursive_xml": {
+      "clear_dining_table_3d/v1": {
+        "dependencies": [
+          {
+            "bytes": 2353,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_actuators.xml",
+            "sha256": "5a0e8e33e0cd3c3f48eb03b61f2c54149680f934c5d02f437a6712221e64b53e"
+          },
+          {
+            "bytes": 1084,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_assets.xml",
+            "sha256": "05ba873fda32322a3382a06748cd973b340d4510c0a13956361f6ea7b53538cd"
+          },
+          {
+            "bytes": 14003,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_body.xml",
+            "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+          },
+          {
+            "bytes": 1300,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_contacts.xml",
+            "sha256": "4d97b6604e47deedd16f5514db03731b45e4a51d4d74267d5c6909c1380235f9"
+          },
+          {
+            "bytes": 467,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_defaults.xml",
+            "sha256": "440206d217672675c7e0c5e751a5659e017e0388ccb063bbe88fd826bed12ca5"
+          },
+          {
+            "bytes": 137,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_sensors.xml",
+            "sha256": "5ade71352b5996b7d0fa4ed660795b906454ff9e0956ed7efefa29afe9b73d59"
+          },
+          {
+            "bytes": 7717,
+            "includes": [
+              "assets/mujoco/common/robot_actuators.xml",
+              "assets/mujoco/common/robot_assets.xml",
+              "assets/mujoco/common/robot_body.xml",
+              "assets/mujoco/common/robot_contacts.xml",
+              "assets/mujoco/common/robot_defaults.xml",
+              "assets/mujoco/common/robot_sensors.xml"
+            ],
+            "path": "assets/mujoco/formal/dining_room.xml",
+            "sha256": "a93e3a746a8e6b721d225e2006148fbddac6868ffa59dc125611408db97d2236"
+          }
+        ],
+        "entry_model": "assets/mujoco/formal/dining_room.xml",
+        "identity": {
+          "bytes": 1432,
+          "sha256": "9878c43d40a477b9c367f4f3cca6d64c63192de6c47acb92fb757ce0c714bf10"
+        },
+        "schema_version": "hwr.p52-mujoco-xml-inputs/v1"
+      },
+      "store_kitchen_items_3d/v1": {
+        "dependencies": [
+          {
+            "bytes": 2353,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_actuators.xml",
+            "sha256": "5a0e8e33e0cd3c3f48eb03b61f2c54149680f934c5d02f437a6712221e64b53e"
+          },
+          {
+            "bytes": 1084,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_assets.xml",
+            "sha256": "05ba873fda32322a3382a06748cd973b340d4510c0a13956361f6ea7b53538cd"
+          },
+          {
+            "bytes": 14003,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_body.xml",
+            "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+          },
+          {
+            "bytes": 1300,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_contacts.xml",
+            "sha256": "4d97b6604e47deedd16f5514db03731b45e4a51d4d74267d5c6909c1380235f9"
+          },
+          {
+            "bytes": 467,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_defaults.xml",
+            "sha256": "440206d217672675c7e0c5e751a5659e017e0388ccb063bbe88fd826bed12ca5"
+          },
+          {
+            "bytes": 137,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_sensors.xml",
+            "sha256": "5ade71352b5996b7d0fa4ed660795b906454ff9e0956ed7efefa29afe9b73d59"
+          },
+          {
+            "bytes": 8866,
+            "includes": [
+              "assets/mujoco/common/robot_actuators.xml",
+              "assets/mujoco/common/robot_assets.xml",
+              "assets/mujoco/common/robot_body.xml",
+              "assets/mujoco/common/robot_contacts.xml",
+              "assets/mujoco/common/robot_defaults.xml",
+              "assets/mujoco/common/robot_sensors.xml"
+            ],
+            "path": "assets/mujoco/formal/kitchen.xml",
+            "sha256": "3768c8a56ca8e44344433d45beede04c1389d4f65b3252c939382cba70a421f8"
+          }
+        ],
+        "entry_model": "assets/mujoco/formal/kitchen.xml",
+        "identity": {
+          "bytes": 1424,
+          "sha256": "a7ee60c4981255543b533cf2fbf5c41b34bbaa2697d713252ad5d0d431208e0d"
+        },
+        "schema_version": "hwr.p52-mujoco-xml-inputs/v1"
+      },
+      "tidy_living_room_3d/v1": {
+        "dependencies": [
+          {
+            "bytes": 2353,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_actuators.xml",
+            "sha256": "5a0e8e33e0cd3c3f48eb03b61f2c54149680f934c5d02f437a6712221e64b53e"
+          },
+          {
+            "bytes": 1084,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_assets.xml",
+            "sha256": "05ba873fda32322a3382a06748cd973b340d4510c0a13956361f6ea7b53538cd"
+          },
+          {
+            "bytes": 14003,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_body.xml",
+            "sha256": "a936257039b0037e978897f63e3d012431ff902c311f4428935996d6747da095"
+          },
+          {
+            "bytes": 1300,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_contacts.xml",
+            "sha256": "4d97b6604e47deedd16f5514db03731b45e4a51d4d74267d5c6909c1380235f9"
+          },
+          {
+            "bytes": 467,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_defaults.xml",
+            "sha256": "440206d217672675c7e0c5e751a5659e017e0388ccb063bbe88fd826bed12ca5"
+          },
+          {
+            "bytes": 137,
+            "includes": [],
+            "path": "assets/mujoco/common/robot_sensors.xml",
+            "sha256": "5ade71352b5996b7d0fa4ed660795b906454ff9e0956ed7efefa29afe9b73d59"
+          },
+          {
+            "bytes": 7422,
+            "includes": [
+              "assets/mujoco/common/robot_actuators.xml",
+              "assets/mujoco/common/robot_assets.xml",
+              "assets/mujoco/common/robot_body.xml",
+              "assets/mujoco/common/robot_contacts.xml",
+              "assets/mujoco/common/robot_defaults.xml",
+              "assets/mujoco/common/robot_sensors.xml"
+            ],
+            "path": "assets/mujoco/formal/living_room.xml",
+            "sha256": "0d97256a9dd79e813018cc410aedc04e30f53a8a40220bb1f2563d6e4daa3d82"
+          }
+        ],
+        "entry_model": "assets/mujoco/formal/living_room.xml",
+        "identity": {
+          "bytes": 1432,
+          "sha256": "b2380363bed5a89dcec2378b075554e8d820560bdeec1f4c84f2664d0cfb4dfa"
+        },
+        "schema_version": "hwr.p52-mujoco-xml-inputs/v1"
+      }
+    }
+  },
+  "status": "complete",
+  "task_success_claim_allowed": false,
+  "training_executed": false
+}

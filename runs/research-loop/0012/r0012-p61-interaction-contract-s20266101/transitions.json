@@ -1,0 +1,753 @@
+{
+  "information_boundaries": {
+    "evaluator_private": {
+      "fields": [
+        "task_transition_id",
+        "object_or_articulation_identity",
+        "destination_target_identity",
+        "target_volume_containment",
+        "drawer_requirement",
+        "success_predicate",
+        "stability_predicate"
+      ]
+    },
+    "planner_call_state": {
+      "destination_target_available": false,
+      "fields": [],
+      "transition_id_available": false,
+      "validated_external_planner_present": false
+    },
+    "policy_visible": {
+      "fields": [
+        "rgb_d",
+        "dynamic_calibration",
+        "proprioception",
+        "history",
+        "phase",
+        "safety_state",
+        "language_encoding"
+      ]
+    },
+    "primitive_input": {
+      "evaluator_private_fields_allowed": [],
+      "fields": [
+        "selected_candidate",
+        "acquisition_base_pose",
+        "current_base_pose",
+        "policy_visible_joint_positions",
+        "policy_visible_action_history"
+      ]
+    }
+  },
+  "initial_microinteraction": [
+    {
+      "allowed_entity_instance_or_roles": [
+        "object:duck",
+        "object:football"
+      ],
+      "consumer": "future_evaluator_only",
+      "forbidden_roles": [
+        "articulation",
+        "target_container",
+        "floor_support",
+        "other_furniture",
+        "robot",
+        "site",
+        "unknown",
+        "mixed"
+      ],
+      "scope": "reset-first-acquisition-plus-one-generic-primitive",
+      "task_id": "tidy_living_room_3d/v1"
+    },
+    {
+      "allowed_entity_instance_or_roles": [
+        "object:cup",
+        "object:plate"
+      ],
+      "consumer": "future_evaluator_only",
+      "forbidden_roles": [
+        "articulation",
+        "target_container",
+        "floor_support",
+        "other_furniture",
+        "robot",
+        "site",
+        "unknown",
+        "mixed"
+      ],
+      "scope": "reset-first-acquisition-plus-one-generic-primitive",
+      "task_id": "clear_dining_table_3d/v1"
+    },
+    {
+      "allowed_entity_instance_or_roles": [
+        "articulation:drawer"
+      ],
+      "consumer": "future_evaluator_only",
+      "forbidden_roles": [
+        "manipulated_object",
+        "target_container",
+        "floor_support",
+        "other_furniture",
+        "robot",
+        "site",
+        "unknown",
+        "mixed"
+      ],
+      "scope": "reset-first-acquisition-plus-one-generic-primitive",
+      "task_id": "store_kitchen_items_3d/v1"
+    }
+  ],
+  "proposal_id": "R0001-P61",
+  "schema_version": "hwr.p61-interaction-transitions/v1",
+  "source_boundary_evidence": {
+    "analysis_scope": {
+      "excluded": [
+        "cross-function dataflow",
+        "dynamic dispatch",
+        "reflection",
+        "runtime values",
+        "whole-program planner proof"
+      ],
+      "included": [
+        "class fields",
+        "function signatures",
+        "literal primitive phases",
+        "same-function direct selector and primitive calls",
+        "direct argument names and consumed semantic fields"
+      ],
+      "kind": "finite_static_same_function_direct_calls"
+    },
+    "candidate_fields": [
+      "center",
+      "normal",
+      "width",
+      "prominence",
+      "support_count",
+      "view_count",
+      "first_frame",
+      "first_row",
+      "first_column"
+    ],
+    "checks": {
+      "candidate_schema_audited": true,
+      "direct_call_graph_resolved": true,
+      "evaluator_annotation_isolated": true,
+      "policy_schema_audited": true,
+      "primitive_signature_audited": true,
+      "runtime_predicate_surface_verified": true,
+      "selector_signature_audited": true
+    },
+    "direct_call_graph": {
+      "callers": [
+        {
+          "articulation_threshold_available": false,
+          "articulation_threshold_fields": [],
+          "caller_id": "src/hwr/adapters/mujoco/target_selection_diagnostic.py:TargetSelectionDiagnostic.run_branch",
+          "candidate_role_fields": [],
+          "destination_target_available": false,
+          "destination_target_fields": [],
+          "function": "TargetSelectionDiagnostic.run_branch",
+          "interaction_type_fields": [],
+          "interaction_types": [],
+          "path": "src/hwr/adapters/mujoco/target_selection_diagnostic.py",
+          "planner_call_state_available": false,
+          "primitive_argument_names": [
+            "acquisition_pose",
+            "candidate",
+            "payload",
+            "post_step"
+          ],
+          "primitive_call_lines": [
+            249
+          ],
+          "selected_entity_role_available": false,
+          "selected_entity_role_fields": [],
+          "selector_argument_names": [
+            "acquisition_base_pose",
+            "acquisition_pose",
+            "base_pose",
+            "candidate_set",
+            "deserialize_policy_input",
+            "final_payload"
+          ],
+          "selector_call_lines": [
+            213
+          ]
+        }
+      ]
+    },
+    "frozen_reference": {
+      "candidate_fields_match": true,
+      "policy_fields_match": true,
+      "primitive_arguments_match": true,
+      "primitive_phases_match": true,
+      "selector_arguments_match": true
+    },
+    "interaction_contract_importers": [
+      "src/hwr/apps/audit_interaction_contract.py"
+    ],
+    "primitive_consumed_arguments": [
+      "acquisition_base_pose",
+      "candidate",
+      "post_selection_step",
+      "serialized_input"
+    ],
+    "primitive_function_arguments": [
+      "serialized_input",
+      "candidate",
+      "acquisition_base_pose",
+      "post_selection_step"
+    ],
+    "primitive_phases": [
+      "B0_orient",
+      "B1_approach",
+      "B2_preposition",
+      "B3_contact_approach",
+      "B4_close",
+      "B5_pull",
+      "B6_retract",
+      "B7_stop"
+    ],
+    "selector_consumed_arguments": [
+      "acquisition_base_pose",
+      "candidates",
+      "final_base_pose"
+    ],
+    "selector_function_arguments": [
+      "candidates",
+      "final_base_pose",
+      "acquisition_base_pose"
+    ],
+    "serialized_policy_input_fields": [
+      "observation_timestamp_ns",
+      "sequence_id",
+      "phase_index",
+      "phase_step",
+      "policy_rng_seed",
+      "safety_state",
+      "head_rgb_uint8",
+      "head_depth_m",
+      "head_depth_valid",
+      "head_camera_intrinsics",
+      "robot_from_head_camera",
+      "proprioception",
+      "executed_action_history",
+      "history_available"
+    ]
+  },
+  "transition_count": 7,
+  "transitions": [
+    {
+      "allowed_entity_instance_or_role": "object:duck",
+      "dependencies": [],
+      "evaluator_predicate": {
+        "collision_geom": "toy_duck_collision",
+        "containment_predicate": "TargetVolume.contains",
+        "control_hz": 20.0,
+        "hold_seconds": 2.0,
+        "kind": "stable_target_volume",
+        "maximum_angular_speed_rad_s": 0.15,
+        "maximum_linear_speed_m_s": 0.03,
+        "object_id": "duck",
+        "required_hold_steps": 40,
+        "stability_predicate": "MultiObjectStabilityCriterion._stable",
+        "target_id": "living_bin",
+        "target_site": "living_target_volume"
+      },
+      "evaluator_private_fields": [
+        "task_transition_id",
+        "object_or_articulation_identity",
+        "destination_target_identity",
+        "target_volume_containment",
+        "drawer_requirement",
+        "success_predicate",
+        "stability_predicate"
+      ],
+      "expected_state_change": {
+        "kind": "object_stably_contained",
+        "object_id": "duck",
+        "target_id": "living_bin"
+      },
+      "forbidden_roles": [
+        "articulation",
+        "target_container",
+        "floor_support",
+        "other_furniture",
+        "robot",
+        "site",
+        "unknown",
+        "mixed"
+      ],
+      "interaction_type": "pick-transport-place",
+      "planner_call_state": {
+        "destination_target_available": false,
+        "fields": [],
+        "transition_id_available": false,
+        "validated_external_planner_present": false
+      },
+      "policy_visible_fields": [
+        "rgb_d",
+        "dynamic_calibration",
+        "proprioception",
+        "history",
+        "phase",
+        "safety_state",
+        "language_encoding"
+      ],
+      "precondition": {
+        "kind": "object_not_stably_contained",
+        "object_id": "duck",
+        "target_id": "living_bin"
+      },
+      "primitive_input_fields": [
+        "selected_candidate",
+        "acquisition_base_pose",
+        "current_base_pose",
+        "policy_visible_joint_positions",
+        "policy_visible_action_history"
+      ],
+      "task_id": "tidy_living_room_3d/v1",
+      "transition_id": "R0001-P61-T01"
+    },
+    {
+      "allowed_entity_instance_or_role": "object:football",
+      "dependencies": [],
+      "evaluator_predicate": {
+        "collision_geom": "toy_football_collision",
+        "containment_predicate": "TargetVolume.contains",
+        "control_hz": 20.0,
+        "hold_seconds": 2.0,
+        "kind": "stable_target_volume",
+        "maximum_angular_speed_rad_s": 0.15,
+        "maximum_linear_speed_m_s": 0.03,
+        "object_id": "football",
+        "required_hold_steps": 40,
+        "stability_predicate": "MultiObjectStabilityCriterion._stable",
+        "target_id": "living_bin",
+        "target_site": "living_target_volume"
+      },
+      "evaluator_private_fields": [
+        "task_transition_id",
+        "object_or_articulation_identity",
+        "destination_target_identity",
+        "target_volume_containment",
+        "drawer_requirement",
+        "success_predicate",
+        "stability_predicate"
+      ],
+      "expected_state_change": {
+        "kind": "object_stably_contained",
+        "object_id": "football",
+        "target_id": "living_bin"
+      },
+      "forbidden_roles": [
+        "articulation",
+        "target_container",
+        "floor_support",
+        "other_furniture",
+        "robot",
+        "site",
+        "unknown",
+        "mixed"
+      ],
+      "interaction_type": "pick-transport-place",
+      "planner_call_state": {
+        "destination_target_available": false,
+        "fields": [],
+        "transition_id_available": false,
+        "validated_external_planner_present": false
+      },
+      "policy_visible_fields": [
+        "rgb_d",
+        "dynamic_calibration",
+        "proprioception",
+        "history",
+        "phase",
+        "safety_state",
+        "language_encoding"
+      ],
+      "precondition": {
+        "kind": "object_not_stably_contained",
+        "object_id": "football",
+        "target_id": "living_bin"
+      },
+      "primitive_input_fields": [
+        "selected_candidate",
+        "acquisition_base_pose",
+        "current_base_pose",
+        "policy_visible_joint_positions",
+        "policy_visible_action_history"
+      ],
+      "task_id": "tidy_living_room_3d/v1",
+      "transition_id": "R0001-P61-T02"
+    },
+    {
+      "allowed_entity_instance_or_role": "object:cup",
+      "dependencies": [],
+      "evaluator_predicate": {
+        "collision_geom": "dining_cup_collision",
+        "containment_predicate": "TargetVolume.contains",
+        "control_hz": 20.0,
+        "hold_seconds": 2.0,
+        "kind": "stable_target_volume",
+        "maximum_angular_speed_rad_s": 0.15,
+        "maximum_linear_speed_m_s": 0.03,
+        "object_id": "cup",
+        "required_hold_steps": 40,
+        "stability_predicate": "MultiObjectStabilityCriterion._stable",
+        "target_id": "cup_holder",
+        "target_site": "cup_target_volume"
+      },
+      "evaluator_private_fields": [
+        "task_transition_id",
+        "object_or_articulation_identity",
+        "destination_target_identity",
+        "target_volume_containment",
+        "drawer_requirement",
+        "success_predicate",
+        "stability_predicate"
+      ],
+      "expected_state_change": {
+        "kind": "object_stably_contained",
+        "object_id": "cup",
+        "target_id": "cup_holder"
+      },
+      "forbidden_roles": [
+        "articulation",
+        "target_container",
+        "floor_support",
+        "other_furniture",
+        "robot",
+        "site",
+        "unknown",
+        "mixed"
+      ],
+      "interaction_type": "pick-transport-place",
+      "planner_call_state": {
+        "destination_target_available": false,
+        "fields": [],
+        "transition_id_available": false,
+        "validated_external_planner_present": false
+      },
+      "policy_visible_fields": [
+        "rgb_d",
+        "dynamic_calibration",
+        "proprioception",
+        "history",
+        "phase",
+        "safety_state",
+        "language_encoding"
+      ],
+      "precondition": {
+        "kind": "object_not_stably_contained",
+        "object_id": "cup",
+        "target_id": "cup_holder"
+      },
+      "primitive_input_fields": [
+        "selected_candidate",
+        "acquisition_base_pose",
+        "current_base_pose",
+        "policy_visible_joint_positions",
+        "policy_visible_action_history"
+      ],
+      "task_id": "clear_dining_table_3d/v1",
+      "transition_id": "R0001-P61-T03"
+    },
+    {
+      "allowed_entity_instance_or_role": "object:plate",
+      "dependencies": [],
+      "evaluator_predicate": {
+        "collision_geom": "dining_plate_collision",
+        "containment_predicate": "TargetVolume.contains",
+        "control_hz": 20.0,
+        "hold_seconds": 2.0,
+        "kind": "stable_target_volume",
+        "maximum_angular_speed_rad_s": 0.15,
+        "maximum_linear_speed_m_s": 0.03,
+        "object_id": "plate",
+        "required_hold_steps": 40,
+        "stability_predicate": "MultiObjectStabilityCriterion._stable",
+        "target_id": "plate_holder",
+        "target_site": "plate_target_volume"
+      },
+      "evaluator_private_fields": [
+        "task_transition_id",
+        "object_or_articulation_identity",
+        "destination_target_identity",
+        "target_volume_containment",
+        "drawer_requirement",
+        "success_predicate",
+        "stability_predicate"
+      ],
+      "expected_state_change": {
+        "kind": "object_stably_contained",
+        "object_id": "plate",
+        "target_id": "plate_holder"
+      },
+      "forbidden_roles": [
+        "articulation",
+        "target_container",
+        "floor_support",
+        "other_furniture",
+        "robot",
+        "site",
+        "unknown",
+        "mixed"
+      ],
+      "interaction_type": "pick-transport-place",
+      "planner_call_state": {
+        "destination_target_available": false,
+        "fields": [],
+        "transition_id_available": false,
+        "validated_external_planner_present": false
+      },
+      "policy_visible_fields": [
+        "rgb_d",
+        "dynamic_calibration",
+        "proprioception",
+        "history",
+        "phase",
+        "safety_state",
+        "language_encoding"
+      ],
+      "precondition": {
+        "kind": "object_not_stably_contained",
+        "object_id": "plate",
+        "target_id": "plate_holder"
+      },
+      "primitive_input_fields": [
+        "selected_candidate",
+        "acquisition_base_pose",
+        "current_base_pose",
+        "policy_visible_joint_positions",
+        "policy_visible_action_history"
+      ],
+      "task_id": "clear_dining_table_3d/v1",
+      "transition_id": "R0001-P61-T04"
+    },
+    {
+      "allowed_entity_instance_or_role": "articulation:drawer",
+      "dependencies": [],
+      "evaluator_predicate": {
+        "articulation_id": "drawer",
+        "handle_geom": "drawer_handle",
+        "joint": "kitchen_drawer_slide",
+        "kind": "articulation_position_at_least",
+        "minimum_position_m": 0.3,
+        "runtime_predicate": "MujocoFormalHouseholdDualArmBackend._articulation_satisfied"
+      },
+      "evaluator_private_fields": [
+        "task_transition_id",
+        "object_or_articulation_identity",
+        "destination_target_identity",
+        "target_volume_containment",
+        "drawer_requirement",
+        "success_predicate",
+        "stability_predicate"
+      ],
+      "expected_state_change": {
+        "articulation_id": "drawer",
+        "kind": "articulation_position_at_least",
+        "minimum_position_m": 0.3
+      },
+      "forbidden_roles": [
+        "manipulated_object",
+        "target_container",
+        "floor_support",
+        "other_furniture",
+        "robot",
+        "site",
+        "unknown",
+        "mixed"
+      ],
+      "interaction_type": "articulate-pull",
+      "planner_call_state": {
+        "destination_target_available": false,
+        "fields": [],
+        "transition_id_available": false,
+        "validated_external_planner_present": false
+      },
+      "policy_visible_fields": [
+        "rgb_d",
+        "dynamic_calibration",
+        "proprioception",
+        "history",
+        "phase",
+        "safety_state",
+        "language_encoding"
+      ],
+      "precondition": {
+        "articulation_id": "drawer",
+        "kind": "articulation_position_below",
+        "maximum_exclusive_m": 0.3
+      },
+      "primitive_input_fields": [
+        "selected_candidate",
+        "acquisition_base_pose",
+        "current_base_pose",
+        "policy_visible_joint_positions",
+        "policy_visible_action_history"
+      ],
+      "task_id": "store_kitchen_items_3d/v1",
+      "transition_id": "R0001-P61-T05"
+    },
+    {
+      "allowed_entity_instance_or_role": "object:cleaner_yellow",
+      "dependencies": [
+        "R0001-P61-T05"
+      ],
+      "evaluator_predicate": {
+        "collision_geom": "cleaner_yellow_collision",
+        "containment_predicate": "TargetVolume.contains",
+        "control_hz": 20.0,
+        "hold_seconds": 2.0,
+        "kind": "stable_target_volume",
+        "maximum_angular_speed_rad_s": 0.15,
+        "maximum_linear_speed_m_s": 0.03,
+        "object_id": "cleaner_yellow",
+        "required_hold_steps": 40,
+        "stability_predicate": "MultiObjectStabilityCriterion._stable",
+        "target_id": "yellow_bin",
+        "target_site": "yellow_target_volume"
+      },
+      "evaluator_private_fields": [
+        "task_transition_id",
+        "object_or_articulation_identity",
+        "destination_target_identity",
+        "target_volume_containment",
+        "drawer_requirement",
+        "success_predicate",
+        "stability_predicate"
+      ],
+      "expected_state_change": {
+        "kind": "object_stably_contained",
+        "object_id": "cleaner_yellow",
+        "target_id": "yellow_bin"
+      },
+      "forbidden_roles": [
+        "articulation",
+        "target_container",
+        "floor_support",
+        "other_furniture",
+        "robot",
+        "site",
+        "unknown",
+        "mixed"
+      ],
+      "interaction_type": "pick-transport-place",
+      "planner_call_state": {
+        "destination_target_available": false,
+        "fields": [],
+        "transition_id_available": false,
+        "validated_external_planner_present": false
+      },
+      "policy_visible_fields": [
+        "rgb_d",
+        "dynamic_calibration",
+        "proprioception",
+        "history",
+        "phase",
+        "safety_state",
+        "language_encoding"
+      ],
+      "precondition": {
+        "kind": "object_not_stably_contained",
+        "object_id": "cleaner_yellow",
+        "requires": {
+          "articulation_id": "drawer",
+          "kind": "articulation_position_at_least",
+          "minimum_position_m": 0.3
+        },
+        "target_id": "yellow_bin"
+      },
+      "primitive_input_fields": [
+        "selected_candidate",
+        "acquisition_base_pose",
+        "current_base_pose",
+        "policy_visible_joint_positions",
+        "policy_visible_action_history"
+      ],
+      "task_id": "store_kitchen_items_3d/v1",
+      "transition_id": "R0001-P61-T06"
+    },
+    {
+      "allowed_entity_instance_or_role": "object:cleaner_pink",
+      "dependencies": [
+        "R0001-P61-T05"
+      ],
+      "evaluator_predicate": {
+        "collision_geom": "cleaner_pink_collision",
+        "containment_predicate": "TargetVolume.contains",
+        "control_hz": 20.0,
+        "hold_seconds": 2.0,
+        "kind": "stable_target_volume",
+        "maximum_angular_speed_rad_s": 0.15,
+        "maximum_linear_speed_m_s": 0.03,
+        "object_id": "cleaner_pink",
+        "required_hold_steps": 40,
+        "stability_predicate": "MultiObjectStabilityCriterion._stable",
+        "target_id": "pink_bin",
+        "target_site": "pink_target_volume"
+      },
+      "evaluator_private_fields": [
+        "task_transition_id",
+        "object_or_articulation_identity",
+        "destination_target_identity",
+        "target_volume_containment",
+        "drawer_requirement",
+        "success_predicate",
+        "stability_predicate"
+      ],
+      "expected_state_change": {
+        "kind": "object_stably_contained",
+        "object_id": "cleaner_pink",
+        "target_id": "pink_bin"
+      },
+      "forbidden_roles": [
+        "articulation",
+        "target_container",
+        "floor_support",
+        "other_furniture",
+        "robot",
+        "site",
+        "unknown",
+        "mixed"
+      ],
+      "interaction_type": "pick-transport-place",
+      "planner_call_state": {
+        "destination_target_available": false,
+        "fields": [],
+        "transition_id_available": false,
+        "validated_external_planner_present": false
+      },
+      "policy_visible_fields": [
+        "rgb_d",
+        "dynamic_calibration",
+        "proprioception",
+        "history",
+        "phase",
+        "safety_state",
+        "language_encoding"
+      ],
+      "precondition": {
+        "kind": "object_not_stably_contained",
+        "object_id": "cleaner_pink",
+        "requires": {
+          "articulation_id": "drawer",
+          "kind": "articulation_position_at_least",
+          "minimum_position_m": 0.3
+        },
+        "target_id": "pink_bin"
+      },
+      "primitive_input_fields": [
+        "selected_candidate",
+        "acquisition_base_pose",
+        "current_base_pose",
+        "policy_visible_joint_positions",
+        "policy_visible_action_history"
+      ],
+      "task_id": "store_kitchen_items_3d/v1",
+      "transition_id": "R0001-P61-T07"
+    }
+  ]
+}

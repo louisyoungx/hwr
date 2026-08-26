@@ -1,0 +1,112 @@
+{
+  "b2_action_allowed": false,
+  "cells": [
+    {
+      "action_latency_steps": 1,
+      "cell_id": "cell-00-o1-a1",
+      "observation_latency_steps": 1,
+      "ordinal": 0,
+      "task_id": "tidy_living_room_3d/v1"
+    },
+    {
+      "action_latency_steps": 2,
+      "cell_id": "cell-01-o1-a2",
+      "observation_latency_steps": 1,
+      "ordinal": 1,
+      "task_id": "tidy_living_room_3d/v1"
+    },
+    {
+      "action_latency_steps": 1,
+      "cell_id": "cell-02-o2-a1",
+      "observation_latency_steps": 2,
+      "ordinal": 2,
+      "task_id": "tidy_living_room_3d/v1"
+    },
+    {
+      "action_latency_steps": 2,
+      "cell_id": "cell-03-o2-a2",
+      "observation_latency_steps": 2,
+      "ordinal": 3,
+      "task_id": "tidy_living_room_3d/v1"
+    },
+    {
+      "action_latency_steps": 1,
+      "cell_id": "cell-04-o1-a1",
+      "observation_latency_steps": 1,
+      "ordinal": 4,
+      "task_id": "clear_dining_table_3d/v1"
+    },
+    {
+      "action_latency_steps": 2,
+      "cell_id": "cell-05-o1-a2",
+      "observation_latency_steps": 1,
+      "ordinal": 5,
+      "task_id": "clear_dining_table_3d/v1"
+    },
+    {
+      "action_latency_steps": 1,
+      "cell_id": "cell-06-o2-a1",
+      "observation_latency_steps": 2,
+      "ordinal": 6,
+      "task_id": "clear_dining_table_3d/v1"
+    },
+    {
+      "action_latency_steps": 2,
+      "cell_id": "cell-07-o2-a2",
+      "observation_latency_steps": 2,
+      "ordinal": 7,
+      "task_id": "clear_dining_table_3d/v1"
+    },
+    {
+      "action_latency_steps": 1,
+      "cell_id": "cell-08-o1-a1",
+      "observation_latency_steps": 1,
+      "ordinal": 8,
+      "task_id": "store_kitchen_items_3d/v1"
+    },
+    {
+      "action_latency_steps": 2,
+      "cell_id": "cell-09-o1-a2",
+      "observation_latency_steps": 1,
+      "ordinal": 9,
+      "task_id": "store_kitchen_items_3d/v1"
+    },
+    {
+      "action_latency_steps": 1,
+      "cell_id": "cell-10-o2-a1",
+      "observation_latency_steps": 2,
+      "ordinal": 10,
+      "task_id": "store_kitchen_items_3d/v1"
+    },
+    {
+      "action_latency_steps": 2,
+      "cell_id": "cell-11-o2-a2",
+      "observation_latency_steps": 2,
+      "ordinal": 11,
+      "task_id": "store_kitchen_items_3d/v1"
+    }
+  ],
+  "complete_case_deletion_allowed": false,
+  "episodes": [],
+  "episodes_per_cell": 3,
+  "frozen_document_commit": "a95dbbeacc80a974d7a234f2dc79442249eaf07b",
+  "hard_stop": {
+    "cell_id": "cell-00-o1-a1",
+    "planned_episode_id": "838dd73530fc555aefa4084574fccb4b5a9ca91496f2cca6791f702d95a27bb8",
+    "reason": "safety_intervention_during_prefix"
+  },
+  "infeasible_cells": [],
+  "latency_match_limit_per_cell": 16,
+  "natural_evaluation_latency_rejection": true,
+  "plan_id": "R0001-P60-E1-formal",
+  "planned_episode_count": 0,
+  "prefix_only": true,
+  "prefix_steps_per_episode": 1395,
+  "proposal_id": "R0001-P60",
+  "raw_seed_limit_per_cell": 768,
+  "reset_latency_override_used": false,
+  "salt_commitment": "263e9f85e32f4a3f5f1560ba82cd820a558cc0aad9a5710bbdf6a3306e3f9c55",
+  "schema_version": "hwr.p60-phase-entry-plan/v1",
+  "seed_schema": "hwr.opaque-episode-seeds/v1",
+  "source_commit": "be965f868c3c21e234130d6b5e9f725bf73efc78"
+}

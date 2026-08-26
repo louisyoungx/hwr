@@ -1,0 +1,31 @@
+{
+  "capability_claim_allowed": false,
+  "checks": {
+    "passed": false
+  },
+  "decision": "invalid",
+  "entity_coverage_claim_allowed": false,
+  "estimand": "strict arm-chain outer-envelope exclusion and nominal finite-horizon B2 command support at the acquisition+B0+B1 entry state",
+  "estimands_separate": true,
+  "generalization_claim_allowed": false,
+  "hard_stop": {
+    "cell_id": "cell-00-o1-a1",
+    "planned_episode_id": "838dd73530fc555aefa4084574fccb4b5a9ca91496f2cca6791f702d95a27bb8",
+    "reason": "safety_intervention_during_prefix"
+  },
+  "hardware_safety_claim_allowed": false,
+  "ik_collision_path_dynamics_claim_allowed": false,
+  "infeasible_cells": [],
+  "nominal_diagnostic": null,
+  "plan_id": "R0001-P60-E1-formal",
+  "policy_inference_executed": false,
+  "proposal_id": "R0001-P60",
+  "sample_unit": "Episode",
+  "schema_version": "hwr.p60-phase-entry-report/v1",
+  "source_commit": "be965f868c3c21e234130d6b5e9f725bf73efc78",
+  "strict_diagnostic": null,
+  "strict_reachability_claim_allowed": false,
+  "summary": null,
+  "task_success_claim_allowed": false,
+  "training_executed": false
+}
