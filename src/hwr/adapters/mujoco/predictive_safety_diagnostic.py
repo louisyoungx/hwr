@@ -152,6 +152,8 @@ class PredictiveSafetyDiagnosticBackend(MujocoFormalHouseholdDualArmBackend):
         self._source_queue: list[int] = []
         self._diagnostic_steps: list[dict[str, object]] = []
         self._pending_step: dict[str, object] | None = None
+        self._predictor_frame: DualArmActionFrame | None = None
+        self._predictor_boundary_ordinal = 0
         super().__init__(
             task,
             binding,
@@ -165,6 +167,8 @@ class PredictiveSafetyDiagnosticBackend(MujocoFormalHouseholdDualArmBackend):
         self._source_queue = []
         self._diagnostic_steps = []
         self._pending_step = None
+        self._predictor_frame = None
+        self._predictor_boundary_ordinal = 0
 
     def apply(self, frame: DualArmActionFrame):
         self._pending_step = {
@@ -223,20 +227,27 @@ class PredictiveSafetyDiagnosticBackend(MujocoFormalHouseholdDualArmBackend):
             )
         return delayed
 
-    def _observe_predictive_safety_boundary(
-        self,
-        frame: DualArmActionFrame,
-        *,
-        boundary_ordinal: int,
-        cumulative_substep: int,
-        production_violation: bool,
-    ) -> None:
+    def _predictive_filter(self, frame, hold_grippers):
+        self._predictor_frame = frame
+        self._predictor_boundary_ordinal = 0
+        try:
+            return super()._predictive_filter(frame, hold_grippers)
+        finally:
+            self._predictor_frame = None
+
+    def _predictive_safety_violation(self) -> bool:
+        production_violation = super()._predictive_safety_violation()
         if self._pending_step is None:
             raise RuntimeError("predictive-safety observer has no active step")
+        if self._predictor_frame is None:
+            raise RuntimeError("predictive-safety observer has no predictor frame")
+        self._predictor_boundary_ordinal += 1
         boundary = {
-            "boundary_ordinal": boundary_ordinal,
-            "cumulative_substep": cumulative_substep,
-            "predictor_input": _frame_record(frame),
+            "boundary_ordinal": self._predictor_boundary_ordinal,
+            "cumulative_substep": (
+                self._predictor_boundary_ordinal * self._substeps
+            ),
+            "predictor_input": _frame_record(self._predictor_frame),
             "production_violation": bool(production_violation),
             "predictive_trial_physics_advanced": True,
             "authoritative_physics_advanced": False,
@@ -253,6 +264,7 @@ class PredictiveSafetyDiagnosticBackend(MujocoFormalHouseholdDualArmBackend):
                 threshold=self.severe_force_threshold,
             )
         self._pending_step["boundaries"].append(boundary)
+        return production_violation
 
     def diagnostic_record(self) -> dict[str, object]:
         return {

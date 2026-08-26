@@ -316,17 +316,9 @@ class MujocoDualArmBackend:
             for substep in range(horizon):
                 mujoco.mj_step(self.model, self.data)
                 control_boundary = (substep + 1) % self._substeps == 0
-                if control_boundary:
-                    violation = self._predictive_safety_violation()
-                    self._observe_predictive_safety_boundary(
-                        frame,
-                        boundary_ordinal=(substep + 1) // self._substeps,
-                        cumulative_substep=substep + 1,
-                        production_violation=violation,
-                    )
-                    if violation:
-                        unsafe = True
-                        break
+                if control_boundary and self._predictive_safety_violation():
+                    unsafe = True
+                    break
         finally:
             self.data = actual_data
             self._left_targets = left_targets
@@ -357,16 +349,6 @@ class MujocoDualArmBackend:
 
     def _predictive_horizon_control_steps(self) -> int:
         return 1
-
-    def _observe_predictive_safety_boundary(
-        self,
-        frame: DualArmActionFrame,
-        *,
-        boundary_ordinal: int,
-        cumulative_substep: int,
-        production_violation: bool,
-    ) -> None:
-        del frame, boundary_ordinal, cumulative_substep, production_violation
 
     def _synchronize_arm_targets_to_measured(self) -> None:
         for targets, joint_ids in (
