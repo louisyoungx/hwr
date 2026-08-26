@@ -69,6 +69,9 @@ def test_all_frozen_mutations_are_valid_and_expose_expected_residuals() -> None:
     assert report["residual_exact_reference_gaps"] == list(MUTATION_NAMES[:5])
     assert report["residual_planner_evidence_gap"] is True
     assert report["residual_verdict_dependency_gaps"] == []
+    role_only = result["mutations"]["mutations"][9]["observations"]
+    assert role_only["planner_call_state_available"] is True
+    assert role_only["independent_planner_state_or_call_evidence"] is False
 
 
 def test_mutations_are_single_variable_replayed_and_reach_auditor() -> None:

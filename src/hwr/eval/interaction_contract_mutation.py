@@ -30,8 +30,7 @@ BuildSourceAudit = Callable[[Mapping[str, str], Mapping[str, frozenset[str]]],
 AuditContract = Callable[[Mapping[str, object], Mapping[str, object],
                           Mapping[str, object], Mapping[str, object]],
                          dict[str, object]]
-RequirementFields = Callable[[Mapping[str, object]],
-                             dict[str, frozenset[str]]]
+RequirementFields = Callable[[Mapping[str, object]], dict[str, frozenset[str]]]
 
 def audit_interaction_contract_mutations(
     contract: Mapping[str, object],
@@ -46,12 +45,7 @@ def audit_interaction_contract_mutations(
 ) -> dict[str, object]:
     """Run all frozen mutations twice from independent clean copies."""
     baseline = _execute(
-        contract,
-        tasks,
-        bindings,
-        sources,
-        build_source_audit,
-        audit_contract,
+        contract, tasks, bindings, sources, build_source_audit, audit_contract,
         requirement_fields,
     )
     baseline_replay = _execute(
@@ -64,10 +58,9 @@ def audit_interaction_contract_mutations(
         canonical_bytes(baseline["audit"]["transitions_document"])
         == canonical_bytes(p61_transitions)
     )
-    annotation_matches = (
-        canonical_bytes(contract["initial_microinteraction"])
-        == canonical_bytes(p61_transitions.get("initial_microinteraction"))
-    )
+    annotation_matches = canonical_bytes(
+        contract["initial_microinteraction"]
+    ) == canonical_bytes(p61_transitions.get("initial_microinteraction"))
 
     states: dict[str, dict[str, object]] = {}
     records = []
@@ -82,9 +75,7 @@ def audit_interaction_contract_mutations(
         state["canonical_replay_bit_identical"] = canonical_bytes(
             first) == canonical_bytes(second)
         states[name] = state
-        records.append(
-            _mutation_record(name, state, baseline, states, contract)
-        )
+        records.append(_mutation_record(name, state, baseline, states, contract))
 
     harness_checks = {
         "fourteen_frozen_mutations_executed":
@@ -188,12 +179,12 @@ def audit_interaction_contract_mutations(
         "hardware_safety_claim_allowed": False,
     }
     return {"mutations": mutations, "report": report}
-
-
 def canonical_bytes(value: object) -> bytes:
     return json.dumps(
         value, ensure_ascii=True, separators=(",", ":"), sort_keys=True
     ).encode("ascii")
+
+
 def _execute_state(
     state: Mapping[str, object],
     build_source_audit: BuildSourceAudit,
@@ -216,7 +207,9 @@ def _execute(
     requirements = requirement_fields(contract)
     source_audit = build_source_audit(sources, requirements)
     audit = audit_contract(contract, tasks, bindings, source_audit)
-    return {"source_audit": source_audit, "audit": audit}
+    return {"source_audit": source_audit, "audit": audit,
+            "planner_call_state":
+                contract["information_boundaries"]["planner_call_state"]}
 def _mutation_state(
     name: str,
     contract: Mapping[str, object],
@@ -431,6 +424,14 @@ def _observations(
     source_audit = execution["source_audit"]
     audit = execution["audit"]
     projection = _source_projection(source_audit)
+    planner = execution["planner_call_state"]
+    independent_planner = bool(
+        isinstance(planner, Mapping)
+        and planner.get("fields")
+        and planner.get("transition_id_available") is True
+        and planner.get("validated_external_planner_present") is True
+        and projection["planner_call_state_available"]
+    )
     rows = (
         []
         if audit["full_task_contract"] is None
@@ -442,7 +443,7 @@ def _observations(
         "planner_call_state_available": projection[
             "planner_call_state_available"
         ],
-        "independent_planner_state_or_call_evidence": False,
+        "independent_planner_state_or_call_evidence": independent_planner,
         "all_transitions_uniquely_expressible": (
             None
             if audit["full_task_contract"] is None
