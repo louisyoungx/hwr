@@ -1,0 +1,147 @@
+{
+  "actual_collision_claim_allowed": false,
+  "artifacts": {
+    "disabled.json": {
+      "bytes": 40122533,
+      "sha256": "42bc8430ca4a731ceb9dfef46395ea58638edfc6507eed833e2134003b626014"
+    },
+    "report.json": {
+      "bytes": 7797,
+      "sha256": "afa78a40fd5e0adb2a14fcc8ba7fbc28cf96a86c3a23296890886fb4462602f1"
+    },
+    "witness.json": {
+      "bytes": 41227118,
+      "sha256": "a1a38c1d1cbdad3c2a435f3c6fb3713d41facd7264f41635030bd7947519478e"
+    }
+  },
+  "capability_claim_allowed": false,
+  "command": [
+    "/Users/louis/Developer/AIWorkspace/50-housework-robot/.venv/bin/python",
+    "-m",
+    "hwr.apps.evaluate_predictive_safety_witness",
+    "--p60-input",
+    "runs/research-loop/0012/r0012-p60-phase-entry-s20266001",
+    "--output",
+    "runs/research-loop/0013/r0013-p66-predictive-witness-s20266601"
+  ],
+  "decision": "accepted as predictive-safety witness contract",
+  "generalization_claim_allowed": false,
+  "hardware_safety_claim_allowed": false,
+  "policy_inference_executed": false,
+  "proposal_id": "R0001-P66-E1",
+  "provenance": {
+    "checks": {
+      "frozen_document_commit_is_ancestor": true,
+      "frozen_document_content_and_blob_match": true,
+      "historical_trees_match": true,
+      "input_hashes_match": true,
+      "passed": true,
+      "source_commit_matches_head": true,
+      "source_files_match_head": true,
+      "workspace_clean": true
+    },
+    "frozen_document": {
+      "blob_matches": true,
+      "content_matches": true
+    },
+    "historical_trees": {
+      "docs/research-loop/0001": "416912b7dc1c19611bcfc4375028180014a1989b",
+      "docs/research-loop/0002": "6fb603dbd52451fe1749157daf05aa482ca7222f",
+      "docs/research-loop/0003": "f56011eda321ea803bc24051db001e632c1549fb",
+      "docs/research-loop/0004": "611c420e539a53a8c7578cd66aa8bdfe46fe82b7",
+      "docs/research-loop/0005": "0352d379d5754adb03e9158c0fa72393ab322d58",
+      "docs/research-loop/0006": "ee3a6f5b25887f67f812750d2a75424df12823d4",
+      "docs/research-loop/0007": "0a696caa153abc9c13403fbc9bd3c081ce71c327",
+      "docs/research-loop/0008": "65e626cddbcb0ec9c2e17cca5184b7d40950e1c6",
+      "docs/research-loop/0009": "316db8b9ad9739ef491778f641603dbca25e75c9",
+      "docs/research-loop/0010": "8a193a24788027d715750c3cd89c2509e71fdbda",
+      "docs/research-loop/0011": "85bb445726ecb8e35ff4d8e90606874e2ee36fe4",
+      "docs/research-loop/0012": "db73bb9a6c6155d0366d7d92718aec614e044a5f"
+    },
+    "inputs": {
+      "episodes.json": {
+        "bytes": 6064915,
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0012/r0012-p60-phase-entry-s20266001/episodes.json",
+        "sha256": "681b2ac5f49d8af7fa21108e3adb96f1fcc0bbc894d2a3f6b2d544cb28f64c4e"
+      },
+      "manifest.json": {
+        "bytes": 17989,
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0012/r0012-p60-phase-entry-s20266001/manifest.json",
+        "sha256": "ee21c04f009d0ab89bc83f3f00516a36a91955f9369ab50d66bea0f04f9c75df"
+      },
+      "plan.json": {
+        "bytes": 3181,
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0012/r0012-p60-phase-entry-s20266001/plan.json",
+        "sha256": "df69da8606f78f94fdaaecef0021a64eb33c8cc5e2b62720bdbdd1f5e2255e5a"
+      },
+      "report.json": {
+        "bytes": 1119,
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0012/r0012-p60-phase-entry-s20266001/report.json",
+        "sha256": "1674278396eb51f647c261d6514b2411cb09ba786deda659ed189c6124841737"
+      },
+      "seed-audit.json": {
+        "bytes": 23622,
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0012/r0012-p60-phase-entry-s20266001/seed-audit.json",
+        "sha256": "5bc6fb284f14c689da0167a40e76775c83c2116fb9541d96d45371307dde71f3"
+      }
+    },
+    "sources": {
+      "src/hwr/adapters/mujoco/dual_arm_backend.py": {
+        "bytes": 29370,
+        "head_blob": "22df69d4bf82162181761dc8323fe1a1e88352e8",
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/src/hwr/adapters/mujoco/dual_arm_backend.py",
+        "sha256": "4e7c9b6367bd02bf9f30cc62c6089f423db235582959b28fdf932dcae6911d66",
+        "working_blob": "22df69d4bf82162181761dc8323fe1a1e88352e8"
+      },
+      "src/hwr/adapters/mujoco/formal_household_backend.py": {
+        "bytes": 33769,
+        "head_blob": "bace9a0fb45352e22c69a5fb532eb97ab5f96b64",
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/src/hwr/adapters/mujoco/formal_household_backend.py",
+        "sha256": "2e2c1fe58447c01503ce11dfabb796a29417eb83b26de3288076b4e3b1d42982",
+        "working_blob": "bace9a0fb45352e22c69a5fb532eb97ab5f96b64"
+      },
+      "src/hwr/adapters/mujoco/phase_entry_geometry.py": {
+        "bytes": 17749,
+        "head_blob": "f4601addbed90b13f0ae459171fbb13d59ed2f12",
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/src/hwr/adapters/mujoco/phase_entry_geometry.py",
+        "sha256": "565bb1c4f954a012a1a673499703e3f86f16d7bbd16302e8dcccd73a6882297e",
+        "working_blob": "f4601addbed90b13f0ae459171fbb13d59ed2f12"
+      },
+      "src/hwr/adapters/mujoco/predictive_safety_diagnostic.py": {
+        "bytes": 15241,
+        "head_blob": "c8e400dd2b8953bdc184f5e1e55327b3a161b393",
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/src/hwr/adapters/mujoco/predictive_safety_diagnostic.py",
+        "sha256": "fe41e5a1adfd4cdde907a3b5faa7ec53857582a58fe28a36a076a37514e432ad",
+        "working_blob": "c8e400dd2b8953bdc184f5e1e55327b3a161b393"
+      },
+      "src/hwr/apps/evaluate_predictive_safety_witness.py": {
+        "bytes": 12060,
+        "head_blob": "0d71be1561fb4f6205f9ffe342c7edb40623bda9",
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/src/hwr/apps/evaluate_predictive_safety_witness.py",
+        "sha256": "e12d1f7adfb77387e911fd37da7dffdbfddca1c55bf27c05a16b56dcb7c06cfe",
+        "working_blob": "0d71be1561fb4f6205f9ffe342c7edb40623bda9"
+      },
+      "src/hwr/eval/predictive_safety_witness.py": {
+        "bytes": 8813,
+        "head_blob": "006a370100be7158efc78bfbd3e78a83c87236d8",
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/src/hwr/eval/predictive_safety_witness.py",
+        "sha256": "256d440a7ac81a3a5f55649fc63251854e8f1e25258356ce0c738fa30c4bd3a7",
+        "working_blob": "006a370100be7158efc78bfbd3e78a83c87236d8"
+      }
+    }
+  },
+  "runtime": {
+    "cpu_count": 18,
+    "disk_free_bytes": 103403257856,
+    "mujoco": "3.10.0",
+    "peak_rss_bytes": 630620160,
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "python": "3.11.0",
+    "wall_seconds": 89.00430662505096
+  },
+  "schema_version": "hwr.p66-predictive-safety-witness-artifacts/v1",
+  "source_commit": "199c5a8f171e6bc553652cd4734a85a410ce8cbc",
+  "status": "complete",
+  "task_success_claim_allowed": false,
+  "training_executed": false
+}

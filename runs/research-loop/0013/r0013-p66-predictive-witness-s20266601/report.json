@@ -1,0 +1,308 @@
+{
+  "actual_collision_claim_allowed": false,
+  "capability_claim_allowed": false,
+  "checks": {
+    "actual_severe_collision_count_zero": true,
+    "candidate_set_sha256": true,
+    "eligibility_reason": true,
+    "exactly_one_predictive_rejection": true,
+    "invalid_force_count_zero": true,
+    "observer_disabled_enabled_authoritative_bit_identical": true,
+    "observer_disabled_enabled_prefix_bit_identical": true,
+    "p40_conservation_exact": true,
+    "passed": true,
+    "planned_episode_id": true,
+    "policy_input_sequence_sha256": true,
+    "prefix_step_count": true,
+    "production_witness_consistent": true,
+    "raw_prefix_trace_sha256": true,
+    "rejected_action_not_committed": true,
+    "rejection_step_matches_anchor": true,
+    "rejection_witness_complete": true,
+    "runtime_randomization_sha256": true,
+    "selected_index": true
+  },
+  "command": [
+    "/Users/louis/Developer/AIWorkspace/50-housework-robot/.venv/bin/python",
+    "-m",
+    "hwr.apps.evaluate_predictive_safety_witness",
+    "--p60-input",
+    "runs/research-loop/0012/r0012-p60-phase-entry-s20266001",
+    "--output",
+    "runs/research-loop/0013/r0013-p66-predictive-witness-s20266601"
+  ],
+  "decision": "accepted as predictive-safety witness contract",
+  "generalization_claim_allowed": false,
+  "hardware_safety_claim_allowed": false,
+  "occurrence_rate_claim_allowed": false,
+  "plant_action_lineage": {
+    "delayed_scaled_plant_action": [
+      0.10563094615897749,
+      -0.1605351261728603,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "final_applied_action": {
+      "action": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.24509706772053047,
+        0.24497104382113127
+      ],
+      "confidence": 1.0,
+      "created_at_ns": 63900000000,
+      "policy_version": null,
+      "schema_version": "hwr.dual-arm-runtime-action/v2",
+      "source": "safety",
+      "valid_from_ns": 63900000000,
+      "valid_until_ns": 64000000000
+    },
+    "policy_proposal": {
+      "action": [
+        0.12,
+        -0.1822977766101701,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "confidence": 1.0,
+      "created_at_ns": 63900000000,
+      "policy_version": null,
+      "schema_version": "hwr.dual-arm-runtime-action/v2",
+      "source": "R0001-P41-E2-fixed-primitive",
+      "valid_from_ns": 63900000000,
+      "valid_until_ns": 64000000000
+    },
+    "predictor_input": {
+      "action": [
+        0.10563094615897749,
+        -0.1605351261728603,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "confidence": 1.0,
+      "created_at_ns": 63900000000,
+      "policy_version": null,
+      "schema_version": "hwr.dual-arm-runtime-action/v2",
+      "source": "plant:R0001-P41-E2-fixed-primitive",
+      "valid_from_ns": 63900000000,
+      "valid_until_ns": 64000000000
+    },
+    "queue_source": "scaled_policy_proposal",
+    "queue_source_step": 1278
+  },
+  "policy_inference_executed": false,
+  "proposal_id": "R0001-P66-E1",
+  "rejection_step": 1279,
+  "sample_unit": "single deterministic historical Episode anchor",
+  "schema_version": "hwr.p66-predictive-safety-witness-report/v1",
+  "source_commit": "199c5a8f171e6bc553652cd4734a85a410ce8cbc",
+  "task_success_claim_allowed": false,
+  "training_executed": false,
+  "witness": {
+    "authoritative_physics_advanced": false,
+    "boundary_ordinal": 2,
+    "cumulative_substep": 50,
+    "predictive_trial_physics_advanced": true,
+    "predictor_input": {
+      "action": [
+        0.10563094615897749,
+        -0.1605351261728603,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "confidence": 1.0,
+      "created_at_ns": 63900000000,
+      "policy_version": null,
+      "schema_version": "hwr.dual-arm-runtime-action/v2",
+      "source": "plant:R0001-P41-E2-fixed-primitive",
+      "valid_from_ns": 63900000000,
+      "valid_until_ns": 64000000000
+    },
+    "production_violation": true,
+    "witness": {
+      "aggregation": "maximum_absolute_normal_force_per_contact_point",
+      "display_maximum": {
+        "body_ids": [
+          1,
+          26
+        ],
+        "body_names": [
+          "robot_base",
+          "tea_table"
+        ],
+        "canonical_geom_pair": [
+          "body_box_collision",
+          "tea_table_top_collision"
+        ],
+        "contact_index": 22,
+        "environment_side": {
+          "body_id": 26,
+          "body_name": "tea_table",
+          "geom_id": 58,
+          "geom_name": "tea_table_top_collision"
+        },
+        "force_finite": true,
+        "geom_ids": [
+          5,
+          58
+        ],
+        "geom_names": [
+          "body_box_collision",
+          "tea_table_top_collision"
+        ],
+        "nonfinite_force": null,
+        "normal_force": 356.9927528897417,
+        "robot_side": {
+          "body_id": 1,
+          "body_name": "robot_base",
+          "geom_id": 5,
+          "geom_name": "body_box_collision"
+        }
+      },
+      "forbidden_contact_point_count": 2,
+      "forbidden_contact_points": [
+        {
+          "body_ids": [
+            1,
+            26
+          ],
+          "body_names": [
+            "robot_base",
+            "tea_table"
+          ],
+          "canonical_geom_pair": [
+            "body_box_collision",
+            "tea_table_top_collision"
+          ],
+          "contact_index": 22,
+          "environment_side": {
+            "body_id": 26,
+            "body_name": "tea_table",
+            "geom_id": 58,
+            "geom_name": "tea_table_top_collision"
+          },
+          "force_finite": true,
+          "geom_ids": [
+            5,
+            58
+          ],
+          "geom_names": [
+            "body_box_collision",
+            "tea_table_top_collision"
+          ],
+          "nonfinite_force": null,
+          "normal_force": 356.9927528897417,
+          "robot_side": {
+            "body_id": 1,
+            "body_name": "robot_base",
+            "geom_id": 5,
+            "geom_name": "body_box_collision"
+          }
+        },
+        {
+          "body_ids": [
+            1,
+            26
+          ],
+          "body_names": [
+            "robot_base",
+            "tea_table"
+          ],
+          "canonical_geom_pair": [
+            "body_box_collision",
+            "tea_table_top_collision"
+          ],
+          "contact_index": 23,
+          "environment_side": {
+            "body_id": 26,
+            "body_name": "tea_table",
+            "geom_id": 58,
+            "geom_name": "tea_table_top_collision"
+          },
+          "force_finite": true,
+          "geom_ids": [
+            5,
+            58
+          ],
+          "geom_names": [
+            "body_box_collision",
+            "tea_table_top_collision"
+          ],
+          "nonfinite_force": null,
+          "normal_force": 121.60432009046283,
+          "robot_side": {
+            "body_id": 1,
+            "body_name": "robot_base",
+            "geom_id": 5,
+            "geom_name": "body_box_collision"
+          }
+        }
+      ],
+      "invalid_force_count": 0,
+      "maximum_forbidden_contact_point_force": 356.9927528897417,
+      "threshold": 220.0,
+      "valid": true,
+      "witness_violation": true
+    }
+  }
+}

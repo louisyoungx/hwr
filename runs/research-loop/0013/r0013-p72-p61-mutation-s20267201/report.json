@@ -1,0 +1,76 @@
+{
+  "baseline_initial_annotations_p61_bit_identical": true,
+  "capability_claim_allowed": false,
+  "command": [
+    "/Users/louis/Developer/AIWorkspace/50-housework-robot/.venv/bin/python",
+    "-m",
+    "hwr.apps.audit_interaction_contract_mutations",
+    "--contract",
+    "configs/eval/interaction_contract_v1.json",
+    "--p61-input",
+    "runs/research-loop/0012/r0012-p61-interaction-contract-s20266101",
+    "--output",
+    "runs/research-loop/0013/r0013-p72-p61-mutation-s20267201"
+  ],
+  "decision": "accepted as residual P61 contract gap evidence",
+  "generalization_claim_allowed": false,
+  "hardware_safety_claim_allowed": false,
+  "harness_checks": {
+    "baseline_matches_p61_transitions": true,
+    "baseline_replay_bit_identical": true,
+    "each_mutated_source_compiles": true,
+    "each_mutation_reached_parser_and_auditor": true,
+    "each_mutation_replay_bit_identical": true,
+    "each_mutation_single_variable": true,
+    "each_mutation_started_from_clean_copy": true,
+    "fourteen_frozen_mutations_executed": true,
+    "passed": true
+  },
+  "mutation_count": 14,
+  "p61_producer_commit": "6bf0400f51a25bfb6f45e951299c410efd5c2c7a",
+  "p68_dependency_gate_passed": true,
+  "p68_dependency_mutations_fail_closed": true,
+  "policy_inference_executed": false,
+  "proposal_id": "R0001-P72-E1",
+  "residual_count_is_not_a_statistical_sample": true,
+  "residual_exact_reference_gaps": [
+    "candidate_schema_extra_field",
+    "policy_schema_extra_field",
+    "primitive_signature_extra_argument",
+    "selector_signature_extra_argument",
+    "primitive_phase_extra_value"
+  ],
+  "residual_planner_evidence_gap": true,
+  "residual_verdict_dependency_gaps": [],
+  "residuals": [
+    {
+      "kind": "exact_reference",
+      "mutation_id": "candidate_schema_extra_field"
+    },
+    {
+      "kind": "exact_reference",
+      "mutation_id": "policy_schema_extra_field"
+    },
+    {
+      "kind": "exact_reference",
+      "mutation_id": "primitive_signature_extra_argument"
+    },
+    {
+      "kind": "exact_reference",
+      "mutation_id": "selector_signature_extra_argument"
+    },
+    {
+      "kind": "exact_reference",
+      "mutation_id": "primitive_phase_extra_value"
+    },
+    {
+      "kind": "planner_evidence",
+      "mutation_id": "role_field_without_independent_planner_state"
+    }
+  ],
+  "schema_version": "hwr.p72-interaction-contract-mutation-report/v1",
+  "source_commit": "199c5a8f171e6bc553652cd4734a85a410ce8cbc",
+  "task_success_claim_allowed": false,
+  "training_executed": false,
+  "whole_program_planner_claim_allowed": false
+}
