@@ -1,0 +1,93 @@
+{
+  "artifacts": {
+    "mutations.json": {
+      "bytes": 523639,
+      "sha256": "e3a2732365953f49981730491cab07268ec16dbc2c2023d36cb0270a89d70d70"
+    },
+    "report.json": {
+      "bytes": 2563,
+      "sha256": "5964666a44f79f7b2d5938eda863b489d96d4546bb40d2e2fcd894751b109943"
+    }
+  },
+  "capability_claim_allowed": false,
+  "command": [
+    "/Users/louis/Developer/AIWorkspace/50-housework-robot/.venv/bin/python",
+    "-m",
+    "hwr.apps.audit_interaction_contract_mutations",
+    "--contract",
+    "configs/eval/interaction_contract_v1.json",
+    "--p61-input",
+    "runs/research-loop/0012/r0012-p61-interaction-contract-s20266101",
+    "--output",
+    "runs/research-loop/0013/r0013-p72-p61-mutation-s20267201"
+  ],
+  "decision": "accepted as residual P61 contract gap evidence",
+  "generalization_claim_allowed": false,
+  "hardware_safety_claim_allowed": false,
+  "p61_producer_commit": "6bf0400f51a25bfb6f45e951299c410efd5c2c7a",
+  "policy_inference_executed": false,
+  "proposal_id": "R0001-P72-E1",
+  "provenance": {
+    "checks": {
+      "frozen_document_blob_matches": true,
+      "frozen_document_commit_is_ancestor": true,
+      "frozen_document_content_matches": true,
+      "historical_trees_match": true,
+      "input_hashes_match": true,
+      "passed": true,
+      "producer_commit_matches": true,
+      "producer_is_ancestor": true,
+      "source_commit_matches_head": true,
+      "workspace_clean": true
+    },
+    "frozen_document": {
+      "bytes": 18865,
+      "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/docs/research-loop/0013/03-experiment.md",
+      "sha256": "b696c3378a68eff40bcb2fc4227a56b5093cfb66d5e5740219741269829b74ad"
+    },
+    "historical_trees": {
+      "docs/research-loop/0001": "416912b7dc1c19611bcfc4375028180014a1989b",
+      "docs/research-loop/0002": "6fb603dbd52451fe1749157daf05aa482ca7222f",
+      "docs/research-loop/0003": "f56011eda321ea803bc24051db001e632c1549fb",
+      "docs/research-loop/0004": "611c420e539a53a8c7578cd66aa8bdfe46fe82b7",
+      "docs/research-loop/0005": "0352d379d5754adb03e9158c0fa72393ab322d58",
+      "docs/research-loop/0006": "ee3a6f5b25887f67f812750d2a75424df12823d4",
+      "docs/research-loop/0007": "0a696caa153abc9c13403fbc9bd3c081ce71c327",
+      "docs/research-loop/0008": "65e626cddbcb0ec9c2e17cca5184b7d40950e1c6",
+      "docs/research-loop/0009": "316db8b9ad9739ef491778f641603dbca25e75c9",
+      "docs/research-loop/0010": "8a193a24788027d715750c3cd89c2509e71fdbda",
+      "docs/research-loop/0011": "85bb445726ecb8e35ff4d8e90606874e2ee36fe4",
+      "docs/research-loop/0012": "db73bb9a6c6155d0366d7d92718aec614e044a5f"
+    },
+    "inputs": {
+      "manifest.json": {
+        "bytes": 10725,
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0012/r0012-p61-interaction-contract-s20266101/manifest.json",
+        "sha256": "6a019a7591a2614c6082dea102c29f9cb24e101f78da8ce21ce3725f60df221d"
+      },
+      "report.json": {
+        "bytes": 7235,
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0012/r0012-p61-interaction-contract-s20266101/report.json",
+        "sha256": "d9a760eaa30198eda95d20e90a4ebf4c9d9f5bcd2e118b6e139446866545719a"
+      },
+      "transitions.json": {
+        "bytes": 22033,
+        "path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0012/r0012-p61-interaction-contract-s20266101/transitions.json",
+        "sha256": "1cc139e7f8b02a6325d16282f9b7882e9736c40d03f56644c1739d79ee7bcc0a"
+      }
+    }
+  },
+  "runtime": {
+    "cpu_count": 18,
+    "numpy": "2.4.6",
+    "peak_rss_bytes": 180830208,
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "python": "3.11.0",
+    "wall_seconds": 32.99177745805355
+  },
+  "schema_version": "hwr.p72-interaction-contract-mutation-artifacts/v1",
+  "source_commit": "0edd113d82027587055f0980f3873ae762c0fff1",
+  "status": "complete",
+  "task_success_claim_allowed": false,
+  "training_executed": false
+}
