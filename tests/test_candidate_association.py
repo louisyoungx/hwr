@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
+from hwr.eval import target_selection
 from hwr.adapters.mujoco.candidate_association import (
     CandidateAssociationBackend,
     summary_for_identity,
@@ -19,6 +23,7 @@ from hwr.eval.initial_candidate_association import (
 )
 from hwr.eval.target_selection import (
     Candidate,
+    CandidateSet,
     RawCandidate,
     deserialize_policy_input,
 )
@@ -65,6 +70,35 @@ def test_support_reconstruction_matches_all_committed_capsules() -> None:
         )
         assert deserialize_policy_input(payloads[-1]).sequence_id == (
             episode["captures"][-1]["sequence_id"]
+        )
+
+
+def test_p68_consumer_fails_closed_on_v2_candidate_schema(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    document = {
+        "schema_version": "hwr.p79-target-candidates/v2",
+        "acquisition_input_sha256": [],
+        "candidate_count": 0,
+        "candidates": [],
+    }
+    canonical = json.dumps(
+        document, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+    ).encode("ascii")
+    candidate_set = CandidateSet(
+        (), (), canonical, hashlib.sha256(canonical).hexdigest()
+    )
+    monkeypatch.setattr(
+        target_selection,
+        "generate_candidate_set_legacy_v1",
+        lambda *args, **kwargs: candidate_set,
+    )
+
+    with pytest.raises(ValueError, match="legacy-v1"):
+        reconstruct_candidate_support(
+            (),
+            acquisition_base_pose=(0.0, 0.0, 0.0),
+            final_input=b"unused",
         )
 
 
