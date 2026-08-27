@@ -75,12 +75,11 @@ def test_overlap_fixture_proves_legacy_alias_and_corrected_ownership() -> None:
 
 
 def test_legacy_defect_is_derived_from_review_source_ast() -> None:
-    source = target_selection.__file__
     legacy = subprocess.run(
         (
             "git",
             "show",
-            "41eae6575407263fdcbe1b96667b33bdc2392fd6:"
+            "61d85cda1b96058831b4f93c7ad21a39f51cc2ab:"
             "src/hwr/eval/target_selection.py",
         ),
         cwd=ROOT,
@@ -89,14 +88,13 @@ def test_legacy_defect_is_derived_from_review_source_ast() -> None:
         text=True,
     ).stdout
 
-    assert source.endswith("target_selection.py")
     assert ownership.audit_legacy_source(legacy) == {
         "slice_assignment_count": 1,
         "bitand_augmented_assignment_count": 1,
         "assignment_precedes_mutation": True,
         "passed": True,
     }
-    current = Path(target_selection.__file__).read_text()
+    current = Path(ownership.__file__).read_text()
     assert ownership.audit_single_variable_source(current, legacy) == {
         "one_ownership_copy_gate": True,
         "frame_generator_otherwise_unchanged": True,
@@ -105,6 +103,17 @@ def test_legacy_defect_is_derived_from_review_source_ast() -> None:
         "geometry_merge_ranking_selector_unchanged": True,
         "passed": True,
     }
+    target_blob = subprocess.run(
+        ("git", "hash-object", "src/hwr/eval/target_selection.py"),
+        cwd=ROOT, check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    frozen_blob = subprocess.run(
+        ("git", "rev-parse", "61d85cd:src/hwr/eval/target_selection.py"),
+        cwd=ROOT, check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    assert target_blob == frozen_blob == (
+        "d7e588ba76ce18882255e3e22b1f86459ab235dd"
+    )
 
 
 def test_oracle_three_traversals_match_production_without_mutation() -> None:
@@ -123,7 +132,7 @@ def test_oracle_three_traversals_match_production_without_mutation() -> None:
     )
 
     assert json.loads(candidate_set.canonical_bytes)["schema_version"] == (
-        target_selection.CANDIDATE_SCHEMA_V2
+        ownership.CANDIDATE_SCHEMA_V2
     )
     assert audit["decision"] == (
         "accepted as deterministic candidate-generator correction"
@@ -214,25 +223,20 @@ def test_boundary_controls_cover_invalid_flat_single_duplicate_and_nonfinite() -
     assert ownership.boundary_fixture_audit()["passed"] is True
 
 
-def test_v2_and_legacy_v1_are_explicit_and_context_does_not_leak() -> None:
+def test_v2_generator_is_explicit_and_legacy_generator_stays_frozen() -> None:
     payload = serialize_policy_input(_single_anchor_input())
     arguments = {
         "acquisition_base_pose": (0.0, 0.0, 0.0),
         "final_input": payload,
     }
 
-    v2 = target_selection.generate_candidate_set((payload, payload), **arguments)
-    legacy = target_selection.generate_candidate_set_legacy_v1(
-        (payload, payload), **arguments
-    )
-    repeated = target_selection.generate_candidate_set(
-        (payload, payload), **arguments
-    )
+    v2 = ownership.generate_candidate_set_v2((payload, payload), **arguments)
+    legacy = target_selection.generate_candidate_set((payload, payload), **arguments)
+    repeated = ownership.generate_candidate_set_v2((payload, payload), **arguments)
 
     assert json.loads(v2.canonical_bytes)["schema_version"] == (
         "hwr.p79-target-candidates/v2"
     )
-    assert target_selection.CANDIDATE_SCHEMA == "hwr.p41-target-candidates/v1"
     assert json.loads(legacy.canonical_bytes)["schema_version"] == (
         "hwr.p41-target-candidates/v1"
     )

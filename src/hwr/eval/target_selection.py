@@ -6,7 +6,6 @@ import hashlib
 import json
 import math
 import struct
-from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -14,8 +13,6 @@ import numpy as np
 
 INPUT_SCHEMA = "hwr.p41-target-index-input/v1"
 CANDIDATE_SCHEMA = "hwr.p41-target-candidates/v1"
-LEGACY_CANDIDATE_SCHEMA = CANDIDATE_SCHEMA
-CANDIDATE_SCHEMA_V2 = "hwr.p79-target-candidates/v2"
 PLAN_SCHEMA = "hwr.p41-target-selection-plan/v1"
 TERMINAL_SCHEMA = "hwr.p41-target-selection-terminal/v1"
 POWER_SCHEMA = "hwr.p41-target-selection-power/v1"
@@ -53,8 +50,6 @@ INPUT_ARRAY_SPECS = (
 SAFETY_STATES = ("ok", "degraded", "stopped", "emergency_stop")
 ACTION_MINIMUM = np.asarray((-0.18, -0.50, *(-0.35,) * 12, 0.0, 0.0))
 ACTION_MAXIMUM = np.asarray((0.18, 0.50, *(0.35,) * 12, 1.0, 1.0))
-_INDEPENDENT_PATCH_MASK = ContextVar("hwr_target_selection_independent_patch_mask",
-                                     default=True)
 
 
 class TargetSelectionContractError(ValueError):
@@ -262,11 +257,7 @@ def generate_candidate_set(
     )[:64]
     ordered = tuple(sorted(ordered, key=Candidate.canonical_key))
     document = {
-        "schema_version": (
-            CANDIDATE_SCHEMA_V2
-            if _INDEPENDENT_PATCH_MASK.get()
-            else CANDIDATE_SCHEMA
-        ),
+        "schema_version": CANDIDATE_SCHEMA,
         "acquisition_input_sha256": list(hashes),
         "candidate_count": len(ordered),
         "candidates": [list(item.canonical_record()) for item in ordered],
@@ -277,21 +268,6 @@ def generate_candidate_set(
     return CandidateSet(
         hashes, ordered, canonical, hashlib.sha256(canonical).hexdigest()
     )
-
-
-def generate_candidate_set_legacy_v1(
-    keyframes: Sequence[bytes], *, acquisition_base_pose: Sequence[float],
-    final_input: bytes,
-) -> CandidateSet:
-    token = _INDEPENDENT_PATCH_MASK.set(False)
-    try:
-        return generate_candidate_set(
-            keyframes,
-            acquisition_base_pose=acquisition_base_pose,
-            final_input=final_input,
-        )
-    finally:
-        _INDEPENDENT_PATCH_MASK.reset(token)
 
 
 def candidate_scores(
@@ -542,8 +518,6 @@ def _frame_candidates(
                 continue
             patch_depth = depth[row - 10 : row + 11, column - 10 : column + 11]
             patch_valid = valid[row - 10 : row + 11, column - 10 : column + 11]
-            if _INDEPENDENT_PATCH_MASK.get():
-                patch_valid = patch_valid.copy()
             patch_valid &= np.abs(patch_depth - center_z) <= max(0.025, 0.015 * center_z)
             rows, columns = np.nonzero(patch_valid)
             if len(rows) < 24:

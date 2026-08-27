@@ -43,7 +43,7 @@ def reconstruct_candidate_support(
     acquisition_base_pose: Sequence[float],
     final_input: bytes,
 ) -> tuple[CandidateSet, tuple[CandidateSupport, ...]]:
-    official = target_selection.generate_candidate_set_legacy_v1(
+    official = target_selection.generate_candidate_set(
         keyframes,
         acquisition_base_pose=acquisition_base_pose,
         final_input=final_input,
@@ -97,7 +97,7 @@ def require_legacy_v1_candidate_set(candidate_set: CandidateSet) -> None:
         document = json.loads(candidate_set.canonical_bytes)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("P68 candidate document is not canonical JSON") from error
-    if document.get("schema_version") != target_selection.LEGACY_CANDIDATE_SCHEMA:
+    if document.get("schema_version") != target_selection.CANDIDATE_SCHEMA:
         raise ValueError("P68 requires legacy-v1 candidate schema")
     if canonical_bytes(document) != candidate_set.canonical_bytes:
         raise ValueError("P68 candidate document bytes differ")

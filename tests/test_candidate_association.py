@@ -92,7 +92,7 @@ def test_p68_consumer_fails_closed_on_v2_candidate_schema(
     )
     monkeypatch.setattr(
         target_selection,
-        "generate_candidate_set_legacy_v1",
+        "generate_candidate_set",
         lambda *args, **kwargs: candidate_set,
     )
 

@@ -1,23 +1,21 @@
 """Independent audit contracts for frozen R0001-P79-E1."""
 from __future__ import annotations
-import ast
-import copy
-import hashlib
-import json
-import re
-import sys
+import ast, copy, hashlib, json, re, sys
 from collections import Counter
 from dataclasses import dataclass
 from types import FrameType
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Sequence
 import numpy as np
 from hwr.eval import target_selection
-from hwr.eval.target_selection import CandidateSet, PolicyVisibleInput, RawCandidate
-PROPOSAL_ID = "R0001-P79-E1"
-AUDIT_SCHEMA = "hwr.p79-candidate-mask-ownership-audit/v1"
+from hwr.eval.target_selection import (
+    Candidate, CandidateSet, PolicyVisibleInput, RawCandidate,
+    _acquisition_from_robot, _camera_points, _candidate_from_points,
+    _merge_candidates, _pose, _quantize, _robot_self_mask, _transform_points,
+    deserialize_policy_input, input_sha256)
+PROPOSAL_ID = "R0001-P79-E1"; AUDIT_SCHEMA = "hwr.p79-candidate-mask-ownership-audit/v1"
+CANDIDATE_SCHEMA_V2 = "hwr.p79-target-candidates/v2"
 TRAVERSALS = ("row_major", "reverse_row_major", "column_major")
-ROWS = tuple(range(12, 180, 4))
-COLUMNS = tuple(range(12, 244, 4))
+ROWS = tuple(range(12, 180, 4)); COLUMNS = tuple(range(12, 244, 4))
 @dataclass(frozen=True)
 class OracleFrame:
     raw: tuple[RawCandidate, ...]
@@ -26,6 +24,63 @@ class OracleFrame:
     mutation_count: int
     probe_ledger_sha256: str
     probe_sha256_pair_counts: tuple[tuple[str, str, int], ...]
+def generate_candidate_set_v2(keyframes: Sequence[bytes], *,
+                              acquisition_base_pose: Sequence[float],
+                              final_input: bytes) -> CandidateSet:
+    origin = _pose(acquisition_base_pose); hashes = tuple(
+        input_sha256(payload) for payload in (*keyframes, final_input))
+    raw: list[RawCandidate] = []
+    for ordinal, payload in enumerate(keyframes):
+        frame = deserialize_policy_input(payload); raw.extend(
+            _frame_candidates_v2(frame, origin, ordinal))
+    merged = _merge_candidates(raw); ordered = sorted(merged, key=lambda item: (
+        -item.support_count, -item.view_count,
+        -int(round(item.prominence * 1_000_000.0)),
+        *_quantize(item.center, 1_000.0),
+        item.first_frame, item.first_row, item.first_column,
+    ))[:64]
+    ordered = tuple(sorted(ordered, key=Candidate.canonical_key)); document = {
+        "schema_version": CANDIDATE_SCHEMA_V2,
+        "acquisition_input_sha256": list(hashes),
+        "candidate_count": len(ordered),
+        "candidates": [list(item.canonical_record()) for item in ordered],
+    }
+    canonical = json.dumps(document, ensure_ascii=True, separators=(",", ":"),
+                           sort_keys=True).encode("ascii")
+    return CandidateSet(hashes, ordered, canonical, hashlib.sha256(canonical).hexdigest())
+def _frame_candidates_v2(
+    frame: PolicyVisibleInput, acquisition_base_pose: tuple[float, float, float],
+    ordinal: int,
+) -> list[RawCandidate]:
+    depth = frame.head_depth_m; valid = (
+        frame.head_depth_valid & np.isfinite(depth) & (depth >= 0.10) & (depth <= 5.00))
+    transform = _acquisition_from_robot(acquisition_base_pose, frame.base_pose)
+    camera_transform = transform @ frame.robot_from_head_camera
+    camera_origin = camera_transform[:3, 3]; base_center = transform[:3, 3]
+    result = []
+    for row in range(12, 180, 4):
+        for column in range(12, 244, 4):
+            center_depth = depth[row - 2 : row + 3, column - 2 : column + 3]; center_valid = valid[row - 2 : row + 3, column - 2 : column + 3]
+            ring_depth = depth[row - 10 : row + 11, column - 10 : column + 11]; ring_valid = valid[row - 10 : row + 11, column - 10 : column + 11].copy()
+            ring_valid[6:15, 6:15] = False
+            if center_valid.sum() < 20 or ring_valid.sum() < 240: continue
+            center_values = center_depth[center_valid].astype(np.float64); center_z = float(np.median(center_values)); prominence = float(np.median(ring_depth[ring_valid])) - center_z
+            if not 0.025 <= prominence <= 0.45: continue
+            if float(np.quantile(center_values, 0.90) - np.quantile(center_values, 0.10)) > 0.04: continue
+            patch_depth = depth[row - 10 : row + 11, column - 10 : column + 11]; patch_valid = valid[row - 10 : row + 11, column - 10 : column + 11]; patch_valid = patch_valid.copy()
+            patch_valid &= np.abs(patch_depth - center_z) <= max(0.025, 0.015 * center_z)
+            rows, columns = np.nonzero(patch_valid)
+            if len(rows) < 24: continue
+            rows, columns = rows + row - 10, columns + column - 10
+            points = _camera_points(
+                rows, columns, patch_depth[patch_valid].astype(np.float64),
+                frame.head_camera_intrinsics)
+            points = _transform_points(camera_transform, points); points = points[~_robot_self_mask(points, frame, acquisition_base_pose)]
+            if len(points) < 24: continue
+            candidate = _candidate_from_points(
+                points, camera_origin, base_center, prominence, ordinal, row, column)
+            if candidate is not None: result.append(candidate)
+    return result
 def audit_episode(
     keyframes: Sequence[bytes],
     *,
@@ -199,7 +254,7 @@ def _production_candidate_set(
     def trace(frame: FrameType, event: str, argument: object):
         if (
             event == "line"
-            and frame.f_code is target_selection._frame_candidates.__code__
+            and frame.f_code is _frame_candidates_v2.__code__
             and "valid" in frame.f_locals
         ):
             initial_masks.setdefault(
@@ -208,7 +263,7 @@ def _production_candidate_set(
             )
         if (
             event == "return"
-            and frame.f_code is target_selection._frame_candidates.__code__
+            and frame.f_code is _frame_candidates_v2.__code__
         ):
             ordinal = int(frame.f_locals["ordinal"])
             raw_by_frame[ordinal] = (
@@ -222,7 +277,7 @@ def _production_candidate_set(
     previous = sys.gettrace()
     try:
         sys.settrace(trace)
-        candidate_set = target_selection.generate_candidate_set(
+        candidate_set = generate_candidate_set_v2(
             keyframes,
             acquisition_base_pose=acquisition_base_pose,
             final_input=final_input,
@@ -236,7 +291,7 @@ def _production_frame(frame, origin, ordinal):
     initial = final = None
     def trace(current: FrameType, event: str, argument: object):
         nonlocal initial, final
-        if current.f_code is target_selection._frame_candidates.__code__:
+        if current.f_code is _frame_candidates_v2.__code__:
             if event == "line" and "valid" in current.f_locals and initial is None:
                 initial = _sha256(current.f_locals["valid"].tobytes())
             elif event == "return":
@@ -245,7 +300,7 @@ def _production_frame(frame, origin, ordinal):
     previous = sys.gettrace()
     try:
         sys.settrace(trace)
-        raw = tuple(target_selection._frame_candidates(frame, origin, ordinal))
+        raw = tuple(_frame_candidates_v2(frame, origin, ordinal))
     finally:
         sys.settrace(previous)
     if initial is None or final is None:
@@ -315,34 +370,22 @@ def candidate_set_from_raw(
     raw: Sequence[RawCandidate],
 ) -> CandidateSet:
     merged = target_selection._merge_candidates(raw)
-    ordered = sorted(
-        merged,
-        key=lambda item: (
-            -item.support_count,
-            -item.view_count,
-            -int(round(item.prominence * 1_000_000.0)),
-            *target_selection._quantize(item.center, 1_000.0),
-            item.first_frame,
-            item.first_row,
-            item.first_column,
-        ),
-    )[:64]
+    ordered = sorted(merged, key=lambda item: (
+        -item.support_count, -item.view_count,
+        -int(round(item.prominence * 1_000_000.0)),
+        *target_selection._quantize(item.center, 1_000.0),
+        item.first_frame, item.first_row, item.first_column,
+    ))[:64]
     ordered = tuple(sorted(ordered, key=target_selection.Candidate.canonical_key))
     document = {
-        "schema_version": target_selection.CANDIDATE_SCHEMA_V2,
+        "schema_version": CANDIDATE_SCHEMA_V2,
         "acquisition_input_sha256": list(input_hashes),
         "candidate_count": len(ordered),
         "candidates": [list(item.canonical_record()) for item in ordered],
     }
-    canonical = json.dumps(
-        document, ensure_ascii=True, separators=(",", ":"), sort_keys=True
-    ).encode("ascii")
-    return CandidateSet(
-        tuple(input_hashes),
-        ordered,
-        canonical,
-        _sha256(canonical),
-    )
+    canonical = json.dumps(document, ensure_ascii=True, separators=(",", ":"),
+                           sort_keys=True).encode("ascii")
+    return CandidateSet(tuple(input_hashes), ordered, canonical, _sha256(canonical))
 def candidate_visible_bytes(value: PolicyVisibleInput) -> bytes:
     arrays = (
         value.head_rgb_uint8,
@@ -352,89 +395,60 @@ def candidate_visible_bytes(value: PolicyVisibleInput) -> bytes:
         value.robot_from_head_camera,
     )
     proprioception = np.asarray(value.proprioception, dtype="<f8")
-    payloads = [
-        np.ascontiguousarray(array).astype(
-            np.uint8 if array is value.head_depth_valid else array.dtype,
-            copy=False,
-        ).tobytes()
-        for array in arrays
-    ]
+    payloads = [np.ascontiguousarray(array).astype(
+        np.uint8 if array is value.head_depth_valid else array.dtype,
+        copy=False).tobytes() for array in arrays]
     selected = np.concatenate(
         (proprioception[:6], proprioception[12:18], proprioception[26:29])
     )
-    return b"".join((
-        b"hwr.p50-candidate-visible-input/v1\0",
-        *payloads,
-        np.ascontiguousarray(selected, dtype="<f8").tobytes(),
-    ))
+    return b"".join((b"hwr.p50-candidate-visible-input/v1\0", *payloads,
+                     np.ascontiguousarray(selected, dtype="<f8").tobytes()))
 def audit_legacy_source(source: str) -> dict[str, object]:
     tree = ast.parse(source)
-    assignments = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "patch_valid"
-            for target in node.targets
-        )
-        and isinstance(node.value, ast.Subscript)
-        and isinstance(node.value.value, ast.Name)
-        and node.value.value.id == "valid"
-    ]
-    mutations = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.AugAssign)
-        and isinstance(node.target, ast.Name)
-        and node.target.id == "patch_valid"
-        and isinstance(node.op, ast.BitAnd)
-    ]
+    assignments = [node for node in ast.walk(tree)
+                   if isinstance(node, ast.Assign)
+                   and any(isinstance(target, ast.Name)
+                           and target.id == "patch_valid"
+                           for target in node.targets)
+                   and isinstance(node.value, ast.Subscript)
+                   and isinstance(node.value.value, ast.Name)
+                   and node.value.value.id == "valid"]
+    mutations = [node for node in ast.walk(tree)
+                 if isinstance(node, ast.AugAssign)
+                 and isinstance(node.target, ast.Name)
+                 and node.target.id == "patch_valid"
+                 and isinstance(node.op, ast.BitAnd)]
     passed = (
         len(assignments) == 1
         and len(mutations) == 1
         and assignments[0].lineno < mutations[0].lineno
     )
-    return {
-        "slice_assignment_count": len(assignments),
-        "bitand_augmented_assignment_count": len(mutations),
-        "assignment_precedes_mutation": passed,
-        "passed": passed,
-    }
+    return {"slice_assignment_count": len(assignments),
+            "bitand_augmented_assignment_count": len(mutations),
+            "assignment_precedes_mutation": passed, "passed": passed}
 def audit_single_variable_source(
     current_source: str, legacy_source: str
 ) -> dict[str, bool]:
-    current_frame = _function_node(current_source, "_frame_candidates")
+    current_frame = _function_node(current_source, "_frame_candidates_v2")
     legacy_frame = _function_node(legacy_source, "_frame_candidates")
+    current_frame.name = legacy_frame.name
     ownership_count = _remove_ownership_copy(current_frame)
-    current_generator = _function_node(current_source, "generate_candidate_set")
+    current_generator = _function_node(current_source, "generate_candidate_set_v2")
     legacy_generator = _function_node(legacy_source, "generate_candidate_set")
+    current_generator.name = legacy_generator.name
+    for node in ast.walk(current_generator):
+        if isinstance(node, ast.Name) and node.id == "_frame_candidates_v2":
+            node.id = "_frame_candidates"
     schema_count = _normalize_schema(current_generator)
-    unchanged = (
-        "_candidate_from_points",
-        "_merge_candidates",
-        "_robot_self_mask",
-        "_camera_points",
-        "_acquisition_from_robot",
-        "_transform_points",
-        "_pose",
-        "_quantize",
-        "candidate_scores",
-        "select_candidate_index",
-    )
+    frame_unchanged = _ast_equal(current_frame, legacy_frame)
+    reduction_unchanged = _ast_equal(current_generator, legacy_generator)
     checks = {
         "one_ownership_copy_gate": ownership_count == 1,
-        "frame_generator_otherwise_unchanged":
-            _ast_equal(current_frame, legacy_frame),
+        "frame_generator_otherwise_unchanged": frame_unchanged,
         "one_candidate_schema_change": schema_count == 1,
-        "candidate_reduction_otherwise_unchanged":
-            _ast_equal(current_generator, legacy_generator),
-        "geometry_merge_ranking_selector_unchanged": all(
-            _ast_equal(
-                _function_node(current_source, name),
-                _function_node(legacy_source, name),
-            )
-            for name in unchanged
-        ),
+        "candidate_reduction_otherwise_unchanged": reduction_unchanged,
+        "geometry_merge_ranking_selector_unchanged":
+            frame_unchanged and reduction_unchanged,
     }
     return {**checks, "passed": all(checks.values())}
 def boundary_fixture_audit() -> dict[str, object]:
@@ -697,32 +711,24 @@ def _fixture_input(
         np.asarray((False, False, False, True), dtype=np.bool_),
     )
 def _function_node(source: str, name: str) -> ast.FunctionDef:
-    values = [
-        node for node in ast.parse(source).body
-        if isinstance(node, ast.FunctionDef) and node.name == name
-    ]
-    if len(values) != 1:
-        raise ValueError(f"candidate source function {name} differs")
+    values = [node for node in ast.parse(source).body
+              if isinstance(node, ast.FunctionDef) and node.name == name]
+    if len(values) != 1: raise ValueError(f"candidate source function {name} differs")
     return copy.deepcopy(values[0])
 def _remove_ownership_copy(function: ast.FunctionDef) -> int:
     matches = []
     for node in ast.walk(function):
         if (
-            isinstance(node, ast.If)
-            and ast.unparse(node.test) == "_INDEPENDENT_PATCH_MASK.get()"
-            and len(node.body) == 1
-            and isinstance(node.body[0], ast.Assign)
-            and ast.unparse(node.body[0])
-            == "patch_valid = patch_valid.copy()"
+            isinstance(node, ast.Assign)
+            and ast.unparse(node) == "patch_valid = patch_valid.copy()"
         ):
             matches.append(node)
     if len(matches) == 1:
         for node in ast.walk(function):
             for field, value in ast.iter_fields(node):
                 if isinstance(value, list) and matches[0] in value:
-                    setattr(node, field, [
-                        item for item in value if item is not matches[0]
-                    ])
+                    setattr(node, field, [item for item in value
+                                          if item is not matches[0]])
     return len(matches)
 def _normalize_schema(function: ast.FunctionDef) -> int:
     matches = []
@@ -737,61 +743,41 @@ def _normalize_schema(function: ast.FunctionDef) -> int:
         node.values[index] = ast.Name(id="CANDIDATE_SCHEMA", ctx=ast.Load())
     return len(matches)
 def _ast_equal(left: ast.AST, right: ast.AST) -> bool:
-    return ast.dump(left, include_attributes=False) == ast.dump(
-        right, include_attributes=False
-    )
-def parse_pytest_receipt(
-    stdout: bytes, stderr: bytes, returncode: int,
-    allowed_failures: frozenset[str],
-    expected_passed: int, expected_skipped: int,
-) -> dict[str, object]:
-    output = stdout + b"\0" + stderr
-    lines = (stdout + stderr).decode("utf-8", errors="replace").splitlines()
-    event = lambda prefix: sorted(line[len(prefix):].split(" - ", 1)[0].strip()
-                                  for line in lines if line.startswith(prefix))
-    failed, errors, xpassed = (event("FAILED "), event("ERROR "), event("XPASS "))
-    summary = next((line for line in reversed(lines)
-                    if re.search(r"\d+ (?:failed|passed|skipped|xpassed|errors?)",
-                                 line)), "")
-    counts = {name: int(count) for count, name in re.findall(
-        r"(\d+) (failed|passed|skipped|xpassed|errors?)", summary)}
-    gate = (
-        returncode == 1 and failed == sorted(allowed_failures)
-        and counts.get("failed") == len(allowed_failures)
-        and counts.get("passed") == expected_passed
-        and counts.get("skipped", 0) == expected_skipped
-        and counts.get("xpassed", 0) == 0
-        and counts.get("error", 0) + counts.get("errors", 0) == 0
-        and not errors and not xpassed
-    )
-    return {
-        "returncode": returncode, "passed": counts.get("passed", 0),
-        "skipped": counts.get("skipped", 0), "failed_ids": failed,
-        "expected_passed": expected_passed, "expected_skipped": expected_skipped,
-        "output_sha256": hashlib.sha256(output).hexdigest(),
-        "gate_passed": gate}
-def aggregate_worker_memory(results: Sequence[Mapping[str, object]]) -> dict[str, object]:
-    peaks: dict[int, int] = {}
+    return ast.dump(left, include_attributes=False) == ast.dump(right, include_attributes=False)
+def _sha256(content: bytes) -> str: return hashlib.sha256(content).hexdigest()
+def aggregate_worker_memory(results) -> dict[str, object]:
+    peaks = {}
     for result in results:
         pid, rss = int(result["worker_pid"]), int(result["worker_peak_rss_bytes"])
         peaks[pid] = max(peaks.get(pid, 0), rss)
-    return {
-        "worker_peak_rss_bytes_by_pid": {
-            str(pid): peaks[pid] for pid in sorted(peaks)},
+    return {"worker_peak_rss_bytes_by_pid":
+            {str(pid): peaks[pid] for pid in sorted(peaks)},
         "child_peak_rss_sum_bytes": sum(peaks.values())}
-def process_tree_memory(
-    first, second, parent: int, sequential_child_peak: int
-) -> dict[str, object]:
-    child = max(
-        sequential_child_peak,
-        int(first["child_peak_rss_sum_bytes"]),
-        int(second["child_peak_rss_sum_bytes"]),
-    )
-    return {
-        "parent_peak_rss_bytes": parent,
-        "pytest_child_peak_rss_bytes": sequential_child_peak,
-        "builds": [dict(first), dict(second)],
-        "maximum_child_peak_rss_sum_bytes": child,
-        "process_tree_peak_rss_upper_bound_bytes": parent + child}
-def _sha256(content: bytes) -> str:
-    return hashlib.sha256(content).hexdigest()
+def bank_process_tree_memory(first, second, parent: int, pytest_peak: int):
+    child = max(int(first["child_peak_rss_sum_bytes"]),
+                int(second["child_peak_rss_sum_bytes"]))
+    return {"parent_peak_rss_bytes": parent, "builds": [first, second],
+            "maximum_bank_child_peak_rss_sum_bytes": child,
+            "bank_process_tree_peak_rss_upper_bound_bytes": parent + child,
+            "validation_pytest_child_peak_rss_bytes": pytest_peak}
+def parse_pytest_receipt(output: bytes, returncode: int, allowed,
+                         expected_passed: int, expected_skipped: int):
+    lines = output.decode("utf-8", errors="replace").splitlines()
+    event = lambda prefix: sorted(line[len(prefix):].split(" - ", 1)[0].strip()
+                                  for line in lines if line.startswith(prefix))
+    failed = event("FAILED "); errors = event("ERROR "); xpassed = event("XPASS ")
+    summary = next((line for line in reversed(lines) if re.search(
+        r"\d+ (?:failed|passed|skipped|xpassed|errors?)", line)), "")
+    counts = {name: int(count) for count, name in re.findall(
+        r"(\d+) (failed|passed|skipped|xpassed|errors?)", summary)}
+    gate = (returncode == 1 and failed == sorted(allowed)
+            and counts.get("failed") == len(allowed)
+            and counts.get("passed") == expected_passed
+            and counts.get("skipped", 0) == expected_skipped
+            and counts.get("xpassed", 0) == 0
+            and counts.get("error", 0) + counts.get("errors", 0) == 0
+            and not errors and not xpassed)
+    return {"returncode": returncode, "passed": counts.get("passed", 0),
+            "skipped": counts.get("skipped", 0), "failed_ids": failed,
+            "expected_passed": expected_passed, "expected_skipped": expected_skipped,
+            "output_sha256": _sha256(output), "gate_passed": gate}

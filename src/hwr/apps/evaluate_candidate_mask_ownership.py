@@ -26,18 +26,12 @@ from hwr.apps import (
 )
 from hwr.eval import candidate_mask_ownership as ownership
 from hwr.eval import target_selection
-MODULE_NAME = "hwr.apps.evaluate_candidate_mask_ownership"
-PROPOSAL_ID = "R0001-P79-E1"
-BANK_SCHEMA = "hwr.p79-candidate-bank/v1"
-REGRESSION_SCHEMA = "hwr.p79-candidate-mask-regression/v1"
-REPORT_SCHEMA = "hwr.p79-candidate-mask-ownership-report/v1"
-MANIFEST_SCHEMA = "hwr.p79-candidate-mask-ownership-artifacts/v1"
-FROZEN_DOCUMENT_COMMIT = "61d85cda1b96058831b4f93c7ad21a39f51cc2ab"
-FROZEN_DOCUMENT_PATH = Path("docs/research-loop/0014/03-experiment.md")
-REVIEW_COMMIT = "41eae6575407263fdcbe1b96667b33bdc2392fd6"
+MODULE_NAME = "hwr.apps.evaluate_candidate_mask_ownership"; PROPOSAL_ID = "R0001-P79-E1"
+BANK_SCHEMA = "hwr.p79-candidate-bank/v1"; REGRESSION_SCHEMA = "hwr.p79-candidate-mask-regression/v1"
+REPORT_SCHEMA = "hwr.p79-candidate-mask-ownership-report/v1"; MANIFEST_SCHEMA = "hwr.p79-candidate-mask-ownership-artifacts/v1"
+FROZEN_DOCUMENT_COMMIT = "61d85cda1b96058831b4f93c7ad21a39f51cc2ab"; FROZEN_DOCUMENT_PATH = Path("docs/research-loop/0014/03-experiment.md")
 OLD_SOURCE_COMMIT = "d67791a53491ce37cddaef4bd7d6b71ad3e66ac2"
-FORMAL_INPUT = Path("runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001")
-FORMAL_OUTPUT = Path("runs/research-loop/0014/r0014-p79-candidate-bank-s20267901")
+FORMAL_INPUT = Path("runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001"); FORMAL_OUTPUT = Path("runs/research-loop/0014/r0014-p79-candidate-bank-s20267901")
 EXPECTED_INPUTS = {
     "capsules.json": "223cb403def742b82f6c8cfe1916b204b76bb29304e2fc94d64318b58ee74cbf",
     "plan.json": "5eec1d65527a837667d2e53d015c8cb38672a42c3856155ae279921c6b6413ab",
@@ -53,13 +47,10 @@ HISTORICAL_ARTIFACT_TREES = {
     "runs/research-loop/0012/r0012-p60-phase-entry-s20266001": "107e08cb3fde5efca38e2f248bc4d50bc0763e2e",
     "runs/research-loop/0013/r0013-p66-predictive-witness-s20266601": "2595086ad308d06dadeaea0c2caafab862b3638e",
 }
-MAX_WALL_SECONDS, MAX_RSS_BYTES = 10 * 60, 4 * 1024**3
-MAX_ARTIFACT_BYTES, MIN_DISK_FREE_BYTES = 25 * 1024**2, 20 * 1024**3
-PYTEST_COMMAND = (".venv/bin/python", "-m", "pytest"); EXPECTED_PYTEST_PASSED, EXPECTED_PYTEST_SKIPPED = 1113, 11
+MAX_WALL_SECONDS, MAX_RSS_BYTES = 10 * 60, 4 * 1024**3; MAX_ARTIFACT_BYTES, MIN_DISK_FREE_BYTES = 25 * 1024**2, 20 * 1024**3
+PYTEST_COMMAND = (".venv/bin/python", "-m", "pytest"); EXPECTED_PYTEST_PASSED, EXPECTED_PYTEST_SKIPPED = 1115, 11
 ALLOWED_PYTEST_FAILURES = frozenset((
-    "tests/test_cartesian_convergence_app.py::test_source_tree_identity_and_bank_dependency_drift_fail_closed",
     "tests/test_entity_candidate_mapping.py::test_frozen_document_history_and_input_provenance_are_complete",
-    "tests/test_phase_entry_geometry_app.py::test_frozen_document_provenance_and_historical_trees_are_live",
 ))
 ALLOWED_CHANGES = frozenset((
     "src/hwr/eval/target_selection.py",
@@ -81,8 +72,8 @@ CLAIM_FLAGS = dict.fromkeys((
 ), False)
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--input", type=Path, required=True); parser.add_argument(
+        "--output", type=Path, required=True)
     return parser
 def run(arguments: argparse.Namespace) -> dict[str, object]:
     root = Path(__file__).resolve().parents[3]
@@ -97,14 +88,13 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
     source_commit = _source_commit(root)
     provenance = _provenance(root, input_path, source_commit)
     _require_provenance(provenance)
-    receipt = _pytest_receipt(root, deadline)
+    receipt, pytest_output = _pytest_receipt(root, deadline)
     capsules = _read_json(input_path / "capsules.json")
     first = build_bank(input_path, capsules, started=started)
     second = build_bank(input_path, capsules, started=started)
     replay_identical = _full_bank_replay_bit_identical(first, second)
-    memory = ownership.process_tree_memory(
-        first["memory"], second["memory"], _peak_rss_bytes(),
-        receipt["pytest_child_peak_rss_bytes"],
+    memory = _memory_summary(
+        first, second, receipt["validation_pytest_child_peak_rss_bytes"]
     )
     history_after = _directory_identities(root, input_path)
     history_unchanged = history_after == provenance["input_files"]
@@ -113,14 +103,13 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         replay_identical=replay_identical,
         history_unchanged=history_unchanged,
         provenance=provenance,
-        pytest_receipt=receipt,
-        memory=memory,
-        source_commit=source_commit,
+        pytest_receipt=receipt, memory=memory, source_commit=source_commit,
         command=_command(arguments),
         elapsed=time.perf_counter() - started,
     )
     artifacts = {
         **first["artifacts"],
+        "pytest-output.txt": pytest_output,
         "report.json": _json_bytes(report),
     }
     manifest = _manifest(
@@ -129,14 +118,12 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         provenance,
         artifacts,
         report,
-        receipt,
-        memory,
-        time.perf_counter() - started,
+        receipt, memory, time.perf_counter() - started,
     )
     artifacts["manifest.json"] = _json_bytes(manifest)
     _require_budget(
         time.perf_counter() - started,
-        int(memory["process_tree_peak_rss_upper_bound_bytes"]),
+        int(memory["bank_process_tree_peak_rss_upper_bound_bytes"]),
         artifacts,
     )
     _write_atomic(output, artifacts)
@@ -223,7 +210,7 @@ def _build_episode_job(job) -> dict[str, object]:
     blob_path = f"blobs/{identity}/candidate-set.json"
     old = _old_candidate_identity(input_path, episode["candidate_set"])
     new = {
-        "schema_version": target_selection.CANDIDATE_SCHEMA_V2,
+        "schema_version": ownership.CANDIDATE_SCHEMA_V2,
         "path": blob_path,
         "sha256": candidate_set.candidate_set_sha256,
         "bytes": len(candidate_set.canonical_bytes),
@@ -289,6 +276,9 @@ def _full_bank_replay_bit_identical(first, second) -> bool:
         and set(first_artifacts) == set(second_artifacts) == required
         and all(first_artifacts[name] == second_artifacts[name] for name in required)
     )
+def _memory_summary(first, second, pytest_peak: int) -> dict[str, object]:
+    return ownership.bank_process_tree_memory(
+        first["memory"], second["memory"], _peak_rss_bytes(), pytest_peak)
 def _episode_inputs(
     input_path: Path,
     episode: Mapping[str, object],
@@ -360,7 +350,7 @@ def _regression_record(episode, old, new, selected_index, audit):
                 old["selected_canonical_identity"],
         },
         "new": {
-            "schema_version": target_selection.CANDIDATE_SCHEMA_V2,
+            "schema_version": ownership.CANDIDATE_SCHEMA_V2,
             "candidate_count": len(new.candidates),
             "candidate_set_sha256": new.candidate_set_sha256,
             "selected_index": selected_index,
@@ -376,9 +366,9 @@ def _old_candidate_identity(
     content = _read_bound_blob(input_path, value)
     document = json.loads(content)
     if (
-        value.get("schema_version") != target_selection.LEGACY_CANDIDATE_SCHEMA
+        value.get("schema_version") != target_selection.CANDIDATE_SCHEMA
         or document.get("schema_version")
-        != target_selection.LEGACY_CANDIDATE_SCHEMA
+        != target_selection.CANDIDATE_SCHEMA
     ):
         raise RuntimeError("P79 old candidate schema differs")
     result = dict(value)
@@ -493,7 +483,7 @@ def _report(first, *, replay_identical, history_unchanged, provenance,
         ),
         "candidate_schema_v2": all(
             value["candidate_set"]["schema_version"]
-            == target_selection.CANDIDATE_SCHEMA_V2
+            == ownership.CANDIDATE_SCHEMA_V2
             for value in first["bank"]["episodes"]
         ),
         "historical_artifacts_byte_identical": history_unchanged,
@@ -520,8 +510,7 @@ def _report(first, *, replay_identical, history_unchanged, provenance,
         "episode_count": len(audits),
         "capture_frame_count": frame_count,
         "full_bank_replay_bit_identical": replay_identical,
-        "pytest_receipt": pytest_receipt,
-        "memory": memory,
+        "pytest_receipt": pytest_receipt, "memory": memory,
         "overlap_fixture": fixture,
         "boundary_controls": boundaries,
         "checks": {**checks, "passed": passed},
@@ -546,13 +535,17 @@ def _provenance(
         f"{input_prefix}/{name}" for name in artifacts
     } | {f"{input_prefix}/manifest.json"}
     capture_ledger = _capture_ledger(input_path)
-    current_source = (root / "src/hwr/eval/target_selection.py").read_text()
+    current_source = (root / "src/hwr/eval/candidate_mask_ownership.py").read_text()
     legacy_source = _git_show(
-        root, REVIEW_COMMIT, Path("src/hwr/eval/target_selection.py")
+        root, FROZEN_DOCUMENT_COMMIT, Path("src/hwr/eval/target_selection.py"),
     ).decode()
     single_variable = ownership.audit_single_variable_source(
         current_source, legacy_source
     )
+    target_path = "src/hwr/eval/target_selection.py"
+    target_blob = _git(root, "hash-object", target_path)
+    frozen_target_blob = _git(root, "rev-parse",
+                              f"{FROZEN_DOCUMENT_COMMIT}:{target_path}")
     historical_artifacts = _historical_artifact_identities(root)
     checks = {
         "workspace_clean":
@@ -619,6 +612,9 @@ def _provenance(
         "legacy_ast_defect_confirmed":
             ownership.audit_legacy_source(legacy_source)["passed"] is True,
         "single_variable_source_change": single_variable["passed"] is True,
+        "target_selection_frozen_blob_matches":
+            target_blob == frozen_target_blob
+            == "d7e588ba76ce18882255e3e22b1f86459ab235dd",
     }
     return {
         "checks": {**checks, "passed": all(checks.values())},
@@ -626,11 +622,16 @@ def _provenance(
         "manifest_artifacts": artifact_checks,
         "capture_input_ledger": capture_ledger,
         "legacy_defect_source": {
-            "commit": REVIEW_COMMIT,
+            "commit": FROZEN_DOCUMENT_COMMIT,
             "path": "src/hwr/eval/target_selection.py",
             "audit": ownership.audit_legacy_source(legacy_source),
         },
         "single_variable_source_audit": single_variable,
+        "corrected_generator_source": {
+            "path": "src/hwr/eval/candidate_mask_ownership.py",
+            "schema_version": ownership.CANDIDATE_SCHEMA_V2},
+        "target_selection_frozen_blob": {
+            "working_blob": target_blob, "frozen_blob": frozen_target_blob},
         "historical_artifact_trees": historical_artifacts,
         "frozen_document": _identity(root, root / FROZEN_DOCUMENT_PATH),
         "sources": {
@@ -648,7 +649,7 @@ def _require_provenance(value: Mapping[str, object]) -> None:
         raise RuntimeError(f"P79 provenance gate failed: {', '.join(failed)}")
 def _manifest(
     source_commit, command, provenance, artifacts, report,
-    pytest_receipt, memory, elapsed,
+    pytest_receipt, memory, elapsed
 ) -> dict[str, object]:
     return {
         "schema_version": MANIFEST_SCHEMA,
@@ -676,6 +677,7 @@ def _manifest(
         "budgets": {
             "maximum_wall_seconds": MAX_WALL_SECONDS,
             "maximum_peak_rss_bytes": MAX_RSS_BYTES,
+            "peak_rss_scope": "bank_process_tree",
             "maximum_artifact_bytes": MAX_ARTIFACT_BYTES,
             "minimum_disk_free_bytes": MIN_DISK_FREE_BYTES,
         },
@@ -722,20 +724,14 @@ def _directory_identities(root: Path, directory: Path) -> list[dict[str, object]
     ]
 def _input_identity(directory: Path, path: Path) -> dict[str, object]:
     content = path.read_bytes()
-    return {
-        "path": (FORMAL_INPUT / path.relative_to(directory)).as_posix(),
-        "bytes": len(content), "sha256": _sha256(content),
-    }
+    return {"path": (FORMAL_INPUT / path.relative_to(directory)).as_posix(),
+            "bytes": len(content), "sha256": _sha256(content)}
 def _selected_identity(candidate_set, index: int) -> str | None:
-    return (
-        None
-        if index < 0
-        else _record_identity(list(candidate_set.candidates[index].canonical_record()))
-    )
+    return (None if index < 0 else _record_identity(
+        list(candidate_set.candidates[index].canonical_record())))
 def _record_identity(record: object) -> str:
     return _sha256(json.dumps(record, separators=(",", ":")).encode("ascii"))
-def _score_sha256(scores: Sequence[float]) -> str:
-    return _sha256(np.ascontiguousarray(scores, dtype="<f8").tobytes())
+def _score_sha256(scores: Sequence[float]) -> str: return _sha256(np.ascontiguousarray(scores, dtype="<f8").tobytes())
 def _require_frozen_paths(root: Path, input_path: Path, output: Path) -> None:
     if input_path != (root / FORMAL_INPUT).resolve():
         raise ValueError("P79 input path differs from frozen path")
@@ -744,19 +740,16 @@ def _require_frozen_paths(root: Path, input_path: Path, output: Path) -> None:
 def _require_budget(
     elapsed: float, peak_rss: int, artifacts: Mapping[str, bytes]
 ) -> None:
-    if elapsed > MAX_WALL_SECONDS:
-        raise RuntimeError("P79 wall-time budget exceeded")
-    if peak_rss > MAX_RSS_BYTES:
-        raise RuntimeError("P79 RSS budget exceeded")
+    if elapsed > MAX_WALL_SECONDS: raise RuntimeError("P79 wall-time budget exceeded")
+    if peak_rss > MAX_RSS_BYTES: raise RuntimeError("P79 RSS budget exceeded")
     if sum(len(value) for value in artifacts.values()) > MAX_ARTIFACT_BYTES:
         raise RuntimeError("P79 artifact budget exceeded")
 def _require_disk(output: Path) -> None:
     parent = output.parent
-    while not parent.exists():
-        parent = parent.parent
+    while not parent.exists(): parent = parent.parent
     if shutil.disk_usage(parent).free < MIN_DISK_FREE_BYTES:
         raise RuntimeError("P79 disk-free guard failed")
-def _pytest_receipt(root: Path, deadline: float) -> dict[str, object]:
+def _pytest_receipt(root: Path, deadline: float):
     remaining = deadline - time.perf_counter()
     if remaining <= 0.0:
         raise RuntimeError("P79 wall-time budget exceeded before pytest")
@@ -766,32 +759,39 @@ def _pytest_receipt(root: Path, deadline: float) -> dict[str, object]:
                                 capture_output=True, timeout=remaining)
     except subprocess.TimeoutExpired as error:
         raise RuntimeError("P79 wall-time budget exceeded during pytest") from error
-    receipt = ownership.parse_pytest_receipt(
-        result.stdout, result.stderr, result.returncode, ALLOWED_PYTEST_FAILURES,
-        EXPECTED_PYTEST_PASSED, EXPECTED_PYTEST_SKIPPED,
-    )
+    output = result.stdout + result.stderr
+    receipt = _parse_pytest_receipt(output, result.returncode)
     if receipt["gate_passed"] is not True:
         raise RuntimeError("P79 full pytest receipt differs")
-    return {
-        "command": list(PYTEST_COMMAND), "baseline_commit": FROZEN_DOCUMENT_COMMIT,
+    return ({
+        "command": list(PYTEST_COMMAND),
+        "baseline_commit": FROZEN_DOCUMENT_COMMIT,
         "allowed_failure_ids": sorted(ALLOWED_PYTEST_FAILURES),
-        "pytest_child_peak_rss_bytes": _children_peak_rss_bytes(), **receipt}
-def _read_json(path: Path) -> object:
-    return json.loads(path.read_text(encoding="utf-8"))
+        "output_path": "pytest-output.txt",
+        "memory_scope": "validation_only_excluded_from_bank_rss_budget",
+        "validation_pytest_child_peak_rss_bytes": _children_peak_rss_bytes(),
+        **receipt,
+    }, output)
+def _parse_pytest_receipt(output: bytes, returncode: int):
+    return ownership.parse_pytest_receipt(
+        output, returncode, ALLOWED_PYTEST_FAILURES,
+        EXPECTED_PYTEST_PASSED, EXPECTED_PYTEST_SKIPPED)
+def _read_json(path: Path) -> object: return json.loads(path.read_text(encoding="utf-8"))
 def _git(root: Path, *arguments: str) -> str:
     return subprocess.run(("git", *arguments), cwd=root, check=True,
                           capture_output=True, text=True).stdout.strip()
 def _git_lines(root: Path, *arguments: str) -> list[str]:
     output = _git(root, *arguments); return [] if not output else output.splitlines()
 def _git_show(root: Path, commit: str, path: Path) -> bytes:
-    return subprocess.run(
-        ("git", "show", f"{commit}:{path.as_posix()}"), cwd=root,
-        check=True, capture_output=True).stdout
+    return subprocess.run(("git", "show", f"{commit}:{path.as_posix()}"),
+                          cwd=root, check=True, capture_output=True).stdout
 def _command(arguments: argparse.Namespace) -> tuple[str, ...]:
     return (sys.executable, "-m", MODULE_NAME, "--input",
             arguments.input.as_posix(), "--output", arguments.output.as_posix())
-def _peak_rss_bytes() -> int: value = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss); return value if sys.platform == "darwin" else value * 1024
-def _children_peak_rss_bytes() -> int: value = int(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss); return value if sys.platform == "darwin" else value * 1024
+def _rss_bytes(who) -> int:
+    value = int(resource.getrusage(who).ru_maxrss); return value if sys.platform == "darwin" else value * 1024
+def _peak_rss_bytes() -> int: return _rss_bytes(resource.RUSAGE_SELF)
+def _children_peak_rss_bytes() -> int: return _rss_bytes(resource.RUSAGE_CHILDREN)
 def main(argv: Sequence[str] | None = None) -> int:
     result = run(build_parser().parse_args(argv))
     print(json.dumps(result, indent=2, sort_keys=True))
