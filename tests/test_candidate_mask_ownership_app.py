@@ -166,6 +166,7 @@ def test_run_writes_v2_bank_atomically_without_copying_inputs(
             "expected_passed": app.EXPECTED_PYTEST_PASSED,
             "expected_skipped": app.EXPECTED_PYTEST_SKIPPED,
             "failed_ids": sorted(app.ALLOWED_PYTEST_FAILURES),
+            "pytest_child_peak_rss_bytes": 1,
             "output_sha256": "b" * 64, "gate_passed": True,
         },
     )
