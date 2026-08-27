@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from hwr.eval import phase_entry_geometry
 from hwr.eval import target_selection
 from hwr.adapters.mujoco.candidate_association import (
     CandidateAssociationBackend,
@@ -30,6 +31,7 @@ from hwr.eval.target_selection import (
 
 ROOT = Path(__file__).resolve().parents[1]
 P50 = ROOT / "runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001"
+P60 = ROOT / "runs/research-loop/0012/r0012-p60-phase-entry-s20266001"
 
 
 def test_backend_binds_segmentation_to_returned_observation_identity() -> None:
@@ -100,6 +102,20 @@ def test_p68_consumer_fails_closed_on_v2_candidate_schema(
             acquisition_base_pose=(0.0, 0.0, 0.0),
             final_input=b"unused",
         )
+
+
+def test_p60_actual_selected_candidate_identity_uses_legacy_schema() -> None:
+    document = json.loads((P60 / "episodes.json").read_text())
+    record = next(
+        value for value in document["records"]
+        if value["candidate_count"] > 0 and value["selected_record"] is not None
+    )
+
+    phase_entry_geometry._validate_candidate_identity(record)
+
+    candidate = json.loads(bytes.fromhex(record["candidate_bytes_hex"]))
+    assert candidate["schema_version"] == target_selection.CANDIDATE_SCHEMA
+    assert candidate["schema_version"] == "hwr.p41-target-candidates/v1"
 
 
 def test_association_counts_every_support_pixel_and_applies_ratio() -> None:

@@ -1,6 +1,5 @@
 """Build the frozen R0001-P79-E1 corrected offline candidate bank."""
 from __future__ import annotations
-
 import argparse
 from concurrent.futures import ProcessPoolExecutor, TimeoutError
 import importlib.metadata
@@ -15,7 +14,6 @@ import time
 from pathlib import Path
 from typing import Mapping, Sequence
 import numpy as np
-
 from hwr.apps import (
     candidate_commit_is_ancestor as _is_ancestor,
     candidate_file_identity as _identity,
@@ -57,6 +55,12 @@ HISTORICAL_ARTIFACT_TREES = {
 }
 MAX_WALL_SECONDS, MAX_RSS_BYTES = 10 * 60, 4 * 1024**3
 MAX_ARTIFACT_BYTES, MIN_DISK_FREE_BYTES = 25 * 1024**2, 20 * 1024**3
+PYTEST_COMMAND = (".venv/bin/python", "-m", "pytest"); EXPECTED_PYTEST_PASSED, EXPECTED_PYTEST_SKIPPED = 1113, 11
+ALLOWED_PYTEST_FAILURES = frozenset((
+    "tests/test_cartesian_convergence_app.py::test_source_tree_identity_and_bank_dependency_drift_fail_closed",
+    "tests/test_entity_candidate_mapping.py::test_frozen_document_history_and_input_provenance_are_complete",
+    "tests/test_phase_entry_geometry_app.py::test_frozen_document_provenance_and_historical_trees_are_live",
+))
 ALLOWED_CHANGES = frozenset((
     "src/hwr/eval/target_selection.py",
     "src/hwr/eval/candidate_mask_ownership.py",
@@ -75,8 +79,6 @@ CLAIM_FLAGS = dict.fromkeys((
     "generalization_claim_allowed", "hardware_safety_claim_allowed",
     "candidate_quality_claim_allowed", "selector_improvement_claim_allowed",
 ), False)
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True)
@@ -91,13 +93,19 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         raise FileExistsError(output)
     _require_disk(output)
     started = time.perf_counter()
+    deadline = started + MAX_WALL_SECONDS
     source_commit = _source_commit(root)
     provenance = _provenance(root, input_path, source_commit)
     _require_provenance(provenance)
+    receipt = _pytest_receipt(root, deadline)
     capsules = _read_json(input_path / "capsules.json")
     first = build_bank(input_path, capsules, started=started)
     second = build_bank(input_path, capsules, started=started)
     replay_identical = _full_bank_replay_bit_identical(first, second)
+    memory = ownership.process_tree_memory(
+        first["memory"], second["memory"], _peak_rss_bytes(),
+        receipt["pytest_child_peak_rss_bytes"],
+    )
     history_after = _directory_identities(root, input_path)
     history_unchanged = history_after == provenance["input_files"]
     report = _report(
@@ -105,6 +113,8 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         replay_identical=replay_identical,
         history_unchanged=history_unchanged,
         provenance=provenance,
+        pytest_receipt=receipt,
+        memory=memory,
         source_commit=source_commit,
         command=_command(arguments),
         elapsed=time.perf_counter() - started,
@@ -119,12 +129,14 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         provenance,
         artifacts,
         report,
+        receipt,
+        memory,
         time.perf_counter() - started,
     )
     artifacts["manifest.json"] = _json_bytes(manifest)
     _require_budget(
         time.perf_counter() - started,
-        int(manifest["runtime"]["peak_rss_bytes"]),
+        int(memory["process_tree_peak_rss_upper_bound_bytes"]),
         artifacts,
     )
     _write_atomic(output, artifacts)
@@ -133,8 +145,6 @@ def run(arguments: argparse.Namespace) -> dict[str, object]:
         "episode_count": report["episode_count"],
         "bank_sha256": _sha256(artifacts["bank.json"]),
         "manifest_sha256": _sha256(artifacts["manifest.json"])}
-
-
 def build_bank(
     input_path: Path,
     capsules: Mapping[str, object],
@@ -189,9 +199,11 @@ def _build_bank(input_path, capsules, started, max_workers):
     })
     if time.perf_counter() > deadline:
         raise RuntimeError("P79 wall-time budget exceeded")
+    memory = ownership.aggregate_worker_memory(results)
     return {
         "artifacts": artifacts, "bank": bank, "regression": regression,
-        "audits": [record["audit"] for record in regression_records]}
+        "audits": [record["audit"] for record in regression_records],
+        "memory": memory}
 def _build_episode_job(job) -> dict[str, object]:
     input_path_value, episode = job
     input_path = Path(input_path_value)
@@ -211,7 +223,7 @@ def _build_episode_job(job) -> dict[str, object]:
     blob_path = f"blobs/{identity}/candidate-set.json"
     old = _old_candidate_identity(input_path, episode["candidate_set"])
     new = {
-        "schema_version": target_selection.CANDIDATE_SCHEMA,
+        "schema_version": target_selection.CANDIDATE_SCHEMA_V2,
         "path": blob_path,
         "sha256": candidate_set.candidate_set_sha256,
         "bytes": len(candidate_set.canonical_bytes),
@@ -235,7 +247,8 @@ def _build_episode_job(job) -> dict[str, object]:
         "regression": _regression_record(
             episode, old, candidate_set, selected_index, audit),
         "blob_path": blob_path, "blob": candidate_set.canonical_bytes,
-        "frame_count": len(payloads),
+        "frame_count": len(payloads), "worker_pid": os.getpid(),
+        "worker_peak_rss_bytes": _peak_rss_bytes(),
     }
 def _run_ordered_jobs(function, jobs, deadline, workers):
     remaining = deadline - time.perf_counter()
@@ -259,7 +272,6 @@ def _abort_executor(executor) -> None:
     for process in processes:
         if process.is_alive():
             process.terminate()
-    executor.shutdown(wait=False, cancel_futures=True)
     deadline = time.monotonic() + 1.0
     for process in processes:
         process.join(max(0.0, deadline - time.monotonic()))
@@ -267,6 +279,7 @@ def _abort_executor(executor) -> None:
         if process.is_alive():
             process.kill()
             process.join()
+    executor.shutdown(wait=True, cancel_futures=True)
 def _full_bank_replay_bit_identical(first, second) -> bool:
     first_artifacts, second_artifacts = first["artifacts"], second["artifacts"]
     candidate_blobs = {name for name in first_artifacts if name.startswith("blobs/")}
@@ -347,7 +360,7 @@ def _regression_record(episode, old, new, selected_index, audit):
                 old["selected_canonical_identity"],
         },
         "new": {
-            "schema_version": target_selection.CANDIDATE_SCHEMA,
+            "schema_version": target_selection.CANDIDATE_SCHEMA_V2,
             "candidate_count": len(new.candidates),
             "candidate_set_sha256": new.candidate_set_sha256,
             "selected_index": selected_index,
@@ -425,7 +438,7 @@ def _paired_counts(records: Sequence[Mapping[str, object]]) -> dict[str, int]:
         ),
     }
 def _report(first, *, replay_identical, history_unchanged, provenance,
-            source_commit, command, elapsed):
+            pytest_receipt, memory, source_commit, command, elapsed):
     audits = first["audits"]
     frame_count = sum(int(value["frame_count"]) for value in audits)
     frame_checks = [frame for audit in audits for frame in audit["frames"]]
@@ -480,10 +493,11 @@ def _report(first, *, replay_identical, history_unchanged, provenance,
         ),
         "candidate_schema_v2": all(
             value["candidate_set"]["schema_version"]
-            == target_selection.CANDIDATE_SCHEMA
+            == target_selection.CANDIDATE_SCHEMA_V2
             for value in first["bank"]["episodes"]
         ),
         "historical_artifacts_byte_identical": history_unchanged,
+        "full_pytest_receipt": pytest_receipt["gate_passed"] is True,
     }
     passed = all(checks.values())
     audit_decisions = {str(value["decision"]) for value in audits}
@@ -506,6 +520,8 @@ def _report(first, *, replay_identical, history_unchanged, provenance,
         "episode_count": len(audits),
         "capture_frame_count": frame_count,
         "full_bank_replay_bit_identical": replay_identical,
+        "pytest_receipt": pytest_receipt,
+        "memory": memory,
         "overlap_fixture": fixture,
         "boundary_controls": boundaries,
         "checks": {**checks, "passed": passed},
@@ -631,7 +647,8 @@ def _require_provenance(value: Mapping[str, object]) -> None:
         )
         raise RuntimeError(f"P79 provenance gate failed: {', '.join(failed)}")
 def _manifest(
-    source_commit, command, provenance, artifacts, report, elapsed
+    source_commit, command, provenance, artifacts, report,
+    pytest_receipt, memory, elapsed,
 ) -> dict[str, object]:
     return {
         "schema_version": MANIFEST_SCHEMA,
@@ -651,7 +668,7 @@ def _manifest(
             "platform": platform.platform(),
             "cpu_count": os.cpu_count(),
             "wall_seconds": elapsed,
-            "peak_rss_bytes": _peak_rss_bytes(),
+            **memory,
             "disk_free_bytes": shutil.disk_usage(
                 Path(__file__).resolve().parents[3]
             ).free,
@@ -662,6 +679,7 @@ def _manifest(
             "maximum_artifact_bytes": MAX_ARTIFACT_BYTES,
             "minimum_disk_free_bytes": MIN_DISK_FREE_BYTES,
         },
+        "pytest_receipt": pytest_receipt,
         "artifacts": {
             name: {"bytes": len(content), "sha256": _sha256(content)}
             for name, content in sorted(artifacts.items())
@@ -723,8 +741,6 @@ def _require_frozen_paths(root: Path, input_path: Path, output: Path) -> None:
         raise ValueError("P79 input path differs from frozen path")
     if output != (root / FORMAL_OUTPUT).resolve():
         raise ValueError("P79 output path differs from frozen path")
-
-
 def _require_budget(
     elapsed: float, peak_rss: int, artifacts: Mapping[str, bytes]
 ) -> None:
@@ -734,56 +750,51 @@ def _require_budget(
         raise RuntimeError("P79 RSS budget exceeded")
     if sum(len(value) for value in artifacts.values()) > MAX_ARTIFACT_BYTES:
         raise RuntimeError("P79 artifact budget exceeded")
-
-
 def _require_disk(output: Path) -> None:
     parent = output.parent
     while not parent.exists():
         parent = parent.parent
     if shutil.disk_usage(parent).free < MIN_DISK_FREE_BYTES:
         raise RuntimeError("P79 disk-free guard failed")
-
-
+def _pytest_receipt(root: Path, deadline: float) -> dict[str, object]:
+    remaining = deadline - time.perf_counter()
+    if remaining <= 0.0:
+        raise RuntimeError("P79 wall-time budget exceeded before pytest")
+    environment = {**os.environ, "PYTEST_ADDOPTS": ""}
+    try:
+        result = subprocess.run(PYTEST_COMMAND, cwd=root, env=environment,
+                                capture_output=True, timeout=remaining)
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("P79 wall-time budget exceeded during pytest") from error
+    receipt = ownership.parse_pytest_receipt(
+        result.stdout, result.stderr, result.returncode, ALLOWED_PYTEST_FAILURES,
+        EXPECTED_PYTEST_PASSED, EXPECTED_PYTEST_SKIPPED,
+    )
+    if receipt["gate_passed"] is not True:
+        raise RuntimeError("P79 full pytest receipt differs")
+    return {
+        "command": list(PYTEST_COMMAND), "baseline_commit": FROZEN_DOCUMENT_COMMIT,
+        "allowed_failure_ids": sorted(ALLOWED_PYTEST_FAILURES),
+        "pytest_child_peak_rss_bytes": _children_peak_rss_bytes(), **receipt}
 def _read_json(path: Path) -> object:
     return json.loads(path.read_text(encoding="utf-8"))
 def _git(root: Path, *arguments: str) -> str:
-    return subprocess.run(
-        ("git", *arguments), cwd=root, check=True, capture_output=True, text=True,
-    ).stdout.strip()
-
-
+    return subprocess.run(("git", *arguments), cwd=root, check=True,
+                          capture_output=True, text=True).stdout.strip()
 def _git_lines(root: Path, *arguments: str) -> list[str]:
-    output = _git(root, *arguments)
-    return [] if not output else output.splitlines()
-
-
+    output = _git(root, *arguments); return [] if not output else output.splitlines()
 def _git_show(root: Path, commit: str, path: Path) -> bytes:
     return subprocess.run(
         ("git", "show", f"{commit}:{path.as_posix()}"), cwd=root,
-        check=True, capture_output=True,
-    ).stdout
-
-
+        check=True, capture_output=True).stdout
 def _command(arguments: argparse.Namespace) -> tuple[str, ...]:
-    return (
-        sys.executable,
-        "-m",
-        MODULE_NAME,
-        "--input",
-        arguments.input.as_posix(),
-        "--output",
-        arguments.output.as_posix(),
-    )
-
-
-def _peak_rss_bytes() -> int:
-    value = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-    return value if sys.platform == "darwin" else value * 1024
+    return (sys.executable, "-m", MODULE_NAME, "--input",
+            arguments.input.as_posix(), "--output", arguments.output.as_posix())
+def _peak_rss_bytes() -> int: value = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss); return value if sys.platform == "darwin" else value * 1024
+def _children_peak_rss_bytes() -> int: value = int(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss); return value if sys.platform == "darwin" else value * 1024
 def main(argv: Sequence[str] | None = None) -> int:
     result = run(build_parser().parse_args(argv))
     print(json.dumps(result, indent=2, sort_keys=True))
-    return int(result["decision"] !=
-               "accepted as deterministic candidate-generator correction")
-
+    return int(result["decision"] != "accepted as deterministic candidate-generator correction")
 if __name__ == "__main__":
     raise SystemExit(main())

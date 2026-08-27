@@ -1,27 +1,23 @@
 """Independent audit contracts for frozen R0001-P79-E1."""
 from __future__ import annotations
-
 import ast
 import copy
 import hashlib
 import json
+import re
 import sys
 from collections import Counter
 from dataclasses import dataclass
 from types import FrameType
-from typing import Iterable, Sequence
+from typing import Iterable, Mapping, Sequence
 import numpy as np
-
 from hwr.eval import target_selection
 from hwr.eval.target_selection import CandidateSet, PolicyVisibleInput, RawCandidate
-
 PROPOSAL_ID = "R0001-P79-E1"
 AUDIT_SCHEMA = "hwr.p79-candidate-mask-ownership-audit/v1"
 TRAVERSALS = ("row_major", "reverse_row_major", "column_major")
 ROWS = tuple(range(12, 180, 4))
 COLUMNS = tuple(range(12, 244, 4))
-
-
 @dataclass(frozen=True)
 class OracleFrame:
     raw: tuple[RawCandidate, ...]
@@ -30,8 +26,6 @@ class OracleFrame:
     mutation_count: int
     probe_ledger_sha256: str
     probe_sha256_pair_counts: tuple[tuple[str, str, int], ...]
-
-
 def audit_episode(
     keyframes: Sequence[bytes],
     *,
@@ -195,8 +189,6 @@ def audit_episode(
         },
         "checks": {**checks, "passed": all(checks.values())},
     }
-
-
 def _production_candidate_set(
     keyframes: Sequence[bytes],
     acquisition_base_pose: Sequence[float],
@@ -204,7 +196,6 @@ def _production_candidate_set(
 ) -> tuple[CandidateSet, dict[int, tuple[tuple[RawCandidate, ...], tuple[str, str]]]]:
     raw_by_frame = {}
     initial_masks = {}
-
     def trace(frame: FrameType, event: str, argument: object):
         if (
             event == "line"
@@ -228,7 +219,6 @@ def _production_candidate_set(
                 ),
             )
         return trace
-
     previous = sys.gettrace()
     try:
         sys.settrace(trace)
@@ -242,11 +232,8 @@ def _production_candidate_set(
     if set(raw_by_frame) != set(range(len(keyframes))):
         raise RuntimeError("production candidate frame trace is incomplete")
     return candidate_set, raw_by_frame
-
-
 def _production_frame(frame, origin, ordinal):
     initial = final = None
-
     def trace(current: FrameType, event: str, argument: object):
         nonlocal initial, final
         if current.f_code is target_selection._frame_candidates.__code__:
@@ -255,7 +242,6 @@ def _production_frame(frame, origin, ordinal):
             elif event == "return":
                 final = _sha256(current.f_locals["valid"].tobytes())
         return trace
-
     previous = sys.gettrace()
     try:
         sys.settrace(trace)
@@ -265,8 +251,6 @@ def _production_frame(frame, origin, ordinal):
     if initial is None or final is None:
         raise RuntimeError("production candidate frame trace is incomplete")
     return raw, (initial, final)
-
-
 def oracle_frame_candidates(
     frame: PolicyVisibleInput,
     acquisition_base_pose: tuple[float, float, float],
@@ -326,8 +310,6 @@ def oracle_frame_candidates(
         ledger.hexdigest(),
         tuple((before, after, count) for (before, after), count in sorted(pairs.items())),
     )
-
-
 def candidate_set_from_raw(
     input_hashes: Sequence[str],
     raw: Sequence[RawCandidate],
@@ -347,7 +329,7 @@ def candidate_set_from_raw(
     )[:64]
     ordered = tuple(sorted(ordered, key=target_selection.Candidate.canonical_key))
     document = {
-        "schema_version": target_selection.CANDIDATE_SCHEMA,
+        "schema_version": target_selection.CANDIDATE_SCHEMA_V2,
         "acquisition_input_sha256": list(input_hashes),
         "candidate_count": len(ordered),
         "candidates": [list(item.canonical_record()) for item in ordered],
@@ -361,8 +343,6 @@ def candidate_set_from_raw(
         canonical,
         _sha256(canonical),
     )
-
-
 def candidate_visible_bytes(value: PolicyVisibleInput) -> bytes:
     arrays = (
         value.head_rgb_uint8,
@@ -387,8 +367,6 @@ def candidate_visible_bytes(value: PolicyVisibleInput) -> bytes:
         *payloads,
         np.ascontiguousarray(selected, dtype="<f8").tobytes(),
     ))
-
-
 def audit_legacy_source(source: str) -> dict[str, object]:
     tree = ast.parse(source)
     assignments = [
@@ -422,8 +400,6 @@ def audit_legacy_source(source: str) -> dict[str, object]:
         "assignment_precedes_mutation": passed,
         "passed": passed,
     }
-
-
 def audit_single_variable_source(
     current_source: str, legacy_source: str
 ) -> dict[str, bool]:
@@ -461,8 +437,6 @@ def audit_single_variable_source(
         ),
     }
     return {**checks, "passed": all(checks.values())}
-
-
 def boundary_fixture_audit() -> dict[str, object]:
     invalid = _fixture_input(valid=np.zeros((192, 256), dtype=np.bool_))
     flat = _fixture_input(timestamp=2, sequence=2)
@@ -537,8 +511,6 @@ def boundary_fixture_audit() -> dict[str, object]:
         "cases": cases,
         "passed": all(value["passed"] for value in cases.values()),
     }
-
-
 def overlap_fixture_audit() -> dict[str, object]:
     shape = (21, 21)
     conditions = {
@@ -587,8 +559,6 @@ def overlap_fixture_audit() -> dict[str, object]:
         "corrected": corrected,
         "checks": {**checks, "passed": all(checks.values())},
     }
-
-
 def _oracle_candidate_at(
     frame,
     depth,
@@ -648,8 +618,6 @@ def _oracle_candidate_at(
         row,
         column,
     )
-
-
 def _anchors(traversal: str) -> tuple[tuple[int, int], ...]:
     row_major = tuple((row, column) for row in ROWS for column in COLUMNS)
     if traversal == "row_major":
@@ -659,8 +627,6 @@ def _anchors(traversal: str) -> tuple[tuple[int, int], ...]:
     if traversal == "column_major":
         return tuple((row, column) for column in COLUMNS for row in ROWS)
     raise ValueError("unknown candidate-mask traversal")
-
-
 def _raw_record(candidate: RawCandidate) -> tuple[object, ...]:
     return (
         *(float(value).hex() for value in candidate.center),
@@ -672,20 +638,12 @@ def _raw_record(candidate: RawCandidate) -> tuple[object, ...]:
         candidate.row,
         candidate.column,
     )
-
-
 def _raw_multiset(raw: Iterable[RawCandidate]) -> Counter[tuple[object, ...]]:
     return Counter(_raw_record(candidate) for candidate in raw)
-
-
 def _raw_sequence_sha256(raw: Iterable[RawCandidate]) -> str:
     return _sha256(_canonical_bytes([_raw_record(value) for value in raw]))
-
-
 def _raw_multiset_sha256(raw: Iterable[RawCandidate]) -> str:
     return _sha256(_canonical_bytes(sorted(_raw_multiset(raw).items())))
-
-
 def _fixture_probe(traversal, order, slices, conditions, *, independent):
     parent = np.ones((31, 31), dtype=np.bool_)
     initial = _sha256(parent.tobytes())
@@ -709,14 +667,10 @@ def _fixture_probe(traversal, order, slices, conditions, *, independent):
         "parent_sha256_after": _sha256(parent.tobytes()),
         "mutation_count": mutation_count,
     }
-
-
 def _canonical_bytes(value: object) -> bytes:
     return json.dumps(
         value, ensure_ascii=True, separators=(",", ":"), sort_keys=True
     ).encode("ascii")
-
-
 def _fixture_input(
     *,
     timestamp: int = 1,
@@ -742,8 +696,6 @@ def _fixture_input(
         np.zeros((4, 16), dtype="<f8"),
         np.asarray((False, False, False, True), dtype=np.bool_),
     )
-
-
 def _function_node(source: str, name: str) -> ast.FunctionDef:
     values = [
         node for node in ast.parse(source).body
@@ -752,8 +704,6 @@ def _function_node(source: str, name: str) -> ast.FunctionDef:
     if len(values) != 1:
         raise ValueError(f"candidate source function {name} differs")
     return copy.deepcopy(values[0])
-
-
 def _remove_ownership_copy(function: ast.FunctionDef) -> int:
     matches = []
     for node in ast.walk(function):
@@ -774,8 +724,6 @@ def _remove_ownership_copy(function: ast.FunctionDef) -> int:
                         item for item in value if item is not matches[0]
                     ])
     return len(matches)
-
-
 def _normalize_schema(function: ast.FunctionDef) -> int:
     matches = []
     for node in ast.walk(function):
@@ -788,13 +736,62 @@ def _normalize_schema(function: ast.FunctionDef) -> int:
         node, index = matches[0]
         node.values[index] = ast.Name(id="CANDIDATE_SCHEMA", ctx=ast.Load())
     return len(matches)
-
-
 def _ast_equal(left: ast.AST, right: ast.AST) -> bool:
     return ast.dump(left, include_attributes=False) == ast.dump(
         right, include_attributes=False
     )
-
-
+def parse_pytest_receipt(
+    stdout: bytes, stderr: bytes, returncode: int,
+    allowed_failures: frozenset[str],
+    expected_passed: int, expected_skipped: int,
+) -> dict[str, object]:
+    output = stdout + b"\0" + stderr
+    lines = (stdout + stderr).decode("utf-8", errors="replace").splitlines()
+    event = lambda prefix: sorted(line[len(prefix):].split(" - ", 1)[0].strip()
+                                  for line in lines if line.startswith(prefix))
+    failed, errors, xpassed = (event("FAILED "), event("ERROR "), event("XPASS "))
+    summary = next((line for line in reversed(lines)
+                    if re.search(r"\d+ (?:failed|passed|skipped|xpassed|errors?)",
+                                 line)), "")
+    counts = {name: int(count) for count, name in re.findall(
+        r"(\d+) (failed|passed|skipped|xpassed|errors?)", summary)}
+    gate = (
+        returncode == 1 and failed == sorted(allowed_failures)
+        and counts.get("failed") == len(allowed_failures)
+        and counts.get("passed") == expected_passed
+        and counts.get("skipped", 0) == expected_skipped
+        and counts.get("xpassed", 0) == 0
+        and counts.get("error", 0) + counts.get("errors", 0) == 0
+        and not errors and not xpassed
+    )
+    return {
+        "returncode": returncode, "passed": counts.get("passed", 0),
+        "skipped": counts.get("skipped", 0), "failed_ids": failed,
+        "expected_passed": expected_passed, "expected_skipped": expected_skipped,
+        "output_sha256": hashlib.sha256(output).hexdigest(),
+        "gate_passed": gate}
+def aggregate_worker_memory(results: Sequence[Mapping[str, object]]) -> dict[str, object]:
+    peaks: dict[int, int] = {}
+    for result in results:
+        pid, rss = int(result["worker_pid"]), int(result["worker_peak_rss_bytes"])
+        peaks[pid] = max(peaks.get(pid, 0), rss)
+    return {
+        "worker_peak_rss_bytes_by_pid": {
+            str(pid): peaks[pid] for pid in sorted(peaks)},
+        "child_peak_rss_sum_bytes": sum(peaks.values())}
+def process_tree_memory(
+    first, second, parent: int, sequential_child_peak: int
+) -> dict[str, object]:
+    child = max(
+        sequential_child_peak,
+        int(first["child_peak_rss_sum_bytes"]),
+        int(second["child_peak_rss_sum_bytes"]),
+    )
+    return {
+        "parent_peak_rss_bytes": parent,
+        "pytest_child_peak_rss_bytes": sequential_child_peak,
+        "builds": [dict(first), dict(second)],
+        "maximum_child_peak_rss_sum_bytes": child,
+        "process_tree_peak_rss_upper_bound_bytes": parent + child}
 def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()

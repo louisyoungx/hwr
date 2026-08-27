@@ -13,8 +13,9 @@ from typing import Sequence
 import numpy as np
 
 INPUT_SCHEMA = "hwr.p41-target-index-input/v1"
-LEGACY_CANDIDATE_SCHEMA = "hwr.p41-target-candidates/v1"
-CANDIDATE_SCHEMA = "hwr.p79-target-candidates/v2"
+CANDIDATE_SCHEMA = "hwr.p41-target-candidates/v1"
+LEGACY_CANDIDATE_SCHEMA = CANDIDATE_SCHEMA
+CANDIDATE_SCHEMA_V2 = "hwr.p79-target-candidates/v2"
 PLAN_SCHEMA = "hwr.p41-target-selection-plan/v1"
 TERMINAL_SCHEMA = "hwr.p41-target-selection-terminal/v1"
 POWER_SCHEMA = "hwr.p41-target-selection-power/v1"
@@ -52,9 +53,8 @@ INPUT_ARRAY_SPECS = (
 SAFETY_STATES = ("ok", "degraded", "stopped", "emergency_stop")
 ACTION_MINIMUM = np.asarray((-0.18, -0.50, *(-0.35,) * 12, 0.0, 0.0))
 ACTION_MAXIMUM = np.asarray((0.18, 0.50, *(0.35,) * 12, 1.0, 1.0))
-_INDEPENDENT_PATCH_MASK = ContextVar(
-    "hwr_target_selection_independent_patch_mask", default=True
-)
+_INDEPENDENT_PATCH_MASK = ContextVar("hwr_target_selection_independent_patch_mask",
+                                     default=True)
 
 
 class TargetSelectionContractError(ValueError):
@@ -263,9 +263,9 @@ def generate_candidate_set(
     ordered = tuple(sorted(ordered, key=Candidate.canonical_key))
     document = {
         "schema_version": (
-            CANDIDATE_SCHEMA
+            CANDIDATE_SCHEMA_V2
             if _INDEPENDENT_PATCH_MASK.get()
-            else LEGACY_CANDIDATE_SCHEMA
+            else CANDIDATE_SCHEMA
         ),
         "acquisition_input_sha256": list(hashes),
         "candidate_count": len(ordered),

@@ -123,7 +123,7 @@ def test_oracle_three_traversals_match_production_without_mutation() -> None:
     )
 
     assert json.loads(candidate_set.canonical_bytes)["schema_version"] == (
-        target_selection.CANDIDATE_SCHEMA
+        target_selection.CANDIDATE_SCHEMA_V2
     )
     assert audit["decision"] == (
         "accepted as deterministic candidate-generator correction"
@@ -232,6 +232,7 @@ def test_v2_and_legacy_v1_are_explicit_and_context_does_not_leak() -> None:
     assert json.loads(v2.canonical_bytes)["schema_version"] == (
         "hwr.p79-target-candidates/v2"
     )
+    assert target_selection.CANDIDATE_SCHEMA == "hwr.p41-target-candidates/v1"
     assert json.loads(legacy.canonical_bytes)["schema_version"] == (
         "hwr.p41-target-candidates/v1"
     )

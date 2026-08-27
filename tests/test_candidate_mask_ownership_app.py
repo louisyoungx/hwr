@@ -154,6 +154,21 @@ def test_run_writes_v2_bank_atomically_without_copying_inputs(
         },
     )
     monkeypatch.setattr(app, "_peak_rss_bytes", lambda: 1)
+    monkeypatch.setattr(
+        app, "_pytest_receipt",
+        lambda *args: {
+            "command": list(app.PYTEST_COMMAND),
+            "baseline_commit": app.FROZEN_DOCUMENT_COMMIT,
+            "allowed_failure_ids": sorted(app.ALLOWED_PYTEST_FAILURES),
+            "returncode": 1,
+            "passed": app.EXPECTED_PYTEST_PASSED,
+            "skipped": app.EXPECTED_PYTEST_SKIPPED,
+            "expected_passed": app.EXPECTED_PYTEST_PASSED,
+            "expected_skipped": app.EXPECTED_PYTEST_SKIPPED,
+            "failed_ids": sorted(app.ALLOWED_PYTEST_FAILURES),
+            "output_sha256": "b" * 64, "gate_passed": True,
+        },
+    )
     calls = 0
     original = app.build_bank
 
@@ -189,7 +204,7 @@ def test_run_writes_v2_bank_atomically_without_copying_inputs(
     manifest = json.loads((output / "manifest.json").read_text())
     report = json.loads((output / "report.json").read_text())
     assert bank["schema_version"] == app.BANK_SCHEMA
-    assert candidate["schema_version"] == target_selection.CANDIDATE_SCHEMA
+    assert candidate["schema_version"] == target_selection.CANDIDATE_SCHEMA_V2
     assert bank["episodes"][0]["old_candidate_set"]["schema_version"] == (
         target_selection.LEGACY_CANDIDATE_SCHEMA
     )
@@ -200,6 +215,8 @@ def test_run_writes_v2_bank_atomically_without_copying_inputs(
     assert manifest["capability_evaluation_executed"] is False
     assert report["full_bank_replay_bit_identical"] is True
     assert report["checks"]["full_bank_replay_bit_identical"] is True
+    assert report["pytest_receipt"]["gate_passed"] is True
+    assert manifest["runtime"]["process_tree_peak_rss_upper_bound_bytes"] >= 1
 
 
 def test_runner_rejects_non_frozen_paths(tmp_path: Path) -> None:
@@ -398,6 +415,123 @@ def test_parallel_deadline_fails_closed_without_residual_processes() -> None:
 
     assert time.perf_counter() - started < 1.5
     assert {process.pid for process in multiprocessing.active_children()} == baseline
+
+
+def test_worker_rss_aggregation_and_process_tree_bound() -> None:
+    first = ownership.aggregate_worker_memory((
+        {"worker_pid": 2, "worker_peak_rss_bytes": 30},
+        {"worker_pid": 1, "worker_peak_rss_bytes": 20},
+        {"worker_pid": 2, "worker_peak_rss_bytes": 40},
+    ))
+    second = ownership.aggregate_worker_memory((
+        {"worker_pid": 3, "worker_peak_rss_bytes": 50},
+    ))
+
+    memory = ownership.process_tree_memory(first, second, 10, 80)
+
+    assert first["worker_peak_rss_bytes_by_pid"] == {"1": 20, "2": 40}
+    assert first["child_peak_rss_sum_bytes"] == 60
+    assert memory["pytest_child_peak_rss_bytes"] == 80
+    assert memory["maximum_child_peak_rss_sum_bytes"] == 80
+    assert memory["process_tree_peak_rss_upper_bound_bytes"] == 90
+
+
+def _pytest_output(failed_ids, summary, *, error=None, xpass=None):
+    lines = [f"FAILED {value} - AssertionError" for value in failed_ids]
+    if error:
+        lines.append(f"ERROR {error} - RuntimeError")
+    if xpass:
+        lines.append(f"XPASS {xpass}")
+    return ("\n".join((*lines, summary)) + "\n").encode()
+
+
+def test_pytest_receipt_accepts_only_frozen_failure_set() -> None:
+    output = _pytest_output(
+        sorted(app.ALLOWED_PYTEST_FAILURES),
+        "3 failed, 1113 passed, 11 skipped in 30.00s",
+    )
+    receipt = ownership.parse_pytest_receipt(
+        output, b"", 1, app.ALLOWED_PYTEST_FAILURES,
+        app.EXPECTED_PYTEST_PASSED, app.EXPECTED_PYTEST_SKIPPED,
+    )
+
+    assert receipt["gate_passed"] is True
+    assert receipt["passed"] == app.EXPECTED_PYTEST_PASSED
+    assert receipt["skipped"] == app.EXPECTED_PYTEST_SKIPPED
+    assert receipt["expected_passed"] == app.EXPECTED_PYTEST_PASSED
+    assert receipt["expected_skipped"] == app.EXPECTED_PYTEST_SKIPPED
+    assert receipt["failed_ids"] == sorted(app.ALLOWED_PYTEST_FAILURES)
+
+
+@pytest.mark.parametrize(
+    "drift",
+    ("new_failure", "duplicate_failure", "error", "xpass", "all_pass",
+     "passed_short", "skipped_extra"),
+)
+def test_pytest_receipt_drift_fails_closed(drift: str) -> None:
+    failures = sorted(app.ALLOWED_PYTEST_FAILURES)
+    error = xpass = None
+    returncode = 1
+    summary = "3 failed, 1113 passed, 11 skipped in 30.00s"
+    if drift == "new_failure":
+        failures.append("tests/test_new.py::test_unexpected")
+        summary = "4 failed, 1113 passed, 11 skipped in 30.00s"
+    elif drift == "duplicate_failure":
+        failures.append(failures[0])
+        summary = "3 failed, 1113 passed, 11 skipped in 30.00s"
+    elif drift == "error":
+        error = "tests/test_new.py::test_error"
+        summary = "3 failed, 1113 passed, 11 skipped, 1 error in 30.00s"
+    elif drift == "xpass":
+        xpass = "tests/test_new.py::test_xpass"
+        summary = "3 failed, 1113 passed, 11 skipped, 1 xpassed in 30.00s"
+    elif drift == "all_pass":
+        failures, returncode, summary = [], 0, "1116 passed, 11 skipped in 30.00s"
+    elif drift == "passed_short":
+        summary = "3 failed, 1112 passed, 11 skipped in 30.00s"
+    else:
+        summary = "3 failed, 1113 passed, 12 skipped in 30.00s"
+
+    receipt = ownership.parse_pytest_receipt(
+        _pytest_output(failures, summary, error=error, xpass=xpass),
+        b"", returncode, app.ALLOWED_PYTEST_FAILURES,
+        app.EXPECTED_PYTEST_PASSED, app.EXPECTED_PYTEST_SKIPPED,
+    )
+
+    assert receipt["gate_passed"] is False
+
+
+def test_pytest_runner_records_receipt_and_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    accepted = _pytest_output(
+        sorted(app.ALLOWED_PYTEST_FAILURES),
+        "3 failed, 1113 passed, 11 skipped in 30.00s",
+    )
+    monkeypatch.setattr(app, "_children_peak_rss_bytes", lambda: 180)
+    monkeypatch.setattr(
+        app.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            stdout=accepted, stderr=b"", returncode=1
+        ),
+    )
+
+    receipt = app._pytest_receipt(tmp_path, time.perf_counter() + 5.0)
+
+    assert receipt["command"] == list(app.PYTEST_COMMAND)
+    assert receipt["baseline_commit"] == app.FROZEN_DOCUMENT_COMMIT
+    assert receipt["expected_passed"] == 1113
+    assert receipt["expected_skipped"] == 11
+    assert receipt["pytest_child_peak_rss_bytes"] == 180
+    assert receipt["gate_passed"] is True
+    monkeypatch.setattr(
+        app.subprocess, "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            stdout=b"1 failed, 1 passed in 1.00s\n", stderr=b"", returncode=1
+        ),
+    )
+    with pytest.raises(RuntimeError, match="pytest receipt"):
+        app._pytest_receipt(tmp_path, time.perf_counter() + 5.0)
 
 
 def test_historical_artifact_trees_are_bound_to_frozen_and_head(
