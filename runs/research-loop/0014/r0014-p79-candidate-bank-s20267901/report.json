@@ -1,0 +1,490 @@
+{
+  "boundary_controls": {
+    "cases": {
+      "all_flat": {
+        "expected_raw_count": 0,
+        "oracle_raw_counts": {
+          "column_major": 0,
+          "reverse_row_major": 0,
+          "row_major": 0
+        },
+        "passed": true,
+        "production_parent_mask_byte_identical": true,
+        "production_raw_count": 0
+      },
+      "all_invalid": {
+        "expected_raw_count": 0,
+        "oracle_raw_counts": {
+          "column_major": 0,
+          "reverse_row_major": 0,
+          "row_major": 0
+        },
+        "passed": true,
+        "production_parent_mask_byte_identical": true,
+        "production_raw_count": 0
+      },
+      "duplicate_observation_identity": {
+        "candidate_count": 1,
+        "passed": true,
+        "view_counts": [
+          2
+        ]
+      },
+      "nonfinite_depth": {
+        "expected_raw_count": 0,
+        "oracle_raw_counts": {
+          "column_major": 0,
+          "reverse_row_major": 0,
+          "row_major": 0
+        },
+        "passed": true,
+        "production_parent_mask_byte_identical": true,
+        "production_raw_count": 0
+      },
+      "single_acceptable_anchor": {
+        "expected_raw_count": 1,
+        "oracle_raw_counts": {
+          "column_major": 1,
+          "reverse_row_major": 1,
+          "row_major": 1
+        },
+        "passed": true,
+        "production_parent_mask_byte_identical": true,
+        "production_raw_count": 1
+      }
+    },
+    "passed": true
+  },
+  "candidate_quality_claim_allowed": false,
+  "capability_claim_allowed": false,
+  "capability_evaluation_executed": false,
+  "capture_frame_count": 384,
+  "checks": {
+    "boundary_controls": true,
+    "candidate_schema_v2": true,
+    "corrected_parent_mask_mutation_count_zero": true,
+    "episode_final_bytes_equality": true,
+    "full_bank_replay_bit_identical": true,
+    "full_pytest_receipt": true,
+    "historical_artifacts_byte_identical": true,
+    "legacy_ast_defect_confirmed": true,
+    "legacy_overlap_fixture": true,
+    "passed": true,
+    "production_final_bytes_match_oracle": true,
+    "production_oracle_frame_equality": true,
+    "three_traversal_raw_multiset_equality": true,
+    "twenty_four_episode_bijection": true
+  },
+  "command": [
+    "/Users/louis/Developer/AIWorkspace/50-housework-robot/.venv/bin/python",
+    "-m",
+    "hwr.apps.evaluate_candidate_mask_ownership",
+    "--input",
+    "runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001",
+    "--output",
+    "runs/research-loop/0014/r0014-p79-candidate-bank-s20267901"
+  ],
+  "decision": "accepted as deterministic candidate-generator correction",
+  "descriptive": {
+    "by_task": {
+      "clear_dining_table_3d/v1": {
+        "candidate_count_decreased_count": 3,
+        "candidate_count_increased_count": 0,
+        "candidate_count_unchanged_count": 5,
+        "candidate_hash_changed_count": 8,
+        "empty_to_nonempty_count": 0,
+        "episode_count": 8,
+        "nonempty_to_empty_count": 0,
+        "selected_identity_changed_count": 8,
+        "total_candidate_count_delta": -3
+      },
+      "store_kitchen_items_3d/v1": {
+        "candidate_count_decreased_count": 2,
+        "candidate_count_increased_count": 5,
+        "candidate_count_unchanged_count": 1,
+        "candidate_hash_changed_count": 8,
+        "empty_to_nonempty_count": 1,
+        "episode_count": 8,
+        "nonempty_to_empty_count": 0,
+        "selected_identity_changed_count": 8,
+        "total_candidate_count_delta": 4
+      },
+      "tidy_living_room_3d/v1": {
+        "candidate_count_decreased_count": 4,
+        "candidate_count_increased_count": 2,
+        "candidate_count_unchanged_count": 2,
+        "candidate_hash_changed_count": 8,
+        "empty_to_nonempty_count": 2,
+        "episode_count": 8,
+        "nonempty_to_empty_count": 0,
+        "selected_identity_changed_count": 6,
+        "total_candidate_count_delta": -4
+      }
+    },
+    "candidate_count_decreased_count": 9,
+    "candidate_count_increased_count": 7,
+    "candidate_count_unchanged_count": 8,
+    "candidate_hash_changed_count": 24,
+    "empty_to_nonempty_count": 3,
+    "episode_count": 24,
+    "nonempty_to_empty_count": 0,
+    "selected_identity_changed_count": 22,
+    "total_candidate_count_delta": -3
+  },
+  "episode_count": 24,
+  "full_bank_replay_bit_identical": true,
+  "generalization_claim_allowed": false,
+  "hardware_safety_claim_allowed": false,
+  "memory": {
+    "bank_process_tree_peak_rss_upper_bound_bytes": 1454653440,
+    "builds": [
+      {
+        "child_peak_rss_sum_bytes": 1393704960,
+        "worker_peak_rss_bytes_by_pid": {
+          "55245": 72237056,
+          "55246": 81608704,
+          "55247": 78888960,
+          "55248": 75382784,
+          "55249": 75382784,
+          "55250": 78856192,
+          "55251": 76152832,
+          "55252": 86310912,
+          "55253": 73859072,
+          "55254": 75743232,
+          "55255": 75628544,
+          "55256": 76595200,
+          "55257": 75268096,
+          "55258": 80887808,
+          "55259": 82903040,
+          "55260": 83722240,
+          "55261": 72761344,
+          "55262": 71516160
+        }
+      },
+      {
+        "child_peak_rss_sum_bytes": 1352171520,
+        "worker_peak_rss_bytes_by_pid": {
+          "55461": 72695808,
+          "55462": 73711616,
+          "55463": 71417856,
+          "55464": 73072640,
+          "55465": 77742080,
+          "55466": 75530240,
+          "55467": 72761344,
+          "55468": 78364672,
+          "55469": 72482816,
+          "55470": 74825728,
+          "55471": 84803584,
+          "55472": 74072064,
+          "55473": 75792384,
+          "55474": 74973184,
+          "55475": 77463552,
+          "55476": 78757888,
+          "55477": 73826304,
+          "55478": 69877760
+        }
+      }
+    ],
+    "maximum_bank_child_peak_rss_sum_bytes": 1393704960,
+    "parent_peak_rss_bytes": 60948480,
+    "validation_pytest_child_peak_rss_bytes": 1612333056
+  },
+  "overlap_fixture": {
+    "checks": {
+      "corrected_parent_mutation_zero": true,
+      "corrected_traversal_support_equal": true,
+      "legacy_parent_mutation_positive": true,
+      "legacy_traversal_support_differs": true,
+      "overlapping_twenty_one_pixel_patches": true,
+      "passed": true
+    },
+    "corrected": [
+      {
+        "canonical_support": [
+          [
+            "bottom_left",
+            441
+          ],
+          [
+            "top_left",
+            210
+          ],
+          [
+            "top_right",
+            441
+          ]
+        ],
+        "mutation_count": 0,
+        "order": [
+          "top_left",
+          "top_right",
+          "bottom_left"
+        ],
+        "parent_sha256_after": "b2807bd41861b6e4971d2910968619d9f7bc0db7368cb7bfade40df01473a92a",
+        "parent_sha256_before": "b2807bd41861b6e4971d2910968619d9f7bc0db7368cb7bfade40df01473a92a",
+        "support_sequence": [
+          [
+            "top_left",
+            210
+          ],
+          [
+            "top_right",
+            441
+          ],
+          [
+            "bottom_left",
+            441
+          ]
+        ],
+        "traversal": "row_major"
+      },
+      {
+        "canonical_support": [
+          [
+            "bottom_left",
+            441
+          ],
+          [
+            "top_left",
+            210
+          ],
+          [
+            "top_right",
+            441
+          ]
+        ],
+        "mutation_count": 0,
+        "order": [
+          "bottom_left",
+          "top_right",
+          "top_left"
+        ],
+        "parent_sha256_after": "b2807bd41861b6e4971d2910968619d9f7bc0db7368cb7bfade40df01473a92a",
+        "parent_sha256_before": "b2807bd41861b6e4971d2910968619d9f7bc0db7368cb7bfade40df01473a92a",
+        "support_sequence": [
+          [
+            "bottom_left",
+            441
+          ],
+          [
+            "top_right",
+            441
+          ],
+          [
+            "top_left",
+            210
+          ]
+        ],
+        "traversal": "reverse_row_major"
+      },
+      {
+        "canonical_support": [
+          [
+            "bottom_left",
+            441
+          ],
+          [
+            "top_left",
+            210
+          ],
+          [
+            "top_right",
+            441
+          ]
+        ],
+        "mutation_count": 0,
+        "order": [
+          "top_left",
+          "bottom_left",
+          "top_right"
+        ],
+        "parent_sha256_after": "b2807bd41861b6e4971d2910968619d9f7bc0db7368cb7bfade40df01473a92a",
+        "parent_sha256_before": "b2807bd41861b6e4971d2910968619d9f7bc0db7368cb7bfade40df01473a92a",
+        "support_sequence": [
+          [
+            "top_left",
+            210
+          ],
+          [
+            "bottom_left",
+            441
+          ],
+          [
+            "top_right",
+            441
+          ]
+        ],
+        "traversal": "column_major"
+      }
+    ],
+    "legacy": [
+      {
+        "canonical_support": [
+          [
+            "bottom_left",
+            320
+          ],
+          [
+            "top_left",
+            210
+          ],
+          [
+            "top_right",
+            210
+          ]
+        ],
+        "mutation_count": 1,
+        "order": [
+          "top_left",
+          "top_right",
+          "bottom_left"
+        ],
+        "parent_sha256_after": "e7a13c133da8cceea73a07a47665d0c2b7e63979ab43d1981feea780dc494b59",
+        "parent_sha256_before": "b2807bd41861b6e4971d2910968619d9f7bc0db7368cb7bfade40df01473a92a",
+        "support_sequence": [
+          [
+            "top_left",
+            210
+          ],
+          [
+            "top_right",
+            210
+          ],
+          [
+            "bottom_left",
+            320
+          ]
+        ],
+        "traversal": "row_major"
+      },
+      {
+        "canonical_support": [
+          [
+            "bottom_left",
+            441
+          ],
+          [
+            "top_left",
+            210
+          ],
+          [
+            "top_right",
+            441
+          ]
+        ],
+        "mutation_count": 1,
+        "order": [
+          "bottom_left",
+          "top_right",
+          "top_left"
+        ],
+        "parent_sha256_after": "e7a13c133da8cceea73a07a47665d0c2b7e63979ab43d1981feea780dc494b59",
+        "parent_sha256_before": "b2807bd41861b6e4971d2910968619d9f7bc0db7368cb7bfade40df01473a92a",
+        "support_sequence": [
+          [
+            "bottom_left",
+            441
+          ],
+          [
+            "top_right",
+            441
+          ],
+          [
+            "top_left",
+            210
+          ]
+        ],
+        "traversal": "reverse_row_major"
+      },
+      {
+        "canonical_support": [
+          [
+            "bottom_left",
+            320
+          ],
+          [
+            "top_left",
+            210
+          ],
+          [
+            "top_right",
+            210
+          ]
+        ],
+        "mutation_count": 1,
+        "order": [
+          "top_left",
+          "bottom_left",
+          "top_right"
+        ],
+        "parent_sha256_after": "e7a13c133da8cceea73a07a47665d0c2b7e63979ab43d1981feea780dc494b59",
+        "parent_sha256_before": "b2807bd41861b6e4971d2910968619d9f7bc0db7368cb7bfade40df01473a92a",
+        "support_sequence": [
+          [
+            "top_left",
+            210
+          ],
+          [
+            "bottom_left",
+            320
+          ],
+          [
+            "top_right",
+            210
+          ]
+        ],
+        "traversal": "column_major"
+      }
+    ],
+    "orders": {
+      "column_major": [
+        "top_left",
+        "bottom_left",
+        "top_right"
+      ],
+      "reverse_row_major": [
+        "bottom_left",
+        "top_right",
+        "top_left"
+      ],
+      "row_major": [
+        "top_left",
+        "top_right",
+        "bottom_left"
+      ]
+    }
+  },
+  "physical_acquisition_executed": false,
+  "policy_inference_executed": false,
+  "proposal_id": "R0001-P79-E1",
+  "pytest_receipt": {
+    "allowed_failure_ids": [
+      "tests/test_entity_candidate_mapping.py::test_frozen_document_history_and_input_provenance_are_complete"
+    ],
+    "baseline_commit": "61d85cda1b96058831b4f93c7ad21a39f51cc2ab",
+    "command": [
+      ".venv/bin/python",
+      "-m",
+      "pytest"
+    ],
+    "expected_passed": 1115,
+    "expected_skipped": 11,
+    "failed_ids": [
+      "tests/test_entity_candidate_mapping.py::test_frozen_document_history_and_input_provenance_are_complete"
+    ],
+    "gate_passed": true,
+    "memory_scope": "validation_only_excluded_from_bank_rss_budget",
+    "output_path": "pytest-output.txt",
+    "output_sha256": "9ea09269023dfab495a4dffe7287ae70115fb83c4e6a7872136b334abe9a03cf",
+    "passed": 1115,
+    "returncode": 1,
+    "skipped": 11,
+    "validation_pytest_child_peak_rss_bytes": 1612333056
+  },
+  "schema_version": "hwr.p79-candidate-mask-ownership-report/v1",
+  "selector_improvement_claim_allowed": false,
+  "source_commit": "9eef9953f8a8558228a5e8870d7d2d8f7499ee1e",
+  "task_success_claim_allowed": false,
+  "training_executed": false,
+  "wall_seconds": 295.0390392090012
+}
