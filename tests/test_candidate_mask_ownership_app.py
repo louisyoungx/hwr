@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+import multiprocessing
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +15,17 @@ from hwr.apps import evaluate_candidate_mask_ownership as app
 from hwr.eval import candidate_mask_ownership as ownership
 from hwr.eval import target_selection
 from hwr.eval.target_selection import PolicyVisibleInput
+
+
+def _delayed_identity(value: tuple[float, int]) -> int:
+    delay, identity = value
+    time.sleep(delay)
+    return identity
+
+
+def _raise_in_worker(value: object) -> None:
+    del value
+    raise RuntimeError("worker exploded")
 
 
 def _policy_input() -> PolicyVisibleInput:
@@ -299,6 +312,92 @@ def test_full_bank_replay_compares_indexes_regression_and_every_blob(
         changed = {"artifacts": dict(second["artifacts"])}
         changed["artifacts"][name] += b"x"
         assert app._full_bank_replay_bit_identical(first, changed) is False
+
+
+def test_serial_and_parallel_bank_artifacts_are_bit_identical(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_path = tmp_path / "input"
+    capsules = _input_directory(input_path)
+    second = copy.deepcopy(capsules["episodes"][0])
+    second["planned_episode_id"] = "episode-2"
+    second["replicate_ordinal"] = 1
+    capsules["episodes"].append(second)
+    capsules["capsule_count"] = 2
+    monkeypatch.setattr(app, "EXPECTED_EPISODES", 2)
+
+    serial = app._build_bank(
+        input_path, capsules, time.perf_counter(), max_workers=1
+    )
+    parallel = app._build_bank(
+        input_path, capsules, time.perf_counter(), max_workers=2
+    )
+
+    assert serial["artifacts"] == parallel["artifacts"]
+    assert [
+        value["planned_episode_id"] for value in parallel["bank"]["episodes"]
+    ] == ["episode", "episode-2"]
+    assert app._full_bank_replay_bit_identical(serial, parallel) is True
+
+
+@pytest.mark.parametrize(("cpu_count", "expected"), ((64, 24), (None, 1)))
+def test_formal_build_uses_fixed_worker_count(
+    cpu_count: int | None,
+    expected: int,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed = {}
+    monkeypatch.setattr(app.os, "cpu_count", lambda: cpu_count)
+    monkeypatch.setattr(
+        app,
+        "_build_bank",
+        lambda input_path, capsules, started, max_workers: observed.update(
+            max_workers=max_workers
+        ),
+    )
+
+    app.build_bank(tmp_path, {}, started=time.perf_counter())
+
+    assert observed == {"max_workers": expected}
+
+
+def test_process_map_preserves_input_order() -> None:
+    values = app._run_ordered_jobs(
+        _delayed_identity,
+        ((0.08, 0), (0.0, 1), (0.02, 2)),
+        time.perf_counter() + 5.0,
+        3,
+    )
+
+    assert values == (0, 1, 2)
+
+
+def test_worker_exception_propagates_without_residual_processes() -> None:
+    baseline = {process.pid for process in multiprocessing.active_children()}
+
+    with pytest.raises(RuntimeError, match="worker exploded"):
+        app._run_ordered_jobs(
+            _raise_in_worker, (None,), time.perf_counter() + 5.0, 1
+        )
+
+    assert {process.pid for process in multiprocessing.active_children()} == baseline
+
+
+def test_parallel_deadline_fails_closed_without_residual_processes() -> None:
+    baseline = {process.pid for process in multiprocessing.active_children()}
+    started = time.perf_counter()
+
+    with pytest.raises(RuntimeError, match="wall-time budget"):
+        app._run_ordered_jobs(
+            _delayed_identity,
+            ((2.0, 0), (2.0, 1)),
+            time.perf_counter() + 0.05,
+            2,
+        )
+
+    assert time.perf_counter() - started < 1.5
+    assert {process.pid for process in multiprocessing.active_children()} == baseline
 
 
 def test_historical_artifact_trees_are_bound_to_frozen_and_head(

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor, TimeoutError
 import importlib.metadata
 import json
 import os
@@ -47,19 +48,15 @@ EXPECTED_INPUTS = {
 }
 EXPECTED_CAPTURE_LEDGER_SHA256 = "ff8c5cf53942e89e5ebc04dd8e9020313e5a120dc62ad6ca8764d93a6eda6145"
 EXPECTED_MANIFEST_ARTIFACTS = 795
-EXPECTED_EPISODES = 24
-EXPECTED_CAPTURES = 384
-EXPECTED_INPUT_BLOBS = 768
+EXPECTED_EPISODES, EXPECTED_CAPTURES, EXPECTED_INPUT_BLOBS = 24, 384, 768
 HISTORICAL_ARTIFACT_TREES = {
     "runs/research-loop/0010/r0010-p51-e1-bank-s20265101": "c1990ba894a50fdc6184359983d05f02cffe6a52",
     "runs/research-loop/0011/r0011-p57-precontact-reachability-s20265701": "651371c386eb325c5e96c82e2638f4a3298f1e2d",
     "runs/research-loop/0012/r0012-p60-phase-entry-s20266001": "107e08cb3fde5efca38e2f248bc4d50bc0763e2e",
     "runs/research-loop/0013/r0013-p66-predictive-witness-s20266601": "2595086ad308d06dadeaea0c2caafab862b3638e",
 }
-MAX_WALL_SECONDS = 10 * 60
-MAX_RSS_BYTES = 4 * 1024**3
-MAX_ARTIFACT_BYTES = 25 * 1024**2
-MIN_DISK_FREE_BYTES = 20 * 1024**3
+MAX_WALL_SECONDS, MAX_RSS_BYTES = 10 * 60, 4 * 1024**3
+MAX_ARTIFACT_BYTES, MIN_DISK_FREE_BYTES = 25 * 1024**2, 20 * 1024**3
 ALLOWED_CHANGES = frozenset((
     "src/hwr/eval/target_selection.py",
     "src/hwr/eval/candidate_mask_ownership.py",
@@ -69,9 +66,8 @@ ALLOWED_CHANGES = frozenset((
     "tests/test_candidate_mask_ownership_app.py",
     "tests/test_candidate_association.py",
 ))
-SOURCE_PATHS = tuple(
-    Path(value) for value in sorted(ALLOWED_CHANGES) if value.startswith("src/")
-)
+SOURCE_PATHS = tuple(Path(value) for value in sorted(ALLOWED_CHANGES)
+                     if value.startswith("src/"))
 CLAIM_FLAGS = dict.fromkeys((
     "training_executed", "policy_inference_executed",
     "physical_acquisition_executed", "capability_evaluation_executed",
@@ -145,6 +141,10 @@ def build_bank(
     *,
     started: float,
 ) -> dict[str, object]:
+    workers = min(EXPECTED_EPISODES, os.cpu_count() or 1)
+    return _build_bank(input_path, capsules, started, workers)
+def _build_bank(input_path, capsules, started, max_workers):
+    deadline = started + MAX_WALL_SECONDS
     episodes = capsules.get("episodes")
     if (
         capsules.get("capsule_count") != EXPECTED_EPISODES
@@ -152,75 +152,25 @@ def build_bank(
         or len(episodes) != EXPECTED_EPISODES
     ):
         raise RuntimeError("P79 input cohort must contain 24 Episodes")
-    bank_records = []
-    regression_records = []
-    artifacts: dict[str, bytes] = {}
-    seen_ids: set[str] = set()
-    frame_count = 0
-    for episode in episodes:
-        if time.perf_counter() - started > MAX_WALL_SECONDS:
-            raise RuntimeError("P79 wall-time budget exceeded")
-        identity = str(episode["planned_episode_id"])
-        if identity in seen_ids or episode.get("replacement") is not False:
-            raise RuntimeError("P79 Episode identity or replacement differs")
-        seen_ids.add(identity)
-        payloads, capture_records = _episode_inputs(input_path, episode)
-        frame_count += len(payloads)
-        candidate_set, audit = ownership.audit_episode(
-            payloads[:-1],
-            acquisition_base_pose=episode["acquisition_base_pose"],
-            final_input=payloads[-1],
-        )
-        final_value = target_selection.deserialize_policy_input(payloads[-1])
-        scores = target_selection.candidate_scores(
-            candidate_set,
-            final_value.base_pose,
-            acquisition_base_pose=episode["acquisition_base_pose"],
-        )
-        selected_index = target_selection.select_candidate_index(
-            candidate_set,
-            final_value.base_pose,
-            acquisition_base_pose=episode["acquisition_base_pose"],
-        )
-        blob_path = f"blobs/{identity}/candidate-set.json"
-        artifacts[blob_path] = candidate_set.canonical_bytes
-        old = _old_candidate_identity(input_path, episode["candidate_set"])
-        new = {
-            "schema_version": target_selection.CANDIDATE_SCHEMA,
-            "path": blob_path,
-            "sha256": candidate_set.candidate_set_sha256,
-            "bytes": len(candidate_set.canonical_bytes),
-            "candidate_count": len(candidate_set.candidates),
-            "score_bytes_sha256": _score_sha256(scores),
-            "selected_index": selected_index,
-            "selected_canonical_identity": _selected_identity(
-                candidate_set, selected_index
-            ),
-        }
-        bank_records.append({
-            "planned_episode_id": identity,
-            "task_id": episode["task_id"],
-            "cell_id": episode["cell_id"],
-            "cell_ordinal": episode["cell_ordinal"],
-            "replicate_ordinal": episode["replicate_ordinal"],
-            "candidate_ordinal": episode["candidate_ordinal"],
-            "environment_seed": episode["environment_seed"],
-            "policy_rng_seed": episode["policy_rng_seed"],
-            "replacement": False,
-            "acquisition_base_pose": episode["acquisition_base_pose"],
-            "captures": capture_records,
-            "old_candidate_set": old,
-            "candidate_set": new,
-        })
-        regression_records.append(
-            _regression_record(episode, old, candidate_set, selected_index, audit)
-        )
+    identifiers = [str(episode["planned_episode_id"]) for episode in episodes]
+    if (
+        len(identifiers) != len(set(identifiers))
+        or any(episode.get("replacement") is not False for episode in episodes)
+    ):
+        raise RuntimeError("P79 Episode identity or replacement differs")
+    jobs = ((str(input_path), episode) for episode in episodes)
+    results = _run_ordered_jobs(
+        _build_episode_job, jobs, deadline, max_workers
+    )
+    bank_records = [value["bank"] for value in results]
+    regression_records = [value["regression"] for value in results]
+    artifacts = {value["blob_path"]: value["blob"] for value in results}
     bank = {
         "schema_version": BANK_SCHEMA,
         "proposal_id": PROPOSAL_ID,
         "source_acquisition": FORMAL_INPUT.as_posix(),
         "episode_count": len(bank_records),
-        "capture_count": frame_count,
+        "capture_count": sum(int(value["frame_count"]) for value in results),
         "episodes": bank_records,
         **CLAIM_FLAGS,
     }
@@ -235,14 +185,88 @@ def build_bank(
         **CLAIM_FLAGS,
     }
     artifacts.update({
-        "bank.json": _json_bytes(bank),
-        "regression.json": _json_bytes(regression),
+        "bank.json": _json_bytes(bank), "regression.json": _json_bytes(regression),
     })
+    if time.perf_counter() > deadline:
+        raise RuntimeError("P79 wall-time budget exceeded")
     return {
         "artifacts": artifacts, "bank": bank, "regression": regression,
         "audits": [record["audit"] for record in regression_records]}
-
-
+def _build_episode_job(job) -> dict[str, object]:
+    input_path_value, episode = job
+    input_path = Path(input_path_value)
+    identity = str(episode["planned_episode_id"])
+    pose = episode["acquisition_base_pose"]
+    payloads, capture_records = _episode_inputs(input_path, episode)
+    candidate_set, audit = ownership.audit_episode(
+        payloads[:-1], acquisition_base_pose=pose, final_input=payloads[-1],
+    )
+    final_value = target_selection.deserialize_policy_input(payloads[-1])
+    scores = target_selection.candidate_scores(
+        candidate_set, final_value.base_pose, acquisition_base_pose=pose,
+    )
+    selected_index = target_selection.select_candidate_index(
+        candidate_set, final_value.base_pose, acquisition_base_pose=pose,
+    )
+    blob_path = f"blobs/{identity}/candidate-set.json"
+    old = _old_candidate_identity(input_path, episode["candidate_set"])
+    new = {
+        "schema_version": target_selection.CANDIDATE_SCHEMA,
+        "path": blob_path,
+        "sha256": candidate_set.candidate_set_sha256,
+        "bytes": len(candidate_set.canonical_bytes),
+        "candidate_count": len(candidate_set.candidates),
+        "score_bytes_sha256": _score_sha256(scores),
+        "selected_index": selected_index,
+        "selected_canonical_identity": _selected_identity(candidate_set, selected_index),
+    }
+    bank = {
+        name: episode[name] for name in (
+            "planned_episode_id", "task_id", "cell_id", "cell_ordinal",
+            "replicate_ordinal", "candidate_ordinal", "environment_seed",
+            "policy_rng_seed", "replacement", "acquisition_base_pose",
+        )
+    }
+    bank.update({
+        "captures": capture_records, "old_candidate_set": old, "candidate_set": new,
+    })
+    return {
+        "bank": bank,
+        "regression": _regression_record(
+            episode, old, candidate_set, selected_index, audit),
+        "blob_path": blob_path, "blob": candidate_set.canonical_bytes,
+        "frame_count": len(payloads),
+    }
+def _run_ordered_jobs(function, jobs, deadline, workers):
+    remaining = deadline - time.perf_counter()
+    if remaining <= 0.0:
+        raise RuntimeError("P79 wall-time budget exceeded")
+    executor = ProcessPoolExecutor(max_workers=workers)
+    try:
+        results = tuple(executor.map(
+            function, jobs, timeout=remaining, chunksize=1
+        ))
+    except TimeoutError as error:
+        _abort_executor(executor)
+        raise RuntimeError("P79 wall-time budget exceeded") from error
+    except BaseException:
+        _abort_executor(executor)
+        raise
+    executor.shutdown(wait=True)
+    return results
+def _abort_executor(executor) -> None:
+    processes = tuple((getattr(executor, "_processes", None) or {}).values())
+    for process in processes:
+        if process.is_alive():
+            process.terminate()
+    executor.shutdown(wait=False, cancel_futures=True)
+    deadline = time.monotonic() + 1.0
+    for process in processes:
+        process.join(max(0.0, deadline - time.monotonic()))
+    for process in processes:
+        if process.is_alive():
+            process.kill()
+            process.join()
 def _full_bank_replay_bit_identical(first, second) -> bool:
     first_artifacts, second_artifacts = first["artifacts"], second["artifacts"]
     candidate_blobs = {name for name in first_artifacts if name.startswith("blobs/")}
@@ -252,8 +276,6 @@ def _full_bank_replay_bit_identical(first, second) -> bool:
         and set(first_artifacts) == set(second_artifacts) == required
         and all(first_artifacts[name] == second_artifacts[name] for name in required)
     )
-
-
 def _episode_inputs(
     input_path: Path,
     episode: Mapping[str, object],
@@ -312,8 +334,6 @@ def _episode_inputs(
             ),
         })
     return tuple(payloads), records
-
-
 def _regression_record(episode, old, new, selected_index, audit):
     return {
         "planned_episode_id": episode["planned_episode_id"],
@@ -337,8 +357,6 @@ def _regression_record(episode, old, new, selected_index, audit):
         },
         "audit": audit,
     }
-
-
 def _old_candidate_identity(
     input_path: Path, value: Mapping[str, object]
 ) -> dict[str, object]:
@@ -359,8 +377,6 @@ def _old_candidate_identity(
         )
     )
     return result
-
-
 def _descriptive(records: Sequence[Mapping[str, object]]) -> dict[str, object]:
     tasks = {}
     for task_id in sorted({str(value["task_id"]) for value in records}):
@@ -368,8 +384,6 @@ def _descriptive(records: Sequence[Mapping[str, object]]) -> dict[str, object]:
             [value for value in records if value["task_id"] == task_id]
         )
     return {**_paired_counts(records), "by_task": tasks}
-
-
 def _paired_counts(records: Sequence[Mapping[str, object]]) -> dict[str, int]:
     return {
         "episode_count": len(records),
@@ -410,8 +424,6 @@ def _paired_counts(records: Sequence[Mapping[str, object]]) -> dict[str, int]:
             for value in records
         ),
     }
-
-
 def _report(first, *, replay_identical, history_unchanged, provenance,
             source_commit, command, elapsed):
     audits = first["audits"]
@@ -501,8 +513,6 @@ def _report(first, *, replay_identical, history_unchanged, provenance,
         "wall_seconds": elapsed,
         **CLAIM_FLAGS,
     }
-
-
 def _provenance(
     root: Path, input_path: Path, source_commit: str
 ) -> dict[str, object]:
@@ -612,8 +622,6 @@ def _provenance(
             for path in SOURCE_PATHS
         },
     }
-
-
 def _require_provenance(value: Mapping[str, object]) -> None:
     checks = value["checks"]
     if checks["passed"] is not True:
@@ -622,8 +630,6 @@ def _require_provenance(value: Mapping[str, object]) -> None:
             if name != "passed" and not passed
         )
         raise RuntimeError(f"P79 provenance gate failed: {', '.join(failed)}")
-
-
 def _manifest(
     source_commit, command, provenance, artifacts, report, elapsed
 ) -> dict[str, object]:
@@ -662,8 +668,6 @@ def _manifest(
         },
         **CLAIM_FLAGS,
     }
-
-
 def _capture_ledger(input_path: Path) -> dict[str, object]:
     capsules = _read_json(input_path / "capsules.json")
     rows = []
@@ -682,8 +686,6 @@ def _capture_ledger(input_path: Path) -> dict[str, object]:
         "sha256": _sha256(json.dumps(
             rows, separators=(",", ":")).encode("ascii")),
     }
-
-
 def _historical_artifact_identities(root: Path) -> dict[str, object]:
     return {
         path: {
@@ -694,40 +696,28 @@ def _historical_artifact_identities(root: Path) -> dict[str, object]:
         }
         for path, expected in HISTORICAL_ARTIFACT_TREES.items()
     }
-
-
 def _directory_identities(root: Path, directory: Path) -> list[dict[str, object]]:
     del root
     return [
         _input_identity(directory, path)
         for path in sorted(value for value in directory.rglob("*") if value.is_file())
     ]
-
-
 def _input_identity(directory: Path, path: Path) -> dict[str, object]:
     content = path.read_bytes()
     return {
         "path": (FORMAL_INPUT / path.relative_to(directory)).as_posix(),
         "bytes": len(content), "sha256": _sha256(content),
     }
-
-
 def _selected_identity(candidate_set, index: int) -> str | None:
     return (
         None
         if index < 0
         else _record_identity(list(candidate_set.candidates[index].canonical_record()))
     )
-
-
 def _record_identity(record: object) -> str:
     return _sha256(json.dumps(record, separators=(",", ":")).encode("ascii"))
-
-
 def _score_sha256(scores: Sequence[float]) -> str:
     return _sha256(np.ascontiguousarray(scores, dtype="<f8").tobytes())
-
-
 def _require_frozen_paths(root: Path, input_path: Path, output: Path) -> None:
     if input_path != (root / FORMAL_INPUT).resolve():
         raise ValueError("P79 input path differs from frozen path")
