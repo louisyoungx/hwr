@@ -1,0 +1,217 @@
+{
+  "artifact_self_contained_claim_allowed": false,
+  "association_claim_allowed": false,
+  "blind_input_file_count": 768,
+  "blind_p79_path_or_metadata_read_count": 0,
+  "blind_rebuild_bit_identical": true,
+  "candidate_quality_claim_allowed": false,
+  "capability_evaluation_executed": false,
+  "checks": {
+    "blind_rebuild_bit_identical": true,
+    "boundary_controls_passed": true,
+    "cohort_counts_exact": true,
+    "input_files_exact": true,
+    "provenance_passed": true
+  },
+  "decision": "accepted as consumer-local v2 selection-lineage evidence",
+  "generalization_claim_allowed": false,
+  "hardware_safety_claim_allowed": false,
+  "input_file_match_count": 796,
+  "legacy_v1_generator_call_count": 0,
+  "metrics": {
+    "candidate_count": 36,
+    "candidate_exact_match_count": 24,
+    "canonical_only_score_hash_mismatch_count": 22,
+    "empty_episode_count": 2,
+    "empty_selection_exact_match_count": 2,
+    "episode_count": 24,
+    "multi_episode_count": 8,
+    "score_hash_exact_match_count": 24,
+    "selected_identity_exact_match_count": 22,
+    "selected_index_exact_match_count": 24,
+    "singleton_episode_count": 14
+  },
+  "mutation_control_count": 29,
+  "mutation_control_pass_count": 29,
+  "phase_a_trust_basis": {
+    "blind_root_closed_world": true,
+    "isolated_hwr_unavailable": true,
+    "read_ledger_role": "auxiliary",
+    "source_audit_passed": true,
+    "source_similarity_passed": true,
+    "sources_stable_after_workers": true,
+    "staging_copy_executed": true,
+    "worker_blob_parent_verified": true
+  },
+  "physical_acquisition_executed": false,
+  "policy_inference_executed": false,
+  "private_truth_read_count": 0,
+  "proposal_id": "R0001-P83",
+  "reachability_claim_allowed": false,
+  "runtime": {
+    "comparer_wall_seconds": 2.950475000005099,
+    "parent_peak_rss_at_start_bytes": 37502976,
+    "process_tree_peak_rss_bytes": 1365606400,
+    "process_tree_peak_rss_is_upper_bound": true,
+    "wall_seconds": 24.925580708004418,
+    "wall_seconds_is_upper_bound": true,
+    "worker_runs": [
+      {
+        "argv": [
+          "/Users/louis/Developer/AIWorkspace/50-housework-robot/.venv/bin/python",
+          "-I",
+          "-S",
+          "-c",
+          "import sys;sys.path[:0]=sys.argv[1:3];import selection_lineage_worker as worker;raise SystemExit(worker.main(sys.argv[3:]))",
+          "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0016/r0016-p83-selection-lineage-s20268301.tmp",
+          "/Users/louis/Developer/AIWorkspace/50-housework-robot/.venv/lib/python3.11/site-packages",
+          "--plan",
+          "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0016/r0016-p83-selection-lineage-s20268301.tmp/blind-input/blind-plan.json",
+          "--plan-bytes",
+          "296420",
+          "--plan-sha256",
+          "7763bcb52fb00a71e70797adede68ed67edf95816b4005872f68e4351981e25d",
+          "--input-root",
+          "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0016/r0016-p83-selection-lineage-s20268301.tmp/blind-input",
+          "--output",
+          "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0016/r0016-p83-selection-lineage-s20268301.tmp/blind-receipt-a.json",
+          "--worker-sha256",
+          "714e8ffb8eeb1c28dee83dc5c687694e23e50d36c414c2d604f4a9eca41387a6"
+        ],
+        "cwd": "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0016/r0016-p83-selection-lineage-s20268301.tmp/worker-a",
+        "expected_read_audit_sha256": "db961632b5fb22e23c14693987d33c210d729ada750a18a596b87c1cecaa2916",
+        "external_time_peak_rss_bytes": 80904192,
+        "external_wall_seconds": 2.9488984999916283,
+        "isolated_flags": [
+          "-I",
+          "-S"
+        ],
+        "outer_observed_child_peak_rss_bytes": 1199357952,
+        "process_tree_peak_rss_upper_bound_bytes": 1199357952,
+        "pythonpath": "",
+        "receipt_present_after_exit": true,
+        "receipt_temporary_absent_after_exit": true,
+        "returncode": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "9596acdf6ef1c087da23d4dede2fd4344a36170f4cdfd37aa5186e667ef7fb94",
+        "wall_seconds": 2.757969416998094,
+        "worker_path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0016/r0016-p83-selection-lineage-s20268301.tmp/selection_lineage_worker.py",
+        "worker_source_after": {
+          "bytes": 43586,
+          "fd_identity": {
+            "device": 16777229,
+            "inode": 144103379,
+            "size": 43586
+          },
+          "path": "selection_lineage_worker.py",
+          "sha256": "714e8ffb8eeb1c28dee83dc5c687694e23e50d36c414c2d604f4a9eca41387a6"
+        },
+        "worker_source_before": {
+          "bytes": 43586,
+          "fd_identity": {
+            "device": 16777229,
+            "inode": 144103379,
+            "size": 43586
+          },
+          "path": "selection_lineage_worker.py",
+          "sha256": "714e8ffb8eeb1c28dee83dc5c687694e23e50d36c414c2d604f4a9eca41387a6"
+        }
+      },
+      {
+        "argv": [
+          "/Users/louis/Developer/AIWorkspace/50-housework-robot/.venv/bin/python",
+          "-I",
+          "-S",
+          "-c",
+          "import sys;sys.path[:0]=sys.argv[1:3];import selection_lineage_worker as worker;raise SystemExit(worker.main(sys.argv[3:]))",
+          "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0016/r0016-p83-selection-lineage-s20268301.tmp",
+          "/Users/louis/Developer/AIWorkspace/50-housework-robot/.venv/lib/python3.11/site-packages",
+          "--plan",
+          "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0016/r0016-p83-selection-lineage-s20268301.tmp/blind-input/blind-plan.json",
+          "--plan-bytes",
+          "296420",
+          "--plan-sha256",
+          "7763bcb52fb00a71e70797adede68ed67edf95816b4005872f68e4351981e25d",
+          "--input-root",
+          "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0016/r0016-p83-selection-lineage-s20268301.tmp/blind-input",
+          "--output",
+          "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0016/r0016-p83-selection-lineage-s20268301.tmp/blind-receipt-b.json",
+          "--worker-sha256",
+          "714e8ffb8eeb1c28dee83dc5c687694e23e50d36c414c2d604f4a9eca41387a6"
+        ],
+        "cwd": "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0016/r0016-p83-selection-lineage-s20268301.tmp/worker-b",
+        "expected_read_audit_sha256": "db961632b5fb22e23c14693987d33c210d729ada750a18a596b87c1cecaa2916",
+        "external_time_peak_rss_bytes": 79167488,
+        "external_wall_seconds": 3.047514707999653,
+        "isolated_flags": [
+          "-I",
+          "-S"
+        ],
+        "outer_observed_child_peak_rss_bytes": 1229406208,
+        "process_tree_peak_rss_upper_bound_bytes": 1229406208,
+        "pythonpath": "",
+        "receipt_present_after_exit": true,
+        "receipt_temporary_absent_after_exit": true,
+        "returncode": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "0bba64138ff84416afd426fa0c3ac7aa4435d5e3114ee155a5b021584c34c0c5",
+        "wall_seconds": 2.808038667004439,
+        "worker_path": "/Users/louis/Developer/AIWorkspace/50-housework-robot/runs/research-loop/0016/r0016-p83-selection-lineage-s20268301.tmp/selection_lineage_worker.py",
+        "worker_source_after": {
+          "bytes": 43586,
+          "fd_identity": {
+            "device": 16777229,
+            "inode": 144103379,
+            "size": 43586
+          },
+          "path": "selection_lineage_worker.py",
+          "sha256": "714e8ffb8eeb1c28dee83dc5c687694e23e50d36c414c2d604f4a9eca41387a6"
+        },
+        "worker_source_before": {
+          "bytes": 43586,
+          "fd_identity": {
+            "device": 16777229,
+            "inode": 144103379,
+            "size": 43586
+          },
+          "path": "selection_lineage_worker.py",
+          "sha256": "714e8ffb8eeb1c28dee83dc5c687694e23e50d36c414c2d604f4a9eca41387a6"
+        }
+      }
+    ],
+    "worker_wall_seconds": [
+      2.757969416998094,
+      2.808038667004439
+    ]
+  },
+  "sample_unit": "Episode",
+  "schema_version": "hwr.p83-selection-lineage-report/v1",
+  "selector_improvement_claim_allowed": false,
+  "task_breakdown": {
+    "clear_dining_table_3d/v1": {
+      "candidates": 9,
+      "episodes": 8
+    },
+    "store_kitchen_items_3d/v1": {
+      "candidates": 20,
+      "episodes": 8
+    },
+    "tidy_living_room_3d/v1": {
+      "candidates": 7,
+      "episodes": 8
+    }
+  },
+  "task_success_claim_allowed": false,
+  "top_two_score_margins": [
+    0.04506789295459246,
+    0.16988405231644155,
+    0.07752429052170773,
+    0.06661504556516984,
+    0.0337253156855174,
+    0.1430379701657185,
+    0.03652572409903099,
+    0.012365174520925004
+  ],
+  "training_executed": false,
+  "whole_program_completeness_claim_allowed": false
+}

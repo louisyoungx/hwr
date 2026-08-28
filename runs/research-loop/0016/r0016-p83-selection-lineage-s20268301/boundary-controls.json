@@ -1,0 +1,122 @@
+{
+  "algorithm_mutations": {
+    "candidate_order": true,
+    "canonical_only": true,
+    "final_base_pose": true,
+    "score_weights": true,
+    "tie_break": true
+  },
+  "control_count": 29,
+  "isolation_controls": {
+    "hwr_not_importable": true,
+    "read_audit_auxiliary_complete": true,
+    "read_paths_are_plan_only": true,
+    "selected_metadata_mutation": true,
+    "source_independent": true,
+    "worker_blob_bound": true,
+    "worker_executes_staged_copy": true,
+    "worker_input_is_blind_root": true,
+    "worker_isolated": true
+  },
+  "pass_count": 29,
+  "passed": true,
+  "plan_mutations": [
+    {
+      "expected_category": "plan_schema",
+      "name": "schema_interchange",
+      "observed_category": "plan_schema",
+      "passed": true
+    },
+    {
+      "expected_category": "episode_duplicate",
+      "name": "episode_duplicate",
+      "observed_category": "episode_duplicate",
+      "passed": true
+    },
+    {
+      "expected_category": "episode_count",
+      "name": "episode_missing",
+      "observed_category": "episode_count",
+      "passed": true
+    },
+    {
+      "expected_category": "episode_order",
+      "name": "episode_order",
+      "observed_category": "episode_order",
+      "passed": true
+    },
+    {
+      "expected_category": "capture_order",
+      "name": "capture_ordinal",
+      "observed_category": "capture_order",
+      "passed": true
+    },
+    {
+      "expected_category": "final_input",
+      "name": "final_missing",
+      "observed_category": "final_input",
+      "passed": true
+    },
+    {
+      "expected_category": "final_input",
+      "name": "final_multiple",
+      "observed_category": "final_input",
+      "passed": true
+    },
+    {
+      "expected_category": "observation_identity",
+      "name": "observation_identity",
+      "observed_category": "observation_identity",
+      "passed": true
+    },
+    {
+      "expected_category": "path_escape",
+      "name": "path_absolute",
+      "observed_category": "path_escape",
+      "passed": true
+    },
+    {
+      "expected_category": "path_escape",
+      "name": "path_traversal",
+      "observed_category": "path_escape",
+      "passed": true
+    },
+    {
+      "expected_category": "policy_input_size_or_hash",
+      "name": "input_size",
+      "observed_category": "policy_input_size_or_hash",
+      "passed": true
+    },
+    {
+      "expected_category": "policy_input_size_or_hash",
+      "name": "input_hash",
+      "observed_category": "policy_input_size_or_hash",
+      "passed": true
+    },
+    {
+      "expected_category": "policy_input_missing",
+      "name": "input_missing",
+      "observed_category": "policy_input_missing",
+      "passed": true
+    },
+    {
+      "expected_category": "policy_input_symlink",
+      "name": "symlink",
+      "observed_category": "policy_input_symlink",
+      "passed": true
+    },
+    {
+      "expected_category": "input_path_duplicate",
+      "name": "input_duplicate",
+      "observed_category": "input_path_duplicate",
+      "passed": true
+    }
+  ],
+  "proposal_id": "R0001-P83",
+  "runtime": {
+    "blind_blob_copy_count": 0,
+    "maximum_mutation_episode_count": 3,
+    "wall_seconds": 2.897147708994453
+  },
+  "schema_version": "hwr.p83-boundary-controls/v1"
+}
