@@ -1,0 +1,254 @@
+{
+  "schema_version": "hwr.r0017-experiment-contract-registry/v1",
+  "proposal_id": "R0001-P87",
+  "sample_unit": "Episode",
+  "sources": {
+    "p50": {
+      "path": "runs/research-loop/0010/r0010-p50-e1-acquisition-s20265001",
+      "files": {
+        "capsules.json": "223cb403def742b82f6c8cfe1916b204b76bb29304e2fc94d64318b58ee74cbf",
+        "manifest.json": "cefb4855305103fe6b205446295372d0e1060ba3e0f0e90d740264f715350d86",
+        "plan.json": "5eec1d65527a837667d2e53d015c8cb38672a42c3856155ae279921c6b6413ab",
+        "report.json": "b9649a5198bd9a755dd030ea0ef39422c3a5eb09e0a6633e69aa57f5cc87f4d0"
+      }
+    },
+    "p79": {
+      "path": "runs/research-loop/0014/r0014-p79-candidate-bank-s20267901",
+      "files": {
+        "bank.json": "888bf3ee42854a726bd86cc6c703c0c33a74f72d9029dc2cb6a9824ae9becd8e",
+        "manifest.json": "162e4bb6d06daf8e53e7192385274f059adde1a254bf81f2f4f8750ccce8d9c9"
+      }
+    },
+    "p83": {
+      "path": "runs/research-loop/0016/r0016-p83-selection-lineage-s20268301",
+      "files": {
+        "manifest.json": "f149a586e30cb8d29156c685e084507b6a9adf490786993ffbaba589a04bd565",
+        "report.json": "0f09944aadb052d8b92f0b0c54cd40fb31f4835fdab1c44d2f24ef48fffd2513"
+      }
+    }
+  },
+  "expected_cohort": {
+    "episode_count": 24,
+    "nonempty_count": 22,
+    "empty_count": 2,
+    "choice_opportunity_count": 8,
+    "task_nonempty_counts": {
+      "clear_dining_table_3d/v1": 8,
+      "store_kitchen_items_3d/v1": 8,
+      "tidy_living_room_3d/v1": 6
+    },
+    "latency_pair_nonempty_counts": {
+      "o1-a1": 5,
+      "o1-a2": 6,
+      "o2-a1": 5,
+      "o2-a2": 6
+    },
+    "cell_count": 12
+  },
+  "denominators": {
+    "all_episodes": {
+      "candidate_count_minimum": 0,
+      "expected_count": 24
+    },
+    "choice_opportunity": {
+      "candidate_count_minimum": 2,
+      "expected_count": 8
+    },
+    "empty": {
+      "candidate_count_maximum": 0,
+      "expected_count": 2
+    },
+    "nonempty": {
+      "candidate_count_minimum": 1,
+      "expected_count": 22
+    }
+  },
+  "strata": {
+    "action_latency": [
+      "action_latency_steps"
+    ],
+    "cell": [
+      "task_id",
+      "observation_latency_steps",
+      "action_latency_steps"
+    ],
+    "latency_pair": [
+      "observation_latency_steps",
+      "action_latency_steps"
+    ],
+    "observation_latency": [
+      "observation_latency_steps"
+    ],
+    "task": [
+      "task_id"
+    ]
+  },
+  "result_exposure_ledger": [
+    {
+      "episode_id": "45b8ab118505cf7f834d59f9b6cad45a39ae7b25b076ff6157046d7ad620bdcd",
+      "fields": [
+        "safe_b2_entry",
+        "wall_seconds",
+        "lineage_match",
+        "safety_intervention",
+        "runtime_terminal",
+        "invalid_force",
+        "conservation_difference"
+      ],
+      "source": "R0017 innovation Agent B exploratory sentinel"
+    },
+    {
+      "episode_id": "7e039594072ca9a6aceda502e9cc69d2bcd697082906465b674bcb8b952674e8",
+      "fields": [
+        "safe_b2_entry",
+        "wall_seconds",
+        "lineage_match",
+        "safety_intervention",
+        "runtime_terminal",
+        "invalid_force",
+        "conservation_difference"
+      ],
+      "source": "R0017 innovation Agent B exploratory sentinel"
+    },
+    {
+      "episode_id": "c8a3a55e0f8f4f76c077d6b57366861f051be52e295329a1c3227adf1fc18d18",
+      "fields": [
+        "safe_b2_entry",
+        "wall_seconds",
+        "lineage_match",
+        "safety_intervention",
+        "runtime_terminal",
+        "invalid_force",
+        "conservation_difference"
+      ],
+      "source": "R0017 innovation Agent B exploratory sentinel"
+    }
+  ],
+  "contracts": [
+    {
+      "contract_id": "r0016-p68-e3-selector-negative",
+      "claim_scope": [
+        "overall",
+        "task"
+      ],
+      "confirmatory": false,
+      "denominator": "nonempty",
+      "exposure_policy": "exclude_matching_outcome_fields",
+      "outcome_field": "selector_negative",
+      "stratum_minimums": {
+        "task": {
+          "clear_dining_table_3d/v1": 5,
+          "store_kitchen_items_3d/v1": 5,
+          "tidy_living_room_3d/v1": 5
+        }
+      },
+      "target_eligibility": "choice_opportunity",
+      "target_minimum": 18
+    },
+    {
+      "contract_id": "r0016-p76-e3-pooled-prefix",
+      "claim_scope": [
+        "overall",
+        "task",
+        "latency_pair"
+      ],
+      "confirmatory": false,
+      "denominator": "nonempty",
+      "exposure_policy": "historical_design_audit",
+      "outcome_field": "safe_b2_entry",
+      "stratum_minimums": {
+        "task": {
+          "clear_dining_table_3d/v1": 6,
+          "store_kitchen_items_3d/v1": 6,
+          "tidy_living_room_3d/v1": 4
+        }
+      },
+      "target_eligibility": "nonempty",
+      "target_minimum": 19
+    },
+    {
+      "contract_id": "r0017-p68-e4-selected-positive",
+      "claim_scope": [
+        "overall",
+        "task"
+      ],
+      "confirmatory": true,
+      "denominator": "nonempty",
+      "exposure_policy": "exclude_matching_outcome_fields",
+      "forbidden_claim_scope": [
+        "action_latency",
+        "cell",
+        "latency_pair",
+        "observation_latency"
+      ],
+      "outcome_field": "selected_positive",
+      "stratum_minimums": {
+        "task": {
+          "clear_dining_table_3d/v1": 5,
+          "store_kitchen_items_3d/v1": 5,
+          "tidy_living_room_3d/v1": 5
+        }
+      },
+      "target_eligibility": "nonempty",
+      "target_minimum": 18
+    },
+    {
+      "contract_id": "r0017-p76-e5-include-exposed-draft",
+      "claim_scope": [
+        "overall",
+        "task",
+        "latency_pair",
+        "cell"
+      ],
+      "confirmatory": true,
+      "denominator": "nonempty",
+      "exposure_policy": "include_exposed",
+      "outcome_field": "safe_b2_entry",
+      "stratum_minimums": {
+        "cell": 1,
+        "latency_pair": {
+          "o1-a1": 4,
+          "o1-a2": 5,
+          "o2-a1": 4,
+          "o2-a2": 5
+        },
+        "task": {
+          "clear_dining_table_3d/v1": 6,
+          "store_kitchen_items_3d/v1": 6,
+          "tidy_living_room_3d/v1": 4
+        }
+      },
+      "target_eligibility": "nonempty",
+      "target_minimum": 19
+    },
+    {
+      "contract_id": "r0017-p76-e5-exclude-exposed-draft",
+      "claim_scope": [
+        "overall",
+        "task",
+        "latency_pair",
+        "cell"
+      ],
+      "confirmatory": true,
+      "denominator": "nonempty",
+      "exposure_policy": "exclude_matching_outcome_fields",
+      "outcome_field": "safe_b2_entry",
+      "stratum_minimums": {
+        "cell": 1,
+        "latency_pair": {
+          "o1-a1": 2,
+          "o1-a2": 5,
+          "o2-a1": 4,
+          "o2-a2": 5
+        },
+        "task": {
+          "clear_dining_table_3d/v1": 6,
+          "store_kitchen_items_3d/v1": 6,
+          "tidy_living_room_3d/v1": 4
+        }
+      },
+      "target_eligibility": "nonempty",
+      "target_minimum": 16
+    }
+  ]
+}
