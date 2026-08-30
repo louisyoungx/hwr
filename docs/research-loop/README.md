@@ -10,7 +10,9 @@
 - 活跃轮次：无。
 - 下一轮：`0019`，必须由用户明确启动。
 - 下一目标：在 `carry_living_room_basket/v1` 上建立正常物理和独立安全层下的
-  privileged teacher/oracle ceiling；该结果属于 `development`，不冒充可部署能力。
+  algorithmic privileged teacher/oracle ceiling；该结果属于 `development`，不冒充
+  可部署能力。禁止由 LLM 逐步猜测或手调 16 维动作；必须使用状态反馈的 IK、规划、优化、
+  MPC 或已有可靠 controller，并遵守 4 小时/3 次实质 revision 的停止预算。
 
 ## 历史归档
 
