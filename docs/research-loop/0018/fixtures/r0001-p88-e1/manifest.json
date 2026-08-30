@@ -1,0 +1,109 @@
+{
+  "schema": "hwr.r0001-p88-e1.manifest/v1",
+  "proposal_id": "R0001-P88-E1",
+  "freeze_stage": "pre_worker_implementation",
+  "truth_author_role": "independent_truth_author",
+  "scope": "public coordinate/self-mask/component/merge truth plus sealed hidden qualification challenge",
+  "canonical_json_profile": {
+    "public_json": "UTF-8, 2-space indentation, insertion-order keys, one terminal LF",
+    "hidden_plaintext_json": "UTF-8, recursive lexicographic key order, compact separators, one terminal LF",
+    "hash_algorithm": "SHA-256 over exact file bytes"
+  },
+  "schemas": [
+    {
+      "schema": "hwr.r0001-p88-e1.fixtures/v1",
+      "file": "public-fixtures.json",
+      "role": "public input"
+    },
+    {
+      "schema": "hwr.r0001-p88-e1.truth/v1",
+      "file": "public-truth.json",
+      "role": "public expected truth"
+    },
+    {
+      "schema": "hwr.r0001-p88-e1.mutation-inventory/v1",
+      "file": "mutation-inventory.json",
+      "role": "exact mutation and control inventory"
+    },
+    {
+      "schema": "hwr.r0001-p88-e1.hidden-commitment/v1",
+      "file": "commitment.json",
+      "role": "sealed hidden challenge commitment"
+    }
+  ],
+  "files": [
+    {
+      "path": "README.md",
+      "role": "format, verification, role-separation, and reveal protocol",
+      "bytes": 4415,
+      "sha256": "192f2433688623509050b7ea3d6a96df015cd5455bd718087714ccefb77376c2"
+    },
+    {
+      "path": "public-key.pem",
+      "role": "RSA public key for OAEP-SHA256 key wrapping",
+      "bytes": 625,
+      "sha256": "12a7a0d7504b42b56ca36171e759cd7c09974fc7546db41fce773aecd9fc5da2"
+    },
+    {
+      "path": "public-fixtures.json",
+      "role": "public fixture input",
+      "bytes": 7655,
+      "sha256": "a2778edeac61a77a4f13a099ce0942b009f1536bfe658a1e09bef9e7c89bc63d"
+    },
+    {
+      "path": "public-truth.json",
+      "role": "independently derived public expected truth",
+      "bytes": 21157,
+      "sha256": "c0bddb58773a6ff5f70464f64f5e858123c5aa6b49029bfa91aa9458587e2c85"
+    },
+    {
+      "path": "mutation-inventory.json",
+      "role": "exact M01-M11 and C01-C02 inventory",
+      "bytes": 4230,
+      "sha256": "ae860cd67758c01e0c12e0645373ceffb2625975021313b8ec62e5087ffb7af0"
+    },
+    {
+      "path": "commitment.json",
+      "role": "hidden package hashes and non-secret metadata",
+      "bytes": 1341,
+      "sha256": "4dcc49c34bdae3f3c74d3cc9595e743829e6b1225aa942f454ef9e0e43de7e17"
+    },
+    {
+      "path": "hidden-challenge.aes-256-ctr.bin",
+      "role": "encrypted hidden input and truth",
+      "bytes": 16963,
+      "sha256": "16eb680df74224e6b7464be6822d5aaae785d506e3af6c317762d10d68b1dd89"
+    },
+    {
+      "path": "hidden-key.rsa-oaep-sha256.bin",
+      "role": "RSA-OAEP-SHA256 encrypted 32-byte AES key and 16-byte IV",
+      "bytes": 384,
+      "sha256": "31696a8b7c4e764aad14a40c2b21ef47ae2be00cacb6fec3992dea29eaace6f8"
+    }
+  ],
+  "public_expectations": {
+    "public_case_count": 3,
+    "base_pixel_count": 30,
+    "base_masked_count": 6,
+    "base_retained_count": 24,
+    "arm_query_count": 4,
+    "raw_anchor_count": 5,
+    "component_count": 2,
+    "retained_component_count": 1,
+    "dropped_component_count": 1,
+    "identity_raw_multiplicity": 6,
+    "identity_unique_count": 5
+  },
+  "hidden_commitment_expectations": {
+    "hidden_case_count": 3,
+    "expected_distinct_schema_count": 3,
+    "expected_inventory_entry_count": 13,
+    "plaintext_or_key_material_present": false
+  },
+  "inventory_expectations": {
+    "entry_count": 13,
+    "reject_count": 11,
+    "unchanged_control_count": 2
+  },
+  "self_reference_policy": "manifest.json is not listed in its own files array; report or record its SHA-256 externally."
+}

@@ -1,0 +1,118 @@
+{
+  "schema": "hwr.r0001-p88-e1.mutation-inventory/v1",
+  "proposal_id": "R0001-P88-E1",
+  "inventory_contract": {
+    "exact_entry_count": 13,
+    "mutation_entry_count": 11,
+    "control_entry_count": 2,
+    "required_ids_in_order": [
+      "M01",
+      "M02",
+      "M03",
+      "M04",
+      "M05",
+      "M06",
+      "M07",
+      "M08",
+      "M09",
+      "M10",
+      "M11",
+      "C01",
+      "C02"
+    ],
+    "extra_missing_or_duplicate_entries": "invalid"
+  },
+  "entries": [
+    {
+      "id": "M01",
+      "kind": "mutation",
+      "unique_target_field_or_semantics": "post_self_mask_coordinate_disposition",
+      "operation": "Swap one masked coordinate with one retained coordinate while preserving both counts.",
+      "expected_semantic_category": "semantic_reject"
+    },
+    {
+      "id": "M02",
+      "kind": "mutation",
+      "unique_target_field_or_semantics": "coordinate_identity.row_and_column",
+      "operation": "Swap row and column in one coordinate identity.",
+      "expected_semantic_category": "semantic_reject"
+    },
+    {
+      "id": "M03",
+      "kind": "mutation",
+      "unique_target_field_or_semantics": "raw_coordinate_multiset_multiplicity",
+      "operation": "Duplicate one existing coordinate occurrence and drop one different occurrence, preserving raw multiplicity.",
+      "expected_semantic_category": "semantic_reject"
+    },
+    {
+      "id": "M04",
+      "kind": "mutation",
+      "unique_target_field_or_semantics": "coordinate_identity.capture",
+      "operation": "Delete capture ordinal from identity semantics so equal row and column values collide across captures.",
+      "expected_semantic_category": "semantic_reject"
+    },
+    {
+      "id": "M05",
+      "kind": "mutation",
+      "unique_target_field_or_semantics": "component_partition.members",
+      "operation": "Exchange one member between two components while preserving each component cardinality.",
+      "expected_semantic_category": "semantic_reject"
+    },
+    {
+      "id": "M06",
+      "kind": "mutation",
+      "unique_target_field_or_semantics": "merge_graph.edge_set",
+      "operation": "Replace connected-component semantics with clique semantics by adding the missing transitive A-C edge.",
+      "expected_semantic_category": "semantic_reject"
+    },
+    {
+      "id": "M07",
+      "kind": "mutation",
+      "unique_target_field_or_semantics": "component_partition.retained",
+      "operation": "Mark the single-view component as retained.",
+      "expected_semantic_category": "semantic_reject"
+    },
+    {
+      "id": "M08",
+      "kind": "mutation",
+      "unique_target_field_or_semantics": "coordinate_stage",
+      "operation": "Publish the pre-self-mask coordinate ledger as the post-self-mask ledger.",
+      "expected_semantic_category": "semantic_reject"
+    },
+    {
+      "id": "M09",
+      "kind": "mutation",
+      "unique_target_field_or_semantics": "component_partition.completeness",
+      "operation": "Delete one complete dropped component from the result.",
+      "expected_semantic_category": "completeness_reject"
+    },
+    {
+      "id": "M10",
+      "kind": "mutation",
+      "unique_target_field_or_semantics": "raw_anchor_domain.completeness",
+      "operation": "Add one fabricated raw anchor that was not present in the input.",
+      "expected_semantic_category": "completeness_reject"
+    },
+    {
+      "id": "M11",
+      "kind": "mutation",
+      "unique_target_field_or_semantics": "identity_duplicate_equivalence",
+      "operation": "Treat an exact duplicate within one capture as equivalent to equal row and column values across different captures.",
+      "expected_semantic_category": "identity_reject"
+    },
+    {
+      "id": "C01",
+      "kind": "control",
+      "unique_target_field_or_semantics": "raw_anchor_input_order",
+      "operation": "Permute the input raw-anchor order.",
+      "expected_semantic_category": "canonical_result_unchanged"
+    },
+    {
+      "id": "C02",
+      "kind": "control",
+      "unique_target_field_or_semantics": "opaque_case_id",
+      "operation": "Apply a bijective remapping to opaque case identifiers without changing any scientific input.",
+      "expected_semantic_category": "semantic_result_unchanged"
+    }
+  ]
+}

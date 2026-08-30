@@ -1,0 +1,394 @@
+{
+  "schema": "hwr.r0001-p88-e1.fixtures/v1",
+  "proposal_id": "R0001-P88-E1",
+  "numeric_contract": {
+    "length_unit": "metre",
+    "angle_unit": "radian",
+    "floating_point_dtype": "float64",
+    "depth_input_dtype": "float32",
+    "pixel_index_dtype": "int64",
+    "matrix_layout": "row-major",
+    "comparison_semantics": {
+      "base_box": "inclusive",
+      "arm_capsule": "strict distance < radius + 0.06",
+      "merge_distance": "inclusive <= 0.08",
+      "merge_cosine": "inclusive >= 0.80",
+      "merge_width_delta": "inclusive <= 0.10"
+    }
+  },
+  "coordinate_frames": {
+    "camera": {
+      "name": "head_camera",
+      "axes": {
+        "x": "image-right",
+        "y": "image-down",
+        "z": "optical-forward"
+      }
+    },
+    "robot": {
+      "name": "current_robot_base",
+      "axes": {
+        "x": "robot-forward",
+        "y": "robot-left",
+        "z": "up"
+      }
+    },
+    "acquisition": {
+      "name": "acquisition_base",
+      "axes": {
+        "x": "acquisition-forward",
+        "y": "acquisition-left",
+        "z": "up"
+      }
+    },
+    "point_frame": "acquisition_base"
+  },
+  "fixed_geometry": {
+    "acquisition_base_pose_xy_yaw": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "current_base_pose_xy_yaw": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "robot_from_head_camera": [
+      [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "acquisition_from_current_robot": [
+      [
+        1.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "intrinsics_fx_fy_cx_cy": [
+      20.0,
+      80.0,
+      189.5,
+      96.0
+    ],
+    "left_joint_position": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "right_joint_position": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "left_lateral": 0.31,
+    "right_lateral": -0.31,
+    "base_box_robot_frame": {
+      "center_x": -0.01,
+      "half_extent_x": 0.36,
+      "half_extent_y": 0.29,
+      "minimum_z": -0.21,
+      "maximum_z": 1.38
+    },
+    "arm_link_radii": [
+      0.1,
+      0.065,
+      0.059,
+      0.055,
+      0.052,
+      0.13
+    ],
+    "self_mask_padding": 0.06
+  },
+  "cases": [
+    {
+      "case_id": "public-base-grid-30",
+      "kind": "camera_back_projection_and_base_self_mask",
+      "capture": 0,
+      "rows": [
+        94,
+        95,
+        96,
+        97,
+        98,
+        99
+      ],
+      "columns": [
+        198,
+        199,
+        200,
+        201,
+        202
+      ],
+      "depth": 0.8,
+      "pixel_count": 30
+    },
+    {
+      "case_id": "public-arm-capsules",
+      "kind": "arm_chain_and_capsule_self_mask",
+      "tested_capsules": [
+        {
+          "capsule_id": "left-link-2",
+          "side": "left",
+          "link_index": 2,
+          "start": [
+            0.33,
+            0.31,
+            0.95
+          ],
+          "end": [
+            0.6,
+            0.31,
+            0.95
+          ],
+          "radius": 0.059,
+          "threshold": 0.119,
+          "points": [
+            {
+              "point_id": "left-inside",
+              "xyz": [
+                0.465,
+                0.35,
+                0.95
+              ]
+            },
+            {
+              "point_id": "left-outside",
+              "xyz": [
+                0.465,
+                0.45,
+                0.95
+              ]
+            }
+          ]
+        },
+        {
+          "capsule_id": "right-link-2",
+          "side": "right",
+          "link_index": 2,
+          "start": [
+            0.33,
+            -0.31,
+            0.95
+          ],
+          "end": [
+            0.6,
+            -0.31,
+            0.95
+          ],
+          "radius": 0.059,
+          "threshold": 0.119,
+          "points": [
+            {
+              "point_id": "right-inside",
+              "xyz": [
+                0.465,
+                -0.35,
+                0.95
+              ]
+            },
+            {
+              "point_id": "right-outside",
+              "xyz": [
+                0.465,
+                -0.45,
+                0.95
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "public-merge-ledger",
+      "kind": "raw_anchor_graph_component_merge_and_identity_ledger",
+      "raw_anchors": [
+        {
+          "anchor_id": "A",
+          "center": [
+            0.6,
+            0.1,
+            0.8
+          ],
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "width": 0.1,
+          "prominence": 0.4,
+          "support_count": 30,
+          "episode": "public-episode-alpha",
+          "capture": 0,
+          "row": 10,
+          "column": 20
+        },
+        {
+          "anchor_id": "B",
+          "center": [
+            0.67,
+            0.1,
+            0.8
+          ],
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "width": 0.12,
+          "prominence": 0.6,
+          "support_count": 31,
+          "episode": "public-episode-alpha",
+          "capture": 1,
+          "row": 11,
+          "column": 21
+        },
+        {
+          "anchor_id": "C",
+          "center": [
+            0.74,
+            0.1,
+            0.8
+          ],
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "width": 0.14,
+          "prominence": 0.5,
+          "support_count": 32,
+          "episode": "public-episode-alpha",
+          "capture": 2,
+          "row": 12,
+          "column": 22
+        },
+        {
+          "anchor_id": "D",
+          "center": [
+            1.2,
+            -0.6,
+            0.7
+          ],
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "width": 0.25,
+          "prominence": 0.8,
+          "support_count": 28,
+          "episode": "public-episode-alpha",
+          "capture": 4,
+          "row": 30,
+          "column": 40
+        },
+        {
+          "anchor_id": "E",
+          "center": [
+            1.25,
+            -0.6,
+            0.7
+          ],
+          "normal": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "width": 0.27,
+          "prominence": 0.7,
+          "support_count": 29,
+          "episode": "public-episode-alpha",
+          "capture": 4,
+          "row": 31,
+          "column": 41
+        }
+      ],
+      "coordinate_identity_multiset": [
+        {
+          "episode": "public-episode-alpha",
+          "capture": 0,
+          "row": 94,
+          "column": 199
+        },
+        {
+          "episode": "public-episode-alpha",
+          "capture": 0,
+          "row": 94,
+          "column": 200
+        },
+        {
+          "episode": "public-episode-alpha",
+          "capture": 1,
+          "row": 95,
+          "column": 199
+        },
+        {
+          "episode": "public-episode-alpha",
+          "capture": 1,
+          "row": 95,
+          "column": 200
+        },
+        {
+          "episode": "public-episode-alpha",
+          "capture": 1,
+          "row": 95,
+          "column": 200
+        },
+        {
+          "episode": "public-episode-alpha",
+          "capture": 2,
+          "row": 94,
+          "column": 199
+        }
+      ]
+    }
+  ]
+}

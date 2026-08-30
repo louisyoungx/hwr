@@ -1,0 +1,27 @@
+{
+  "schema": "hwr.r0001-p88-e1.hidden-commitment/v1",
+  "proposal_id": "R0001-P88-E1",
+  "plaintext_package_sha256": "8e7864059f4d1fccef9c3be7edee29c88524371ed05475c35e95de2470b9e501",
+  "ciphertext_sha256": "16eb680df74224e6b7464be6822d5aaae785d506e3af6c317762d10d68b1dd89",
+  "encrypted_key_sha256": "31696a8b7c4e764aad14a40c2b21ef47ae2be00cacb6fec3992dea29eaace6f8",
+  "public_key_sha256": "12a7a0d7504b42b56ca36171e759cd7c09974fc7546db41fce773aecd9fc5da2",
+  "hidden_case_count": 3,
+  "expected_distinct_schema_count": 3,
+  "expected_inventory_entry_count": 13,
+  "plaintext_format": "UTF-8 canonical JSON with recursively sorted keys, compact separators, and one terminal LF",
+  "ciphertext_file": "hidden-challenge.aes-256-ctr.bin",
+  "encrypted_key_file": "hidden-key.rsa-oaep-sha256.bin",
+  "content_encryption": {
+    "algorithm": "AES-256-CTR",
+    "key_bytes": 32,
+    "iv_bytes": 16,
+    "wrapped_payload_layout": "32-byte AES key followed by 16-byte IV"
+  },
+  "key_encryption": {
+    "algorithm": "RSA-OAEP",
+    "oaep_digest": "SHA-256",
+    "mgf1_digest": "SHA-256"
+  },
+  "shared_worker_contract": "Hidden fixture and truth collections use the same fixture/truth schema identifiers and case kinds as the public collections.",
+  "answer_disclosure": "No hidden input, truth, AES key, or IV is present in this commitment."
+}
