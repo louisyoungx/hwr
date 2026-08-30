@@ -2,6 +2,12 @@
 
 from hwr.adapters.mujoco.backend import Mujoco3DBackend, Mujoco3DConfig
 from hwr.adapters.mujoco.bimanual_backend import MujocoBimanualTaskBackend
+from hwr.adapters.mujoco.bimanual_teacher import (
+    BASKET_TASK_ID,
+    GenericBasketPrimitiveBaseline,
+    PrivilegedBasketTeacher,
+    TeacherOutput,
+)
 from hwr.adapters.mujoco.bimanual_bindings import (
     BimanualMujocoBinding,
     load_bimanual_mujoco_bindings,
@@ -55,6 +61,8 @@ __all__ = [
     "Mujoco3DBackend",
     "Mujoco3DConfig",
     "MujocoBimanualTaskBackend",
+    "BASKET_TASK_ID",
+    "GenericBasketPrimitiveBaseline",
     "MujocoBimanualBackendFactory",
     "MujocoDualArmBackend",
     "MujocoDualArmConfig",
@@ -76,6 +84,7 @@ __all__ = [
     "ContactGraspReport",
     "FormalExpertOutput",
     "PrivilegedCartesianExpert",
+    "PrivilegedBasketTeacher",
     "PrivilegedHouseholdExpert",
     "RobotModelReport",
     "BIMANUAL_EVIDENCE_VIEWS",
@@ -87,6 +96,7 @@ __all__ = [
     "ROBOT_BODY_ROOT_NAMES",
     "ROBOT_PARTS",
     "ScenePreview",
+    "TeacherOutput",
     "inspect_robot_model",
     "load_mujoco_task_bindings",
     "load_bimanual_mujoco_bindings",
