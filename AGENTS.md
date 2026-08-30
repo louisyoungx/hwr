@@ -35,27 +35,6 @@
 都属于无效实验。反之，不得以“最终策略不能使用 teacher”为由禁止 `development` 阶段建立
 oracle ceiling、采集演示或定位控制缺陷。
 
-### LLM 动作能力边界
-
-LLM 不得把自己当作低层运动控制器。禁止通过反复观看轨迹、猜测数值并手工修改 16 维动作、
-逐阶段速度、逐 seed 航点或固定动作序列来“调出” teacher 成功。此类过程不可泛化、难以
-归因，并且曾经连续运行两天仍没有产生成功。
-
-`L0` teacher 必须由状态反馈的算法生成动作，优先顺序为：
-
-1. 复用并验证已有可靠 controller、IK、motion planner 或 simulator reference controller；
-2. 使用 MuJoCo Jacobian、数值 IK、轨迹优化、MPC、RRT/采样规划、约束优化或其他成熟求解器；
-3. 必要时组合显式状态机，但每个状态的目标必须由当前几何/接触状态计算，不能保存
-   Episode/seed 专属动作表。
-
-允许在 development set 上用自动 sweep 或优化器选择少量 controller 参数，但必须结果前冻结
-搜索空间、目标函数和预算；同一组参数必须用于全部 confirmation seed。禁止 LLM 逐次手调
-动作向量或根据单个 seed 增加例外分支。
-
-teacher 开发默认最多使用 4 小时 wall time 或 3 次实质 controller revision，以先到者为准；
-每次 revision 必须改变可说明的算法或修复已定位的最早失败阶段。预算耗尽且仍无成功时，
-必须停止并报告不可解阶段，或只切换一次不同的算法族；不得连续数日继续微调动作。
-
 ## 3. 当前能力阶梯
 
 研究必须按以下阶梯推进；原则上一次最多跨越一级：
@@ -127,7 +106,6 @@ teacher 开发默认最多使用 4 小时 wall time 或 3 次实质 controller r
 当能力基线为 0 success 时：
 
 - 先建立特权 oracle/teacher ceiling，证明环境、机器人、控制时域和安全合同可解；
-- teacher 必须是闭环算法控制器，不是 LLM 手调的动作序列；
 - 再建立 state-policy，隔离动作表达、优化和控制问题；
 - 再引入视觉、语言、多任务和 OOD；
 - 允许单任务、固定布局、课程、演示、行为克隆和预训练作为开发或训练方案；
@@ -215,7 +193,5 @@ challenger。更复杂方法只有在相同数据和计算预算下超过简单�
 自行派生下一会话。
 
 若启动下一轮，默认建立 `docs/research-loop/0019/`，目标是 `L0`：为
-`carry_living_room_basket/v1` 建立正常物理、独立安全层下的 algorithmic privileged
-teacher/oracle ceiling。teacher 必须由状态反馈的 IK、规划、优化、MPC 或已有可靠 controller
-生成，禁止 LLM 手调低层动作。该结果只属于 `development`，但它是恢复能力研究前必须获得的
-最短闭环证据。
+`carry_living_room_basket/v1` 建立正常物理、独立安全层下的 privileged teacher/oracle
+ceiling。该结果只属于 `development`，但它是恢复能力研究前必须获得的最短闭环证据。
