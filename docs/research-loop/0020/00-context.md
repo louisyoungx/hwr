@@ -27,3 +27,14 @@
   predictive collision filter 执行；不得 teleport、直接改写权威 `MjData`、绕过安全层、
   修改任务成功条件或改变物理参数。
 - confirmation 与 sealed final 均为 `not_run`；本轮不会开启。
+
+## 2026-08-31 重开
+
+- 用户在提交 `f7b27a38b1b2ccbbeba8a8f3783c7feed646b203` 后明确授权重新打开 R0020；
+  主假设不变，不创建 R0021。
+- `f7b27a3` 明确 attempt 1～3 是代码变化后的 implementation iteration，未达到
+  behavior entry，不是独立重复证据，也不足以判定联合规划路线失败。
+- 撤销“R0018～R0020 连续三轮无能力进展”的判断：R0018 是旧机制归档，R0019 为
+  `invalid`，旧 R0020 尚未 behavior-ready。
+- 重开阶段只处理 `acquire`：联合 planner 生成无非法 robot–basket 穿透的可执行近场路径，
+  在线 tracker 使用 pad/handle 几何和真实接触反馈完成对中与闭爪。

@@ -11,6 +11,7 @@ import numpy as np
 
 from hwr.adapters.mujoco.bimanual_backend import MujocoBimanualTaskBackend
 from hwr.adapters.mujoco.bimanual_teacher import BASKET_TASK_ID
+from hwr.adapters.mujoco.joint_basket_acquire import acquire_feedback
 from hwr.adapters.mujoco.joint_basket_planner import (
     GRASP_GRIPPER,
     JointGraspPlan,
@@ -77,6 +78,7 @@ class JointBasketMotionTeacher:
         self._retract_targets: tuple[np.ndarray, np.ndarray] | None = None
         self._approach_settle_steps = 0
         self._grasp_closing = False
+        self._geometry_acquire_started = False
 
     @property
     def grasp_plan(self) -> JointGraspPlan | None:
@@ -152,25 +154,47 @@ class JointBasketMotionTeacher:
         waypoints = self._grasp_plan.waypoints
         target = waypoints[self._waypoint_index]
         error = self._joint_error(target, observation)
-        if error < 0.035 and self._waypoint_index < len(waypoints) - 1:
+        geometry_entry_index = 3
+        if error < 0.035 and self._waypoint_index < geometry_entry_index:
             self._waypoint_index += 1
             target = waypoints[self._waypoint_index]
             error = self._joint_error(target, observation)
-        at_final = self._waypoint_index == len(waypoints) - 1
-        if at_final and error < 0.018:
-            self._grasp_closing = True
-        gripper = GRASP_GRIPPER if self._grasp_closing else 0.0
         concurrent = int(audit["concurrent_steps"])
-        if at_final and concurrent >= self.backend.task.concurrent_steps:
+        if concurrent >= self.backend.task.concurrent_steps:
             self._capture_grasp_transform(observation)
             self._advance("secure")
             return self._secure(observation, audit)
-        if self.stage_step >= 320:
+        if self.stage_step >= 480:
             self._fail("acquire_timeout")
             return JointTeacherOutput(self._hold(observation), self.stage)
         self.stage_step += 1
+        if self._waypoint_index >= geometry_entry_index:
+            self._geometry_acquire_started = True
+            feedback = acquire_feedback(
+                self.backend,
+                target_rotations=(
+                    self._grasp_plan.left_site_rotation,
+                    self._grasp_plan.right_site_rotation,
+                ),
+                target_handle_from_midpoints=(
+                    self._grasp_plan.left_handle_from_pad_midpoint,
+                    self._grasp_plan.right_handle_from_pad_midpoint,
+                ),
+                current_grippers=(
+                    observation.proprioception.left_gripper_position,
+                    observation.proprioception.right_gripper_position,
+                ),
+            )
+            self._grasp_closing = max(feedback.grippers) > 0.0
+            return JointTeacherOutput(
+                self._site_tracking_action(
+                    feedback.targets,
+                    gripper=feedback.grippers,
+                ),
+                self.stage,
+            )
         return JointTeacherOutput(
-            self._joint_tracking_action(target, gripper),
+            self._joint_tracking_action(target, 0.0),
             self.stage,
         )
 
@@ -466,7 +490,7 @@ class JointBasketMotionTeacher:
         payload_position: np.ndarray,
         payload_rotation: np.ndarray,
         *,
-        gripper: float,
+        gripper: float | tuple[float, float],
         base_linear: float = 0.0,
         base_angular: float = 0.0,
     ) -> DualArmAction:

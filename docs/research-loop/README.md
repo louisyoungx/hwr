@@ -7,18 +7,28 @@
 - 最新能力基线：
   `runs/foundation-world-model/r0001-p01-baseline-v4-s20260812`，24 Episode、
   1,600 update、0 success、Actor 未解锁。
-- 最新轮次：`0020`，已结束，结论为 `abandoned`。
+- 最新轮次：`0020`，已按 `f7b27a3` 后的新规则重开并结束；结论为 `abandoned`，仅适用于
+  behavior entry 后冻结的当前实现。
 - R0020 使用联合底盘/双臂抓取构型规划、联合关键帧路径与 payload-relative 闭环跟踪，
   不沿用 R0019 的独立逐臂 CEM 或固定 transport twist。
-- 固定 development seed `19001` 的 3 个完整 physics Episode 均为 `0 success`，只到达
+- 固定 development seed `19001` 的 3 个历史 physics 运行均为 `0 success`，只到达
   `approach/acquire/failed_hold`，没有形成任一完整双 pad contact；全部为 `0` actual
   severe collision、`0` safety intervention。
+- 这三次运行分别发生在代码修改之后，现归类为 implementation iteration 1～3，不是独立
+  重复证据；由于未形成连续 10-step 双臂接触并进入 `secure`，它们没有达到差异化机制的
+  behavior entry，不构成联合规划路线的可判别失败。
 - 静态 planner 能找到四 pad 接近或进入接触的联合末态，但动态 joint waypoint tracker
-  没有把静态解转化为真实抓取。因此不能评价尚未执行的 lift、target transport、place、
-  release 或 stabilize，也没有建立 L0 ceiling。
+  原先未把静态解转化为真实抓取。重开实现修复了非 pad–handle 篮子穿透，并用在线
+  pad/handle 几何、signed distance 与 contact feedback 完成最后接近和闭爪。
+- smoke 011 达到 behavior entry：seed 19001 上进入 `secure`，最大连续双臂接触 `11` step，
+  `0` safety intervention、`0` actual severe collision。
+- 冻结实现的完整 seed 19001 Episode 执行到 `secure` 后丢失接触，以 `secure_timeout`
+  失败；`0 success`、`0` 抬升、`0` 受控目标进展、`0` severe collision。
 - 4-seed development cohort、confirmation 和 sealed final 均为 `not_run`。
-- R0018～R0020 已连续三轮没有能力阶梯进展，研究循环强制停止；下一步必须比较另一条技术
-  路线、缩小任务、改变架构或终止任务，等待用户明确决定，不自动启动新轮。
+- 已撤销“R0018～R0020 连续三轮无能力进展”的判断：R0018 是旧机制归档，R0019 为
+  `invalid`，R0020 历史 attempt 1～3 均不计数；只有重开后达到 behavior entry 的冻结实现
+  计为一个未推进能力的可计数轮次，尚未触发三轮停止。
+- 下一步等待用户明确启动；不得自动创建 R0021 或运行 confirmation。
 
 ## 历史归档
 

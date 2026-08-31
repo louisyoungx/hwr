@@ -21,6 +21,10 @@ class JointGraspPlan:
     base_x: float
     left_joint_target: np.ndarray
     right_joint_target: np.ndarray
+    left_site_rotation: np.ndarray
+    right_site_rotation: np.ndarray
+    left_handle_from_pad_midpoint: np.ndarray
+    right_handle_from_pad_midpoint: np.ndarray
     waypoints: tuple[tuple[np.ndarray, np.ndarray], ...]
     maximum_pad_distance: float
     path_minimum_clearance: float
@@ -45,12 +49,12 @@ def plan_joint_grasp(
     standard_deviation = np.concatenate(
         ([0.035], np.tile((0.30, 0.35, 0.45, 0.50, 0.40, 0.50), 2))
     )
-    rng = np.random.default_rng(seed ^ 0x20C0FFEE)
+    rng = np.random.default_rng(seed ^ 0xCAFE)
     work = mujoco.MjData(model)
-    best: tuple[float, np.ndarray, float] | None = None
-    for _ in range(14):
+    best: tuple[float, np.ndarray, float, float] | None = None
+    for _ in range(20):
         population = np.vstack(
-            (mean, rng.normal(mean, standard_deviation, size=(767, 13)))
+            (mean, rng.normal(mean, standard_deviation, size=(1535, 13)))
         )
         population[:, 0] = np.clip(population[:, 0], start_x - 0.03, 0.11)
         population[:, 1:] = np.clip(population[:, 1:], lower, upper)
@@ -64,16 +68,34 @@ def plan_joint_grasp(
             )
             for candidate in population
         ]
-        elite_indices = np.argsort([row[0] for row in scored])[:48]
+        endpoint_indices = np.argsort([row[0] for row in scored])[:192]
+        path_scores = np.full(len(population), np.inf)
+        for index in endpoint_indices:
+            path_penetration = _candidate_path_penetration(
+                backend,
+                work,
+                candidate=population[index],
+                addresses=addresses,
+                base_address=base_address,
+            )
+            endpoint = scored[int(index)]
+            path_scores[index] = endpoint[0] + 1000.0 * path_penetration**2
+            scored[int(index)] = (
+                float(path_scores[index]),
+                endpoint[1],
+                endpoint[2],
+                max(endpoint[3], path_penetration),
+            )
+        elite_indices = np.argsort(path_scores)[:64]
         elite = population[elite_indices]
         mean = elite.mean(axis=0)
         standard_deviation = np.maximum(elite.std(axis=0), 0.003)
         candidate_best = scored[int(elite_indices[0])]
         if best is None or candidate_best[0] < best[0]:
             best = candidate_best
-        if best[2] <= 0.001:
+        if best[2] <= 0.001 and best[3] <= 1.0e-6:
             break
-    if best is None or best[2] > 0.004:
+    if best is None or best[2] > 0.004 or best[3] > 1.0e-4:
         raise BasketTeacherError("joint grasp planner found no bilateral grasp")
     target = best[1]
     left_target = target[1:7].copy()
@@ -100,10 +122,24 @@ def plan_joint_grasp(
         left_joints=left_joints,
         right_joints=right_joints,
     )
+    terminal_geometry = _terminal_acquire_geometry(
+        backend,
+        work,
+        base_x=float(target[0]),
+        left_target=left_target,
+        right_target=right_target,
+        base_address=base_address,
+        left_joints=left_joints,
+        right_joints=right_joints,
+    )
     return JointGraspPlan(
         base_x=float(target[0]),
         left_joint_target=left_target,
         right_joint_target=right_target,
+        left_site_rotation=terminal_geometry[0][0],
+        right_site_rotation=terminal_geometry[1][0],
+        left_handle_from_pad_midpoint=terminal_geometry[0][1],
+        right_handle_from_pad_midpoint=terminal_geometry[1][1],
         waypoints=waypoints,
         maximum_pad_distance=float(best[2]),
         path_minimum_clearance=clearance,
@@ -116,7 +152,7 @@ def _score_grasp_candidate(
     candidate: np.ndarray,
     addresses: np.ndarray,
     base_address: int,
-) -> tuple[float, np.ndarray, float]:
+) -> tuple[float, np.ndarray, float, float]:
     model = backend.model
     mujoco.mj_copyData(work, model, backend.data)
     work.qpos[base_address] = candidate[0]
@@ -132,17 +168,43 @@ def _score_grasp_candidate(
     left_worst = float(distances[:2].max())
     right_worst = float(distances[2:].max())
     target_distance = distances + 0.0015
-    collision = _forbidden_penetration(backend, work)
+    collision = _planning_penetration(backend, work)
     symmetry = abs(left_worst - right_worst)
     score = float(
         np.square(target_distance).sum()
         + 8.0 * max(maximum, 0.0) ** 2
         + 2.0 * symmetry**2
-        + 25.0 * collision**2
+        + 1000.0 * collision**2
         + 1.0e-5
         * np.square(candidate[1:] - np.tile(NOMINAL_GRASP, 2)).sum()
     )
-    return score, candidate.copy(), maximum
+    return score, candidate.copy(), maximum, collision
+
+
+def _candidate_path_penetration(
+    backend: MujocoBimanualTaskBackend,
+    work: mujoco.MjData,
+    *,
+    candidate: np.ndarray,
+    addresses: np.ndarray,
+    base_address: int,
+) -> float:
+    model = backend.model
+    source = backend.data
+    start = source.qpos[addresses]
+    maximum = 0.0
+    for alpha in (0.35, 0.50, 0.65, 0.80):
+        mujoco.mj_copyData(work, model, source)
+        work.qpos[base_address] = candidate[0]
+        work.qpos[addresses] = start + alpha * (candidate[1:] - start)
+        for joint in (
+            *backend.bundle.ids.secondary_finger_joints,
+            *backend.bundle.ids.finger_joints,
+        ):
+            work.qpos[model.jnt_qposadr[joint]] = 0.0
+        mujoco.mj_forward(model, work)
+        maximum = max(maximum, _planning_penetration(backend, work))
+    return maximum
 
 
 def _validate_grasp_path(
@@ -168,11 +230,68 @@ def _validate_grasp_path(
         ):
             work.qpos[model.jnt_qposadr[joint]] = 0.0
         mujoco.mj_forward(model, work)
-        penetration = _forbidden_penetration(backend, work)
+        penetration = _planning_penetration(backend, work)
         if penetration > 0.002:
             raise BasketTeacherError("joint grasp path intersects scene geometry")
         minimum_clearance = min(minimum_clearance, -penetration)
     return minimum_clearance
+
+
+def _terminal_acquire_geometry(
+    backend: MujocoBimanualTaskBackend,
+    work: mujoco.MjData,
+    *,
+    base_x: float,
+    left_target: np.ndarray,
+    right_target: np.ndarray,
+    base_address: int,
+    left_joints: tuple[int, ...],
+    right_joints: tuple[int, ...],
+) -> tuple[
+    tuple[np.ndarray, np.ndarray],
+    tuple[np.ndarray, np.ndarray],
+]:
+    model = backend.model
+    mujoco.mj_copyData(work, model, backend.data)
+    work.qpos[base_address] = base_x
+    for values, joints in (
+        (left_target, left_joints),
+        (right_target, right_joints),
+    ):
+        work.qpos[[model.jnt_qposadr[joint] for joint in joints]] = values
+    mujoco.mj_forward(model, work)
+    ids = backend.task_ids
+    return tuple(
+        _arm_terminal_geometry(work, site, tuple(sorted(pads)), handle)
+        for site, pads, handle in (
+            (
+                ids.left_grasp_site,
+                ids.left_pads,
+                ids.left_interaction_geom,
+            ),
+            (
+                ids.right_grasp_site,
+                ids.right_pads,
+                ids.right_interaction_geom,
+            ),
+        )
+    )
+
+
+def _arm_terminal_geometry(
+    data: mujoco.MjData,
+    site_id: int,
+    pad_ids: tuple[int, int],
+    handle_id: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    rotation = data.site_xmat[site_id].reshape(3, 3).copy()
+    midpoint = 0.5 * (
+        data.geom_xpos[pad_ids[0]] + data.geom_xpos[pad_ids[1]]
+    )
+    handle_from_midpoint = rotation.T @ (
+        data.geom_xpos[handle_id] - midpoint
+    )
+    return rotation, handle_from_midpoint
 
 
 def _pad_distances(
@@ -200,20 +319,33 @@ def _pad_distances(
     )
 
 
-def _forbidden_penetration(
+def _planning_penetration(
     backend: MujocoBimanualTaskBackend,
     data: mujoco.MjData,
 ) -> float:
     ids = backend.task_ids
+    grasp_pairs = {
+        frozenset((pad, ids.left_interaction_geom))
+        for pad in ids.left_pads
+    } | {
+        frozenset((pad, ids.right_interaction_geom))
+        for pad in ids.right_pads
+    }
     penetration = 0.0
     for contact in data.contact[: data.ncon]:
         first, second = int(contact.geom1), int(contact.geom2)
+        pair = frozenset((first, second))
+        if pair in grasp_pairs:
+            continue
         robot_first = first in ids.robot_geoms
         robot_second = second in ids.robot_geoms
         if robot_first == robot_second:
             continue
         other = second if robot_first else first
-        if other in ids.allowed_robot_contacts:
+        if (
+            other in ids.allowed_robot_contacts
+            and other not in ids.payload_geoms
+        ):
             continue
         penetration = max(penetration, max(0.0, -float(contact.dist)))
     return penetration
