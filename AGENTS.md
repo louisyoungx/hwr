@@ -25,7 +25,8 @@
 2. `capability`：验证可部署策略在冻结分布上的闭环行为改善。
    - 策略只能使用声明的部署观测；评测保持真实物理、成功状态机和独立安全层。
    - 使用结果前冻结的 paired seed、预算、主要指标和守护指标。
-   - 只有这一层可以产生 `accepted_capability` 并推进当前能力阶梯。
+   - 只有这一层可以产生 `accepted_capability` 并推进 `L2` 及以后的能力阶梯；`L0`、`L1`
+     的开发里程碑按第 3 节处理。
 3. `claim`：验证未见分布泛化或硬件迁移。
    - 模型、阈值和源码提交冻结后才生成或开启密封评测。
    - 报告全部 seed、失败、安全事件、计算成本和置信区间。
@@ -53,8 +54,11 @@ oracle ceiling、采集演示或定位控制缺陷。
 `L2` 以后只有满足对应冻结评测的 `accepted_capability` 才能推进。
 
 当前项目研究阶梯为 `L0 未通过`：最新完整三维世界模型基线只有 24 Episode、1,600 update、
-0 success，Actor 未解锁。`docs/research-loop/0001/`～`0018/` 为旧机制档案；其测量证据
-可以复用，但不能把任何 `accepted as ... contract/evidence` 当作能力进展。
+0 success，Actor 未解锁。R0019 的 paired development cohort 中，generic baseline 与
+privileged teacher 均为 `0/6` success；teacher 只在 `1/6` seed 形成真实双臂接触，最长
+`83` step，尚未建立完整的抓取、抬升、搬运、放置、释放和稳定闭环，也没有启动 confirmation。
+`docs/research-loop/0001/`～`0018/` 为旧机制档案；其测量证据可以复用，但不能把任何
+`accepted as ... contract/evidence` 当作能力进展。
 
 下一轮默认优先建立最简单正式任务的 `L0` oracle ceiling。若 `L0` 未通过，禁止把主要资源
 投入世界模型、Actor、开放世界泛化或更深的 evaluator provenance。
@@ -64,6 +68,8 @@ oracle ceiling、采集演示或定位控制缺陷。
 - `development set`：允许反复查看和调试，必须明确标记，不能用于确认性结论。
 - `confirmation set`：候选和阈值冻结后运行，用于 `capability` 判定；看过结果后即转为开发集。
 - `sealed final set`：只用于 `claim`；模型与代码冻结后由独立 seed domain 生成或开启。
+- 未运行或不适用的 evidence 必须明确记为 `not_run` 或 `not_applicable`；不得以
+  `valid: true`、`passed` 或等价状态表示未执行的 confirmation/final evidence。
 - R0001–R0018 反复使用且 outcome 已暴露的 24-Episode bank 只可作为 development set。
 - 不得为了补齐 cell、提高功效或满足门槛而挑换 seed、删除失败 Episode 或重命名已见样本。
 
@@ -103,6 +109,11 @@ oracle ceiling、采集演示或定位控制缺陷。
 4. 是否在当前数据和计算预算内可执行；
 5. 失败后是否仍能显著缩小决策空间。
 
+用端到端失败否定一条路线或定位系统瓶颈前，候选必须实际实现并尝试成功状态机所需的主要
+阶段。若候选只覆盖抓取、接触、搬运等子阶段，实验必须预先标为子目标，结论只能覆盖该子
+目标，不得把尚未实现的后续阶段归因于环境、机器人或整条技术路线。该规则不限制
+`development` teacher 的形式；脚本、规划、人工动作、遥操作、演示和探索性调参仍然允许。
+
 当能力基线为 0 success 时：
 
 - 先建立特权 oracle/teacher ceiling，证明环境、机器人、控制时域和安全合同可解；
@@ -140,6 +151,10 @@ oracle ceiling、采集演示或定位控制缺陷。
 - `02-results.md`：全部运行、失败、异常、资源和原始产物索引；
 - `03-summary.md`：能力等级是否变化、结论、保留/回退项和是否允许下一轮。
 
+凡是进入 `03-summary.md`、影响瓶颈判断或改变路线决策的补充探针，`02-results.md` 都必须
+记录其命令、seed、关键配置和原始产物索引。无法保留最小复核记录的探索，只能标为
+“未归档观察”，不得用于支撑正式结论。
+
 可选的提案或审查材料放入 `notes/`，不强制生成固定篇数。文档优先中文，使用稳定 ID，
 但不得为已经结束的旧观点持续增加无限后缀来代替新的能力假设。
 
@@ -168,13 +183,15 @@ challenger。更复杂方法只有在相同数据和计算预算下超过简单�
 
 - `accepted_capability`：冻结闭环主要指标改善，守护指标无不可接受回归，推进能力阶梯；
 - `rejected_capability`：能力假设被否定或净收益为负；
-- `inconclusive_capability`：能力实验因功效或基础设施问题不足以判定；
-- `validated_development`：开发/测量/基础设施证据成立，但不改变能力基线；
+- `inconclusive_capability`：`capability` 实验因功效或基础设施问题不足以判定，不用于纯
+  `development` 实验；
+- `validated_development`：预先声明的开发/测量/基础设施证据成立；只有完整满足 `L0` 或
+  `L1` 的预设最低证据时才能推进对应开发里程碑，不能成为可部署能力基线；
 - `invalid`：泄露、合同错误、数据污染、不可归因或实现偏离使实验无效；
 - `abandoned`：因价值不足、依赖递归或路线切换主动终止。
 
-只有 `accepted_capability` 可以成为新能力基线。任何结论都必须同时写明“允许声明”和
-“不允许声明”。
+只有 `accepted_capability` 可以成为新的可部署能力基线；`validated_development` 只能按上述
+条件推进 `L0`、`L1` 开发里程碑。任何结论都必须同时写明“允许声明”和“不允许声明”。
 
 ## 11. 收尾与停止
 
@@ -192,6 +209,8 @@ challenger。更复杂方法只有在相同数据和计算预算下超过简单�
 可验证工作，不能只回复计划。但新 Agent 也必须先确认用户明确指定了新轮；不得由旧会话
 自行派生下一会话。
 
-若启动下一轮，默认建立 `docs/research-loop/0019/`，目标是 `L0`：为
-`carry_living_room_basket/v1` 建立正常物理、独立安全层下的 privileged teacher/oracle
-ceiling。该结果只属于 `development`，但它是恢复能力研究前必须获得的最短闭环证据。
+启动时必须先读取 `docs/research-loop/README.md` 和最新一轮总结，并枚举已有四位数目录；新
+目录取现有最大编号的下一号，不在长期规则中硬编码轮次编号。单一目标由当前能力阶梯和最新
+失败证据决定。只要当前仍为 `L0 未通过`，默认继续寻找最短的完整 privileged
+teacher/oracle ceiling，但不得把未覆盖完整成功状态机的子目标结果当作 L0 通过，也不得原样
+重复已经失败的候选。
