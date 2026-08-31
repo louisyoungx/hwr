@@ -35,8 +35,16 @@ class TeacherOutput:
     stage: str
 
 
+class BasketTeacherError(RuntimeError):
+    """Expected candidate failure that should be recorded as an Episode result."""
+
+
 class PrivilegedBasketTeacher:
     """Closed-loop development teacher using private geometry and contact state."""
+
+    implemented_task_phases = frozenset(
+        {"approach", "acquire", "secure", "transport_probe"}
+    )
 
     def __init__(self, backend: MujocoBimanualTaskBackend, *, seed: int) -> None:
         if backend.task.task_id != BASKET_TASK_ID:
@@ -69,14 +77,14 @@ class PrivilegedBasketTeacher:
                 )
         if self.stage == "secure":
             if self.stage_step >= 40:
-                self._advance("transport")
+                self._advance("transport_probe")
             else:
                 self.stage_step += 1
                 return TeacherOutput(
                     self._joint_tracking_action(SECURE_GRIPPER),
                     self.stage,
                 )
-        if self.stage == "transport":
+        if self.stage == "transport_probe":
             if not bool(metrics["left_contact"] and metrics["right_contact"]):
                 self.failure_stage = "transport_contact_lost"
                 self._advance("failed_hold")
@@ -202,7 +210,9 @@ class PrivilegedBasketTeacher:
             if best[2].max() < 0.0005:
                 break
         if best is None or best[2].max() >= 0.005:
-            raise RuntimeError(f"{arm} grasp planning did not find bilateral pad contact")
+            raise BasketTeacherError(
+                f"{arm} grasp planning did not find bilateral pad contact"
+            )
         return best[1]
 
     def _joint_tracking_action(self, gripper: float) -> DualArmAction:

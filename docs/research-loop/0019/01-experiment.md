@@ -12,6 +12,9 @@
   走正式 16 维动作、MuJoCo physics、任务 tracker 和安全层。
 - teacher：任务专用 privileged feedback controller，复用同一动作/物理/安全/成功路径。
 - paired 条件：同一 seed、task config、randomization、physics、安全阈值和 Episode horizon。
+- teacher 必须实际覆盖
+  `approach/acquire/secure/lift/target_transport/place/release/stabilize`；缺少任何成功
+  状态机主要阶段都属于实现偏离，不能进入 confirmation。
 
 ## 开发阶段
 
@@ -32,6 +35,9 @@
 - teacher success `>=80/100`；
 - actual severe collision `=0`；
 - 只允许从干净、已提交的 worktree 启动；runner 在执行首个 Episode 前拒绝脏树；
+- 必须提供同一源码 commit 和 source-file hash 下的干净 development 资格报告；该报告必须
+  完整结束、teacher 至少成功 1 个 Episode、confirmation 状态为 `not_run`；
+- confirmation 输出路径必须不存在，防止覆盖已查看的确认结果；
 - 安全守护：`DualArmSafetySupervisor`、两步 predictive collision、`220N` severe
   threshold 均保持默认值；
 - 每个 Episode 最多 1,200 step，整次运行 wall time 最多 1,800 秒；
@@ -44,18 +50,21 @@
 MUJOCO_GL=glfw .venv/bin/python -m hwr.apps.evaluate_bimanual_teacher \
   --mode confirmation \
   --controller paired \
+  --qualification-report <clean-development-report.json> \
   --output runs/research-loop/0019/confirmation/paired-100.json
 ```
 
 若 development 资源实测表明 100 paired Episode 明显不合理，只能在首次 confirmation 运行前
 调整并记录理由，不能查看 confirmation 结果后改门。
 
-本轮 development 结果为 teacher `0/6` success，未满足“至少先出现一个端到端开发成功”的
-扩大条件。因此本轮不启动上述 confirmation 命令；这不是调整 seed、Episode 数或成功门。
+实际 candidate 仅实现 `approach/acquire/secure/transport_probe`，缺少
+`lift/target_transport/place/release/stabilize`；同时 development teacher 为 `0/6`
+success。因此本轮 candidate 不满足实现合同或最小扩大条件，不启动上述 confirmation
+命令；这不是调整 seed、Episode 数或成功门。
 
 ## 结论
 
 - 达门：`validated_development`。允许声明任务与控制链存在可行 teacher ceiling；不允许声明
   可部署状态/视觉策略、泛化或硬件能力。
-- 未达门：按证据使用 `inconclusive_capability`、`invalid` 或 `abandoned`，并报告最早稳定
-  阻塞；不自动启动下一轮。
+- 本轮实际结论：`invalid`，因为 candidate 未实现预先声明的完整 teacher 状态机。允许保留
+  已实现子目标的物理观察；不允许用端到端 `0/6` 定位完整任务、机器人或技术路线的瓶颈。

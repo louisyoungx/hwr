@@ -7,12 +7,16 @@
 - 最新能力基线：
   `runs/foundation-world-model/r0001-p01-baseline-v4-s20260812`，24 Episode、
   1,600 update、0 success、Actor 未解锁。
-- 最新轮次：`0019`，已结束，结论为 `inconclusive_capability`。
+- 最新轮次：`0019`，已结束，结论为 `invalid`。
 - R0019 结果：paired development seeds `19001`～`19006` 上 baseline 与 teacher 均为
   `0/6` success；teacher 在 `1/6` seed 形成双臂同步接触，最长 `83` step，但 transport
   丢失接触。全部 Episode 为 `0` actual severe collision、`0` safety intervention。
-- 100-seed confirmation 未启动，因为 development teacher 已知为 `0/6` success。
-- 当前最早稳定阻塞：跨 seed 联合双臂抓取不稳，以及抓稳后的 transport support 不足。
+- R0019 teacher 只实现 `approach/acquire/secure/transport_probe`，没有实现成功状态机要求的
+  `lift/target_transport/place/release/stabilize`，因此不能用端到端失败归因完整任务或
+  技术路线。
+- 100-seed confirmation 状态为 `not_run`；runner 会拒绝不完整 teacher、脏 worktree、
+  无同提交成功 development 资格报告或已有输出路径。
+- 可保留的子目标观察：跨 seed 双臂接触不稳，唯一同步接触 Episode 在 transport 时丢失接触。
 - 下一步：等待用户决定；不得自动启动 L1 或新研究轮。
 
 ## 历史归档

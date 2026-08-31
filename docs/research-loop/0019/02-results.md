@@ -11,7 +11,7 @@ MUJOCO_GL=glfw .venv/bin/python -m hwr.apps.evaluate_bimanual_teacher \
   --mode development --controller paired \
   --seed 19001 --seed 19002 --seed 19003 \
   --seed 19004 --seed 19005 --seed 19006 \
-  --output runs/research-loop/0019/development/paired-seeds-19001-19006.json
+  --output runs/research-loop/0019/development/paired-seeds-19001-19006-v2.json
 ```
 
 baseline 使用 simulator-private payload 几何构造唯一 candidate，因而刻意移除了 P61 的
@@ -36,7 +36,8 @@ deficit 一致；B5/B6 之后距离再次增大。
   signed distance 为目标；
 - planner 不写权威 `MjData`；
 - 用 backend Jacobian/DLS 的逆映射生成正常 16 维 Cartesian action；
-- 状态机为 `approach_base → acquire → secure → transport/failed_hold`；
+- 状态机为 `approach_base → acquire → secure → transport_probe/failed_hold`；
+- 未实现目标引导的完整 transport、`place`、`release` 或 `stabilize`；
 - 所有 action 都经过原 `DualArmSafetySupervisor` 与 predictive collision filter。
 
 结果：
@@ -60,57 +61,52 @@ deficit 一致；B5/B6 之后距离再次增大。
 - 全部 teacher Episode 为 `0` safety intervention、`0` actual severe collision；
 - 最大观察到的 forbidden force 为 `54.0003924N`，低于 `220N` severe 门。
 
-开发阶段的补充物理探针还证明：
-
-- CEM 可在复制状态找到四个 pad 同时接触的构型；
-- inverse-DLS 执行可在 seed 19001 上连续保持双臂接触超过 100 step；
-- 小幅水平/垂直搬运会因夹持构型不稳而丢失一侧接触；
-- 最大上抬实验曾将 payload 从约 `0.435m` 抬到约 `0.582m`，但在到达目标支撑前失去
-  双臂接触，不能计为任务成功。
-
-开发探针总账：
-
-| 探针 | 结果 |
-|---|---|
-| 直接 grasp-site Cartesian servo | 最小 reach 约 `0.055–0.067m`，0 双垫接触 |
-| 外侧偏置与基座前移 | 右手短暂双垫接触；前移在 `x≈0.077m` 被 predictive safety 拒绝 |
-| 6D 姿态约束 | 可求位置姿态 IK，但在线路径碰撞/漂移，0 双臂同步接触 |
-| pad-midpoint feedback | 仍受接触扰动和局部可达性限制，0 双臂同步接触 |
-| 180 组合局部参数网格 | 固定快照上 0 个组合形成同步接触，未扩大搜索空间 |
-| 独立逐臂 CEM | 复制状态找到四 pad 接触构型；在线 inverse-DLS 首次双臂接触 step 187 |
-| CEM pose waypoint | 进入高力接触并触发 predictive safety hold，0 actual severe collision |
-| inverse-DLS grasp | 首次双臂接触 step 123，最长同步 50/83/141 step（不同 transport 探针） |
-| 固定向上 twist | payload 最高约 `0.582m`，随后右侧接触丢失 |
-| 5/10/15mm vertical preload | 5/10mm 可长期保持接触但不能脱离支撑；15mm 后接触丢失 |
-| 刚体/IK lift waypoint | 规划残差 `<3e-5m`，在线执行在早期 waypoint 丢失右侧接触 |
-
-两次一次性脚本错误也保留在会话记录中：一次缺少 `mujoco` import，一次未初始化局部
-`first` 字典；二者均在产生科学结果前退出，修正后按原参数重跑。
+探索阶段还观察过更长接触和局部上抬，但这些一次性探针没有保留命令、完整配置和原始产物，
+按本轮收尾规则记为“未归档观察”，不用于正式瓶颈判断或路线决策。
 
 ### 3. 确认集决定
 
-未运行 100-seed confirmation。原因不是计算资源不足：6 个 paired Episode 用时约
-`44.65s`，按线性估计 100 paired Episode 在 `1,800s` wall-time 门内可运行。停止原因是
-teacher 在 development set 为 `0/6` success，已知无法达到 `80/100` 门；继续运行确认集
-只会浪费预算并污染独立 seed。
+100-seed confirmation 状态为 `not_run`，其 `valid` 字段为 `null`。当前 teacher 缺少
+`lift/target_transport/place/release/stabilize`，runner 在首个 confirmation Episode 前
+拒绝该实现；development teacher 也为 `0/6` success，没有可用的同提交成功资格报告。未
+消耗或查看任何 confirmation seed。
 
-runner 已增加 confirmation 启动与判定硬约束：脏 worktree 在首个 Episode 前被拒绝，最终
-报告必须精确覆盖冻结的 100 个 seed，且每个 seed 恰有一条 baseline 和一条 teacher 结果。
-本轮在脏开发树上调用 confirmation 命令时退出码为 `1`，未创建输出文件、未运行 Episode。
+runner v2 同时执行以下约束：
+
+- confirmation 必须使用 paired controller 和冻结的 100-seed domain；
+- 必须从干净 worktree 启动，并提供同 commit、同 source hash、至少 1 个 teacher success
+  的完整 development 资格报告；
+- teacher 必须声明覆盖完整任务主要阶段；
+- 已存在的 confirmation 输出不能被覆盖；
+- wall-time 或基础设施错误会写出部分报告并使 confirmation 无效；
+- 单个 controller 失败仍只计为该 Episode 失败，不中断普通 cohort；
+- `invalid` 命令退出码为 `2`，不能被自动化误判为通过。
 
 ### 4. 原始产物
 
-- 最终 paired development artifact：
-  `runs/research-loop/0019/development/paired-seeds-19001-19006.json`
+- 最终 paired development artifact（schema v2）：
+  `runs/research-loop/0019/development/paired-seeds-19001-19006-v2.json`
 - SHA-256：
-  `dc61ccbfdd98e7fa8a5bde47f86f7b861385a8c21580e6a1e6c76c3fbd2a1816`
-- artifact 大小：`57,402` bytes。
+  `629629437ff262bb523ca1e61260393e440a586f82c42a7960c0c31063057c8c`
+- artifact 大小：`61,276` bytes；
+- 运行耗时：`44.5654s`；
+- `run_status.completed=true`，12/12 都是有效 Episode 结果，无基础设施失败；
+- `decision=invalid`，`l0_gate_passed=false`；
+- `confirmation_evidence.status=not_run`、`valid=null`；
+- `implementation_evidence.valid=false`，缺少
+  `lift/target_transport/place/release/stabilize`；
+- qualification hash 覆盖 19 个直接依赖文件，包括 teacher/runner、task/backend/safety、
+  动作封装、任务配置、场景 XML 及其共享机器人 XML；
+- artifact 记录运行时源码提交 `5102d1411c23e3465dc11bf8891bfbc8505a43a7` 和
+  `source_worktree_dirty=true`，因此只属于 development，不能作为未来 confirmation 资格报告。
 - runner 同时写出 `.sha256` sidecar；`runs/` 受 `.gitignore` 管理，不纳入 Git。
+- 旧 v1 artifact 的 `decision=validated_development` 和 confirmation `valid=true` 语义错误，
+  已被 v2 取代，不得用于结论。
 
 ### 5. 验证
 
 ```text
-42 passed
+48 passed in 8.09s
 Python size check passed: 461 files, file <= 800 lines, function <= 200 lines
 Architecture check passed: engine, foundation, and core boundaries are intact
 ```
