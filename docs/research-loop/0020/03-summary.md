@@ -1,9 +1,9 @@
 # R0020 总结
 
-状态：重开工作已结束。
+状态：第二次重开工作已结束。
 
 - 当前能力等级：`L0 未通过`。
-- 当前结论：`abandoned`，只适用于 behavior entry 后冻结的当前实现。
+- 当前结论：`abandoned`，只淘汰第二次重开冻结的精确定义候选。
 - confirmation：`not_run`。
 - sealed final：`not_run`。
 
@@ -17,9 +17,14 @@
 正常 MuJoCo 物理和原安全层下形成至少 10 个连续 control step 的真实双臂接触并进入
 `secure`。达到 entry 前不扩写或评价 lift、transport、place、release、stabilize。
 
-重开实现已在 smoke 011 达到 behavior entry：进入 `secure`，连续双臂接触 `11` step，
-`0` safety intervention、`0` actual severe collision。随后冻结 controller 源码 hash 并启动
-候选判别预算。
+smoke 011 已验证 acquire 子目标：进入 `secure`，连续双臂接触 `11` step，
+`0` safety intervention、`0` actual severe collision。但提交 `fc8938c` 明确该 entry 定义
+过早：至少一个 payload-relative lift action 必须经正式接口执行，且其后继 observation 仍保持
+双臂接触。本轮此前没有满足该条件。
+
+第二次重开在 smoke 012 达到修正后的 behavior entry：`secure` 延续在线几何/contact
+feedback，保持连续双臂接触至 `26` step；首个 payload-relative lift action 已经正式执行，
+其后继 observation 仍保持左右双臂接触，且 `0` safety intervention、`0` severe collision。
 
 ## 历史结论边界
 
@@ -50,14 +55,36 @@ planner 不修改权威状态；但 joint-space waypoint tracker 没有把该静
 2. 最后接近不再用 joint-error 门触发一次性闭爪，而是在线追踪 pad/handle 相对几何，根据
    signed distance、单/双 pad 接触和最大 3mm 横向平衡修正渐进闭爪。
 
-冻结实现的完整 seed 19001 判别 Episode 实际到达
-`approach/acquire/secure/failed_hold`，最大连续双臂接触 `11` step，证明差异化 acquire
-机制已经进入正常 physics。但接触在 `secure` 中丢失，最终 `secure_timeout`、`0 success`，
-没有抬升或受控目标进展；全部安全守护无回归。
+此前所谓冻结实现的完整 seed 19001 Episode 到达
+`approach/acquire/secure/failed_hold`，最大连续双臂接触 `11` step。但 `secure` 立即切回
+静态 joint target 与较低闭爪预载，接触在首个 payload-relative lift action 前丢失，最终
+`secure_timeout`、`0 success`、`0` 抬升、`0` 受控目标进展。
 
-因为完整 seed 19001 未端到端成功，按冻结条件停止，不运行 19001～19004 development cohort。
-该结果是当前冻结实现的可判别失败，但只覆盖其已执行的 acquire/secure 行为；不否定联合
-规划 + payload-relative closed-loop tracking 主假设。
+因此该完整 Episode 重新归类为 pre-entry implementation result：它验证 acquire 子目标并
+淘汰当时的 acquire→secure 交接实现，但没有执行主假设的差异化 payload-relative 机制，不能
+淘汰当前冻结候选、不能否定联合规划路线，也不计为无进展轮次。
+
+## 第二次重开结果
+
+第二次重开只修复 acquire→secure 控制连续性：
+
+- secure 继续使用 acquire 的在线 pad/handle 几何、signed-distance、contact feedback 和
+  `1.0` 闭爪预载；
+- 完成 secure 连续接触后，执行现有 payload-relative lift tracker 的动作；
+- 没有修改 transport、place、release 或 stabilize。
+
+smoke 012 在 seed 19001 上达到修正后的 entry，随后冻结三个 controller 源码文件。冻结 v2
+完整 Episode 实际执行 `approach/acquire/secure/lift/failed_hold`：
+
+- 最大连续双臂接触 `26` step；
+- payload-relative lift action 实际执行 `9` 个 control step；
+- 接触随后丢失，`lift_contact_lost`；
+- `maximum_lift_m=0`、`maximum_controlled_target_progress=0`；
+- `0` safety intervention、`0` actual severe collision。
+
+因为完整 seed 19001 未成功，按冻结条件不运行 development cohort。本结果可淘汰当前精确定义
+的“collision-aware joint planner + 在线 acquire/secure feedback + 当前 payload-relative
+lift tracker”冻结候选；不得外推否定整个 motion-planning/trajectory-optimization 家族。
 
 ## 允许声明
 
@@ -66,15 +93,22 @@ planner 不修改权威状态；但 joint-space waypoint tracker 没有把该静
   iteration 中均未形成完整双 pad 接触。
 - 三次 Episode 没有 safety intervention 或 actual severe collision。
 - 重开实现经正式动作、物理和安全层达到 behavior entry，形成 11-step 真实双臂接触并进入
-  `secure`。
-- 当前冻结实现的完整 seed 19001 Episode 在 `secure` 丢失接触并失败，未达到 cohort 门。
+  `secure`；按新规则这只算 acquire 子目标达成。
+- 旧完整 seed 19001 Episode 证明 acquire→secure 交接会立即丢失接触，未执行 lift action。
+- 第二次重开 smoke 012 满足修正后的 entry：执行 payload-relative lift action 后的 observation
+  仍保持双臂接触。
+- 冻结 v2 候选在 lift 中丢失接触，未产生可测抬升或目标进展。
 
 ## 不允许声明
 
 - 不允许声明 `carry_living_room_basket/v1` 已有可行 L0 teacher ceiling。
 - 不允许用历史 attempt 1～3 否定联合 motion planning、轨迹优化或 payload-relative
   tracking 路线；它们只表明当时实现尚未 behavior-ready。
-- 不允许用重开完整 Episode 否定联合规划路线；它只淘汰当前冻结的 acquire/secure 实现。
+- 不允许把 smoke 011 或旧完整 Episode 称为修正后 behavior entry 已达到。
+- 不允许用旧完整 Episode 淘汰冻结候选或否定联合规划路线；它只淘汰当时的
+  acquire→secure 交接实现。
+- 不允许把 v2 候选失败外推为 motion planning、trajectory optimization 或
+  payload-relative tracking 家族失败。
 - 不允许把 attempt 1 的非受控高度变化称为抓取或抬升成功。
 - 不允许归因尚未真正执行的 lift、target transport、place、release 或 stabilize。
 - 不允许声明任何可部署状态策略、视觉策略、泛化或硬件能力。
@@ -83,8 +117,10 @@ planner 不修改权威状态；但 joint-space waypoint tracker 没有把该静
 
 - 保留 development-only planner、controller、runner、focused tests 与三个原始 artifact，
   用于复现静态解到动态接触之间的缺口。
-- 保留 11 个重开 smoke、behavior-entry freeze manifest 和完整 seed 19001 判别 artifact；
+- 保留 11 个重开 smoke、历史 behavior-entry freeze manifest 和完整 seed 19001 artifact；
   `runs/` 不写入 Git，但文档记录路径与 hash。
+- 保留 smoke 012、`behavior-entry-freeze-v2.json` 和
+  `reopened-v2-candidate-seed-19001.json` 及其 hash。
 - 不修改 `docs/research-loop/0019/` 或 `0001/`～`0018/`。
 - 不保留任何 confirmation 门禁；本轮 confirmation 与 sealed final 均为 `not_run`。
 - 不自动启动下一路线或 R0021。
@@ -95,12 +131,15 @@ planner 不修改权威状态；但 joint-space waypoint tracker 没有把该静
 
 - R0018 属于旧机制归档，不计数；
 - R0019 为 `invalid`，不计数；
-- R0020 历史 attempt 1～3 不计数；重开后的冻结实现达到 behavior entry 后完成一次可判别
-  Episode，因此 R0020 现在只计为一个未推进能力的可计数轮次。
+- R0020 历史 attempt 1～3 不计数；smoke 011 与旧完整 Episode 没有执行 payload-relative
+  lift action，也不计数。
+- 第二次重开 v2 候选执行了差异化 payload-relative 机制，但结论明确不允许否定所研究的路线
+  家族；按 `fc8938c` 规则，本轮仍不累计为路线级无进展轮次。
 
-当前没有“三轮无进展”强制停止。R0020 已按预算结束；不自动创建新轮或运行 confirmation。
+当前没有“三轮无进展”强制停止。R0020 第二次重开已按预算结束；不自动创建新轮或运行
+confirmation。
 
 ## 资源分配
 
-重开阶段共运行 11 个有原始记录的短 smoke，未达到 24-smoke 或 2-hour debug 上限；达到
-entry 后立即冻结并只运行一个完整判别 Episode。主要资源仍用于真实 physics behavior。
+第一次重开共运行 11 个有原始记录的短 smoke；第二次重开只运行 smoke 012 后达到 entry，
+未耗尽剩余 13-smoke / 约 100 分钟 debug 预算。随后只运行一个冻结完整 Episode。

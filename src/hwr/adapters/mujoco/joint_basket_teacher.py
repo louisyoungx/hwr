@@ -11,7 +11,10 @@ import numpy as np
 
 from hwr.adapters.mujoco.bimanual_backend import MujocoBimanualTaskBackend
 from hwr.adapters.mujoco.bimanual_teacher import BASKET_TASK_ID
-from hwr.adapters.mujoco.joint_basket_acquire import acquire_feedback
+from hwr.adapters.mujoco.joint_basket_acquire import (
+    AcquireFeedback,
+    acquire_feedback,
+)
 from hwr.adapters.mujoco.joint_basket_planner import (
     GRASP_GRIPPER,
     JointGraspPlan,
@@ -170,21 +173,7 @@ class JointBasketMotionTeacher:
         self.stage_step += 1
         if self._waypoint_index >= geometry_entry_index:
             self._geometry_acquire_started = True
-            feedback = acquire_feedback(
-                self.backend,
-                target_rotations=(
-                    self._grasp_plan.left_site_rotation,
-                    self._grasp_plan.right_site_rotation,
-                ),
-                target_handle_from_midpoints=(
-                    self._grasp_plan.left_handle_from_pad_midpoint,
-                    self._grasp_plan.right_handle_from_pad_midpoint,
-                ),
-                current_grippers=(
-                    observation.proprioception.left_gripper_position,
-                    observation.proprioception.right_gripper_position,
-                ),
-            )
+            feedback = self._grasp_feedback(observation)
             self._grasp_closing = max(feedback.grippers) > 0.0
             return JointTeacherOutput(
                 self._site_tracking_action(
@@ -216,12 +205,12 @@ class JointBasketMotionTeacher:
             self._fail("secure_timeout")
             return JointTeacherOutput(self._hold(observation), self.stage)
         self.stage_step += 1
-        target = (
-            self._grasp_plan.left_joint_target,
-            self._grasp_plan.right_joint_target,
-        )
+        feedback = self._grasp_feedback(observation)
         return JointTeacherOutput(
-            self._joint_tracking_action(target, GRASP_GRIPPER),
+            self._site_tracking_action(
+                feedback.targets,
+                gripper=feedback.grippers,
+            ),
             self.stage,
         )
 
@@ -238,7 +227,7 @@ class JointBasketMotionTeacher:
         action = self._payload_tracking_action(
             payload_goal,
             self._payload_start_rotation,
-            gripper=GRASP_GRIPPER,
+            gripper=1.0,
         )
         if (
             abs(
@@ -638,6 +627,28 @@ class JointBasketMotionTeacher:
         )
         desired = np.concatenate(target)
         return float(np.max(np.abs(desired - current)))
+
+    def _grasp_feedback(
+        self,
+        observation: DualArmObservation,
+    ) -> AcquireFeedback:
+        if self._grasp_plan is None:
+            raise RuntimeError("teacher grasp plan is unavailable")
+        return acquire_feedback(
+            self.backend,
+            target_rotations=(
+                self._grasp_plan.left_site_rotation,
+                self._grasp_plan.right_site_rotation,
+            ),
+            target_handle_from_midpoints=(
+                self._grasp_plan.left_handle_from_pad_midpoint,
+                self._grasp_plan.right_handle_from_pad_midpoint,
+            ),
+            current_grippers=(
+                observation.proprioception.left_gripper_position,
+                observation.proprioception.right_gripper_position,
+            ),
+        )
 
     def _contact_failed(self, metrics: dict[str, float]) -> bool:
         bilateral = bool(metrics["left_contact"] and metrics["right_contact"])

@@ -105,3 +105,58 @@ behavior entry condition 冻结为：
 3. cohort 达到 `>=3/4` 完整成功且全部 actual severe collision 为 `0`，才以
    `validated_development` 推进 L0。
 4. 本轮不运行 confirmation 或 sealed final。
+
+## 2026-08-31 第二次重开修订
+
+用户依据提交 `fc8938c` 后的新规则再次明确授权重新打开 R0020。主假设仍为“联合双臂
+planner + payload-relative closed-loop tracker”，不创建 R0021。
+
+smoke 011 已证明 acquire 子目标可以形成 `11` step 连续双臂接触并进入 `secure`，但第一次
+重开冻结的 behavior entry 定义过早：controller 在 `secure` 立即从在线 pad/handle feedback
+切回静态 joint target 与 `GRASP_GRIPPER`，完整 Episode 随即失去接触；没有任何
+payload-relative lift action 通过正式接口执行。因此 smoke 011、旧
+`behavior-entry-freeze.json` 和 `reopened-candidate-seed-19001.json` 均重新归类为
+pre-entry implementation evidence，不构成路线失败或可计数无进展轮次。
+
+### 当前实现范围
+
+- 只修复 `acquire → secure` 的控制连续性。
+- `secure` 必须延续已成功的在线 pad/handle 几何、contact feedback、目标姿态和闭爪预载，
+  不再切回静态 joint target。
+- 不扩写 `transport/place/release/stabilize` 或其他后续功能；只允许执行现有
+  payload-relative lift tracker 的首个动作来验证阶段交接。
+- 不进行无边界常量动作或增益扫参。
+
+### 修正后的 behavior entry
+
+以下条件必须在 seed `19001` 的同一短程 physics smoke 中全部满足：
+
+- 正式 16 维动作接口、正常 MuJoCo physics、原 `DualArmSafetySupervisor` 与两步
+  predictive collision filter；
+- 保持双臂接触完成 `secure` 所需的连续接触；
+- controller 实际进入 `lift`；
+- 至少一个由 payload-relative lift tracker 生成的动作已通过正式接口执行；
+- 已记录该动作之后的 observation；
+- 后继 observation 中双臂接触仍保持，actual severe collision 为 `0`。
+
+仅进入 `secure`、仅生成但未执行 lift action，或首个后继 observation 已丢失接触，都不算
+entry。
+
+### 剩余 debug 预算
+
+- 沿用第一次重开的原预算，不重置：最多再运行 `13` 个有原始记录的短程 physics smoke，
+  即 smoke 012～024；主动实现调试 wall time 余额约 `100` 分钟，以先到者为准。
+- smoke 运行到修正后的 entry、明确 acquire/secure 失败或冻结短程 step 上限；不得在 stage
+  刚切换时停止。
+- 继续保存命令、源码版本或最小源码 hash、配置、动作后继 observation、contact 与安全结果。
+- 若预算耗尽仍未达到 entry，只停止当前实现，不否定主假设、不累计无进展轮次。
+
+### 修正后的候选判别预算
+
+达到 entry 后立即冻结源码和配置，再运行且只运行一个完整 seed `19001` Episode：
+
+1. 端到端成功且 actual severe collision 为 `0`，才运行原冻结的 `19001`～`19004`
+   development cohort；
+2. 差异化 payload-relative 机制已真实执行但完整 Episode 失败时，只淘汰当前精确定义的
+   冻结候选，不外推否定 motion-planning/trajectory-optimization 家族；
+3. 不运行 confirmation 或 sealed final，不自动启动其他路线或新轮。

@@ -161,10 +161,110 @@ MUJOCO_GL=glfw .venv/bin/python -m hwr.apps.evaluate_joint_basket_teacher \
 完整 seed 19001 未端到端成功，因此不满足 cohort 升级条件。development cohort
 `19001`～`19004`、confirmation 和 sealed final 均为 `not_run`。
 
-## 重开收尾验证
+## 第二次重开前的证据重分类
+
+提交 `fc8938c` 后，smoke 011、旧 freeze manifest 与
+`reopened-candidate-seed-19001.json` 保留原文件、名称和 hash，但结论边界修订如下：
+
+- smoke 011 只证明 acquire 子目标达到 `11` step 双臂接触并进入 `secure`；
+- 旧 `behavior-entry-freeze.json` 冻结的是过早 entry 定义，现视为历史 pre-entry manifest；
+- 完整 Episode 的 `secure` stage 从 step 203 开始，但立即切回静态 joint target 和
+  `GRASP_GRIPPER`；接触随后丢失并 `secure_timeout`；
+- 该 Episode 的 `maximum_lift_m=0`、`maximum_controlled_target_progress=0`，没有执行任何
+  payload-relative lift action；
+- 因此它重新归类为 pre-entry implementation result，不是冻结候选判别结果，不计为路线失败
+  或无进展轮次。
+
+R0020 已第二次重新打开；后续 smoke 从 `012` 开始，沿用剩余 `13` smoke / 约 `100` 分钟
+debug 预算。修正后的 behavior entry 与候选判别合同见 `01-experiment.md`。
+
+## 第一次重开收尾验证
 
 - R0020 focused tests：`9 passed`。
-- bimanual 相关回归：`55 passed in 28.22s`。
+- bimanual 相关回归：`55 passed in 48.70s`。
 - Python 尺寸检查：`466` 个文件通过，文件不超过 800 行、函数不超过 200 行。
 - architecture check：通过。
 - `git diff --check`：通过。
+
+## 第二次重开结果
+
+第二次重开只修改 `acquire → secure` 控制连续性：
+
+- `secure` 延续 acquire 已成功的在线 pad/handle 几何、signed-distance、contact feedback
+  和 gripper target，不再切回静态 joint target；
+- 现有 payload-relative lift tracker 的 gripper target 从 `GRASP_GRIPPER` 改为 `1.0`，
+  保持 acquire/secure 已建立的夹持预载；
+- 未修改 transport、place、release 或 stabilize。
+
+### Smoke 012
+
+命令：
+
+```bash
+MUJOCO_GL=glfw .venv/bin/python - <<'PY'
+# bounded R0020 secure-handoff smoke, seed=19001, max_steps=420
+# 完整逐步记录写入下述 artifact
+PY
+```
+
+结果：
+
+- `219` control step；
+- acquire 后在 `secure` 保持连续接触，`maximum_concurrent_steps=26`；
+- controller 实际进入 `lift`；
+- step 218 生成并经正式接口执行一个 payload-relative lift action：
+  左右臂归一化 `vz=0.3166666667`，左右 gripper target 均为 `1.0`；
+- action 未被安全层修改；
+- action 后继 observation 中左右双 pad contact 均保持；
+- `0` safety intervention、`0` actual severe collision；
+- 修正后的 behavior entry：达到；
+- artifact：
+  `runs/research-loop/0020/debug/smoke-012-secure-continuity.json`；
+- SHA-256：
+  `1dbdf6d665c93ac34b632087f5a37da0d1543af7feedb86bcd8a2199d5afbbc3`。
+
+第二次重开只使用 smoke 012，未超过剩余 13-smoke / 约 100 分钟 debug 预算。
+
+### Freeze v2
+
+- manifest：
+  `runs/research-loop/0020/debug/behavior-entry-freeze-v2.json`；
+- SHA-256：
+  `87c54df07a71a2b6ed6ad4a666ad1670783834fd83526962d7fb8f47962ab8b8`；
+- 冻结源码：
+  `joint_basket_acquire.py`、
+  `joint_basket_planner.py`、
+  `joint_basket_teacher.py`；
+- 完整 Episode 后复核三个源码 hash 均与 manifest 一致。
+
+### 冻结候选判别 v2
+
+达到修正后的 entry 后运行且只运行一个完整 seed 19001 Episode：
+
+```bash
+MUJOCO_GL=glfw .venv/bin/python -m hwr.apps.evaluate_joint_basket_teacher \
+  --seed 19001 \
+  --output runs/research-loop/0020/development/reopened-v2-candidate-seed-19001.json
+```
+
+结果：
+
+- `0/1` success；
+- `1200` step，`bimanual_task_timeout`；
+- stages reached：
+  `approach/acquire/secure/lift/failed_hold`；
+- `maximum_concurrent_steps=26`；
+- `left_contact_steps=26`、`right_contact_steps=32`、
+  `simultaneous_contact_steps=26`；
+- payload-relative lift tracker 在 step 218～226 共执行 `9` 个 control step，随后双臂接触
+  丢失，`teacher_failure_stage=lift_contact_lost`；
+- `maximum_lift_m=0`、`maximum_controlled_target_progress=0`；
+- `0` safety intervention、`0` actual severe collision、最大 forbidden force `0N`；
+- artifact：
+  `runs/research-loop/0020/development/reopened-v2-candidate-seed-19001.json`；
+- SHA-256：
+  `f933c511ce56faec806c23005015caebc9d896ab9934e34567384b10c4cc1689`；
+  `6,161` bytes。
+
+完整 seed 19001 没有端到端成功，因此不运行 `19001`～`19004` development cohort。
+confirmation 与 sealed final 继续为 `not_run`。

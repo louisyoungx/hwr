@@ -220,14 +220,15 @@ def test_pad_balance_moves_toward_the_more_distant_pad() -> None:
     np.testing.assert_allclose(correction, (0.0, -0.002, 0.0))
 
 
-def test_online_acquire_reaches_secure_with_ten_step_bilateral_contact() -> None:
+def test_secure_handoff_executes_lift_action_and_preserves_contact() -> None:
     backend = _backend()
     safety_interventions = 0
+    executed_lift = False
     try:
         observation = backend.reset(seed=19_001, task_id=BASKET_TASK_ID)
         backend.set_camera_rendering(False)
         teacher = JointBasketMotionTeacher(backend, seed=19_001)
-        for _ in range(300):
+        for _ in range(360):
             output = teacher.action(observation)
             outcome = backend.apply(
                 dual_arm_action_frame(
@@ -239,16 +240,17 @@ def test_online_acquire_reaches_secure_with_ten_step_bilateral_contact() -> None
             observation = outcome.observation
             safety_interventions += int(outcome.info["safety_intervened"])
             audit = backend.task_audit()
-            if (
-                teacher.stage == "secure"
-                and audit["maximum_concurrent_steps"] >= 10
-            ):
+            if output.stage == "lift":
+                executed_lift = True
                 break
     finally:
         backend.close()
 
-    assert teacher.stage == "secure"
-    assert audit["maximum_concurrent_steps"] >= 10
+    assert executed_lift
+    assert teacher.stage == "lift"
+    assert audit["maximum_concurrent_steps"] >= 16
+    assert audit["metrics"]["left_contact"] == 1.0
+    assert audit["metrics"]["right_contact"] == 1.0
     assert audit["severe_collision_count"] == 0
     assert safety_interventions == 0
 
