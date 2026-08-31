@@ -7,17 +7,18 @@
 - 最新能力基线：
   `runs/foundation-world-model/r0001-p01-baseline-v4-s20260812`，24 Episode、
   1,600 update、0 success、Actor 未解锁。
-- 最新轮次：`0019`，已结束，结论为 `invalid`。
-- R0019 结果：paired development seeds `19001`～`19006` 上 baseline 与 teacher 均为
-  `0/6` success；teacher 在 `1/6` seed 形成双臂同步接触，最长 `83` step，但 transport
-  丢失接触。全部 Episode 为 `0` actual severe collision、`0` safety intervention。
-- R0019 teacher 只实现 `approach/acquire/secure/transport_probe`，没有实现成功状态机要求的
-  `lift/target_transport/place/release/stabilize`，因此不能用端到端失败归因完整任务或
-  技术路线。
-- 100-seed confirmation 状态为 `not_run`；runner 会拒绝不完整 teacher、脏 worktree、
-  无同提交成功 development 资格报告或已有输出路径。
-- 可保留的子目标观察：跨 seed 双臂接触不稳，唯一同步接触 Episode 在 transport 时丢失接触。
-- 下一步：等待用户决定；不得自动启动 L1 或新研究轮。
+- 最新轮次：`0020`，已结束，结论为 `abandoned`。
+- R0020 使用联合底盘/双臂抓取构型规划、联合关键帧路径与 payload-relative 闭环跟踪，
+  不沿用 R0019 的独立逐臂 CEM 或固定 transport twist。
+- 固定 development seed `19001` 的 3 个完整 physics Episode 均为 `0 success`，只到达
+  `approach/acquire/failed_hold`，没有形成任一完整双 pad contact；全部为 `0` actual
+  severe collision、`0` safety intervention。
+- 静态 planner 能找到四 pad 接近或进入接触的联合末态，但动态 joint waypoint tracker
+  没有把静态解转化为真实抓取。因此不能评价尚未执行的 lift、target transport、place、
+  release 或 stabilize，也没有建立 L0 ceiling。
+- 4-seed development cohort、confirmation 和 sealed final 均为 `not_run`。
+- R0018～R0020 已连续三轮没有能力阶梯进展，研究循环强制停止；下一步必须比较另一条技术
+  路线、缩小任务、改变架构或终止任务，等待用户明确决定，不自动启动新轮。
 
 ## 历史归档
 
