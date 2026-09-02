@@ -133,7 +133,7 @@ Each round requires only four short documents:
 
 For every supplemental probe that enters `03-summary.md`, affects bottleneck judgment, or changes a route decision, `02-results.md` must record its command, seed, key configuration, and raw-artifact index. Exploration that cannot preserve a minimal review record may only be labeled an “unarchived observation” and cannot support a formal conclusion.
 
-Optional proposals or review materials go in `notes/`; no fixed number is required. Documents should preferably be in Chinese and use stable IDs, but do not keep adding infinite suffixes to finished old ideas instead of creating a new capability hypothesis.
+Optional proposals or review materials go in `notes/`; no fixed number is required. All documentation must be written in English by default. Use another language only when the user explicitly requests it. Use stable IDs, but do not keep adding infinite suffixes to finished old ideas instead of creating a new capability hypothesis.
 
 `docs/research-loop/0001/`–`0018/` are archived in place with paths and bytes kept stable because historical evaluations are bound to these Git trees. See `docs/research-loop/archive/legacy-evidence-loop-0001-0018.md` for the archive index. New rounds must not modify these directories or continue copying their format as a mandatory template.
 
