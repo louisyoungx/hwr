@@ -8,11 +8,11 @@ from hwr.perception import FrozenNgramLanguageConfig, FrozenNgramLanguageEncoder
 
 def test_raw_language_encoding_is_frozen_deterministic_and_not_tokenized_plan() -> None:
     encoder = FrozenNgramLanguageEncoder(FrozenNgramLanguageConfig(dimension=32))
-    instruction = NaturalLanguageInstruction("  双手端住托盘，平稳放到餐边柜上。 ")
+    instruction = NaturalLanguageInstruction("  Hold the tray with both hands and place it steadily on the sideboard. ")
 
     first = encoder.encode(instruction)
     second = encoder.encode(instruction)
-    changed = encoder.encode(NaturalLanguageInstruction("左手拉住抽屉，右手放入清洁剂。"))
+    changed = encoder.encode(NaturalLanguageInstruction("Pull the drawer with the left hand and place the cleaner with the right hand."))
 
     assert first == second
     assert len(first.values) == 32

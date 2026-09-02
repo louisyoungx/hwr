@@ -50,11 +50,11 @@ if [[ -f "$checkpoint_path" ]]; then
 fi
 
 if [[ "$training_status" -eq 0 ]]; then
-  outcome="训练已完成"
+  outcome="Training completed"
 else
-  outcome="训练异常退出"
+  outcome="Training exited abnormally"
 fi
-message="$(printf '%s\nRun: %s\n状态码: %s\nEpisode 记录数: %s\nCheckpoint: %s\nCheckpoint SHA-256: %s\n源码提交: %s\n结束时间: %s\n日志: %s\n运行目录: %s\n请重启 Codex 任务，我会从该结果继续。' \
+message="$(printf '%s\nRun: %s\nStatus Code: %s\nEpisode Count: %s\nCheckpoint: %s\nCheckpoint SHA-256: %s\nSource Commit: %s\nEnd Time: %s\nLog: %s\nRun Directory: %s\nPlease restart the Codex task; I will continue from this result.' \
   "$outcome" "$run_id" "$training_status" "$episode_count" \
   "$checkpoint_path" "$checkpoint_sha256" "$source_commit" "$ended_at" "$log_path" "$run_path")"
 idempotency_key="$(printf '%s:%s' "$run_id" "$ended_at" | shasum -a 256 | cut -c1-32)"

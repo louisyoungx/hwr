@@ -59,7 +59,7 @@ def build_dataset(root, *, dataset_id: str = "vla-training"):
     builder = VLABehaviorDatasetBuilder(
         root,
         dataset_id,
-        instruction="把桌面上的东西收好",
+        instruction="Put away the items on the tabletop",
         action_chunk_size=3,
     )
     for episode in range(3):

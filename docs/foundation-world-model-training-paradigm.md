@@ -1,536 +1,654 @@
-# 基础模型感知、世界模型与想象强化学习范式
+# Foundation Model Perception, World Model, and Imagination Reinforcement Learning Paradigm
 
-> 状态：当前唯一正式训练架构决策
+> Status: Current and only formal training architecture decision
 >
-> 决策日期：2026-08-12
+> Decision date: 2026-08-12
 >
-> 适用范围：三维仿真、本机训练、未来真机数据与部署
+> Scope: 3D simulation, local training, and future real-robot data and deployment
 
-## 1. 决策
+## 1. Decision
 
-停止继续扩展“小型卷积视觉编码器 + 字符哈希语言编码器 + 直接无模型
-Actor-Critic”路线。P076～P080 保留为失败基线，不再从这些 checkpoint、replay
-或视觉权重继续训练。
+Stop extending the “small convolutional vision encoder + character-hash language encoder +
+direct model-free Actor-Critic” path. Retain P076–P080 as a failed baseline and do not continue
+training from those checkpoints, replay buffers, or vision weights.
 
-新主线采用：
+The new mainline uses:
 
 ```text
-冻结视觉/语言基础模型 -> 高分辨率空间表征 -> 动作条件世界模型
-                                              -> 想象轨迹中的 RL
-                                              -> 16 维联合 Actor
-                                              -> 独立安全层
-                                              -> MuJoCo / 真机
+Frozen vision/language foundation models -> High-resolution spatial representation -> Action-conditioned world model
+                                                                                      -> RL in imagined trajectories
+                                                                                      -> 16-dimensional joint Actor
+                                                                                      -> Independent safety layer
+                                                                                      -> MuJoCo / real robot
 ```
 
-基础模型只负责从可部署观测产生连续表征，不能生成动作、技能、对象列表或任务计划；
-世界模型只学习执行动作后的物理结果；底盘、左右臂和左右夹爪的全部策略动作仍只能由
-随机探索或当前 RL Actor 产生。
+Foundation models only produce continuous representations from deployable observations; they
+cannot generate actions, skills, object lists, or task plans. The world model learns only the
+physical consequences of executed actions. All policy actions for the base, left and right arms,
+and left and right grippers must still come only from random exploration or the current RL Actor.
 
-平台不直接采用外部 VLA、机器人训练框架或大模型的运行时抽象。第三方模型只能通过
-`hwr.adapters.foundation` 接入，其权重、预处理器和许可证均须锁定。核心表示、轨迹、
-世界模型、策略、训练、评测和硬件接口继续由本项目定义。
+The platform does not directly adopt the runtime abstractions of external VLAs, robot-training
+frameworks, or large models. Third-party models may enter only through
+`hwr.adapters.foundation`, with their weights, preprocessors, and licenses locked. The project
+continues to define the core representations, trajectories, world model, policy, training,
+evaluation, and hardware interfaces.
 
-## 2. 单一开发门禁
+## 2. Single Development Gate
 
-本次重建不采用“开发一部分、训练一部分、再补开发”的推进方式。允许按可验证模块提交
-Git，但所有开发工作共享一个总门禁：
+This rebuild does not proceed by “developing part, training part, then filling in the remaining
+development.” Git commits may be organized by verifiable module, but all development shares one
+overall gate:
 
 ```text
-基础模型适配 ─┐
-视觉管线与缓存 ├─> development-ready 总验收 ─> 唯一正式训练入口
-视觉学生与融合 ┤
-世界模型       ┤
-想象 RL        ┤
-部署与评测     ┘
+Foundation-model adapters ─┐
+Vision pipeline and caches ├─> development-ready overall acceptance ─> Sole formal training entry point
+Visual student and fusion  ┤
+World model                ┤
+Imagined RL                ┤
+Deployment and evaluation  ┘
 ```
 
-在总门禁通过前：
-
-- 不启动策略训练、世界模型正式训练或视觉学生正式训练；
-- 不创建以训练进展为目的的 P081 或同类 run；
-- 只允许运行使用合成张量或极小固定 fixture 的单元、集成和 smoke test；
-- smoke test 只能验证梯度、形状、序列化和闭环接口，产物不得登记为训练 checkpoint；
-- 不用局部接触、loss 下降或短 run 代替开发完成证明。
-
-总门禁必须由单一命令检查代码、依赖、权重锁、数据 schema、反作弊规则、部署隔离、
-固定 fixture 和 Python 尺寸限制。任何一项失败，正式训练入口必须拒绝运行。
-解锁报告必须使用当前 `hwr.foundation-development-ready/v3` schema，精确包含受保护源码、
-算法谱系、正式配置、模型选择、运行依赖、权重、架构、Python 尺寸、全量测试和真实基础
-模型推理证据，并额外执行训练语义检查；缺少任一项、混入未知项、未显式声明解锁，或隔离提交证据与当前提交
-不一致都必须失败。正式训练入口把通过校验的 readiness 报告原样复制进 run，并把其
-SHA-256 写入 run manifest；恢复与最终评测都重新验证该副本。算法谱系扫描覆盖基础模型
-适配器、感知、数据、Actor、世界模型、训练、安全、部署和评测整条新主线，不能只扫描
-在线 runner 的少量文件。
-
-## 3. 不可突破的学习边界
-
-### 3.1 允许的输入与反馈
-
-Actor 和世界模型的部署侧输入仅包括：
-
-- 头部 RGB-D、左右腕部 RGB，以及同步、标定和有效性信息；
-- 本体状态和最近实际执行动作；
-- 原始自然语言指令的冻结语义向量；
-- 由上述字段计算的连续视觉、语言和时序潜变量。
-
-环境可以定义奖励、成功、终止、安全结果与合法环境变换。训练期世界模型预测头和
-Critic 可以读取这些结果；仿真真值可以用于独立评测或训练期非部署 Critic，但不能进入
-Actor、部署世界模型状态或基础模型提示。
-
-环境的成功结果必须绑定可验证的物理因果，而不能只拼接互不相关的末态条件。当前三个
-正式任务都要求两个操作物最终进入各自目标体积并稳定 2 秒。成功 Episode 必须分别累积
-左右夹爪的真实双指接触，并出现至少 0.5 秒左右臂同时接触；厨房任务还要求抽屉由物理
-接触拉到最小开度。到位后允许机器人释放物体，但物体离开目标体积会撤销稳定证据。该
-状态机只核验已经发生的接触、关节运动和末态，不向 Actor 返回抓取点、路径、动作、技能
-或任务阶段。
-
-初始自主数据仍只能来自随机 RL，但随机不等于每个控制周期独立抖动。正式采集使用不读取
-观测、任务或对象的平稳时序相关随机过程：14 维运动量服从统一的一阶相关噪声，两个夹爪
-服从独立随机翻转并在翻转间保持状态。相关系数和翻转概率是全局训练配置并写入每个
-Episode 的 `action_process` 谱系；它们不编码方向、姿态、抓取时机或场景步骤。这样产生
-连续可辨识的动力学与接触片段，同时仍没有任何专家动作答案。
-
-### 3.2 禁止项
-
-正式谱系禁止：
-
-- 专家、人工或遥操作动作；
-- 行为克隆、DAgger、教师策略或教师 checkpoint；
-- 抓取点、末端航点、底盘路线或动作搜索器；
-- 对象 token、目标 token、人工技能名和任务阶段；
-- 由 LLM/VLM 生成的计划、动作、奖励或伪动作标签；
-- 按托盘、收纳篮、抽屉或其他场景增加训练分支；
-- 从 P076～P080 继承 Actor、Critic、replay 或优化器状态。
-
-历史特权专家只保留为非正式诊断代码；其“专家必须完成场景”验收已禁用，也不得作为开发
-门禁、数据采集或训练成功的替代证据。训练源码的专家导入审计仍是硬失败项。
-
-冻结视觉/语言模型不是动作教师。它们只能返回连续特征，并且适配器接口在类型和测试上
-不得出现 action、waypoint、skill、stage、object ID 或 target ID 字段。
-
-## 4. 基础感知
-
-### 4.1 视觉教师
-
-默认接入两类互补的冻结视觉教师：
-
-- 多语言视觉—语言教师：SigLIP2 Base，用于指令相关语义和区域级视觉语言对齐；
-- 密集视觉教师：DINOv3 ViT-S/16，保留最终层 stride-16 patch grid，用于跨视角
-  对应、局部外观和空间结构。它只在离线特征物化中运行，不进入控制回路；相较
-  ConvNeXt-Tiny 参数更少，并在官方密集对应基准上更强。
-
-DINOv3 使用 Meta 于 2025-08-19 更新的自定义许可证，不是 Apache-2.0。模型锁必须
-包含官方 `LICENSE.md` 的 SHA-256；权重只能由已在 Hugging Face 官方模型页接受条款的
-账户下载。禁止从公开镜像绕过 manual gate。权重缺失、账户未获授权或许可证文件哈希
-不一致时，开发总门禁必须保持锁定。
-
-当前 Transformers 的 DINOv3 ViT 只有基于 torchvision 的 Fast 图像处理器。正式依赖锁定
-Torch `2.13.x` 与 torchvision `0.28.x` 的配套 release family，适配器必须显式
-`use_fast=True`；开发门禁在访问权重前先实例化该处理器并记录 Torch、torchvision 与
-Transformers 版本。缺少 torchvision、版本族不匹配或回退到不存在的 Slow 处理器都必须
-立即失败。
-
-具体模型通过版本化配置选择，不写入核心接口。适配器必须支持完全离线运行，记录模型
-标识、revision、文件 SHA-256、许可证、输入规范、输出维度和推理后端。任何权重缺失、
-哈希漂移或许可证未登记都必须使总门禁失败。真实推理门禁还必须拒绝恒定或退化特征：
-视觉输出必须是预期的 `14×14` 密集网格、有效 patch 单位归一化、无效相机严格清零，
-并同时具有跨 patch 与跨输入响应差异；语言改写的余弦相似度必须至少比不同意图高
-`0.01`。门禁不能只把这些数值写入报告而不据此判失败。
-
-视觉教师至少输出保留二维布局的 patch grid 和有效掩码。禁止只保留全局池化向量，因为
-双臂接触需要局部空间分辨率。教师不进入 20 Hz 控制回路；正式训练前由它离线产生缓存，
-或作为蒸馏监督训练可部署视觉学生。
-
-### 4.2 语言教师
-
-默认语言编码器为冻结的 Qwen3-Embedding-0.6B。每条自然语言指令按规范化文本计算一次
-并缓存，运行时按内容哈希读取。它只输出连续语义向量，不生成文本、计划或动作。
-
-每个正式家庭任务声明 4 条训练指令改写和 3 条不重叠的评测改写；Episode 只按 seed 从对应
-集合选择原始自然语言，算法不读取对象名或任务阶段。固定未见种子评测只使用评测集合，
-因此可以检验同一任务内的指令改写鲁棒性。它仍不能证明新任务、组合指令或开放词汇泛化；
-这些能力必须用新的任务和对象分布单独验收，而不是只比较 embedding 相似度。
-
-旧 `FrozenNgramLanguageEncoder` 仅保留给历史 checkpoint 和快速接口回归。正式
-`development-ready` 检查必须拒绝将其登记为当前部署语言编码器。
-
-### 4.3 高分辨率视觉预处理
-
-统一管线完成：
-
-1. 四相机时间同步、重复帧和丢帧标记；
-2. 内外参校验、去畸变和 RGB-D 对齐；
-3. 深度去噪、量程裁剪、有效掩码和坐标变换；
-4. 教师分辨率与在线学生分辨率的确定性变换；
-5. RGB、深度、几何和质量信息的独立归一化；
-6. 短时历史和跨相机视锥信息的版本化组装。
-
-教师默认输入分辨率不低于 `224 × 224`；在线学生默认输入不低于 `160 × 160`。
-最终数值可依据 M5 Pro 延迟测量调整，但不得回退到 P080 的 `24 × 18` 玩具输入。
-
-RGB-D 对齐必须使用每帧动态标定，而不能假设头部 RGB 与深度光心重合。深度像素先从深度
-相机反投影到机器人坐标，再投影到头部 RGB，并以最近深度 z-buffer 处理遮挡；无有效投影
-的像素保持无效。对齐后的深度才允许与头部 RGB patch 融合，也只有头部 RGB 的内外参可
-用于从该对齐图建立腕部跨相机对应。该预处理语义版本为
-`hwr.high-resolution-vision/v2`，旧缓存必须重建。
-
-### 4.4 可部署视觉学生
-
-视觉学生是项目自有模型，目标规模为 20M～40M 参数，包含：
-
-- 多层 ConvNeXt 或 ViT 图像骨干；
-- 深度和有效性独立编码；
-- 保留二维位置的多尺度特征金字塔；
-- 共享权重的左右腕部编码器；
-- 基于标定与相机身份的跨相机注意力；
-- 至少四帧的短时序融合。
-
-训练监督只能来自无动作标签数据：教师特征蒸馏、跨视角几何对应、时序一致性、遮挡恢复、
-深度结构和合法视觉增强一致性。仿真分割可用于独立 probe 评测，不进入部署特征或策略输入。
-
-部署实际消费的 `pooled_state` 不能依赖随机且不更新的融合层。视觉目标因此包含从当前空间
-特征到融合状态的停止梯度对齐损失，反向路径必须穿过跨相机融合、时序 Transformer、时序
-位置参数和输出归一化。`development-ready/v3` 会在隔离提交上执行一次真实优化步，要求这
-四部分均有非零梯度且参数确实变化；只靠总体 loss 有限不能解锁训练。
-
-## 5. 自主轨迹与特征缓存
-
-新的序列数据 schema 原子保存：
-
-- 原始相机帧、标定、时间戳和有效掩码；
-- 本体状态；
-- Actor 提案与安全层实际执行的 16 维动作，两者不能覆盖或互相替代；
-- 环境奖励、终止、截断，以及安全层是否改变或拒绝提案的干预标签；
-- 语言内容哈希与冻结编码缓存引用；
-- 教师特征缓存引用、模型 revision 和内容哈希；
-- Episode、任务分布、环境版本、随机种子和代码提交。
-
-缓存是可删除重建的派生物，不能替代原始观测。训练/评测种子、布局和语言表达必须在
-索引层隔离。数据加载器按时间连续窗口读取，不把 transition 随机打散后伪装成动力学序列。
-
-## 6. 动作条件世界模型
-
-世界模型使用项目自有 recurrent state-space model。建议初始结构为：
-
-- deterministic recurrent state；
-- categorical stochastic latent state；
-- 多相机视觉学生特征、语言特征和本体状态编码器；
-- 只接收安全层实际执行动作的 action-conditioned transition；
-- 由未来 latent 预测视觉潜变量、本体、奖励和 continue/terminal；
-- 由当前 latent 与 Actor 提案共同预测安全层是否干预的独立训练头；
-- 由当前 latent 与 Actor 提案预测安全层实际执行动作的通用残差头；
-- 由当前 latent 与实际执行动作预测真实严重碰撞的独立训练头。
-
-训练目标包括潜变量重建、自由比特约束、未来本体预测、奖励分布、终止与安全干预分类。
-世界模型不能预测或反推出“正确动作”，也不向 Actor 暴露仿真对象真值。
-
-这里必须区分两个因果问题：物理动力学以实际执行动作为条件；安全干预以 Actor 提案为
-条件。安全头不把碰撞终止混入标签，也不接收已经被安全层修正的动作。严重碰撞仍由环境
-奖励、终止和最终验收报告定义。安全过滤器本身独立于学习模型；训练头只估计它对提案的
-干预概率，不能替代过滤器。想象 rollout 必须使用残差头预测的实际执行动作推进 RSSM，
-不能假设可能被安全层拒绝或裁剪的提案会原样改变未来；Actor 同时承担动作改写幅度成本。
-
-世界模型必须通过三层动作因果反作弊评测。审计数据由独立的固定种子随机 RL 采集器生成，
-并与训练 Replay 分库存储，任何样本都不得交给视觉学生、世界模型、Actor 或 Critic 的
-优化器。启动时每任务采集 8 个 128-transition 系统辨识 Episode，动作相关度轮换为
-`0.0/0.5/0.9/0.96`；每个任务确定性选择 64 个互不重叠的序列窗口，
-保持观测序列不变，再将每步的“Actor 提案、实际执行动作”视为不可拆分的二元组，对所有
-任务与时间位置做无固定点全局置换，分别计算未来视觉潜变量、本体、奖励、
-continue/terminal 和安全干预的多步 open-loop 误差。成对置换既打破状态—动作对应，
-又保持提案与安全层输出之间的真实配对关系及二者各自的多重集合；算法不读取场景对象或
-任务语义。报告必须声明两个动作源和配对变换，并保留五个分量
-各自的真实动作误差、打乱动作误差、比率和逐 horizon 序列，不能只保存相加后的总分。
-
-三层诊断分别回答不同问题：
-
-1. 数据可辨识性 probe 用普通 replay 拟合两个任务无关的岭回归，只比较“本体状态”和
-   “本体状态 + 实际执行动作”预测关节速度、夹爪位置和底盘速度在 1/4/8/16 步后的变化，
-   并对最弱 horizon 的误差比按原始 Episode 聚类 bootstrap；
-   它只判断采集数据是否含有动作效果，不进入策略或世界模型训练。
-2. 单步动作利用诊断固定每个真实后验状态，只替换下一步动作，评估视觉潜变量和本体预测；
-   这隔离了开环漂移，用于判断世界模型是否真的读取动作。
-3. 多步 open-loop 诊断继续保存视觉、本体、奖励、终止和安全五个头；只有视觉与本体进入
-   动作因果门，稀疏结果头使用各自的校准指标，不能套用同一个动作打乱比率。
-
-每次审计使用五个独立无固定点置换。报告保存每次原始反事实结果，部署评测重新计算每次
-assessment、误差比的 5% 分位数和全部汇总；误差比下界必须达到 `1.05`，且每一次置换
-都须通过分量与 horizon 条件，不能依赖一次幸运置换。
-
-正式物理门槛要求打乱动作后的视觉/本体合计误差至少为真实动作误差的 `1.05` 倍，且至少
-`60%` 的预测 horizon 逐项恶化；条件同时适用于视觉、本体、全局汇总和按通用 `task_id`
-划分的每个分区。最终评测从原始逐 horizon 数值重新计算所有 assessment，不能
-信任报告中预填的 `passed`。若没有恶化，说明模型只学习了视频连续性，不能用于策略想象。
-
-Actor 准入拆成两级，不能再按“采集了若干 Episode”自动切换。探索 Actor 只在普通 replay
-至少 12 个 Episode、单步视觉/本体动作利用、逐任务数据 probe、实际 16 维动作覆盖率与
-协方差有效秩连续两次通过后解锁；外部接触、受控运动和碰撞不参与这一级，否则会要求随机
-策略先产生本应由探索 Actor 获取的证据，形成循环依赖。任务 Actor 还必须连续通过多步物理
-因果、逐任务接触与受控运动、replay 中严重碰撞正负 Episode 覆盖，以及独立留出集上的
-碰撞头验证。碰撞校准数据只在探索 Actor 解锁后采集，每任务各 8 个正例和负例，每条只
-保留末端 16 transition；验证同时要求终点召回率、PR-AUC、逐 transition Brier、误报率、
-时序对齐和动作打乱敏感性过线。任一后续审计失败立即撤销对应准入。在探索准入前只更新视觉学生和世界
-模型；任务 Actor 尚无合格更新也不得导出 deployment。奖励、终止和碰撞等稀疏头仍是任务
-Actor 与最终部署门，不能反过来阻塞通用探索 Actor。
-
-探索 Actor 也不能在未经验证的安全动作残差模型上做想象优化。启动留出阶段另为每任务
-采集 8 个安全干预正例和 8 个未干预负例；残差模型输出先按正式 16 维动作合同逐维裁剪，
-再用独立数据检查干预召回率、PR-AUC、Brier、干预样本归一化 RMSE、未干预恒等映射 RMSE
-和越界率。当前越界率要求严格为 0；该门不通过时探索 Actor 与任务 Actor 均保持锁定。
-
-每个训练 checkpoint 都必须生成不可变的动作因果报告，报告绑定源码提交、更新次数、
-训练 replay manifest SHA-256、独立审计数据 manifest SHA-256 和确切窗口清单；报告
-SHA-256 同时写入训练 checkpoint。未通过的更新允许保存训练状态以便诊断，但不得导出
-部署模型。只有通过报告的同一次更新才能导出部署模型，部署 manifest、`latest.json` 和
-最终评测再交叉验证同一份报告及哈希。最终评测必须重新计算训练 replay、留出库、训练
-checkpoint 和部署 artifact 的哈希，并核对源码提交、更新号、任务分区和窗口互不重叠；
-不能只相信报告内的 `passed` 字段。任何缺失、失败或篡改都使训练/评测返回失败。
-
-每个可恢复 checkpoint 还必须原子保存 NumPy runner RNG、训练设备对应的 Torch RNG、
-任务无关采样器、逐 Episode 记录、训练 replay manifest 和因果留出 manifest。全新训练
-必须在任何项目自有模型初始化前用正式配置的 seed 初始化 Torch；自主采集 Actor 使用由
-Episode seed 初始化的私有设备生成器，不能与 RSSM/想象训练的随机流互相消耗。恢复必须在
-加载模型和优化器后还原 CPU 及实际训练设备的 Torch 状态。滚动 replay 在新 `latest.json` 发布前只能把
-待淘汰分片移动到 run 内的恢复暂存区，不能直接删除；异常恢复先回滚到 `latest.json`
-绑定的 manifest，恢复仍被旧 checkpoint 引用的分片，移除未完成周期追加的分片并记录
-恢复事件，然后才能继续采集。这样不会重复使用同一 Episode 序号和训练种子，也不会让
-checkpoint 指向已经被容量裁剪删除的数据。
-
-统一 runner 的初始状态课程复用同一任务无关 frontier：随机冷启动只积累自主访问过的物理
-快照，不能从 frontier 起步；物理动作可辨识性门通过后才允许按固定概率恢复候选状态。候选
-排序只使用后验潜状态相对候选池的余弦新颖度、真实 transition 的一步 TD error、Episode
-内局部奖励改善速度和环境声明的终止失败边界。终止或截断后的状态、安全干预状态不进入
-候选池。状态恢复必须逐项复现后端指纹、广义位置/速度/加速度、执行器控制、求解器状态和
-运行时状态；任一不一致都退回原始 reset。快照只存在于 runner 的课程恢复状态，不写进
-replay，不进入模型输入，隐藏评测始终禁用 frontier reset。
-
-## 7. 想象空间强化学习
-
-Actor/Critic 在世界模型产生的潜在轨迹中优化：
-
-- Actor 联合输出底盘、左右臂和左右夹爪 16 维动作分布；
-- Actor 的随机分布在 `tanh` 运动范围和 `sigmoid` 夹爪范围内计算变换后的采样熵，
-  不能用未变换高斯熵冒充实际动作熵；随机初始化必须让两个夹爪都能覆盖接近全开与
-  全闭的动作，但不得注入抓取姿态、时序或场景动作；
-- Critic 估计环境回报，世界模型安全头估计当前提案的干预概率；两者都不输出动作；
-- imagined rollout 默认覆盖 15～30 个潜在时间步；
-- 使用 λ-return、熵正则、目标价值网络和梯度裁剪；
-- 探索信号只来自世界模型不确定性、状态新颖度、TD error 和奖励改善速度；
-- 仿真声明的合法变换由通用增强器应用，算法不认识任务对象。
-
-Actor 只能对潜在状态求值和采样自己的动作。禁止使用 CEM、MPC、LLM、VLM 或任何搜索器
-在部署时替 Actor 选动作；否则动作不再是 RL 策略所学。
-
-用于分配后续采集预算的状态新颖度和 TD error 必须按 Episode 从其自身轨迹计算，不能把
-一个训练周期的全局平均指标复制给本周期所有任务。正式实现从每个 Episode 均匀选择最多
-4 个互不重叠窗口：状态新颖度是相邻世界模型后验状态的尺度无关余弦变化，TD error 是
-当前 Value 与真实环境奖励加下一后验慢 Value 构成的一步 Bellman 目标之差。两者只参与
-任务间无语义采样排序，不进入 Actor 输入，也不产生动作。
-
-如需时间层级，只允许学习无名称的连续 latent intent。高层和低层均由同一通用 RL 目标
-训练，不得把 latent 固定解释为“接近、抓取、搬运、放置”等人工技能。
-
-在线微调复用同一算法和运行时契约：实际执行 transition 更新世界动力学，提案及其干预
-标签更新安全头，世界模型生成想象轨迹，Actor/Critic 更新后再与环境交互。安全过滤继续
-独立，replay 始终同时记录 Actor 提案和实际执行动作，且只用实际执行动作作为物理因果。
-
-## 8. 部署与本机预算
-
-现有开发机为 Apple M5 Pro、48 GB 统一内存。设计遵循：
-
-- 基础教师串行离线推理，特征落盘后释放内存；
-- 语言 embedding 按指令缓存，不在控制循环重复执行 0.6B 模型；
-- 视觉学生、世界模型和 Actor 支持 MPS、混合精度与 CPU 回退；
-- 控制进程只加载视觉学生、语言缓存读取器、世界模型 posterior、Actor 和安全层；
-- 训练 manifest 记录峰值内存、吞吐、磁盘预算和设备后端；
-- 外部 SSD 可保存原始帧与派生缓存，但 checkpoint 和 manifest 必须原子写入并校验。
-
-48 GB 统一内存机器上的正式序列 batch 固定为 `2`。一个序列含 17 个时刻、每时刻包含
-两帧历史和三路 RGB 教师视图，视觉教师目标与学生反向传播会同时驻留；`batch=4` 会把
-单次更新展开到 816 张 RGB 图及对应 dense grid，缺少可靠余量。降低 batch 不改变模型、
-任务、replay、更新次数或验收范围，只缩小一次更新的并行序列数。
-
-部署 checkpoint 必须完全不包含教师模型、Critic、奖励器、仿真真值读取器、数据增强器或
-训练应用。它只能恢复可部署感知、世界模型状态更新器、确定性 Actor 和版本化预处理配置。
-
-## 9. 开发完成定义
-
-正式训练入口解锁前，以下实现必须同时存在并通过自动检查：
-
-- 冻结基础模型接口、离线权重锁、许可证和哈希审计；
-- 高分辨率多相机预处理、语言缓存和视觉特征缓存；
-- 视觉学生、跨相机/时间融合及全部无动作标签损失；
-- 序列轨迹 schema、原子存储、切分隔离和加载器；
-- RSSM、所有预测头、序列损失、checkpoint 和重载；
-- 动作打乱反事实、多步 rollout 和不确定性评测；
-- 想象环境、Actor/Critic、λ-return、优化器和在线数据闭环；
-- 通用合法变换、任务无关探索与课程接口；
-- 独立安全过滤、实际执行动作回放和安全 Critic；
-- 部署导出、特权字段审计、未见种子评测和四视角未剪辑视频；
-- 一个装配三个正式任务但不按任务分支的统一训练入口；
-- 当前提交不可变快照中的所有测试、架构检查和 Python 文件/函数尺寸检查；工作区中与新平台无关的历史实验不进入门禁证据。
-
-总门禁还要扫描训练源码和 manifest，证明不存在专家数据、动作标签、教师动作、任务名分支、
-对象/目标 token 或旧 P 系列 checkpoint 继承。只有总门禁生成带代码提交和配置哈希的
-`development-ready.json` 后，正式训练命令才允许运行。
-
-正式 run 与训练 checkpoint 必须共享同一个精确的 no-expert lineage：随机初始化的项目
-自有模型、仅 `random_rl_exploration`、`intrinsic_rl_actor` 与 `rl_actor` 三种动作来源、
-空专家/示范集合、关闭
-行为克隆/教师动作/动作搜索，并且没有旧 P 系列父 checkpoint。保存、恢复和最终评测都要
-按完整结构比较，不能只检查 `source_commit`，也不能把“字段存在”当作“字段为空”。正式
-run manifest schema 为 `hwr.foundation-online-run/v4`，旧 v1/v2/v3 不进入新谱系；v4 还
-固化实际生效的训练设备、基础教师设备、Python 路径、进程 nice 值和 MPS 高低水位。
-
-### 9.1 本机存储上限
-
-密集基础视觉特征不能随 Episode 数量无限增长。正式 runner 使用任务无关的有界 replay：
-总 transition 容量由配置声明，并按任务标识公平分配；每个分区只淘汰最旧的完整 Episode，
-不查看场景对象、距离或动作内容。原始 shard 淘汰后，同时删除可重建的对应视觉特征缓存。
-
-Checkpoint 和部署导出同样采用固定保留数，只删除格式合法的旧 `update-*` 目录，始终保留
-最新版本及其哈希清单。每个自主 Episode 最多保留 7 个连续、互不重叠的 16-transition
-动力学窗口：先选实际保留数据中的接触、受控运动、碰撞和动作变化显著窗口，再补边界与
-均匀覆盖；交互准入只认可这些 retained transition 重新计算出的证据，不能读取已被丢弃的
-Episode 汇总。正式 120 Episode 因而可保留 13,440 个训练 transition，其中每 Episode 仅
-2 个窗口生成昂贵的 DINOv3/SigLIP2 教师缓存，其余窗口仍训练世界模型。
-
-独立留出库包括每任务 8×128 transition 的系统辨识数据、16×16 的碰撞验证数据和
-16×16 的安全动作执行验证数据，三者都不生成教师缓存。正式配置保留 18,000 transition
-容量和最近 3 组训练/部署产物；当前未压缩静态估算约 `28.41 GiB`，配置上限为 `30 GiB`，
-启动时还要求至少 `35 GiB` 空闲空间。容量策略只管理存储，不产生动作或课程答案。
-
-### 9.2 本机统一内存上限
-
-Apple Silicon 的 MPS 显存与系统内存共用。PyTorch 的统一内存默认低水位是设备推荐工作集
-的 1.4 倍；在 48 GiB 本机上，MPS 推荐工作集约为 37.44 GiB，默认低水位因此高于物理内存，
-不能保证桌面仍有可用内存。正式 tmux 启动器固定传入以下任务无关的资源策略：
-
-- `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.65`，即 MPS 分配硬上限约 24.34 GiB；
-- `PYTORCH_MPS_LOW_WATERMARK_RATIO=0.50`，约 18.72 GiB 后启用 allocator 回收与 adaptive commit；
-- 训练进程以 `nice 10` 运行，让交互程序优先获得 CPU；
-- 每卸载一个冻结基础模型，并且每 10 个优化 step，释放一次不再被活跃 tensor 引用的
-  MPS/CUDA allocator cache；最终生效值写入不可变 run manifest，不能只留在启动 shell。
-- 视觉学生保持有效 batch 和完整 16-step 世界模型窗口，但按最多 4 个 observation 做梯度
-  累积；相邻 observation 的四帧三相机 ConvNeXt 激活不再同时驻留统一内存。视觉更新完成
-  后再把按原顺序拼接且停止梯度的连续 latent 交给世界模型和想象 RL。
-- 世界模型保持每步更新；视觉学生按固定的 4-step 全局间隔更新。非视觉更新只以最多 8 个
-  observation 的无梯度微批生成 latent，不构建几何对应，也不加载 DINOv3/SigLIP teacher
-  target。间隔只读取全局 update count，不读取任务或环境反馈。
-- 普通 replay window 的边际分布仍为均匀分布，但 25% batch 为严重碰撞终止窗口保留；
-  严重碰撞头使用类别加权 BCE，避免稀有正例被大量正常 transition 淹没。一个 batch 仍
-  优先从不同碰撞 Episode 无放回抽样，只有独立 Episode 不足时才允许替换；普通 batch
-  仍只从同一 Episode shard 抽样，避免反复解压大 shard。冻结视觉特征按 source hash 在
-  batch 内去重，并使用
-  最多 16 条只读 LRU，缓存容量不能随 replay 增长。
-
-这些约束只回收缓存和调节资源调度，不改变观测、动作、奖励、终止、合法环境变换、采样
-规则或动作标签，也不提供场景动作答案。视觉微批对各块 loss 按 observation 数量加权，
-一次 optimizer step 仍覆盖配置声明的完整 batch。可通过同名 PyTorch 环境变量和
-`HWR_FOUNDATION_NICE_LEVEL` 覆盖启动器默认值；覆盖值应与 run 日志一起保留。
-
-### 9.3 训练可观测性
-
-`loss` 只在进程标准输出中出现不构成训练证据。统一 runner 必须在 `run/metrics/` 原子发布
-当前阶段与每个完整 cycle 的不可变小型 JSON，至少包含：
-
-- 视觉学生、世界模型、Actor、Value 的全部平均损失与裁剪前梯度范数；低频视觉 loss 只对
-  实际视觉更新求平均，并单独记录 `trainer/visual_updated` 比例；
-- 更新数、Episode 数、各阶段耗时，以及动作因果门结果；
-- 16 维实际执行动作按统一量程归一化后的均值、标准差、范围、饱和率、有效秩；
-- Actor 提案与安全层实际执行动作的差值、夹爪切换率和安全干预率；
-- 逐任务 Episode 数、成功数和环境提供的数值物理结果，但训练器不能据此增加任务分支。
-
-中断恢复时删除晚于恢复 checkpoint 的未提交 cycle 指标，不能把已回滚的更新留在曲线中。
-本机只读面板只能轮询这些 JSON 和有界的最近 Episode 记录，不得扫描 replay、特征缓存或
-模型权重。面板默认仅监听 `127.0.0.1`，是旁路观测工具，不参与采样、奖励或优化。
-
-动作可辨识 probe 必须逐任务、逐 1/4/8/16 步 horizon 独立拟合，不能混合任务后把任务
-身份差异误判为动作因果；其
-置信区间按 Episode 聚类 bootstrap，留出集每条 Episode 必须贡献同量不重叠窗口，过短轨迹
-使用确定性替代 seed 重采。交互覆盖只统计长度足以形成完整训练窗口的 Episode；短碰撞轨迹
-不能计入准入分母。24 个 Episode 的随机校准只检查动作可辨识、动作覆盖与单步物理因果，
-不检查接触或受控运动；后两者只在探索 Actor 获得采集预算后进入任务 Actor 门禁。
-
-内在探索的新颖度是相对当前想象历史和 replay batch 状态的 kNN 距离，不再是相邻状态变化
-量；快速往复挥臂回到已见状态不会持续获得高奖励。世界模型分别预测安全层改写和真实严重
-碰撞，两个成本都进入探索 Actor 与任务 Actor 的想象回报，安全过滤本身仍独立于策略。
-
-观测体系是后续准入门禁的前提，不是补救失败训练的可视化包装。若梯度非有限、动作有效
-维度塌缩、提案持续被安全层覆盖，或动作因果长期约等于 `1`，runner 必须据此阻止升级采集
-阶段，而不是继续堆更新。
-
-## 10. 统一训练与最终验收
-
-开发完成后只启动一条正式训练主线，同时从三个任务分布采样，不先训练单场景策略，也不
-为任一场景增加算法分支。训练过程可以断点续训和按可恢复 checkpoint 提交，但不因中间
-指标重新切换到手写课程或专家数据。
-
-新解锁的探索 Actor 或任务 Actor 不能用一次梯度更新直接成为采集源。正式配置至少执行
-200 次、最多 1,000 次不更新世界模型的专用 warm-up，每 50 次聚合一个窗口；最近三个窗口
-必须同时满足 Actor/Value 梯度有限且不超过上限、运动与夹爪策略熵没有坍缩、想象回报相对
-波动不超过 `0.25`。达到最低更新数并通过稳定性门后才记录为可采集；达到最大更新数仍失败
-则终止 run，完整失败检查写入 Actor readiness 状态。
-
-正式后台启动统一使用
-`scripts/start_foundation_training_tmux.sh RUN_ID [--resume] [--seed SEED]`。该入口
-固定调用唯一 foundation 训练应用、run root、readiness、模型目录和飞书机器人完成通知，
-并拒绝重复 tmux session 或不安全的 run id；它不提供跳过门禁参数。
-
-最终必须满足：
-
-- 每个候选配置至少运行 3 个互不相同的训练 seed；单 seed 只能作为校准或失败分析，不能
-  单独支持正式能力结论；
-- 正式家庭场景前先报告到达、单侧接触、双侧稳定接触、受控刚体/关节运动和完整任务五级
-  物理基准；这些级别用于诊断覆盖，不向 Actor 提供任务阶段或动作答案；
-- 客厅双物体收纳、餐桌杯盘归位和厨房双瓶入抽屉三个正式任务分别评测至少 40 个未见随机
-  种子；“未见”必须同时
-  排除训练 Episode 与动作因果留出集使用过的全部种子，即使手工指定评测起始种子也一样；
-- 每个任务观测成功率不低于 70%，且 95% Wilson 区间下界也不低于 70%；
-- 严重碰撞为 0；
-- 成功状态稳定至少 2 秒；
-- 分别锁定左臂或右臂后，同任务成功率及 95% Wilson 区间上界均低于 10%；
-- 评测仅运行重载后的确定性 Actor，关闭探索和训练写入；
-- 同一评测进程直接录制第三人称、头部、左腕和右腕未经剪辑的视频；
-- 数据、模型、代码提交、配置、逐 Episode 结果、视频和反作弊报告可由哈希互相追溯。
-
-单个训练 seed 的评测只能写出 `per_seed_passed`，其 `formal_passed` 与兼容字段 `passed`
-必须保持 false。正式结论只能由独立聚合入口绑定至少三个不同训练 seed、三份不同 run
-manifest 和 deployment，并验证除 seed 外的不可变配置完全相同、训练/留出种子跨 run
-互不重叠、三次评测使用同一组未见种子且全部逐 seed 通过后写出。
-
-每个 `hwr.foundation-evaluation-run/v3` manifest 必须直接哈希 readiness、run/latest、训练
-Episode、训练 replay、因果留出库、动作因果报告、训练 checkpoint、部署 artifact、逐
-Episode 评测、验收结果和每路视频，不能只通过目录路径间接引用训练数据或模型。
-
-基础模型的语义检索、世界模型 loss 或想象回报都不是家务成功证据；最终证据仍是隔离种子
-中由 RL Actor 实际执行的双臂物理结果。
-
-## 11. 当前实现映射
-
-截至 2026-08-14，以上设计对应的项目自有模块如下：
-
-| 责任 | 实现 |
+Before the overall gate passes:
+
+- Do not start policy training, formal world-model training, or formal vision-student training;
+- Do not create P081 or similar runs for the purpose of showing training progress;
+- Run only unit, integration, and smoke tests using synthetic tensors or tiny fixed fixtures;
+- Smoke tests may verify only gradients, shapes, serialization, and closed-loop interfaces; their
+  artifacts must not be registered as training checkpoints;
+- Do not substitute local contact, loss reduction, or a short run for proof of development completion.
+
+The overall gate must use one command to check code, dependencies, weight locks, data schema,
+anti-cheating rules, deployment isolation, fixed fixtures, and Python size limits. If any item
+fails, the formal training entry point must refuse to run. The unlock report must use the current
+`hwr.foundation-development-ready/v3` schema and exactly include protected source, algorithmic
+lineage, formal configuration, model selection, runtime dependencies, weights, architecture,
+Python size, the full test suite, and real foundation-model inference evidence, while also
+running training-semantics checks. Missing items, unknown items, an undeclared unlock, or a
+mismatch between isolated-commit evidence and the current commit must all fail. The formal
+training entry point copies the validated readiness report into the run unchanged and writes
+its SHA-256 to the run manifest; resume and final evaluation revalidate the copy. The lineage
+scan covers the entire new mainline—foundation adapters, perception, data, Actor, world model,
+training, safety, deployment, and evaluation—not merely a few online-runner files.
+
+## 3. Non-Negotiable Learning Boundaries
+
+### 3.1 Allowed Inputs and Feedback
+
+Deployment-side inputs to the Actor and world model include only:
+
+- Head RGB-D, left- and right-wrist RGB, and synchronization, calibration, and validity information;
+- Proprioceptive state and the most recently executed action;
+- A frozen semantic vector for the raw natural-language command;
+- Continuous visual, language, and temporal latents computed from the fields above.
+
+The environment may define rewards, success, termination, safety outcomes, and legal environment
+transformations. Training-time world-model prediction heads and the Critic may read these
+outcomes. Simulation ground truth may be used for independent evaluation or a non-deployment
+training Critic, but it must not enter the Actor, deployment world-model state, or foundation
+model prompts.
+
+Environment success outcomes must be tied to verifiable physical causality rather than merely
+concatenated, unrelated terminal conditions. Each of the three current formal tasks requires
+both manipulated objects to end inside their target volumes and remain stable for 2 seconds. A
+successful Episode must accumulate real two-finger contact for both grippers and at least
+0.5 seconds of simultaneous left/right arm contact; the kitchen task also requires the drawer to
+be pulled to its minimum opening through physical contact. The robot may release objects after
+placement, but leaving the target volume revokes the stability evidence. This state machine
+checks only contacts, joint motion, and terminal state that have already occurred; it returns no
+grasp point, path, action, skill, or task-stage information to the Actor.
+
+Initial autonomous data may still come only from random RL, but random does not mean independent
+jitter at every control cycle. Formal collection uses a stationary temporally correlated random
+process that reads no observation, task, or object: the 14 motion dimensions follow shared
+first-order correlated noise, while the two grippers independently flip at random and hold their
+state between flips. The correlation coefficient and flip probability are global training
+configuration and are written to each Episode's `action_process` lineage; they encode no
+direction, pose, grasp timing, or scene step. This produces continuous, identifiable dynamics
+and contact segments without any expert action answer.
+
+### 3.2 Prohibited Items
+
+Formal lineage prohibits:
+
+- Expert, human, or teleoperation actions;
+- Behavior cloning, DAgger, a teacher policy, or a teacher checkpoint;
+- Grasp points, end-effector waypoints, base routes, or action searchers;
+- Object tokens, target tokens, human-defined skill names, and task stages;
+- Plans, actions, rewards, or pseudo-action labels generated by an LLM/VLM;
+- Training branches added for trays, storage baskets, drawers, or other scenes;
+- Actor, Critic, replay, or optimizer state inherited from P076–P080.
+
+The historical privileged expert remains only as informal diagnostic code. Its “expert must
+complete the scene” acceptance check is disabled and must not substitute for the development
+gate, data collection, or training success. Auditing expert imports in training source remains a
+hard failure condition.
+
+Frozen vision/language models are not action teachers. They may return only continuous features,
+and adapter interfaces must contain no `action`, `waypoint`, `skill`, `stage`, `object ID`, or
+`target ID` fields in their types or tests.
+
+## 4. Foundation Perception
+
+### 4.1 Vision Teachers
+
+By default, connect two complementary frozen vision teachers:
+
+- Multilingual vision-language teacher: SigLIP2 Base, for instruction-related semantics and
+  region-level vision-language alignment;
+- Dense vision teacher: DINOv3 ViT-S/16, retaining the final-layer stride-16 patch grid for
+  cross-view correspondence, local appearance, and spatial structure. It runs only during
+  offline feature materialization and does not enter the control loop; it has fewer parameters
+  than ConvNeXt-Tiny and is stronger on the official dense-correspondence benchmark.
+
+DINOv3 uses a custom license updated by Meta on 2025-08-19, not Apache-2.0. The model lock
+must include the SHA-256 of the official `LICENSE.md`; weights may be downloaded only by an
+account that has accepted the terms on the official Hugging Face model page. Public mirrors
+must not bypass the manual gate. If weights are missing, the account is unauthorized, or the
+license-file hash differs, the overall development gate must remain locked.
+
+The current Transformers DINOv3 ViT provides only a torchvision-based Fast image processor.
+Formal dependencies lock the matching Torch `2.13.x` and torchvision `0.28.x` release family,
+and the adapter must explicitly set `use_fast=True`. Before accessing weights, the development
+gate instantiates the processor and records Torch, torchvision, and Transformers versions.
+Missing torchvision, a mismatched release family, or fallback to a nonexistent Slow processor
+must fail immediately.
+
+The concrete model is selected through versioned configuration and not encoded in the core
+interface. Adapters must run fully offline and record the model identifier, revision, file
+SHA-256, license, input specification, output dimensions, and inference backend. Missing weights,
+hash drift, or an unregistered license must fail the overall gate. The real-inference gate must
+also reject constant or degenerate features: visual output must be the expected `14×14` dense
+grid with unit-normalized valid patches, strict zeroing for invalid cameras, and response
+variation across patches and inputs. The cosine similarity for language paraphrases must be at
+least `0.01` higher than for different intents. The gate must fail on these conditions rather
+than merely writing the numbers into a report.
+
+Vision teachers must output at least a patch grid preserving 2D layout and a validity mask.
+Keeping only a globally pooled vector is prohibited because bimanual contact requires local
+spatial resolution. Teachers do not enter the 20 Hz control loop; before formal training they
+produce caches offline or provide distillation supervision for the deployable vision student.
+
+### 4.2 Language Teacher
+
+The default language encoder is the frozen Qwen3-Embedding-0.6B. Each natural-language command
+is computed once from normalized text and cached; runtime reads it by content hash. It outputs
+only a continuous semantic vector and does not generate text, plans, or actions.
+
+Each formal household task declares 4 training-command paraphrases and 3 non-overlapping
+evaluation paraphrases. An Episode selects raw natural language from the corresponding set by
+seed only; the algorithm does not read object names or task stages. Fixed unseen-seed
+evaluation uses only the evaluation set, allowing robustness to instruction paraphrases within
+the same task to be tested. This still does not prove generalization to new tasks, compositional
+commands, or open vocabulary; those capabilities require separate acceptance on new task and
+object distributions rather than an embedding-similarity comparison alone.
+
+The old `FrozenNgramLanguageEncoder` is retained only for historical checkpoints and fast
+interface regression. Formal `development-ready` checks must reject registering it as the
+current deployment language encoder.
+
+### 4.3 High-Resolution Vision Preprocessing
+
+The unified pipeline performs:
+
+1. Four-camera time synchronization, duplicate-frame and dropped-frame marking;
+2. Intrinsic/extrinsic validation, undistortion, and RGB-D alignment;
+3. Depth denoising, range clipping, validity masks, and coordinate transforms;
+4. Deterministic conversion from teacher resolution to online-student resolution;
+5. Independent normalization of RGB, depth, geometry, and quality information;
+6. Versioned assembly of short-term history and cross-camera view-frustum information.
+
+The teacher's default input resolution is no lower than `224 × 224`; the online student's
+default input is no lower than `160 × 160`. Final values may be adjusted based on M5 Pro
+latency measurements, but must not fall back to P080's toy `24 × 18` input.
+
+RGB-D alignment must use per-frame dynamic calibration rather than assuming that the head RGB
+and depth optical centers coincide. Depth pixels are first back-projected from the depth camera
+into robot coordinates, then projected into head RGB, with the nearest-depth z-buffer handling
+occlusion; pixels without a valid projection remain invalid. Only aligned depth may be fused
+with head-RGB patches, and only head-RGB intrinsics and extrinsics may be used to establish
+cross-camera wrist correspondence from that aligned image. This preprocessing semantic version
+is `hwr.high-resolution-vision/v2`; old caches must be rebuilt.
+
+### 4.4 Deployable Vision Student
+
+The vision student is a project-owned model targeting 20M–40M parameters and includes:
+
+- A multi-stage ConvNeXt or ViT image backbone;
+- Independent depth and validity encoders;
+- A multiscale feature pyramid retaining 2D position;
+- Shared-weight left- and right-wrist encoders;
+- Cross-camera attention based on calibration and camera identity;
+- Short-term temporal fusion over at least four frames.
+
+Training supervision may come only from action-label-free data: teacher-feature distillation,
+cross-view geometric correspondence, temporal consistency, occlusion recovery, depth structure,
+and valid-vision-augmentation consistency. Simulation segmentation may be used for independent
+probe evaluation but must not enter deployment features or policy inputs.
+
+The `pooled_state` actually consumed by deployment must not depend on a random, non-updated
+fusion layer. Vision objectives therefore include a stop-gradient alignment loss from current
+spatial features to the fused state; the backward path must pass through cross-camera fusion,
+the temporal Transformer, temporal-position parameters, and output normalization.
+`development-ready/v3` performs one real optimization step on an isolated commit and requires
+nonzero gradients and actual parameter changes in all four parts; a finite overall loss alone
+cannot unlock training.
+
+## 5. Autonomous Trajectories and Feature Caches
+
+The new sequence data schema atomically stores:
+
+- Raw camera frames, calibration, timestamps, and validity masks;
+- Proprioceptive state;
+- The 16-dimensional Actor proposal and action actually executed by the safety layer; neither may
+  overwrite or substitute for the other;
+- Environment reward, termination, truncation, and the intervention label indicating whether the
+  safety layer changed or rejected the proposal;
+- The language content hash and a reference to the frozen-encoding cache;
+- References to teacher-feature caches, model revision, and content hashes;
+- Episode, task distribution, environment version, random seed, and code commit.
+
+Caches are deletable, rebuildable derivatives and cannot replace raw observations. Training and
+evaluation seeds, layouts, and language expressions must be isolated at the index layer. The
+data loader reads temporally contiguous windows and must not randomly shuffle transitions and
+present them as dynamics sequences.
+
+## 6. Action-Conditioned World Model
+
+The world model uses a project-owned recurrent state-space model. The recommended initial
+structure is:
+
+- deterministic recurrent state;
+- categorical stochastic latent state;
+- Encoders for multi-camera vision-student features, language features, and proprioceptive state;
+- An action-conditioned transition that receives only actions actually executed by the safety layer;
+- Prediction of visual latents, proprioception, rewards, and continue/terminal from future latent states;
+- A separate training head that predicts whether the safety layer intervenes from the current latent and Actor proposal;
+- A generic residual head that predicts the action actually executed by the safety layer from the current latent and Actor proposal;
+- A separate head that predicts real severe collisions from the current latent and executed action.
+
+Training objectives include latent reconstruction, free-bits regularization, future
+proprioception prediction, reward distribution, termination, and safety-intervention
+classification. The world model must not predict or infer a “correct action,” and must not
+expose simulation object ground truth to the Actor.
+
+The two causal questions must be kept distinct: physical dynamics are conditioned on the action
+actually executed, while safety intervention is conditioned on the Actor proposal. The safety
+head must not mix collision termination into its labels or receive an action already modified by
+the safety layer. Severe collision remains defined by environment reward, termination, and the
+final acceptance report. The safety filter itself is independent of the learned model; training
+heads only estimate its intervention probability for a proposal and cannot replace the filter.
+Imagined rollouts must advance the RSSM with the action actually executed as predicted by the
+residual head. They must not assume that a proposal potentially rejected or clipped by the
+safety layer changes the future unchanged. The Actor also bears the cost of action rewriting
+magnitude.
+
+The world model must pass a three-layer action-causality anti-cheating evaluation. Audit data
+is generated by an independent fixed-seed random RL collector and stored separately from
+training Replay; no sample may be given to the optimizers of the vision student, world model,
+Actor, or Critic. At startup, collect 8 128-transition system-identification Episodes per task,
+cycling action correlation values `0.0/0.5/0.9/0.96`. Deterministically select 64
+non-overlapping sequence windows per task, keep the observation sequence unchanged, treat each
+step's “Actor proposal, executed action” as an indivisible pair, and perform a global
+derangement permutation over all tasks and time positions. Compute multi-step open-loop errors
+for future visual latents, proprioception, rewards, continue/terminal, and safety intervention
+separately. Pairwise permutation breaks state-action correspondence while preserving the real
+pairing between the proposal and safety-layer output and each member's own multiset; the
+algorithm does not read scene objects or task semantics. The report must declare both action
+sources and the pairing transformation, and retain each of the five components' real-action
+error, shuffled-action error, ratio, and per-horizon sequence rather than only an added total.
+
+The three diagnostic layers answer different questions:
+
+1. The data-identifiability probe fits two task-agnostic ridge regressions on ordinary replay. It
+   compares only “proprioceptive state” with “proprioceptive state + executed action” when
+   predicting changes in joint velocity, gripper position, and base velocity 1/4/8/16 steps
+   ahead, and bootstraps the error ratio at the weakest horizon by original Episode;
+   it checks only whether collected data contains action effects and does not enter policy or
+   world-model training.
+2. The one-step action-utilization diagnostic fixes each real posterior state, replaces only the
+   next action, and evaluates visual-latent and proprioception prediction; this isolates
+   open-loop drift and tests whether the world model actually reads actions.
+3. The multi-step open-loop diagnostic continues to retain five heads for vision, proprioception,
+   reward, termination, and safety. Only vision and proprioception enter the action-causality
+   gate; sparse outcome heads use their own calibration metrics and must not reuse one action
+   shuffling ratio.
+
+Each audit uses five independent derangements. The report stores the raw counterfactual result
+for each one. Deployment evaluation recomputes every assessment, the 5th percentile of error
+ratios, and all aggregates; the lower error-ratio bound must reach `1.05`, and every permutation
+must pass the component and horizon conditions rather than relying on one lucky permutation.
+
+The formal physical gate requires the combined shuffled-action vision/proprioception error to
+be at least `1.05` times the real-action error, with at least `60%` of prediction horizons
+degrading individually. The conditions apply to vision, proprioception, the global aggregate,
+and every partition split by generic `task_id`. Final evaluation recomputes every assessment
+from raw per-horizon values and cannot trust a prefilled `passed` field in the report. Without
+degradation, the model has learned only video continuity and cannot support policy imagination.
+
+Actor admission is split into two levels and must not switch automatically after “some number
+of Episodes” have been collected. The exploration Actor unlocks only after ordinary replay has
+at least 12 Episodes and one-step visual/proprioceptive action utilization, per-task data
+probes, actual 16-dimensional action coverage, and covariance effective rank pass twice
+consecutively. External contact, controlled motion, and collisions do not participate in this
+level; otherwise random policy would have to produce evidence that the exploration Actor is
+supposed to acquire, creating a circular dependency. The task Actor must additionally pass
+multi-step physical causality, per-task contact and controlled motion, severe-collision positive
+and negative Episode coverage in replay, and collision-head validation on an independent holdout.
+Collision-calibration data is collected only after the exploration Actor unlocks: 8 positive and
+8 negative Episodes per task, retaining only the final 16 transitions of each. Validation also
+requires endpoint recall, PR-AUC, per-transition Brier, false-positive rate, temporal alignment,
+and action-shuffling sensitivity to pass. Any subsequent audit failure immediately revokes the
+corresponding admission. Before exploration admission, update only the vision student and world
+model; do not export deployment while the task Actor lacks a qualified update. Sparse reward,
+termination, and collision heads remain gates for the task Actor and final deployment, but must
+not block the generic exploration Actor.
+
+The exploration Actor must not perform imagination optimization on an unvalidated safety-action
+residual model. During the startup holdout phase, collect 8 safety-intervention positives and
+8 non-intervention negatives per task. Clip residual-model outputs dimension by dimension under
+the formal 16-dimensional action contract, then use independent data to check intervention
+recall, PR-AUC, Brier, normalized RMSE on intervention samples, identity-mapping RMSE on
+non-intervention samples, and out-of-bounds rate. The out-of-bounds rate must be exactly 0;
+while this gate fails, both the exploration Actor and task Actor remain locked.
+
+Every training checkpoint must generate an immutable action-causality report binding the source
+commit, update count, training replay manifest SHA-256, independent audit-data manifest
+SHA-256, and exact window list. The report SHA-256 is also written to the training checkpoint.
+A failed update may save training state for diagnosis but must not export a deployment model.
+Only the same update with a passing report may export a deployment model; the deployment
+manifest, `latest.json`, and final evaluation cross-validate that report and hash. Final
+evaluation must recompute hashes for training replay, the holdout set, training checkpoint, and
+deployment artifacts, and verify that source commit, update number, task partitions, and windows
+do not overlap. It cannot trust only the report's `passed` field. Any missing, failed, or
+tampered item makes training/evaluation fail.
+
+Each resumable checkpoint must also atomically save the NumPy runner RNG, the Torch RNG for
+the training device, the task-agnostic sampler, per-Episode records, the training replay
+manifest, and the causality-holdout manifest. Fresh training must initialize Torch with the
+formal-config seed before initializing any project-owned model. The autonomous-collection
+Actor uses a private device generator initialized from the Episode seed and must not consume
+randomness from the RSSM/imagination-training streams. Resume must restore CPU and actual
+training-device Torch state after loading models and optimizers. Before publishing a new
+`latest.json`, rolling replay may move evicted shards only into a recovery staging area inside
+the run and must not delete them directly. Crash recovery first rolls back to the manifest
+bound to `latest.json`, restores shards still referenced by the old checkpoint, removes shards
+added by an incomplete cycle, and records the recovery event before collection continues. This
+prevents reuse of Episode numbers or training seeds and prevents checkpoints from pointing to
+data already removed by capacity trimming.
+
+The unified runner's initial-state curriculum reuses the same task-agnostic frontier. Random
+cold start only accumulates physical snapshots autonomously visited by the policy and cannot
+start from the frontier. Candidate-state restoration becomes allowed at a fixed probability
+only after the physical action-identifiability gate passes. Candidate ranking uses only posterior
+latent cosine novelty relative to the candidate pool, one-step TD error from real transitions,
+per-Episode local reward-improvement speed, and environment-declared terminal failure boundaries.
+States after termination or truncation and states with safety intervention do not enter the
+candidate pool. State restoration must reproduce the backend fingerprint, generalized
+position/velocity/acceleration, actuator control, solver state, and runtime state item by item;
+any mismatch returns to the original reset. Snapshots exist only in the runner's curriculum
+restoration state, do not enter replay or model inputs, and frontier reset is always disabled for
+hidden evaluation.
+
+## 7. Imagination-Space Reinforcement Learning
+
+Optimize the Actor/Critic over latent trajectories generated by the world model:
+
+- The Actor jointly outputs a 16-dimensional action distribution for the base, left and right arms, and left and right grippers;
+- Compute the Actor's transformed sample entropy within the `tanh` motion and `sigmoid` gripper ranges; untransformed Gaussian entropy must not stand in for actual action entropy. Random initialization must let both grippers cover near-fully-open and near-fully-closed actions, but must not inject grasp poses, timing, or scene actions;
+- The Critic estimates environment return, while the world-model safety head estimates the intervention probability for the current proposal; neither outputs actions;
+- The default imagined rollout covers 15–30 latent time steps;
+- Use λ-return, entropy regularization, a target value network, and gradient clipping;
+- Exploration signals come only from world-model uncertainty, state novelty, TD error, and reward-improvement speed;
+- Generic augmentation applies legal transformations declared by simulation; the algorithm does not know task objects.
+
+The Actor may evaluate latent states and sample only its own actions. CEM, MPC, LLM, VLM, or any
+searcher is prohibited from selecting actions on the Actor's behalf during deployment; otherwise
+the actions are no longer learned by the RL policy.
+
+State novelty and TD error used to allocate subsequent collection budget must be computed from
+each Episode's own trajectory; global averages from one training cycle must not be copied to all
+tasks in that cycle. The formal implementation selects at most 4 uniformly spaced, non-overlapping
+windows from each Episode: state novelty is the scale-invariant cosine change between adjacent
+world-model posterior states, and TD error is the difference between the current Value and the
+one-step Bellman target formed from real environment reward plus the next posterior slow Value.
+Both affect only semantic-free sampling order across tasks, do not enter the Actor input, and do
+not produce actions.
+
+If temporal hierarchy is needed, learn only an unnamed continuous latent intent. Train both high
+and low levels with the same generic RL objective; do not hard-code the latent as human-defined
+skills such as “approach, grasp, transport, or place.”
+
+Online fine-tuning reuses the same algorithm and runtime contract: executed transitions update
+world dynamics, proposals and their intervention labels update the safety head, the world model
+generates imagined trajectories, and the updated Actor/Critic then interacts with the environment
+again. Safety filtering remains independent; replay always records both the Actor proposal and
+executed action, and only the executed action is used as physical causality.
+
+## 8. Deployment and Local Budget
+
+The current development machine is an Apple M5 Pro with 48 GB unified memory. The design follows:
+
+- Run foundation teachers serially offline and release memory after materializing features to disk;
+- Cache language embeddings by command instead of running the 0.6B model repeatedly in the control loop;
+- Support MPS, mixed precision, and CPU fallback for the vision student, world model, and Actor;
+- Load only the vision student, language-cache reader, world-model posterior, Actor, and safety layer in the control process;
+- Record peak memory, throughput, disk budget, and device backend in the training manifest;
+- Allow an external SSD to store raw frames and derived caches, but atomically write and verify checkpoints and manifests.
+
+The formal sequence batch on the 48 GB unified-memory machine is fixed at `2`. A sequence has
+17 time points, each with two history frames and three RGB teacher views, while teacher targets
+and student backpropagation coexist in memory. `batch=4` expands one update to 816 RGB images
+and corresponding dense grids, leaving no reliable margin. Lowering the batch does not change
+the model, tasks, replay, update count, or acceptance scope; it only reduces the number of
+parallel sequences in one update.
+
+The deployment checkpoint must contain none of the teacher models, Critic, rewarder, simulation
+ground-truth reader, augmentationer, or training application. It may restore only deployable
+perception, the world-model state updater, the deterministic Actor, and versioned preprocessing
+configuration.
+
+## 9. Definition of Development Completion
+
+Before the formal training entry point is unlocked, all of the following implementations must
+exist and pass automated checks:
+
+- Frozen foundation-model interfaces, offline weight locks, license and hash audits;
+- High-resolution multi-camera preprocessing, language caches, and vision-feature caches;
+- Vision student, cross-camera/temporal fusion, and all action-label-free losses;
+- Sequence-trajectory schema, atomic storage, split isolation, and loader;
+- RSSM, all prediction heads, sequence losses, checkpointing, and reload;
+- Action-shuffling counterfactuals, multi-step rollouts, and uncertainty evaluation;
+- Imagined environment, Actor/Critic, λ-return, optimizer, and online data loop;
+- Generic legal transformations, task-agnostic exploration, and curriculum interfaces;
+- Independent safety filtering, executed-action replay, and Safety Critic;
+- Deployment export, privileged-field audit, unseen-seed evaluation, and four-view unedited video;
+- One unified training entry that assembles the three formal tasks without task-specific branches;
+- All tests, architecture checks, and Python file/function size checks in the immutable snapshot of the current commit; unrelated historical experiments in the workspace do not enter gate evidence.
+
+The overall gate must also scan training source and manifests to prove there are no expert data,
+action labels, teacher actions, task-name branches, object/target tokens, or inherited old
+P-series checkpoints. Formal training commands may run only after the overall gate generates
+`development-ready.json` with the code commit and configuration hash.
+
+The formal run and training checkpoint must share the same exact no-expert lineage: randomly
+initialized project-owned models; only the three action sources `random_rl_exploration`,
+`intrinsic_rl_actor`, and `rl_actor`; an empty expert/demonstration set; behavior cloning,
+teacher actions, and action search disabled; and no old P-series parent checkpoint. Save, resume,
+and final evaluation must compare the complete structure rather than only `source_commit`, and
+must not treat “field exists” as “field is empty.” The formal run manifest schema is
+`hwr.foundation-online-run/v4`; old v1/v2/v3 do not enter the new lineage. v4 also freezes the
+effective training device, foundation-teacher device, Python path, process nice value, and MPS
+watermarks.
+
+### 9.1 Local Storage Limit
+
+Dense foundation-vision features must not grow without bound with the number of Episodes. The
+formal runner uses task-agnostic bounded replay: total transition capacity is declared in
+configuration and allocated fairly by task ID. Each partition evicts only its oldest complete
+Episode without inspecting scene objects, distance, or action content. When a raw shard is
+evicted, its rebuildable vision-feature cache is deleted as well.
+
+Checkpoint and deployment exports also use a fixed retention count, deleting only old
+format-valid `update-*` directories while always retaining the newest version and its hash
+manifest. Each autonomous Episode retains at most 7 contiguous, non-overlapping
+16-transition dynamics windows: first select windows with significant contact, controlled
+motion, collision, and action changes from data actually retained, then fill boundary and
+uniform coverage. Interaction admission recognizes only evidence recomputed from these
+retained transitions and cannot read discarded Episode summaries. A formal 120-Episode run can
+therefore retain 13,440 training transitions, with only 2 windows per Episode generating
+expensive DINOv3/SigLIP2 teacher caches while other windows still train the world model.
+
+The independent holdout includes 8×128 transitions of system-identification data per task,
+16×16 transitions of collision-validation data, and 16×16 transitions of safety-action
+execution validation data; none generates teacher caches. Formal configuration retains 18,000
+transitions and the most recent 3 sets of training/deployment artifacts. The current uncompressed
+static estimate is approximately `28.41 GiB`, with a configuration limit of `30 GiB`; startup
+also requires at least `35 GiB` free space. The capacity policy manages storage only and produces
+no actions or curriculum answers.
+
+### 9.2 Local Unified-Memory Limit
+
+Apple Silicon MPS memory is shared with system memory. PyTorch's default unified-memory low
+watermark is 1.4 times the device recommended working set; on the 48 GiB machine, the
+recommended MPS working set is approximately 37.44 GiB, so the default low watermark exceeds
+physical memory and cannot guarantee memory remains available for the desktop. The formal tmux
+launcher passes the following task-agnostic resource policy:
+
+- `PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.65`, giving an MPS allocation hard limit of approximately 24.34 GiB;
+- `PYTORCH_MPS_LOW_WATERMARK_RATIO=0.50`, enabling allocator reclamation and adaptive commit at approximately 18.72 GiB;
+- Run the training process with `nice 10` so interactive programs receive CPU priority;
+- After unloading each frozen foundation model and every 10 optimization steps, release MPS/CUDA allocator cache no longer referenced by active tensors; write the final effective values to the immutable run manifest rather than leaving them only in the launch shell;
+- Keep the vision student's effective batch and full 16-step world-model window, but accumulate gradients over at most 4 observations; activations for four-frame, three-camera ConvNeXt inputs from adjacent observations no longer reside in unified memory simultaneously. After the vision update, pass concatenated, stop-gradient continuous latents in their original order to the world model and imagination RL;
+- Keep the world model updating every step and update the vision student at a fixed global 4-step interval. Non-vision updates generate latents only through gradient-free microbatches of at most 8 observations, build no geometric correspondences, and load no DINOv3/SigLIP teacher target. The interval reads only global update count, not task or environment feedback;
+- Keep the marginal distribution of ordinary replay windows uniform, while reserving 25% of the batch for severe-collision termination windows; use class-weighted BCE for the severe-collision head so rare positives are not overwhelmed by normal transitions. A batch still samples without replacement preferentially across collision Episodes, allowing replacement only when independent Episodes are insufficient; ordinary batches still sample only from one Episode shard to avoid repeatedly decompressing large shards. Deduplicate frozen visual features by source hash within the batch and use at most 16 read-only LRU entries; cache capacity must not grow with replay.
+
+These constraints reclaim caches and adjust resource scheduling only. They do not change
+observations, actions, rewards, termination, legal environment transformations, sampling rules,
+or action labels, and do not provide scene action answers. Vision microbatch losses are weighted
+by observation count for each block, while one optimizer step still covers the full configured
+batch. The launcher defaults may be overridden by the same-named PyTorch environment variables
+and `HWR_FOUNDATION_NICE_LEVEL`; override values must be retained with the run log.
+
+### 9.3 Training Observability
+
+The appearance of `loss` only in process stdout does not constitute training evidence. The
+unified runner must atomically publish immutable small JSON files for the current stage and each
+complete cycle in `run/metrics/`, containing at least:
+
+- All mean losses and pre-clipping gradient norms for the vision student, world model, Actor, and Value; low-frequency vision loss averaged only over actual vision updates, with the `trainer/visual_updated` ratio recorded separately;
+- Update count, Episode count, duration of each stage, and action-causality gate results;
+- Mean, standard deviation, range, saturation rate, and effective rank of the 16-dimensional executed action after normalization to a common scale;
+- Difference between Actor proposal and safety-layer executed action, gripper switch rate, and safety intervention rate;
+- Per-task Episode count, success count, and numeric physical outcomes provided by the environment, without allowing the trainer to add task branches based on them.
+
+On interrupted resume, delete uncommitted cycle metrics later than the restored checkpoint; do
+not leave rolled-back updates in the curves. The local read-only dashboard may poll only these
+JSON files and bounded recent-Episode records; it must not scan replay, feature caches, or model
+weights. The dashboard listens only on `127.0.0.1` by default and is an out-of-band observation
+tool that does not participate in sampling, reward, or optimization.
+
+The action-identifiability probe must fit independently per task and per 1/4/8/16-step horizon;
+it must not mix tasks and misclassify task-identity differences as action causality. Confidence
+intervals use Episode-clustered bootstrap; every holdout Episode must contribute the same number
+of non-overlapping windows, and short trajectories use deterministic substitute-seed
+resampling. Interaction coverage counts only Episodes long enough to form a complete training
+window; short collision trajectories cannot enter the admission denominator. Random calibration
+over 24 Episodes checks only action identifiability, action coverage, and one-step physical
+causality, not contact or controlled motion; the latter two enter the task-Actor gate only after
+the exploration Actor receives a collection budget.
+
+Intrinsic-exploration novelty is the kNN distance relative to current imagination history and
+replay-batch states, not adjacent-state change; rapidly swinging an arm back to a seen state
+does not keep earning high reward. The world model separately predicts safety-layer rewriting
+and real severe collisions; both costs enter the imagined returns of the exploration and task
+Actors, while the safety filter remains independent of the policy.
+
+The observation system is a prerequisite for later admission gates, not a visualization wrapper
+for failed training. If gradients are non-finite, effective action dimensions collapse, proposals
+are continually overridden by the safety layer, or action causality remains near `1`, the runner
+must use this to block advancement to the next collection stage instead of stacking more updates.
+
+## 10. Unified Training and Final Acceptance
+
+After development is complete, start only one formal training mainline and sample from all
+three task distributions at the same time. Do not train a single-scene policy first or add an
+algorithm branch for any scene. Training may resume from checkpoints and commit resumable
+checkpoints, but intermediate metrics must not trigger a switch back to a hand-written
+curriculum or expert data.
+
+ A newly unlocked exploration Actor or task Actor cannot become a collection source after one
+gradient update. The formal configuration must run a dedicated warm-up of at least 200 and at
+most 1,000 updates without updating the world model, aggregating one window every 50 updates.
+The latest three windows must simultaneously satisfy finite and bounded Actor/Value gradients,
+non-collapsed motion and gripper policy entropy, and relative imagined-return variation no
+greater than `0.25`. Record the Actor as collectible only after reaching the minimum update
+count and passing the stability gate. If it still fails at the maximum update count, terminate
+the run and write the complete failure check into Actor readiness state.
+
+Formal background startup always uses
+`scripts/start_foundation_training_tmux.sh RUN_ID [--resume] [--seed SEED]`. This entry point
+always invokes the sole foundation training application, run root, readiness, model directory,
+and Lark bot completion notification, and rejects duplicate tmux sessions or unsafe run IDs; it
+provides no gate-bypass parameter.
+
+The following must ultimately hold:
+
+- Run at least 3 distinct training seeds for each candidate configuration; a single seed may be used only for calibration or failure analysis and cannot independently support a formal capability conclusion;
+- Report five physical benchmarks before formal household-scene evaluation: reaching, unilateral contact, stable bilateral contact, controlled rigid-body/joint motion, and the complete task; these levels provide diagnostic coverage and expose no task stages or action answers to the Actor;
+- Evaluate each of the three formal tasks—living-room two-object storage, dining-table plate-and-cup placement, and kitchen two-bottle drawer storage—on at least 40 unseen random seeds; “unseen” must exclude every seed used by training Episodes and the action-causality holdout, even when an evaluation start seed is specified manually;
+- Observed success rate must be at least 70% for every task, and the lower bound of the 95% Wilson interval must also be at least 70%;
+- Severe collisions must be 0;
+- The successful state must remain stable for at least 2 seconds;
+- After separately locking the left or right arm, the same-task success rate and the upper bound of its 95% Wilson interval must both be below 10%;
+- Evaluation runs only the reloaded deterministic Actor, with exploration and training writes disabled;
+- The same evaluation process directly records unedited third-person, head, left-wrist, and right-wrist video;
+- Data, models, code commit, configuration, per-Episode results, videos, and anti-cheating reports must be mutually traceable by hash.
+
+Evaluation for a single training seed may write only `per_seed_passed`; its `formal_passed` and
+compatibility field `passed` must remain false. A formal conclusion may be written only by an
+independent aggregation entry point after binding at least three different training seeds,
+three different run manifests, and deployment, verifying that immutable configuration is
+identical except for seed, training/holdout seeds do not overlap across runs, all three
+evaluations use the same unseen-seed set, and every per-seed result passes.
+
+Every `hwr.foundation-evaluation-run/v3` manifest must directly hash readiness, run/latest,
+training Episodes, training replay, the causality holdout, the action-causality report,
+training checkpoints, deployment artifacts, per-Episode evaluation, acceptance results, and
+each video stream; it must not reference training data or models only indirectly through
+directory paths.
+
+Foundation-model semantic retrieval, world-model loss, and imagined return are not evidence of
+household-task success. The final evidence remains the bimanual physical outcome actually
+executed by the RL Actor on isolated seeds.
+
+## 11. Current Implementation Mapping
+
+As of 2026-08-14, the design above maps to the following project-owned modules:
+
+| Responsibility | Implementation |
 |---|---|
-| 基础模型边界与锁 | `hwr.perception.foundation`、`hwr.adapters.foundation`、`configs/foundation/model-locks.json` |
-| 高分辨率与动态标定 | `hwr.perception.high_resolution`、`FrameCameraCalibration` |
-| 视觉学生与无动作标签目标 | `hwr.perception.student`、`student_objectives`、`geometric_correspondence` |
-| 自主序列、证据池与缓存 | `hwr.data.autonomous_trajectory`、`foundation_sequence_reservoir`、`foundation_cache`、`foundation_features`、`foundation_loading` |
-| 动作条件世界模型 | `hwr.world_model` |
-| 数据可辨识性与 Actor 准入 | `hwr.train.foundation_action_probe`、`foundation_actor_readiness` |
-| 想象 RL | `hwr.train.imagination`、`imagination_rl` |
-| 无环境奖励内在探索 RL | `hwr.train.intrinsic_exploration`、`intrinsic_rl_actor` |
-| 任务无关物理状态课程 | `hwr.train.foundation_frontier`、`learning_frontier`、`foundation_learning_signals` |
-| 环境声明的通用增强 | `hwr.train.foundation_augmentation` |
-| 单一在线闭环 | `hwr.train.foundation_online`、`foundation_trainer`、`foundation_holdout_orchestration`、`foundation_run_manifest` |
-| 正式家庭环境 | `hwr.adapters.mujoco.formal_household_backend`、`hwr.scenarios.formal3d`、`configs/tasks/formal_3d_v1.json` |
-| 本机资源预算 | `hwr.train.foundation_resource_budget` |
-| 指标与本机面板 | `hwr.train.foundation_metrics`、`foundation_dashboard`、`hwr.apps.serve_foundation_dashboard` |
-| 训练/部署 checkpoint | `hwr.train.foundation_registry` |
-| 剥离部署运行时 | `hwr.world_model.deploy`、`hwr.policy.foundation_runtime` |
-| 总门禁 | `scripts/verify_development_ready.py`、`scripts/verify_training_semantics.py`、`hwr.train.development_gate` |
-| 固定验收与视频 | `hwr.apps.evaluate_foundation_world_model`、`hwr.eval.bimanual` |
+| Foundation-model boundary and locks | `hwr.perception.foundation`, `hwr.adapters.foundation`, `configs/foundation/model-locks.json` |
+| High resolution and dynamic calibration | `hwr.perception.high_resolution`, `FrameCameraCalibration` |
+| Vision student and action-label-free objectives | `hwr.perception.student`, `student_objectives`, `geometric_correspondence` |
+| Autonomous sequences, evidence pool, and caches | `hwr.data.autonomous_trajectory`, `foundation_sequence_reservoir`, `foundation_cache`, `foundation_features`, `foundation_loading` |
+| Action-conditioned world model | `hwr.world_model` |
+| Data identifiability and Actor admission | `hwr.train.foundation_action_probe`, `foundation_actor_readiness` |
+| Imagination RL | `hwr.train.imagination`, `imagination_rl` |
+| Environment-reward-free intrinsic exploration RL | `hwr.train.intrinsic_exploration`, `intrinsic_rl_actor` |
+| Task-agnostic physical-state curriculum | `hwr.train.foundation_frontier`, `learning_frontier`, `foundation_learning_signals` |
+| Environment-declared generic augmentation | `hwr.train.foundation_augmentation` |
+| Single online closed loop | `hwr.train.foundation_online`, `foundation_trainer`, `foundation_holdout_orchestration`, `foundation_run_manifest` |
+| Formal household environment | `hwr.adapters.mujoco.formal_household_backend`, `hwr.scenarios.formal3d`, `configs/tasks/formal_3d_v1.json` |
+| Local resource budget | `hwr.train.foundation_resource_budget` |
+| Metrics and local dashboard | `hwr.train.foundation_metrics`, `foundation_dashboard`, `hwr.apps.serve_foundation_dashboard` |
+| Training/deployment checkpoint | `hwr.train.foundation_registry` |
+| Stripped deployment runtime | `hwr.world_model.deploy`, `hwr.policy.foundation_runtime` |
+| Overall gate | `scripts/verify_development_ready.py`, `scripts/verify_training_semantics.py`, `hwr.train.development_gate` |
+| Fixed acceptance and video | `hwr.apps.evaluate_foundation_world_model`, `hwr.eval.bimanual` |
 
-`hwr-train-foundation-world-model` 是唯一新主线正式训练入口。它不能跳过
-`development-ready.json`，并把三个任务装入同一个循环；任务差异只通过环境的观测、奖励、
-终止和合法变换进入平台。开发提交可以按可验证模块拆分，但第一次正式参数更新必须发生在
-全部模块开发、全量测试、真实基础模型推理和部署审计都通过之后。
+`hwr-train-foundation-world-model` is the sole formal training entry point for the new mainline.
+It cannot bypass `development-ready.json` and assembles all three tasks into one loop; task
+differences enter the platform only through environment observations, rewards, termination, and
+legal transformations. Development commits may be split by verifiable module, but the first
+formal parameter update must occur only after all module development, the full test suite, real
+foundation-model inference, and deployment audit have passed.

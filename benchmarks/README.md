@@ -1,41 +1,41 @@
-# 家务场景训练基准
+# Housework Scene Training Benchmarks
 
-## 准入标准
+## Admission Criteria
 
-- 至少三个不同家务场景；
-- 每个场景至少 20 个隔离种子闭环评测；
-- 成功率不低于 70%；
-- 平均碰撞次数为 0；
-- 报告包含数据集校验和、完整训练配置和模型路径。
+- At least three different housework scenes;
+- At least 20 isolated-seed closed-loop evaluations per scene;
+- A success rate of at least 70%;
+- An average collision count of 0;
+- Reports containing dataset checksums, complete training configurations, and model paths.
 
-运行检查：
+Run the check:
 
 ```bash
 python3 scripts/verify_benchmarks.py
 ```
 
-## 当前结果
+## Current Results
 
-| 场景 | 训练 Episode | 样本 | 闭环成功率 | 平均步数 | 平均碰撞 |
+| Scene | Training Episodes | Samples | Closed-loop success rate | Average steps | Average collisions |
 |---|---:|---:|---:|---:|---:|
-| 桌面整理 | 100 | 36,374 | 100%（20/20） | 317.55 | 0 |
-| 衣物分类 | 155 | 55,413 | 100%（20/20） | 323.95 | 0 |
-| 餐具收纳 | 155 | 60,267 | 100%（20/20） | 339.95 | 0 |
+| Tidy Table | 100 | 36,374 | 100%（20/20） | 317.55 | 0 |
+| Sort Laundry | 155 | 55,413 | 100%（20/20） | 323.95 | 0 |
+| Clear Dishes | 155 | 60,267 | 100%（20/20） | 339.95 | 0 |
 
-每个模型均独立生成数据、训练和登记，没有把规则专家用于最终评测动作。规则专家只用于初始示范和策略访问状态的纠正标签。
+Each model independently generates data, trains, and is registered; no rule-based expert is used for final evaluation actions. The rule-based expert is used only for initial demonstrations and corrective labels for states accessed by the policy.
 
-## 视频复现
+## Video Reproduction
 
-以下命令读取三个受版本管理的基准报告，加载报告中登记的真实模型检查点，以每个场景的首个隔离评测种子重新运行闭环推理，并生成同步并排视频：
+The following command reads the three version-controlled benchmark reports, loads the actual model checkpoints registered in those reports, reruns closed-loop inference with the first isolated evaluation seed for each scene, and generates a synchronized side-by-side video:
 
 ```bash
 PYTHONPATH=src python3 -m hwr.apps.render_benchmarks \
   --output-path artifacts/benchmark-rollouts.mp4
 ```
 
-视频元数据写入同名 `.json`，包含模型版本、种子、闭环结果和视频校验和。渲染只读取不可变仿真快照，不参与策略输入、动作过滤或成功判定。需要 Python `Pillow` 和系统 `ffmpeg`。
+Video metadata is written to a same-named `.json` file and includes model versions, seeds, closed-loop results, and the video checksum. Rendering reads only immutable simulation snapshots and does not participate in policy inputs, action filtering, or success judgments. Python `Pillow` and system `ffmpeg` are required.
 
-## 可复现训练命令
+## Reproducible Training Commands
 
 ```bash
 PYTHONPATH=src python3 -m hwr.apps.train_scenario tidy_table/v1 \
@@ -60,4 +60,4 @@ PYTHONPATH=src python3 -m hwr.apps.train_scenario clear_dishes/v1 \
   --report-path benchmarks/results/clear-dishes-v1.json
 ```
 
-数据、模型和运行时产物分别写入 `datasets/`、`models/` 和 `runs/`，这些大文件不提交 Git；可审计的小型结果报告保存在 `benchmarks/results/`。
+Data, models, and runtime artifacts are written to `datasets/`, `models/`, and `runs/`, respectively; these large files are not committed to Git. Small auditable result reports are stored in `benchmarks/results/`.

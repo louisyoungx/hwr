@@ -13,8 +13,8 @@ from typing import Mapping, Sequence
 SUPPORT_DOMAIN_SCHEMA = "hwr.support-domain-evaluation/v1"
 EXPERIMENT_ID = "R0001-P36-E1"
 SUPPORT_STATEMENT = (
-    "支持 visible observation age <=100ms 的 evaluation 子域；"
-    "完整 evaluation profile 尚未支持。"
+    "Supports the evaluation subdomain with visible observation age <=100ms; "
+    "the complete evaluation profile is not yet supported."
 )
 PRIMARY_LEDGER = "complete_challenge"
 CONTROL_HZ = 20
@@ -177,8 +177,8 @@ def build_support_domain_report(
             ],
             "observation_latency_imbalanced": True,
             "statement": (
-                "P11 的 observation-latency cell 为 2/10/4，"
-                "不是 balanced factorial capability benchmark。"
+                "P11's observation-latency cells are 2/10/4; "
+                "this is not a balanced factorial capability benchmark."
             ),
         },
         "ledgers": ledgers,

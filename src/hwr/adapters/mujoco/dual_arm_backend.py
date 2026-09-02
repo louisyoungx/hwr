@@ -37,7 +37,7 @@ from hwr.safety import DualArmSafetySupervisor, SafetyLimits
 class MujocoDualArmConfig:
     model_path: Path
     task_id: str = "mujoco_dual_arm_smoke/v1"
-    instruction_text: str = "同时控制左右机械臂完成任务"
+    instruction_text: str = "Control both arms to complete the task"
     instruction_locale: str = "zh-CN"
     control_hz: float = 20.0
     max_steps: int = 200

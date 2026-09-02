@@ -40,7 +40,7 @@ def _observation(size: int = 4, right_timestamp: int = 1_000) -> DualArmObservat
             )
         )
     return DualArmObservation(
-        1_000, 4, "fixture/v1", NaturalLanguageInstruction("双手搬运容器"),
+        1_000, 4, "fixture/v1", NaturalLanguageInstruction("Carry a container with both hands"),
         proprioception, tuple(frames),
     )
 

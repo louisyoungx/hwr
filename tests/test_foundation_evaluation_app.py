@@ -255,7 +255,7 @@ def _evaluation_language(output, run) -> None:
     entries = []
     for task_index in range(3):
         for instruction_index in range(3):
-            text = f"评测指令 {task_index}-{instruction_index}"
+            text = f"Evaluation instruction {task_index}-{instruction_index}"
             source = language_source_sha256(text, "zh-CN")
             key = FoundationCacheKey(
                 "language", source, "e" * 64, "f" * 64

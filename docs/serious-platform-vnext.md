@@ -1,59 +1,46 @@
-# 从玩具闭环到严肃家务研究平台
+# From Toy Closed Loops to a Serious Housework Research Platform
 
-> 状态：开发合同已实现，训练能力尚待新谱系验证  
-> 日期：2026-08-14
+> Status: Development contract implemented; training capability still awaits validation on a new lineage
+> Date: 2026-08-14
 
-“代码更多、模型更大”不等于脱离玩具。本项目把严肃性的最低定义固定为：正式任务与训练
-入口一致、部署路径确实可训练、数据证据与优化器实际看到的数据一致、安全模型不能被 Actor
-利用、评测包含统计重复与分布外变化，并且失败时能够明确停止而不是继续堆更新。
+“More code and larger models” do not make a system non-toy. This project fixes the minimum definition of seriousness as follows: formal tasks and training entry points match, the deployment path is genuinely trainable, data evidence matches what the optimizer actually sees, the safety model cannot be exploited by the Actor, evaluation includes statistical repeats and out-of-distribution variation, and failure can trigger a clear stop instead of more piled-on updates.
 
-## 判定矩阵
+## Assessment Matrix
 
-| 玩具特征 | 当前实现 | 必须留下的证据 |
+| Toy characteristic | Current implementation | Required evidence |
 |---|---|---|
-| 用简化代理任务训练，却用家庭场景命名结果 | 训练与评测直接运行客厅、餐厅、厨房三个正式多物体 MJCF | run manifest 中只有三个 `formal_3d_v1` task ID |
-| 视觉 backbone 在训练，但策略消费的融合层是随机的 | 部署表示对齐损失贯通跨相机融合、时序融合、时序位置和输出归一化 | `training_semantics` 中四部分梯度非零且参数变化 |
-| Episode 有接触，但 Replay 丢掉接触片段 | 每 Episode 最多保留 7 个显著优先窗口，交互证据从 retained transition 重算 | 13,440 transition 上限、逐 shard interaction trace |
-| 安全层会改动作，想象模型却可输出任意动作 | 16 维逐维边界，以及独立安全动作执行留出集 | recall、PR-AUC、Brier、两类 RMSE、越界率 0 |
-| 单条固定指令只记住 task ID | 每任务 4 条训练改写、3 条不重叠评测改写 | 评测 Episode 的 instruction split 与原文 |
-| 只换随机种子，仍是同一窄仿真分布 | 评测使用更宽的物理、视觉、标定、执行器和时延范围 | 每 Episode 完整 randomization audit |
-| 一次偶然 run 就宣称能力 | 每任务 40 个未见 seed、Wilson 区间、左右单臂消融、3 个训练 seed | 三 run 聚合 manifest 与逐 Episode 报告 |
-| loss 下降就算学会控制 | 动作 probe、单步利用、多步因果、安全/碰撞门和物理成功分开 | 不通过门禁时无 deployment |
+| Training on a simplified proxy task while naming the result after a household scene | Training and evaluation directly run the three formal multi-object MJCF scenes: living room, dining room, and kitchen | The run manifest contains only three `formal_3d_v1` task IDs |
+| The visual backbone is trained while the fusion layer consumed by the policy is random | Deployment representation-alignment loss runs through cross-camera fusion, temporal fusion, temporal positions, and output normalization | All four gradient groups are nonzero and parameters change in `training_semantics` |
+| The Episode has contact, but Replay drops contact segments | Retain at most 7 significant-priority windows per Episode; recompute interaction evidence from retained transitions | A 13,440-transition limit and per-shard interaction trace |
+| The safety layer changes actions, but the imagination model can output arbitrary actions | Per-dimension bounds for all 16 dimensions, plus an independent held-out set for safe-action execution | Recall, PR-AUC, Brier, two types of RMSE, and 0 out-of-bounds rate |
+| A single fixed instruction merely memorizes the task ID | Four training rewrites and three non-overlapping evaluation rewrites per task | The instruction split and original text for each evaluation Episode |
+| Only the random seed changes, leaving the same narrow simulation distribution | Evaluation uses broader physics, visual, calibration, actuator, and latency ranges | A complete randomization audit for every Episode |
+| One accidental run is used to claim capability | 40 unseen seeds per task, Wilson intervals, left/right single-arm ablations, and 3 training seeds | An aggregate manifest for three runs and per-Episode reports |
+| Lower loss is treated as learned control | Separate action probes, single-step use, multistep causality, safety/collision gates, and physical success | No deployment when a gate fails |
 
-## 正式运行对象
+## Formal Run Objects
 
-三个任务不是占位圆圈或工作台抓取：
+The three tasks are not placeholder circles or tabletop grasping:
 
-- 客厅：移动穿过家具，将橡皮鸭和迷你足球放入藤编篮；
-- 餐厅：将茶杯和木盘分别放入不同目标托位；
-- 厨房：物理拉开无执行器抽屉，将两瓶清洁剂分别放入左右分仓。
+- Living room: Move through the furniture and place a rubber duck and a mini soccer ball in a wicker basket;
+- Dining room: Place a teacup and a wooden plate in separate target trays;
+- Kitchen: Physically pull open a drawer without an actuator and place two cleaning bottles in the left and right compartments.
 
-全部任务使用四轮移动底盘、左右 6-DOF 机械臂、双指夹爪、头部 RGB-D 和左右腕部 RGB。
-成功需要两件操作物稳定 2 秒、严重碰撞为零、左右臂分别发生真实双指接触，并存在至少
-0.5 秒的并发接触。厨房还要求抽屉开度至少 0.30 m。成功、奖励和安全是环境接口，不是给
-Actor 的动作提示。
+All tasks use a four-wheel mobile base, left and right 6-DOF arms, two-finger grippers, head RGB-D, and left/right wrist RGB. Success requires both manipulated objects to remain stable for 2 seconds, zero severe collisions, real two-finger contact by each arm, and at least 0.5 seconds of concurrent contact. The kitchen also requires drawer opening of at least 0.30 m. Success, rewards, and safety are environment interfaces, not action hints for the Actor.
 
-## 开发完成后的训练顺序
+## Training Order After Development Completion
 
-所有开发先一次性完成，再允许任何正式参数更新。之后按证据控制算力投入：
+Complete all development first, then allow any formal parameter updates. After that, control compute investment by evidence:
 
-1. `development-ready/v3` 在当前已提交快照上通过全量测试、基础模型真实推理和可执行训练
-   语义检查；
-2. 运行 24 Episode 校准。若逐任务动作 probe、部署视觉梯度、留出损失或单步物理因果没有
-   改善，自动停止，不进入 Actor 采集；
-3. 校准通过后运行一个完整 120 Episode seed。只有产生合格 deployment 和正式物理进展，
-   才值得复制到另外两个独立 seed；
-4. 三个 seed 分别完成 40-seed/任务的正常与单臂消融评测，再由聚合入口决定正式通过。
+1. `development-ready/v3` passes the full test suite, real foundation-model inference, and executable training-semantics checks on the current committed snapshot;
+2. Run a 24-Episode calibration. If per-task action probes, deployment visual gradients, held-out loss, or single-step physical causality do not improve, stop automatically and do not enter Actor collection;
+3. After calibration passes, run one complete 120-Episode seed. Replication to the other two independent seeds is worthwhile only if it produces a qualified deployment and formal physical progress;
+4. Each of the three seeds completes normal and single-arm-ablation evaluation over 40 seeds per task; the aggregation entry point then decides formal acceptance.
 
-这不是边开发边试错；代码、任务、数据、门禁、评测和资源策略在步骤 1 前已经冻结。后面
-的分层只是避免在已证伪的模型上浪费数十小时本机算力。
+This is not trial and error during development; code, tasks, data, gates, evaluation, and resource policy are frozen before Step 1. The later tiers exist only to avoid wasting tens of hours of local compute on a falsified model.
 
-## 当前不能宣称的能力
+## Capabilities Not Currently Claimable
 
-当前提交只能说明工程闭环已经从代理基准升级为可审计的三场景研究平台，不能说明模型已
-经学会家务。即便三个任务最终通过，也只证明这三个任务族在已声明的语言和物理扰动下成立，
-不等于开放世界通用家务、未知物体零样本操作或真实机器人 sim-to-real 成功。后续若要扩大
-能力边界，必须新增未见布局/物体类别验收和真机回放，而不是修改现有结果的措辞。
+The current commit shows only that the engineering loop has been upgraded from proxy benchmarks to an auditable three-scene research platform; it does not show that the model has learned housework. Even if all three tasks eventually pass, that proves only that these task families work under the declared language and physics perturbations; it does not imply open-world general housework, zero-shot manipulation of unknown objects, or real-robot sim-to-real success. To expand the capability boundary later, add acceptance tests on unseen layouts/object categories and real-robot replays rather than changing the wording of existing results.
 
-正式技术细节见[基础模型—世界模型训练范式](foundation-world-model-training-paradigm.md)，
-物理成功定义见[三维 V1 验收合同](three-dimensional-v1-acceptance.md)。
+See [Foundation-Model–World-Model Training Paradigm](foundation-world-model-training-paradigm.md) for formal technical details and [3D V1 Acceptance Contract](three-dimensional-v1-acceptance.md) for the definition of physical success.

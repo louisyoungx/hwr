@@ -1,33 +1,33 @@
-# 正式三维视觉训练运行说明
+# Formal 3D Visual Training Runbook
 
-> 状态：已废弃的 V1/V2 行为克隆基线；不得用于当前正式训练
+> Status: Deprecated V1/V2 behavioral-cloning baseline; do not use for current formal training
 >
-> 当前方案：[基础模型感知、世界模型与想象强化学习范式](./foundation-world-model-training-paradigm.md)
+> Current approach: [Foundation-Model Perception, World Models, and Imagination Reinforcement Learning Paradigm](./foundation-world-model-training-paradigm.md)
 >
-> 本文中的旧视觉训练命令只用于复查历史运行。统一开发门禁完成前不得据此启动新训练。
+> The legacy visual-training commands in this document are only for reviewing historical runs. Do not use them to start new training before the unified development gates are complete.
 >
-> 配置：[formal_visual_v1.json](../configs/training/formal_visual_v1.json)
-> 训练结果：[formal_visual_v1_results.json](../configs/training/formal_visual_v1_results.json)
+> Configuration: [formal_visual_v1.json](../configs/training/formal_visual_v1.json)
+> Training results: [formal_visual_v1_results.json](../configs/training/formal_visual_v1_results.json)
 
-本页只保留失败实验的可追溯记录，所列数据、checkpoint 和命令不得进入当前训练谱系。首轮普通行为克隆在餐厅未见种子 30000 上能导航到餐桌附近，但混淆机械臂操作与后续导航阶段，6000 步超时且没有夹持接触。V2 又通过训练标签 `phase` 增加阶段分类和分阶段动作头；这进一步依赖人工结构，没有解决闭环泛化问题。
+This page retains only traceable records of failed experiments; the listed data, checkpoints, and commands must not enter the current training lineage. The first ordinary behavioral-cloning run could navigate near the dining table on unseen dining-room seed 30000, but it confused arm manipulation with the subsequent navigation stage, timed out after 6000 steps, and made no grasping contact. V2 then added phase classification and phase-specific action heads through the training label `phase`; this introduced further dependence on manual structure without solving closed-loop generalization.
 
-V2 数据与训练配置见 [formal_visual_v2.json](../configs/training/formal_visual_v2.json)。三个 V2 数据集仍使用相同的 9 个成功专家 Episode，但按 `hwr.visual-behavior-dataset/v2` 重采并锁定新的 shard 哈希。
+See [formal_visual_v2.json](../configs/training/formal_visual_v2.json) for the V2 data and training configuration. The three V2 datasets still use the same 9 successful expert Episodes, but were resampled under `hwr.visual-behavior-dataset/v2` and locked to new shard hashes.
 
-## 数据边界
+## Data Boundary
 
-当时三个任务分别使用 3 条专家 Episode，动作空间也只覆盖单臂。这些数据只能复现历史结论，训练加载器必须将其来源标记为 `legacy` 并拒绝用于当前双臂 Actor-Critic 训练。
+At the time, each of the three tasks used 3 expert Episodes, and the action space covered only one arm. These data can reproduce historical conclusions only; the training loader must mark their source as `legacy` and reject them for current dual-arm Actor-Critic training.
 
-| 任务 | 训练种子 | 样本数 | 数据目录 |
+| Task | Training seeds | Sample count | Data directory |
 |---|---:|---:|---|
-| 餐桌清理 | 1000–1002 | 2485 | `datasets/formal-v1-r4/clear_dining_table_3d_v1-expert-s1000` |
-| 起居室收纳 | 2000–2002 | 2198 | `datasets/formal-v1-r5/tidy_living_room_3d_v1-expert-s2000` |
-| 厨房入柜 | 3000–3002 | 4059 | `datasets/formal-v1-r6/store_kitchen_items_3d_v1-expert-s3000` |
+| Dining-table clearing | 1000–1002 | 2485 | `datasets/formal-v1-r4/clear_dining_table_3d_v1-expert-s1000` |
+| Living-room tidying | 2000–2002 | 2198 | `datasets/formal-v1-r5/tidy_living_room_3d_v1-expert-s2000` |
+| Storing kitchen items | 3000–3002 | 4059 | `datasets/formal-v1-r6/store_kitchen_items_3d_v1-expert-s3000` |
 
-数据目录由 Git 忽略；受版本管理的训练配置保存每个 shard 的 SHA-256。训练前加载器会再次检查 manifest、字段白名单和 shard 哈希。
+The data directories are ignored by Git; the version-controlled training configuration stores the SHA-256 for each shard. Before training, the loader checks the manifest, field allowlist, and shard hashes again.
 
-## 历史复现命令
+## Historical Reproduction Commands
 
-以下命令只用于审计旧失败基线，不是当前训练入口：
+The following commands are only for auditing the old failed baseline and are not current training entry points:
 
 ```bash
 .venv/bin/python -m hwr.apps.train_formal_visual \
@@ -43,17 +43,17 @@ V2 数据与训练配置见 [formal_visual_v2.json](../configs/training/formal_v
   --run-id formal-v1-kitchen-s0 --epochs 30 --batch-size 128 --seed 0
 ```
 
-训练器在本机自动选择 MPS、CUDA 或 CPU，保存最佳验证 checkpoint，并立即从磁盘重载一次。`models/` 和 `runs/` 中的大文件由 Git 忽略；完成训练后需把模型哈希、设备、损失和评测种子写入受版本管理的运行清单。
+The trainer automatically selects MPS, CUDA, or CPU on the local machine, saves the best validation checkpoint, and immediately reloads it from disk once. Large files in `models/` and `runs/` are ignored by Git; after training, record the model hash, device, loss, and evaluation seeds in the version-controlled run manifest.
 
-首轮三套策略已在本机 MPS 上各训练 30 epoch 并完成磁盘重载。受版本管理的结果清单记录训练代码提交、训练种子、损失和 checkpoint SHA-256；模型文件仍保存在 `models/formal-v1/`。这些结果只证明本机训练链路跑通，不代表闭环门槛已经达成。
+The first three policies were each trained for 30 epochs on local MPS and successfully reloaded from disk. The version-controlled results manifest records the training-code commit, training seed, loss, and checkpoint SHA-256; model files remain in `models/formal-v1/`. These results show only that the local training pipeline runs end to end; they do not demonstrate that the closed-loop gates have been met.
 
-## 闭环评测门槛
+## Closed-Loop Evaluation Gates
 
-- 每个任务使用与训练集合不相交的 20 个种子；
-- 推理动作来源必须以 `learned:` 开头；
-- 成功率至少 70%；
-- 严重碰撞总数为 0；
-- 每个成功 Episode 的目标状态连续稳定至少 2 秒；
-- 视频必须来自同一个 checkpoint、种子和未剪辑 Episode。
+- Use 20 seeds disjoint from the training set for each task;
+- the inference action source must begin with `learned:`;
+- success rate must be at least 70%;
+- total severe collisions must be 0;
+- the target state in every successful Episode must remain stable for at least 2 seconds;
+- videos must come from the same checkpoint, seed, and unedited Episode.
 
-离线损失下降只证明训练器工作，不代表家务任务完成。只有 checkpoint 重载后的闭环报告满足上述门槛，训练阶段才算通过。
+A decrease in offline loss proves only that the trainer works; it does not mean that the household task was completed. The training stage passes only when the closed-loop report after checkpoint reload meets the gates above.

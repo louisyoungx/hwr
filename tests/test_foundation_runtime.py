@@ -49,7 +49,7 @@ def _observation() -> DualArmObservation:
         0.0, 0.0, (0.0, 0.0, 0.0), (0.0, 0.0),
     )
     return DualArmObservation(
-        100, 0, "fixture/v1", NaturalLanguageInstruction("双手搬运容器"),
+        100, 0, "fixture/v1", NaturalLanguageInstruction("Carry a container with both hands"),
         proprioception, (),
     )
 
@@ -87,7 +87,7 @@ def _policy() -> FoundationWorldModelPolicy:
         )
     )
     resolver = StaticLanguageFeatureResolver(
-        {("zh-CN", "双手搬运容器"): np.ones(6, np.float32)},
+        {("zh-CN", "Carry a container with both hands"): np.ones(6, np.float32)},
         encoder_lock_sha256="c" * 64,
         output_dimension=6,
     )
@@ -134,7 +134,7 @@ def test_static_language_resolver_rejects_unprepared_instruction() -> None:
     policy.reset(task_id="fixture/v1", seed=3)
     observation = _observation()
     observation = DualArmObservation(
-        **{**observation.__dict__, "instruction": NaturalLanguageInstruction("未缓存指令")}
+        **{**observation.__dict__, "instruction": NaturalLanguageInstruction("Uncached instruction")}
     )
 
     with pytest.raises(KeyError, match="not prepared"):

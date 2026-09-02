@@ -61,7 +61,7 @@ def _observation(step: int = 0) -> DualArmObservation:
         timestamp,
         step,
         "runtime-policy/v1",
-        NaturalLanguageInstruction("双手搬运托盘"),
+        NaturalLanguageInstruction("Carry a tray with both hands"),
         DualArmProprioception(
             (0.0,) * 6,
             (0.0,) * 6,

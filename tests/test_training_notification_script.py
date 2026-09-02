@@ -84,7 +84,7 @@ def test_message_script_encapsulates_agent_identity_and_recipient(tmp_path: Path
     )
 
     result = subprocess.run(
-        (str(MESSAGE_SCRIPT), "阶段训练已完成"),
+        (str(MESSAGE_SCRIPT), "Stage training completed"),
         cwd=tmp_path,
         env=environment,
         text=True,
@@ -96,7 +96,7 @@ def test_message_script_encapsulates_agent_identity_and_recipient(tmp_path: Path
     arguments = arguments_path.read_text(encoding="utf-8")
     assert "--as\nbot\n" in arguments
     assert "--user-id\nou_663a48636b9cd51d4a4aec323de37703\n" in arguments
-    assert "--text\n阶段训练已完成\n" in arguments
+    assert "--text\nStage training completed\n" in arguments
 
 
 def test_message_script_retries_and_returns_send_failure(tmp_path: Path) -> None:
@@ -117,7 +117,7 @@ def test_message_script_retries_and_returns_send_failure(tmp_path: Path) -> None
     )
 
     result = subprocess.run(
-        (str(MESSAGE_SCRIPT), "发送失败测试"),
+        (str(MESSAGE_SCRIPT), "Send failure test"),
         cwd=tmp_path,
         env=environment,
         text=True,
@@ -136,8 +136,8 @@ def test_training_wrapper_notifies_as_bot_after_success(tmp_path: Path) -> None:
     arguments = result.lark_arguments  # type: ignore[attr-defined]
     assert "--as\nbot\n" in arguments
     assert "--user-id\nou_663a48636b9cd51d4a4aec323de37703\n" in arguments
-    assert "训练已完成" in arguments
-    assert "Episode 记录数: 1" in arguments
+    assert "Training completed" in arguments
+    assert "Episode Count: 1" in arguments
 
 
 def test_training_wrapper_preserves_training_failure_status(tmp_path: Path) -> None:
@@ -145,8 +145,8 @@ def test_training_wrapper_preserves_training_failure_status(tmp_path: Path) -> N
 
     assert result.returncode == 7
     arguments = result.lark_arguments  # type: ignore[attr-defined]
-    assert "训练异常退出" in arguments
-    assert "状态码: 7" in arguments
+    assert "Training exited abnormally" in arguments
+    assert "Status Code: 7" in arguments
 
 
 def test_training_wrapper_resolves_versioned_foundation_checkpoint(tmp_path: Path) -> None:

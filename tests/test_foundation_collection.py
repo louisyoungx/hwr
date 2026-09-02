@@ -76,7 +76,7 @@ def _observation(sequence: int, task_id: str = "fixture/v1") -> DualArmObservati
         timestamp,
         sequence,
         task_id,
-        NaturalLanguageInstruction("双手移动物体"),
+        NaturalLanguageInstruction("Move the object with both hands"),
         proprioception,
         cameras,
     )

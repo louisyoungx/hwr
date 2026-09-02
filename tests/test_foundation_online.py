@@ -132,7 +132,7 @@ def _observation(task_id: str, sequence: int) -> DualArmObservation:
         timestamp,
         sequence,
         task_id,
-        NaturalLanguageInstruction(f"执行 {task_id} 的双臂任务"),
+        NaturalLanguageInstruction(f"Execute the bimanual task for {task_id}"),
         proprioception,
         cameras,
     )

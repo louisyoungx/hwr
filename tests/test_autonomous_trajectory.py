@@ -41,7 +41,7 @@ def _episode(**overrides) -> AutonomousEpisode:
         "episode_id": "episode-0001",
         "task_id": "fixture/v1",
         "seed": 7,
-        "instruction": "双手搬运容器",
+        "instruction": "Carry a container with both hands",
         "locale": "zh-CN",
         "environment_version": "fixture-env/v1",
         "source_commit": "a" * 40,
@@ -67,7 +67,7 @@ def test_autonomous_trajectory_round_trip_and_continuous_windows(tmp_path) -> No
     assert windows[1]["rgb_uint8"].shape[0] == 3
     assert windows[1]["executed_action"].shape == (2, 16)
     assert windows[1]["reward"].tolist() == [1.0, 2.0]
-    assert windows.shard_metadata(0)["instruction"] == "双手搬运容器"
+    assert windows.shard_metadata(0)["instruction"] == "Carry a container with both hands"
 
 
 def test_autonomous_trajectory_rejects_non_rl_action_sources() -> None:

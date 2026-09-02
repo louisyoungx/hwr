@@ -52,9 +52,9 @@ def test_vision_adapter_input_rejects_invalid_range_and_digest() -> None:
 
 
 def test_language_source_identity_normalizes_whitespace_but_preserves_locale() -> None:
-    first = language_source_sha256("双手  搬运托盘", "zh-CN")
-    second = language_source_sha256(" 双手 搬运托盘 ", "zh-CN")
-    english = language_source_sha256("双手 搬运托盘", "en-US")
+    first = language_source_sha256("Carry a tray  with both hands", "zh-CN")
+    second = language_source_sha256(" Carry a tray with both hands ", "zh-CN")
+    english = language_source_sha256("Carry a tray with both hands", "en-US")
 
     assert first == second
     assert first != english

@@ -1,172 +1,168 @@
-# 家务具身智能三维拟真训练平台 V1：实施与验收合同
+# Household Embodied-Intelligence 3D Realistic Training Platform V1: Implementation and Acceptance Contract
 
-> 状态：执行中  
-> 日期：2026-08-10  
-> 原则：证据缺失等同于未完成；二维结果不计入本合同。
+> Status: In progress
+> Date: 2026-08-10
+> Principle: Missing evidence is equivalent to incomplete; 2D results do not count toward this contract.
 
-正式视觉数据、训练命令和当前执行状态见[正式三维视觉训练运行说明](formal-visual-training.md)。
+See [Formal 3D Visual Training Runbook](formal-visual-training.md) for the formal visual data, training commands, and current execution status.
 
-## 1. 完成定义
+## 1. Definition of Done
 
-V1 不是“能打开一个三维窗口”，而是本机可复现的视觉—动作训练闭环。只有本文件中的 A～H 八组门槛全部有直接证据，目标才能标记完成。
+V1 is not “being able to open a 3D window”; it is a locally reproducible visual-to-action training loop. The goal may be marked complete only when all eight gate groups A–H in this document have direct evidence.
 
-| 门槛 | 必须交付 | 权威证据 | 自动检查 |
+| Gate | Required deliverable | Authoritative evidence | Automatic check |
 |---|---|---|---|
-| A 自有边界 | 引擎只存在于适配器；仿真和未来真机共享 Observation/Action/RuntimeBackend | 导入图、接口测试 | `check_architecture.py` |
-| B 三维场景 | 厨房、餐厅、起居收纳三个米制场景；mesh、材质、纹理、光照、遮挡 | 资产 manifest、场景检查报告、原始截图 | `verify_3d_assets.py` |
-| C 三维机器人 | 四轮底盘、左右两套 6-DOF 机械臂与双指夹爪、头部 RGB-D、左右腕部 RGB；质量/惯量/碰撞/限位 | 编译后的模型清单和动力学测试 | `verify_robot_model.py` |
-| D 真实物理 | 重力、碰撞、摩擦、关节约束；接触夹取；无传送、无动态改物体位姿、无 weld 抓取 | 接触日志、模型审计、源代码扫描、扰动测试 | `verify_physics_integrity.py` |
-| E 非特权策略 | 推理只读相机 payload、本体状态、动作历史和任务指令 | 观察白名单测试、策略输入 manifest | `verify_policy_inputs.py` |
-| F 本机训练 | 无专家、无示范地在本机在线采样、强化学习、登记和重载；评测只执行 Actor | 训练 manifest、数据来源审计、设备信息、模型哈希、动作来源日志 | `verify_training_lineage.py` |
-| G 三任务评测 | 三个指定任务，各 40 个隔离随机种子与未见指令改写，成功率及 Wilson 下界 ≥70%，严重碰撞 0；双臂必需任务通过单臂锁定消融 | 逐 Episode 报告、聚合报告和消融报告 | `evaluate_foundation_world_model.py` |
-| H 原始证据 | 第三人称 + 头部/左右腕部视角，不剪接；最终状态稳定 ≥2 秒 | MP4、帧时间线、相机样本、哈希 | `verify_replay_evidence.py` |
+| A Ownership boundary | The engine exists only in adapters; simulation and future real hardware share Observation/Action/RuntimeBackend | Import graph, interface tests | `check_architecture.py` |
+| B 3D scenes | Three metric scenes for the kitchen, dining room, and living-room storage; meshes, materials, textures, lighting, and occlusion | Asset manifest, scene inspection report, raw screenshots | `verify_3d_assets.py` |
+| C 3D robot | Four-wheel chassis, two 6-DOF arms with two-finger grippers, head RGB-D, and left/right wrist RGB; mass/inertia/collision/limits | Compiled model inventory and dynamics tests | `verify_robot_model.py` |
+| D Real physics | Gravity, collisions, friction, and joint constraints; contact grasping; no teleportation, dynamic object-pose writes, or weld-based grasping | Contact logs, model audit, source scan, perturbation tests | `verify_physics_integrity.py` |
+| E Non-privileged policy | Inference reads only camera payloads, proprioceptive state, action history, and task instructions | Observation allowlist tests, policy-input manifest | `verify_policy_inputs.py` |
+| F Local training | Local online sampling, reinforcement learning, registration, and reload without experts or demonstrations; evaluation executes only the Actor | Training manifest, data-source audit, device information, model hash, action-source logs | `verify_training_lineage.py` |
+| G Three-task evaluation | Three specified tasks, each with 40 isolated random seeds and unseen instruction rewrites, success rate and Wilson lower bound ≥70%, zero severe collisions; dual-arm-required tasks pass the single-arm-lockout ablation | Per-Episode reports, aggregate report, and ablation report | `evaluate_foundation_world_model.py` |
+| H Raw evidence | Third-person plus head/left-wrist/right-wrist views, unedited; final state stable for ≥2 seconds | MP4, frame timeline, camera samples, hashes | `verify_replay_evidence.py` |
 
-检查脚本名称是冻结的交付接口；对应阶段实现前允许文件不存在，但最终不得用人工说明代替。
+The check-script names are frozen delivery interfaces; the files may be absent before their corresponding stages are implemented, but human explanations may not substitute for them in the final state.
 
-## 2. 正式任务
+## 2. Formal Tasks
 
 ### `tidy_living_room_3d/v1`
 
-- 机器人从房间入口出发，绕过茶几或沙发；
-- 从地面拾取橡皮鸭和迷你足球，将两件物品收进藤编篮；
-- 成功只检查两件物品的目标体积、速度与稳定时间，不提供抓取点或搬运动作标签；
-- 成功前左右夹爪必须分别形成真实双指接触，并出现至少 0.5 秒同时接触。
+- The robot starts at the room entrance and navigates around the coffee table or sofa;
+- picks up a rubber duck and a mini soccer ball from the floor and places both objects in the wicker basket;
+- success checks only the objects’ target volumes, velocities, and stability duration; it provides no grasp points or transport-action labels;
+- before success, the left and right grippers must each form genuine two-finger contact, with at least 0.5 seconds of simultaneous contact.
 
 ### `clear_dining_table_3d/v1`
 
-- 桌面放置陶瓷杯和木盘，目标分别为蓝色杯托与橙色盘托；
-- 两件物品必须进入各自目标体积并稳定至少 2 秒；
-- 成功前左右夹爪必须分别形成真实双指接触，并出现至少 0.5 秒同时接触；
-- 单臂锁定后若仍能满足相同成功判定，则正式消融不通过。
+- A ceramic cup and wooden plate are placed on the tabletop, with a blue cup holder and orange plate holder as their respective targets;
+- both objects must enter their respective target volumes and remain stable for at least 2 seconds;
+- before success, the left and right grippers must each form genuine two-finger contact, with at least 0.5 seconds of simultaneous contact;
+- if the same success determination can still be met after locking one arm, the formal ablation fails.
 
 ### `store_kitchen_items_3d/v1`
 
-- 黄色与粉色清洁剂瓶必须分别进入抽屉左右分仓；
-- 抽屉具有无执行器滑轨，必须由机器人接触拉开到至少 0.30 m；
-- 成功前左右夹爪必须分别形成真实双指接触，并出现至少 0.5 秒同时接触；
-- 柜门/抽屉的运动必须由机器人接触或夹持产生，禁止任务脚本直接设置关节位置。
+- The yellow and pink cleaning-agent bottles must enter the drawer’s left and right compartments, respectively;
+- the drawer has a non-actuated slide rail and must be opened by robot contact to at least 0.30 m;
+- before success, the left and right grippers must each form genuine two-finger contact, with at least 0.5 seconds of simultaneous contact;
+- cabinet-door/drawer motion must be caused by robot contact or grasping; the task script may not set joint positions directly.
 
-三个任务都必须使用移动底盘和左右机械臂。只在工作台原地抓取、两只手依次完成但没有
-并发接触，或单臂锁定后仍能达到同一成功门槛，均不算通过。环境只定义观测、奖励、终止、
-安全与合法变换，不提供任何动作答案。
+All three tasks must use the mobile chassis and both arms. Stationary tabletop grasping, sequential two-hand completion without concurrent contact, or meeting the same success gate after locking one arm does not pass. The environment defines only observations, rewards, termination, safety, and legal transformations; it provides no action answers.
 
-## 3. 场景与资产门槛
+## 3. Scene and Asset Gates
 
-每个正式场景必须同时满足：
+Every formal scene must satisfy all of the following:
 
-- 以米为单位，房间、通道、桌台和目标容器具有明确真实尺度；
-- 至少 3 件静态家具、1 个目标容器、2 个可操作物体；
-- 可见家具和操作物使用 mesh 或程序化非平凡网格；
-- 至少包含地面、墙面、木材/织物/陶瓷等可辨识纹理材质；
-- 配置环境光和至少两个有方向或位置的光源；
-- 渲染结果存在正常透视、遮挡和阴影；
-- 视觉 mesh 与简化碰撞 mesh 分离，二者尺度误差受 manifest 约束；
-- 每个外部资产记录来源 URL、许可、原始哈希、处理后哈希和米制缩放。
+- be metric, with clear real-world dimensions for rooms, passages, tables, and target containers;
+- contain at least 3 pieces of static furniture, 1 target container, and 2 manipulable objects;
+- use meshes or non-trivial procedural meshes for visible furniture and manipulable objects;
+- include at least the floor, walls, and recognizable textured materials such as wood, fabric, and ceramic;
+- configure ambient light and at least two directional or positional light sources;
+- show normal perspective, occlusion, and shadows in the rendered result;
+- keep visual meshes separate from simplified collision meshes, with their scale error constrained by the manifest;
+- record the source URL, license, original hash, processed hash, and metric scaling for every external asset.
 
-禁止把一组无纹理 box/cylinder/sphere 改名为“家具”后通过验收。基础几何体可用作不可见碰撞体或小型连接件，但不能构成正式场景的全部可见内容。
+Renaming a set of untextured boxes/cylinders/spheres as “furniture” does not pass acceptance. Basic geometric primitives may be used as invisible collision bodies or small connectors, but they cannot constitute all visible content in a formal scene.
 
-## 4. 机器人门槛
+## 4. Robot Gates
 
-机器人模型必须包含：
+The robot model must contain:
 
-- 四个独立可见轮体和轮地接触碰撞体；
-- 可实现差速移动的底盘驱动；
-- 左右各六个旋转机械臂关节，逐关节位置、速度、力矩限制；
-- 左右各一个双指夹爪，每个夹爪具有两个可动夹指、接触面和力限制；
-- 头部 RGB 相机与同位深度相机、左右腕部 RGB 相机；
-- 每个动态 link 的正质量、正定惯量和碰撞几何；
-- 自碰撞白名单/黑名单、双臂互碰约束和底盘—手臂安全限位。
+- four independently visible wheel bodies and wheel-ground contact collision bodies;
+- chassis drive capable of differential motion;
+- six revolute arm joints on each side, with per-joint position, velocity, and torque limits;
+- one two-finger gripper on each side, each with two movable fingers, contact surfaces, and force limits;
+- a head RGB camera with a co-located depth camera, plus left and right wrist RGB cameras;
+- positive mass, positive-definite inertia, and collision geometry for every dynamic link;
+- self-collision allowlists/blocklists, inter-arm collision constraints, and chassis-arm safety limits.
 
-模型检查器必须从编译后的引擎模型读取上述事实，不能只检查 XML 中是否出现某个字符串。
+The model checker must read these facts from the compiled engine model rather than merely checking whether a string appears in the XML.
 
-## 5. 物理完整性与反作弊
+## 5. Physical Integrity and Anti-Cheating
 
-### 允许
+### Allowed
 
-- `reset` 前后设置随机初始位姿；
-- 控制器把 Actor 动作转换为关节位置、速度或力矩目标；
-- 成功判定器、奖励器和训练期 Critic 只读物理状态；
-- 环境定义奖励、终止、成功/安全结果和合法环境变换，训练器不要求目标重标记；
-- 课程调度器根据闭环成功率调整初始状态和随机化分布。
+- set randomized initial poses before and after `reset`;
+- have the controller convert Actor actions into joint-position, velocity, or torque targets;
+- have the success checker, rewarder, and training-time Critic read physical state only;
+- have the environment define rewards, termination, success/safety outcomes, and legal environment transformations; the trainer must not require target relabeling;
+- have the curriculum scheduler adjust initial-state difficulty and the randomization distribution based on closed-loop success rate.
 
-### 禁止
+### Prohibited
 
-- Episode 中给操作物体写位置、姿态或速度；
-- 按末端距离把物体绑定、吸附、焊接或复制到夹爪；
-- 按动作值直接切换“已抓取/已放置”；
-- 用规则专家、人工遥操作、教师策略或动作脚本生成正式训练标签；
-- 从专家或行为克隆 checkpoint 初始化正式 Actor；
-- Critic、奖励器或任务脚本向 Actor 输出动作、阶段或中间计划；
-- 评测策略读取实体 ID、真值位姿、目标向量、任务阶段或成功状态；
-- 评测时混入规则专家动作、重试失败步骤或剪掉失败片段；
-- 视频使用与评测报告不同的模型、种子或轨迹。
+- write the position, orientation, or velocity of a manipulable object during an Episode;
+- bind, attract, weld, or copy an object to a gripper based on end-effector distance;
+- switch directly to “grasped/placed” based on action values;
+- use a rule-based expert, human teleoperation, teacher policy, or action script to generate formal training labels;
+- initialize the formal Actor from an expert or behavioral-cloning checkpoint;
+- have the Critic, rewarder, or task script output actions, stages, or intermediate plans to the Actor;
+- have the evaluation policy read entity IDs, ground-truth poses, target vectors, task stages, or success state;
+- mix rule-based expert actions into evaluation, retry failed steps, or cut failed segments;
+- use a model, seed, or trajectory in the video that differs from the evaluation report.
 
-运行时审计记录每一步动作来源、物体位姿变化、夹指接触对、碰撞冲量和任务判定输入。反作弊检查同时扫描代码、模型和 Episode 审计记录。
+The runtime audit records the source of every action, object-pose changes, finger-contact pairs, collision impulses, and task-determination inputs. Anti-cheating checks scan the code, model, and Episode audit records together.
 
-## 6. 视觉观察与训练
+## 6. Visual Observations and Training
 
-正式策略每一步只允许使用：
+At each step, the formal policy may use only:
 
-- 头部 RGB；
-- 头部米制 depth；
-- 左右腕部 RGB；
-- 左右各六轴关节位置/速度；
-- 左右夹爪位置与力；
-- 底盘里程计与 IMU；
-- 版本化任务指令；
-- 已执行动作的有限历史。
+- head RGB;
+- metric depth from the head;
+- left and right wrist RGB;
+- six-axis joint position/velocity for each arm;
+- left and right gripper position and force;
+- chassis odometry and IMU;
+- versioned task instruction;
+- a limited history of executed actions.
 
-训练期特权状态与策略输入分开存储。导出 Actor 张量时执行白名单，任何额外字段导致构建失败。训练谱系必须证明没有专家 Episode、人工动作、教师 checkpoint 或行为克隆初始化；最终 checkpoint 重载后的评测动作 `source` 必须全部是学习策略版本。
+Training-time privileged state and policy inputs are stored separately. Enforce an allowlist when exporting Actor tensors; any extra field must fail the build. The training lineage must prove that no expert Episodes, human actions, teacher checkpoints, or behavioral-cloning initialization were used; after reloading the final checkpoint, every evaluation action `source` must be a learned-policy version.
 
-## 7. 随机化与评测
+## 7. Randomization and Evaluation
 
-每个正式任务至少 40 个训练未见种子，并使用与训练集合不重叠的自然语言改写。每个种子
-同时决定并记录：
+Each formal task must use at least 40 seeds unseen during training and natural-language rewrites disjoint from the training set. Each seed simultaneously determines and records:
 
-- 机器人初始位姿；
-- 操作物位置与朝向；
-- 纹理或材质变体；
-- 光源强度、色温或位置；
-- 合理范围内的物体质量和接触摩擦；
-- 相机噪声或深度缺失比例。
-- 相机安装平移/旋转、焦距比例、深度测量噪声；
-- 执行器比例误差、动作延迟和观测延迟。
+- robot initial pose;
+- manipulable-object positions and orientations;
+- texture or material variants;
+- light intensity, color temperature, or position;
+- object mass and contact friction within reasonable ranges;
+- camera noise or depth-missing ratio;
+- camera extrinsic translation/rotation, focal-length ratio, and depth-measurement noise;
+- actuator scale error, action latency, and observation latency.
 
-评测扰动区间必须比训练区间更宽，并至少有一端落在训练范围外；训练与评测的每个参数、
-指令文本和 seed 都写入审计记录。
+Evaluation perturbation ranges must be wider than the training ranges, with at least one end outside the training range; every parameter, instruction text, and seed for training and evaluation must be written to the audit record.
 
-准入条件：
+Entry criteria:
 
-- 成功率不低于 70%；
-- 严重碰撞为 0；
-- 每次成功均通过 2 秒稳定窗口；
-- 正常双臂条件达到成功门槛，锁定左臂或右臂后分别重新运行同一评测集，成功率均不得达到 10%；
-- 双臂成功 Episode 中存在由物理接触证明的必要并发操作窗口，不以关节发生过运动代替；
-- 每个场景保存全部 40 回合的逐回合原因、步数、接触与碰撞统计；
-- 报告保存训练种子集合与评测种子集合，并验证不相交。
+- success rate of at least 70%;
+- zero severe collisions;
+- every success passes a 2-second stability window;
+- after the normal dual-arm condition reaches the success gate, rerun the same evaluation set with the left arm locked and with the right arm locked; neither success rate may reach 10%;
+- successful dual-arm Episodes contain a necessary concurrent-operation window proven by physical contact; movement of the joints alone is not a substitute;
+- retain per-Episode reasons, step counts, contact statistics, and collision statistics for all 40 rounds in each scene;
+- retain the training-seed and evaluation-seed sets in the report and verify that they are disjoint.
 
-## 8. 视频与可审计产物
+## 8. Video and Auditable Artifacts
 
-每个正式任务至少输出一条成功回放和一条失败回放（若 20 回合无失败则输出另一个成功种子）。视频必须：
+Each formal task must produce at least one successful replay and one failed replay (if there is no failure in 20 rounds, produce another successful seed). Videos must:
 
-- 由评测进程同时录制第三人称、头部 RGB、腕部 RGB；
-- 从 reset 前稳定画面录到任务判定后的 2 秒稳定窗口；
-- 不改变动作频率、不跳帧掩盖失败、不在不同 Episode 间拼接；
-- 叠加 task、seed、checkpoint hash、simulation time、action source；
-- 旁车 JSON 记录每帧对应的 Episode step 和各视角帧哈希。
+- be recorded by the evaluation process simultaneously from third-person, head RGB, and wrist RGB views;
+- run from a stable view before reset through the 2-second stability window after task determination;
+- not change the action frequency, skip frames to hide failures, or splice different Episodes together;
+- overlay task, seed, checkpoint hash, simulation time, and action source;
+- have a sidecar JSON recording the corresponding Episode step and per-view frame hash for every frame.
 
-大模型、数据集和视频可以由 Git 忽略，但小型 manifest、聚合报告、验收阈值和复现命令必须受版本管理。
+Large models, datasets, and videos may be ignored by Git, but small manifests, aggregate reports, acceptance thresholds, and reproduction commands must be version-controlled.
 
-## 9. 阶段与 Git 提交
+## 9. Stages and Git Commits
 
-1. ADR、接口和验收矩阵；
-2. MuJoCo 本机安装、离屏 RGB/depth smoke test；
-3. 四轮双六轴机器人模型、16 维动作及编译后审计；
-4. 纯接触抓取和稳定判定；
-5. 三场景资产、许可与校验；
-6. 程序化任务、奖励、终止、合法环境变换与自主 replay；
-7. 无专家 Actor-Critic 训练与登记；
-8. 20 种子评测、双臂消融、视频和反作弊审计；
-9. 干净环境复现和最终逐项审计。
+1. ADR, interfaces, and acceptance matrix;
+2. local MuJoCo installation and off-screen RGB/depth smoke test;
+3. four-wheel dual-six-axis robot model, 16-dimensional action, and post-compilation audit;
+4. pure contact grasping and stability determination;
+5. three-scene assets, licensing, and verification;
+6. procedural tasks, rewards, termination, legal environment transformations, and autonomous replay;
+7. expert-free Actor-Critic training and registration;
+8. 20-seed evaluation, dual-arm ablation, video, and anti-cheating audit;
+9. clean-environment reproduction and final item-by-item audit.
 
-每阶段必须运行相关测试和 `scripts/check_python_size.py`，通过后独立提交。阶段完成不等于总目标完成。
+Each stage must run the relevant tests and `scripts/check_python_size.py` and be committed separately after passing. Completing a stage does not mean that the overall goal is complete.

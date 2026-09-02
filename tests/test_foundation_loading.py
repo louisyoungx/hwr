@@ -127,7 +127,7 @@ def _dataset(tmp_path, fingerprint: str):
         "episode-1",
         "fixture/v1",
         7,
-        "双手移动容器",
+        "Move the container with both hands",
         "zh-CN",
         "fixture-env/v1",
         "abc123",

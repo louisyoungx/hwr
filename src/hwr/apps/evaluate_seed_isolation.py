@@ -49,7 +49,9 @@ def _observation() -> DualArmObservation:
         timestamp_ns=0,
         sequence_id=0,
         task_id=TASK_ID,
-        instruction=NaturalLanguageInstruction("执行 seed 隔离接口诊断"),
+        instruction=NaturalLanguageInstruction(
+            "Run the seed-isolation interface diagnostic"
+        ),
         proprioception=DualArmProprioception(
             (0.0,) * 6,
             (0.0,) * 6,

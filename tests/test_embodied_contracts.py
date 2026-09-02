@@ -22,9 +22,9 @@ def _action(value: float = 0.1) -> DualArmAction:
 
 
 def test_natural_instruction_is_normalized_without_symbolic_parsing() -> None:
-    instruction = NaturalLanguageInstruction("  把杯子\n放到水槽旁边  ")
+    instruction = NaturalLanguageInstruction("  Put the cup\nbeside the sink  ")
 
-    assert instruction.text == "把杯子 放到水槽旁边"
+    assert instruction.text == "Put the cup beside the sink"
     assert not hasattr(instruction, "object_token")
     assert not hasattr(instruction, "skill_plan")
 
@@ -58,7 +58,7 @@ def test_dual_arm_runtime_contract_keeps_raw_inputs_and_side_ownership() -> None
         timestamp_ns=10,
         sequence_id=2,
         task_id="bimanual_test",
-        instruction=NaturalLanguageInstruction("双手拿起托盘"),
+        instruction=NaturalLanguageInstruction("Pick up the tray with both hands"),
         proprioception=DualArmProprioception(
             left_joint_position=(0.1,) * 6,
             left_joint_velocity=(0.2,) * 6,
@@ -72,7 +72,7 @@ def test_dual_arm_runtime_contract_keeps_raw_inputs_and_side_ownership() -> None
         cameras=(CameraFrame("head_rgb", 10, 2, 1, 1, payload=b"rgb"),),
     )
 
-    assert observation.instruction.text == "双手拿起托盘"
+    assert observation.instruction.text == "Pick up the tray with both hands"
     assert observation.proprioception.vector()[:6] == (0.1,) * 6
     assert observation.camera("head_rgb").payload == b"rgb"
     assert not hasattr(observation, "privileged_state")

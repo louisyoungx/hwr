@@ -1,218 +1,218 @@
-# 万元内家务具身智能训练平台方案
+# Household Embodied-Intelligence Training Platform Proposal Under ¥10,000
 
-> 版本：V0.2  
-> 日期：2026-08-09  
-> 预算上限：人民币 10,000 元（不含现有 Mac）
+> Version: V0.2
+> Date: 2026-08-09
+> Budget ceiling: RMB 10,000 (excluding the existing Mac)
 
-配套文档：[训练与拟真环境方案](./training-and-simulation-plan.md)；训练架构以[基础模型感知、世界模型与想象强化学习范式](./foundation-world-model-training-paradigm.md)为准。
+Related document: [Training and Realistic-Environment Plan](./training-and-simulation-plan.md); the training architecture follows [Foundation-Model Perception, World Models, and Imagination Reinforcement Learning Paradigm](./foundation-world-model-training-paradigm.md).
 
-## 1. 方案结论
+## 1. Proposal Conclusion
 
-在 1 万元预算内，平台定位为“低成本移动操作研究平台”，而不是可直接投入家庭使用的通用家务机器人。
+Within a ¥10,000 budget, the platform is positioned as a “low-cost mobile manipulation research platform,” not as a general-purpose household robot ready for direct use in homes.
 
-首版保留以下完整闭环：
+The first version retains the following complete loop:
 
-1. 四轮移动底盘；
-2. 头部 RGB-D 相机和左右腕部 RGB 相机；
-3. 两套具有关节反馈和夹爪的低成本机械臂；
-4. 双臂联合控制和独立安全过滤；
-5. 自有数据规范和本机策略训练；
-6. 本机推理、真机评测、失败数据回流和再训练。
+1. a four-wheel mobile chassis;
+2. a head RGB-D camera and left/right wrist RGB cameras;
+3. two low-cost arms with joint feedback and grippers;
+4. dual-arm joint control and independent safety filtering;
+5. an in-house data specification and local policy training;
+6. local inference, real-robot evaluation, failed-data feedback, and retraining.
 
-为满足预算，需要暂时取消电动升降柱、激光雷达、六维力传感器和 Jetson 等机载 GPU。底盘与双臂均由同一个 Actor 输出目标，轮速和关节底层控制器只负责跟踪和安全，不能包含任务路线或左右臂分工。
+To meet the budget, the electric lift column, lidar, six-axis force sensors, and onboard GPUs such as Jetson must be deferred. The same Actor outputs targets for the chassis and both arms; wheel-speed and low-level joint controllers are responsible only for tracking and safety and may not contain task routes or left/right arm role assignments.
 
-现有训练机为 Apple M5 Pro、48 GB 统一内存，可以承担小型视觉 Actor、特权 Critic、经验回放和并行仿真的本机训练与推理。方案编写时系统根卷可用空间约 77 GiB，因此将 1 TB 外置 SSD 列为必选项。
+The existing training machine is an Apple M5 Pro with 48 GB of unified memory, which can handle local training and inference for a small visual Actor, a privileged Critic, replay buffers, and parallel simulation. When this proposal was written, the system root volume had about 77 GiB available, so a 1 TB external SSD is mandatory.
 
-平台的设备接口、数据格式、策略接口、任务编排和安全协议均由本项目定义。任何机械臂、底盘、训练算法或第三方工具都只能通过适配器接入，不能成为核心架构的一部分。
+This project defines the platform's device interfaces, data formats, policy interface, task orchestration, and safety protocols. Any arm, chassis, training algorithm, or third-party tool may connect only through an adapter and may not become part of the core architecture.
 
-## 2. 第一阶段任务
+## 2. Phase-One Task
 
-首个端到端任务定义为：
+The first end-to-end task is defined as:
 
-> 小车从起点移动到工作区，双臂同时抓住宽托盘或双把手收纳篮，将其稳定搬运到指定区域。
+> The robot moves from its starting point to the work area, grasps a wide tray or a two-handle storage basket with both arms simultaneously, and transports it stably to a designated area.
 
-选择该任务的原因是它可以同时验证：
+This task is selected because it can validate all of the following at once:
 
-- 底盘运动和里程计；
-- 视觉定位与工作位对准；
-- 左右臂在统一动作空间内的并发控制；
-- 图像、机器人状态和动作的时间同步；
-- 无专家强化学习和真机推理；
-- 失败检测、人工接管和数据回流。
+- chassis motion and odometry;
+- visual localization and work-position alignment;
+- concurrent control of the left and right arms in a unified action space;
+- time synchronization among images, robot state, and actions;
+- expert-free reinforcement learning and real-robot inference;
+- failure detection, human takeover, and data feedback.
 
-首版目标物重量建议小于 200 g，工作台和收纳篮应位于固定高度范围内。
+For the first version, the target object should weigh less than 200 g, and the worktable and storage basket should remain within a fixed height range.
 
-## 3. 系统架构
+## 3. System Architecture
 
 ```mermaid
 flowchart LR
-    A[相机、机械臂、底盘编码器] --> B[车载 SBC<br/>采集与实时控制]
-    B -->|局域网| C[Mac 本机<br/>数据录制]
-    C --> D[自有 Episode 数据集]
-    D --> E[策略训练器<br/>本机加速后端]
-    E --> F[本机策略推理]
-    F -->|动作指令| B
-    B --> G[底盘与机械臂]
+    A[Cameras, arms, and base encoders] --> B[Onboard SBC<br/>Data capture and real-time control]
+    B -->|LAN| C[Local Mac<br/>Data recording]
+    C --> D[First-party Episode dataset]
+    D --> E[Policy trainer<br/>Local acceleration backend]
+    E --> F[Local policy inference]
+    F -->|Action commands| B
+    B --> G[Base and arms]
     G --> A
 ```
 
-### 3.1 车载侧
+### 3.1 Onboard Side
 
-车载 SBC 运行 Ubuntu，负责：
+The onboard SBC runs Ubuntu and is responsible for:
 
-- 采集头部 RGB-D 和左右腕部 RGB 相机；
-- 读取机械臂关节、夹爪、轮编码器和 IMU；
-- 对视频进行硬件或软件编码；
-- 执行底盘速度闭环；
-- 接收 Mac 下发的机械臂动作块和底盘速度；
-- 执行通信看门狗、动作限幅和紧急停车。
+- capturing the head RGB-D and left/right wrist RGB cameras;
+- reading arm joints, grippers, wheel encoders, and the IMU;
+- encoding video in hardware or software;
+- running the chassis velocity loop;
+- receiving arm action chunks and chassis velocities sent by the Mac;
+- running the communication watchdog, action limiting, and emergency stop.
 
-底盘的电机速度环、急停和通信超时停车放在 ESP32-S3 或 STM32 上实现，不能依赖 Mac、Wi-Fi 或学习模型。
+The chassis motor-velocity loop, emergency stop, and communication-timeout stop must run on the ESP32-S3 or STM32 and may not depend on the Mac, Wi-Fi, or the learned model.
 
-### 3.2 Mac 侧
+### 3.2 Mac Side
 
-Mac 负责：
+The Mac is responsible for:
 
-- 多模态数据录制和数据质量检查；
-- 在线仿真采样、经验回放和 Episode 数据生成；
-- 无专家 Actor-Critic 训练、评测和模型版本管理；
-- 10～15 Hz 策略推理；
-- 评测结果、失败轨迹和安全事件回流。
+- multimodal data recording and data-quality checks;
+- online simulation sampling, replay, and Episode-data generation;
+- expert-free Actor-Critic training, evaluation, and model-version management;
+- policy inference at 10–15 Hz;
+- feedback of evaluation results, failed trajectories, and safety events.
 
-Mac 与机器人之间使用专用局域网通信，不依赖互联网或云端服务。Mac 休眠、网络中断或推理进程退出时，车载控制器必须在超时后自动停车并卸载高风险动作。
+The Mac and robot communicate over a dedicated local network without relying on the internet or cloud services. If the Mac sleeps, the network is interrupted, or the inference process exits, the onboard controller must stop automatically after a timeout and unload high-risk actions.
 
-### 3.3 自有核心抽象
+### 3.3 In-House Core Abstractions
 
-核心代码不直接依赖具体设备型号，按以下接口组织：
+Core code does not directly depend on specific device models and is organized around the following interfaces:
 
-- `ArmDevice`：按 `arm_id` 描述左右机械臂能力、读取关节状态、位置/速度指令、夹爪指令、停止；
-- `MobileBaseDevice`：读取轮速和里程计、底盘速度指令、制动；
-- `CameraDevice`：相机内外参、图像帧、采集时间戳；
-- `SafetyDevice`：急停、看门狗、限位、过流和故障状态；
-- `RobotRuntime`：设备生命周期、时钟同步、观测聚合、动作下发；
-- `EpisodeRecorder`：按自有规范保存原始观测、动作、事件和元数据；
-- `Policy`：接收观测窗口，输出带时间范围的动作块；
-- `TaskEvaluator`：只读环境状态，计算奖励、终止、成功和安全结果，不输出动作。
+- `ArmDevice`: describes left/right arm capabilities by `arm_id`, reads joint state, position/velocity commands, gripper commands, and stop state;
+- `MobileBaseDevice`: reads wheel speed and odometry, chassis velocity commands, and braking state;
+- `CameraDevice`: camera intrinsics/extrinsics, image frames, and capture timestamps;
+- `SafetyDevice`: emergency stop, watchdog, limits, overcurrent, and fault state;
+- `RobotRuntime`: device lifecycle, clock synchronization, observation aggregation, and action dispatch;
+- `EpisodeRecorder`: stores raw observations, actions, events, and metadata under the in-house specification;
+- `Policy`: receives an observation window and outputs time-bounded action chunks;
+- `TaskEvaluator`: reads environment state only, computes rewards, termination, success, and safety outcomes, and outputs no actions.
 
-统一约定使用 SI 单位、弧度、右手坐标系和单调纳秒时间戳。机器人本体坐标、机械臂基座、末端和相机坐标均进入版本化坐标树，标定结果不写死在驱动中。
+The common convention uses SI units, radians, a right-handed coordinate system, and monotonic nanosecond timestamps. The robot-body, arm-base, end-effector, and camera frames all belong in a versioned frame tree; calibration results must not be hard-coded into drivers.
 
-核心数据对象包括：
+Core data objects include:
 
-- `ObservationFrame`：图像、关节、夹爪、底盘、IMU 和安全状态；
-- `ActionFrame`：目标动作、实际下发动作、有效时间和来源；
-- `Episode`：任务、帧序列、事件、结果、标定版本和模型版本；
-- `PolicySpec`：模型所需观测、动作空间、历史窗口和推理频率；
-- `RobotCapabilities`：当前硬件可提供的传感器、执行器和控制模式。
+- `ObservationFrame`: images, joints, grippers, chassis, IMU, and safety state;
+- `ActionFrame`: target action, actually dispatched action, validity interval, and source;
+- `Episode`: task, frame sequence, events, result, calibration version, and model version;
+- `PolicySpec`: observations required by the model, action space, history window, and inference frequency;
+- `RobotCapabilities`: sensors, actuators, and control modes available from the current hardware.
 
-设备驱动、算法实现和数据格式转换器均位于外围适配层。替换机械臂或训练算法时，不应修改 Episode 格式、任务编排和安全模块。
+Device drivers, algorithm implementations, and data-format converters all belong in the peripheral adapter layer. Replacing an arm or training algorithm must not require changes to the Episode format, task orchestration, or safety module.
 
-### 3.4 控制分层
+### 3.4 Control Layering
 
-任务策略不分层为人工导航、抓取技能和状态机。Actor 联合输出底盘、左右六轴机械臂和左右夹爪的 16 维动作；设备侧只保留轮速 PID、关节伺服、安全限位和急停。训练课程可以改变初始状态难度，但不把任务拆成 Actor 可见阶段。
+The task policy is not split into human navigation, grasping skills, and a state machine. The Actor jointly outputs a 16-dimensional action for the chassis, the left and right six-axis arms, and the left and right grippers; the device side retains only wheel-speed PID, joint servoing, safety limits, and emergency stop. Training curricula may change initial-state difficulty but may not split the task into stages visible to the Actor.
 
-## 4. 硬件方案与预算
+## 4. Hardware Plan and Budget
 
-| 模块 | 建议方案 | 预算区间 |
+| Module | Recommended solution | Budget range |
 |---|---|---:|
-| 双机械臂 | 两套具有关节反馈和夹爪的低成本 5～6 轴机械臂 | ¥3,200～4,000 |
-| 四轮底盘 | 金属 4WD、四个带编码器减速电机 | ¥600～900 |
-| 车载计算 | Orange Pi 5 或 Raspberry Pi 5，8 GB 内存 | ¥600～900 |
-| 实时控制 | ESP32-S3/STM32、双路电机驱动、编码器接口 | ¥250～400 |
-| 相机 | 一个头部 RGB-D、两个腕部 RGB 相机 | ¥600～900 |
-| 电池与供电 | 12 V 电池、BMS、保险、5 V/12 V DC-DC | ¥450～700 |
-| 安全与辅助传感器 | 急停、IMU、碰撞条或近距 ToF | ¥200～350 |
-| 机械结构 | 箱体、双臂座、相机座和 3D 打印件 | ¥350～550 |
-| 数据存储 | 1 TB 外置 SSD | ¥450～600 |
-| 线材、路由器、备件 | 舵机线、轮胎、紧固件、备用驱动等 | ¥400～600 |
-| **合计** |  | **¥7,100～9,900** |
+| Dual arms | Two low-cost 5–6-axis arms with joint feedback and grippers | ¥3,200–4,000 |
+| Four-wheel chassis | Metal 4WD, four geared motors with encoders | ¥600–900 |
+| Onboard computing | Orange Pi 5 or Raspberry Pi 5, 8 GB RAM | ¥600–900 |
+| Real-time control | ESP32-S3/STM32, dual motor driver, encoder interface | ¥250–400 |
+| Cameras | One head RGB-D camera, two wrist RGB cameras | ¥600–900 |
+| Battery and power | 12 V battery, BMS, fuse, 5 V/12 V DC-DC | ¥450–700 |
+| Safety and auxiliary sensors | Emergency stop, IMU, bumper or short-range ToF | ¥200–350 |
+| Mechanical structure | Enclosure, dual-arm mounts, camera mounts, and 3D-printed parts | ¥350–550 |
+| Data storage | 1 TB external SSD | ¥450–600 |
+| Cables, router, and spares | Servo cables, tires, fasteners, spare drivers, etc. | ¥400–600 |
+| **Total** |  | **¥7,100–9,900** |
 
-预算上界没有浮动空间，采购时目标应控制在约 9,000 元，为运费、打印失败和损坏备件保留约 1,000 元。任何单项超预算时，优先保留双臂反馈、编码器、急停和外置 SSD；深度相机、雷达和外观件均可后置。
+The budget ceiling has no room for overruns. Procurement should target approximately ¥9,000, reserving about ¥1,000 for shipping, failed prints, and damaged spares. If any individual item exceeds budget, prioritize dual-arm feedback, encoders, emergency stop, and the external SSD; the depth camera, lidar, and cosmetic parts can all be deferred.
 
-### 4.1 机械臂约束
+### 4.1 Arm Constraints
 
-当前阶段不指定机械臂型号，只定义接入平台所需的最低能力：
+At this stage, no arm model is specified; only the minimum capabilities required for platform integration are defined:
 
-- 不少于 5 个可控关节，并具备末端夹爪；
-- 所有关节能够读取绝对或可稳定复位的位置；
-- 至少支持 20 Hz 的位置指令与状态反馈；
-- 能读取通信故障、过载或失能状态；
-- 具备公开或可封装的控制协议；
-- 能在控制器侧设置关节限位、速度限制和超时停止；
-- 两套机械臂通过相同接口和不同 `arm_id` 接入，不假定具体品牌或型号；
-- 两套机械臂及夹爪总预算上限为 4,000 元。
+- at least 5 controllable joints and an end-effector gripper;
+- the ability to read absolute positions or positions that can be reset reliably for every joint;
+- support for position commands and state feedback at a minimum of 20 Hz;
+- the ability to read communication faults, overload, or disabled state;
+- a public or encapsulatable control protocol;
+- controller-side joint limits, speed limits, and timeout stop;
+- both arms integrated through the same interface with different `arm_id` values, without assuming a particular brand or model;
+- a total budget ceiling of ¥4,000 for both arms and grippers.
 
-型号选择发生在接口、数据规范和仿真桩驱动验证完成之后。候选硬件必须先通过 `ArmDevice` 适配性测试，再进入采购决策。
+Model selection takes place after the interfaces, data specification, and simulation stub driver have been validated. Candidate hardware must first pass the `ArmDevice` compatibility test before entering the procurement decision.
 
-### 4.2 底盘
+### 4.2 Chassis
 
-底盘采用四轮差速/滑移转向，不使用麦克纳姆轮。首版参数建议：
+The chassis uses four-wheel differential/skid steering and does not use mecanum wheels. Suggested first-version parameters:
 
-- 底盘尺寸约 300～400 mm；
-- 四个带编码器减速电机；
-- 低速运行上限 0.3 m/s；
-- 电池放在最低层作为配重；
-- 机械臂固定立柱靠近底盘中心；
-- 机械臂伸出时限制底盘速度和旋转速度。
+- chassis dimensions of approximately 300–400 mm;
+- four geared motors with encoders;
+- a low-speed operating limit of 0.3 m/s;
+- battery placed on the lowest level as ballast;
+- fixed arm columns near the chassis center;
+- chassis speed and rotational speed limits when the arms are extended.
 
-预算内的小型机械臂臂展和负载有限，固定立柱只能针对一个工作高度优化，不能同时覆盖地面和标准厨房台面。
+The small arms' reach and payload are limited within the budget, so fixed columns can be optimized for only one work height and cannot cover both the floor and a standard kitchen countertop.
 
-### 4.3 相机与定位
+### 4.3 Cameras and Localization
 
-三路相机布局：
+Three-camera layout:
 
-- 头部 RGB-D：安装在箱体上方，提供全局 RGB 与米制深度；
-- 左右腕部 RGB：分别安装在两个夹爪附近，提供局部操作视野。
+- head RGB-D: mounted above the enclosure, providing global RGB and metric depth;
+- left/right wrist RGB: mounted near the two grippers, respectively, providing local manipulation views.
 
-AprilTag 只用于标定和系统辨识，不作为任务路线或 Actor 的特权目标输入。仿真与真机复用同一 RGB-D 对齐、深度清理和相机有效性预处理契约。
+AprilTag is used only for calibration and system identification, not as a privileged target input for the task route or Actor. Simulation and the real robot reuse the same RGB-D alignment, depth cleanup, and camera-validity preprocessing contract.
 
-## 5. 本机训练闭环
+## 5. Local Training Loop
 
-平台自动执行以下循环：
+The platform automatically runs the following loop:
 
-1. 程序化采样场景、任务、自然语言表达和随机化参数；
-2. 当前双臂 Actor 自主探索并保存 transition；
-3. 自动检查丢帧、时间戳跳变、相机冻结、动作越界和安全事件；
-4. 由环境计算奖励、终止、成功和安全结果；
-5. 将真实 transition 写入自主 replay，执行非对称 Actor-Critic 更新；
-6. 定期重载部署 Actor，在隔离种子上闭环评测；
-7. 回流失败和新颖状态，按成功率自动调整课程难度；
-8. 达标后生成模型、视频、谱系和双臂消融报告。
+1. procedurally sample scenes, tasks, natural-language expressions, and randomization parameters;
+2. have the current dual-arm Actor explore autonomously and save transitions;
+3. automatically check dropped frames, timestamp jumps, frozen cameras, out-of-range actions, and safety events;
+4. have the environment compute rewards, termination, success, and safety outcomes;
+5. write real transitions to autonomous replay and perform asymmetric Actor-Critic updates;
+6. periodically reload the deployment Actor and run closed-loop evaluation on isolated seeds;
+7. feed back failures and novel states, and automatically adjust curriculum difficulty based on success rate;
+8. after the gates are met, generate the model, videos, lineage, and dual-arm ablation report.
 
-这里的“自闭环训练”指本机自动完成“探索—结果判定—回放—强化学习—隐藏评测—失败回流”。模型不会在单次真实执行过程中在线更新权重，以避免真机策略在运动中发生不可预测变化。
+Here, “closed-loop training” means that the local machine automatically completes “exploration → outcome determination → replay → reinforcement learning → hidden evaluation → failure feedback.” The model does not update weights online during a single real-robot execution, avoiding unpredictable changes in the real-robot policy while it is moving.
 
-### 5.1 推荐采样配置
+### 5.1 Recommended Sampling Configuration
 
-| 数据 | 频率或规格 |
+| Data | Frequency or specification |
 |---|---|
-| 环境/腕部 RGB | 640×480，30 fps |
-| 训练输入图像 | 裁剪或缩放至 224×224 或 320×240 |
-| 机械臂状态与动作 | 30 Hz |
-| 底盘里程计与 IMU | 50 Hz |
-| 策略推理 | 10～15 Hz，使用动作分块 |
-| 电机底层控制 | 100 Hz 以上 |
-| 通信看门狗 | 200～500 ms 内停止 |
+| Environment/wrist RGB | 640×480, 30 fps |
+| Training input images | Crop or resize to 224×224 or 320×240 |
+| Arm state and actions | 30 Hz |
+| Chassis odometry and IMU | 50 Hz |
+| Policy inference | 10–15 Hz, using action chunking |
+| Low-level motor control | At least 100 Hz |
+| Communication watchdog | Stop within 200–500 ms |
 
-### 5.2 数据字段
+### 5.2 Data Fields
 
-每一帧至少记录：
+Record at least the following for every frame:
 
-- 单调时钟时间戳；
-- 头部与左右腕部 RGB 图像；
-- 左右六轴关节位置/速度和左右夹爪状态；
-- 当前 Actor 输出和经过安全过滤的实际动作；
-- 左右轮目标速度、实际速度和编码器；
-- IMU；
-- 当前任务文本；
-- 人工接管标记；
-- Episode 奖励、终止、成功和安全结果；
-- 标定版本、机器人 ID 和模型版本；
-- 急停、过流、通信超时等安全事件。
+- monotonic clock timestamp;
+- head and left/right wrist RGB images;
+- six-axis joint position/velocity and gripper state for both arms;
+- current Actor output and the actual action after safety filtering;
+- target wheel speeds, actual wheel speeds, and encoders for both sides;
+- IMU;
+- current task text;
+- human-takeover marker;
+- Episode reward, termination, success, and safety outcome;
+- calibration version, robot ID, and model version;
+- safety events such as emergency stop, overcurrent, and communication timeout.
 
-原始数据只追加、不覆盖。清洗、裁剪和增强结果保存为派生数据集，并记录其来源 episode。
+Raw data is append-only and never overwritten. Results of cleaning, cropping, and augmentation are saved as derived datasets, with their source Episodes recorded.
 
-### 5.3 自有数据存储
+### 5.3 In-House Data Storage
 
-Episode 是平台的一级对象，建议采用以下逻辑布局：
+An Episode is a first-class platform object. The following logical layout is recommended:
 
 ```text
 dataset/
@@ -229,111 +229,111 @@ dataset/
     └── <calibration_id>.json
 ```
 
-低维时序数据使用 Parquet，视频使用 MP4，事件使用 JSON Lines，顶层清单记录 schema 版本和内容校验值。第三方数据格式通过独立转换器导入或导出，自有 Episode 格式始终是系统内部唯一事实来源。
+Use Parquet for low-dimensional time-series data, MP4 for video, and JSON Lines for events. The top-level manifest records the schema version and content checksums. Import or export third-party data formats through independent converters; the in-house Episode format remains the system's sole internal source of truth.
 
-### 5.4 模型路线
+### 5.4 Model Route
 
-首版实现小型视觉—语言双臂 Actor 和训练期特权双 Critic，不把某个论文算法或外部框架定义成平台接口。策略只需实现统一 `Policy` 协议，训练器通过 `PolicySpec` 获取输入输出约束。
+The first version implements a small vision-language dual-arm Actor and two privileged training-time Critics, without defining any particular paper algorithm or external framework as a platform interface. A policy only needs to implement the unified `Policy` protocol; the trainer obtains input/output constraints through `PolicySpec`.
 
-建议顺序：
+Recommended order:
 
-1. 打通底盘、左右臂和左右夹爪的 16 维联合动作；
-2. 从简化随机化的完整任务开始在线探索；
-3. 加入仅保存自主 transition 的 replay 和任务无关自动课程；
-4. 增加物体位置、背景、光照和相机噪声变化；
-5. 加入左右镜像和物理上必须双臂并发的任务；
-6. 通过隐藏种子、未见语言表达和锁定单臂消融后再进入真机。
+1. connect the 16-dimensional joint action for the chassis, left/right arms, and left/right grippers;
+2. begin online exploration with the complete task under simplified randomization;
+3. add replay that stores only autonomous transitions and an automatic task-agnostic curriculum;
+4. add variation in object positions, backgrounds, lighting, and camera noise;
+5. add left/right mirroring and tasks that physically require concurrent use of both arms;
+6. enter real-robot testing only after passing hidden seeds, unseen language expressions, and single-arm-lockout ablations.
 
-视觉和语言编码器可以使用本机预训练权重，但不得使用带动作答案的专家数据或教师 checkpoint。大模型不是首版验收前提。
+Visual and language encoders may use local pretrained weights, but expert data with action answers and teacher checkpoints are prohibited. A large model is not a prerequisite for first-version acceptance.
 
-## 6. 实施计划
+## 6. Implementation Plan
 
-### 阶段 A：平台内核（第 1～3 周）
+### Phase A: Platform Core (Weeks 1–3)
 
-- 定义设备接口、坐标系、时间戳和错误模型；
-- 定义 Observation、Action、Episode 和 Policy schema；
-- 实现相机、机械臂、底盘和安全模块的仿真桩驱动；
-- 实现录制、回放、训练、评测和模型注册的本机最小闭环；
-- 使用合成数据验证数据版本迁移和动作回放一致性。
+- define device interfaces, coordinate frames, timestamps, and the error model;
+- define the Observation, Action, Episode, and Policy schemas;
+- implement simulation stub drivers for the cameras, arms, chassis, and safety module;
+- implement the minimum local loop for recording, replay, training, evaluation, and model registration;
+- use synthetic data to validate data-version migration and action-replay consistency.
 
-阶段出口：在没有绑定真实硬件型号的情况下，完整跑通“观测—录制—训练—推理—回放”链路。
+Phase exit: run the “observation → recording → training → inference → replay” pipeline end to end without binding it to a real hardware model.
 
-### 阶段 B：四轮底盘（第 4～5 周）
+### Phase B: Four-Wheel Chassis (Weeks 4–5)
 
-- 根据能力接口选择双机械臂、底盘和相机；
-- 为选定设备分别实现硬件适配器；
-- 完成底盘电气、编码器、PID 和急停；
-- 接入 IMU 和通信看门狗；
-- 验证底盘速度、左右臂基座坐标系 6D 末端 twist 和左右夹爪的 16 维联合动作语义，并由设备适配器转换为关节伺服目标；
-- 完成 Mac、车载 SBC 和 MCU 的局域网链路。
+- select the arms, chassis, and cameras according to the capability interfaces;
+- implement hardware adapters for each selected device;
+- complete the chassis electronics, encoders, PID, and emergency stop;
+- integrate the IMU and communication watchdog;
+- validate chassis velocity, the 6D end-effector twist in the left/right arm base frames, and the 16-dimensional joint-action semantics for the left/right grippers, then have the device adapter convert them into joint-servo targets;
+- complete the local-network links among the Mac, onboard SBC, and MCU.
 
-阶段出口：全部执行器可由统一动作独立控制，连续 30 次基础运动无碰撞，通信断开能够自动停车。
+Phase exit: all actuators can be independently controlled through unified actions, 30 consecutive basic motions complete without collision, and a communication disconnection causes an automatic stop.
 
-### 阶段 C：双臂移动操作闭环（第 6～8 周）
+### Phase C: Dual-Arm Mobile Manipulation Loop (Weeks 6–8)
 
-- 将左右机械臂固定到箱体两侧并完成相机标定；
-- 部署从底盘到双臂的单一 Actor，不串联人工任务状态机；
-- 自动记录评测 episode 和人工接管；
-- 完成多轮失败数据回流、仿真分布修正和再训练；
-- 对双臂必需任务执行左右单臂锁定消融。
+- mount the left and right arms on the two sides of the enclosure and complete camera calibration;
+- deploy a single Actor covering the chassis and both arms, without chaining a human task state machine;
+- automatically record evaluation Episodes and human takeovers;
+- complete multiple rounds of failed-data feedback, simulation-distribution correction, and retraining;
+- perform left-arm and right-arm lockout ablations for dual-arm-required tasks.
 
-阶段出口：受控双臂场景完整任务成功率达到 70%，锁定任意一臂后低于 10%，连续 50 次运行无碰撞。
+Phase exit: complete-task success rate reaches 70% in the controlled dual-arm scene, falls below 10% after locking either arm, and 50 consecutive runs complete without collision.
 
-## 7. 验收指标
+## 7. Acceptance Metrics
 
-| 指标 | 首版目标 |
+| Metric | First-version target |
 |---|---:|
-| 固定场景双臂接触操作成功率 | ≥ 80% |
-| 完整双臂移动操作任务成功率 | ≥ 70% |
-| 锁定任意一臂后的双臂任务成功率 | < 10% |
-| 工作位最终位置误差 | ≤ 30 mm |
-| 评测任务人工接管率 | 0% |
-| 通信中断自动停车 | 100% |
-| 连续无碰撞运行 | 50 次任务 |
-| 训练、数据和模型是否依赖云端 | 否 |
+| Fixed-scene dual-arm contact-manipulation success rate | ≥ 80% |
+| Complete dual-arm mobile-manipulation task success rate | ≥ 70% |
+| Dual-arm task success rate after locking either arm | < 10% |
+| Final work-position error | ≤ 30 mm |
+| Human-takeover rate during evaluation tasks | 0% |
+| Automatic stop on communication interruption | 100% |
+| Consecutive collision-free runs | 50 tasks |
+| Whether training, data, and models depend on the cloud | No |
 
-成功率必须在未参与训练的独立评测 episode 上计算，不能只报告训练数据回放结果。
+Success rates must be computed on independent evaluation Episodes not used for training; do not report only replay results from training data.
 
-## 8. 安全设计
+## 8. Safety Design
 
-- 设置物理急停，直接切断底盘电机和机械臂动力；
-- MCU 对每条速度指令设置有效期，超时自动归零；
-- 首版底盘速度限制为 0.3 m/s；
-- 机械臂策略输出位置或位置增量，不直接输出电机力矩；
-- 所有关节设置软限位、单步动作限幅和目标变化率限制；
-- 机械臂伸出时禁止底盘高速转向；
-- 训练和评测阶段保持人员在急停可达范围内；
-- 不在儿童、宠物或自由走动人员附近进行自动评测；
-- 电池配置保险、BMS、固定支架和独立充电流程。
+- install a physical emergency stop that directly cuts power to the chassis motors and arms;
+- have the MCU set an expiration time for every velocity command and automatically zero it on timeout;
+- limit first-version chassis speed to 0.3 m/s;
+- have the arm policy output positions or position increments, not motor torques directly;
+- configure soft limits, per-step action limits, and target-rate limits for every joint;
+- prohibit high-speed chassis turning when the arms are extended;
+- keep personnel within reach of the emergency stop during training and evaluation;
+- do not run automatic evaluation near children, pets, or freely moving people;
+- equip the battery with a fuse, BMS, fixed mount, and independent charging procedure.
 
-## 9. 首版不包含的能力
+## 9. Capabilities Excluded from the First Version
 
-- 无标记全屋 SLAM 和长期自主导航；
-- 地面、桌面和高柜之间的全高度覆盖；
-- 重物、液体、刀具、热源和易碎品操作；
-- 稳定开门、拉重抽屉、装洗碗机；
-- 商业级功能安全和无人值守运行；
-- 大型 VLA 的本地预训练；
-- 真实执行过程中实时更新模型权重。
+- markerless whole-home SLAM and long-term autonomous navigation;
+- full-height coverage from the floor to tabletops and high cabinets;
+- manipulation of heavy objects, liquids, knives, heat sources, and fragile items;
+- reliable door opening, pulling heavy drawers, and loading dishwashers;
+- commercial-grade functional safety and unattended operation;
+- local pretraining of a large VLA;
+- real-time model-weight updates during real execution.
 
-## 10. 后续升级顺序
+## 10. Upgrade Order
 
-若后续增加预算，建议按以下顺序升级：
+If the budget increases later, upgrade in the following order:
 
-1. 更稳定的机械臂结构和夹爪；
-2. 2D 激光雷达；
-3. RGB-D 环境相机；
-4. 电动升降柱和更宽底盘；
-5. 六维力传感器或触觉传感器；
-6. 机载 GPU 推理；
-7. 更高负载的协作机械臂。
+1. more stable arm structures and grippers;
+2. 2D lidar;
+3. RGB-D environment cameras;
+4. an electric lift column and wider chassis;
+5. six-axis force sensors or tactile sensors;
+6. onboard GPU inference;
+7. higher-payload collaborative arms.
 
-## 11. 架构边界
+## 11. Architecture Boundaries
 
-- 核心层不引用具体机器人型号、厂商 SDK 或第三方数据格式；
-- 核心层不感知训练设备是 CPU、Apple GPU 还是其他加速器；
-- 硬件差异由设备适配器和 `RobotCapabilities` 消化；
-- 算法差异由 `Policy`、`PolicySpec` 和训练器插件消化；
-- 传输协议差异由运行时通信适配器消化；
-- 第三方代码可以用于外围实现，但不得反向定义核心对象和生命周期；
-- 安全监督器独立于策略，任何模型均不能绕过动作过滤、限位和急停。
+- the core layer does not reference specific robot models, vendor SDKs, or third-party data formats;
+- the core layer is unaware of whether the training device is a CPU, Apple GPU, or another accelerator;
+- hardware differences are absorbed by device adapters and `RobotCapabilities`;
+- algorithm differences are absorbed by `Policy`, `PolicySpec`, and trainer plugins;
+- transport-protocol differences are absorbed by runtime communication adapters;
+- third-party code may be used for peripheral implementation but may not redefine core objects or lifecycles in reverse;
+- the safety supervisor is independent of the policy, and no model may bypass action filtering, limits, or the emergency stop.

@@ -11,7 +11,7 @@
     {
       "task_id": "carry_living_room_basket/v1",
       "scene_id": "bimanual_living_room/v1",
-      "instruction": "用双手握住收纳篮两侧把手，把篮子搬到沙发旁的矮柜上并平稳放下。",
+      "instruction": "Grasp both side handles of the storage basket with both hands, carry it to the low cabinet beside the sofa, and set it down steadily.",
       "objective": "carry_payload",
       "legal_transforms": ["lateral_reflection"],
       "max_steps": 1200,
@@ -23,7 +23,7 @@
     {
       "task_id": "carry_dining_tray/v1",
       "scene_id": "bimanual_dining_room/v1",
-      "instruction": "双手端住托盘两侧把手，把装有杯盘的托盘平稳搬到餐边柜上。",
+      "instruction": "Hold both side handles of the tray with both hands and carry the tray with the cups and plates steadily to the sideboard.",
       "objective": "carry_payload",
       "legal_transforms": ["lateral_reflection"],
       "max_steps": 1200,
@@ -35,7 +35,7 @@
     {
       "task_id": "hold_drawer_place_item/v1",
       "scene_id": "bimanual_kitchen/v1",
-      "instruction": "左手持续拉住会回弹的抽屉，右手把清洁剂放进抽屉并保持稳定。",
+      "instruction": "Keep holding the spring-loaded drawer open with the left hand, place the cleaner in the drawer with the right hand, and keep it stable.",
       "objective": "hold_drawer_place",
       "legal_transforms": [],
       "max_steps": 1600,

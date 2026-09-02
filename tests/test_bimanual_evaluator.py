@@ -36,7 +36,7 @@ def _observation(step: int) -> DualArmObservation:
         timestamp_ns=step * 50_000_000,
         sequence_id=step,
         task_id=TASK_ID,
-        instruction=NaturalLanguageInstruction("双臂完成测试"),
+        instruction=NaturalLanguageInstruction("Complete the test with both arms"),
         proprioception=DualArmProprioception(
             (0.0,) * 6,
             (0.0,) * 6,

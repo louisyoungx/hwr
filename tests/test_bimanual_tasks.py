@@ -55,7 +55,7 @@ def test_catalog_defines_exactly_three_raw_language_bimanual_tasks() -> None:
     }
     assert all(spec.hold_steps == 40 for spec in SPECS.values())
     assert all(spec.concurrent_steps == 10 for spec in SPECS.values())
-    assert all("双手" in spec.instruction or "左手" in spec.instruction for spec in SPECS.values())
+    assert all("both hands" in spec.instruction or "left hand" in spec.instruction for spec in SPECS.values())
 
 
 @pytest.mark.parametrize(

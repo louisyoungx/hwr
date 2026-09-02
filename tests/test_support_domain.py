@@ -179,8 +179,8 @@ def test_complete_ledger_reports_all_27_imbalanced_cells(
         "observation_latency_counts": {"1": 18, "2": 90, "3": 36},
         "observation_latency_imbalanced": True,
         "statement": (
-            "P11 的 observation-latency cell 为 2/10/4，"
-            "不是 balanced factorial capability benchmark。"
+            "P11's observation-latency cells are 2/10/4; "
+            "this is not a balanced factorial capability benchmark."
         ),
     }
 

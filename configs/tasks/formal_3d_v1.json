@@ -37,10 +37,10 @@
     {
       "task_id": "tidy_living_room_3d/v1",
       "scene_id": "living_room_3d/v1",
-      "instruction": "绕开茶几，将橡皮鸭和迷你足球依次拾起并放入藤编收纳篮。",
+      "instruction": "Go around the coffee table, pick up the rubber duck and mini football in sequence, and place them in the wicker storage basket.",
       "instruction_variants": {
-        "train": ["绕开茶几，将橡皮鸭和迷你足球依次拾起并放入藤编收纳篮。", "把地上的橡皮鸭和小足球收进客厅的藤编篮，注意避开茶几。", "整理客厅：依次捡起鸭子玩具与迷你足球，放到收纳篮里。", "请将两件玩具都收纳进沙发旁的篮子。"],
-        "evaluation": ["清理客厅地面，把鸭子和足球全部放进编织篮。", "将散落的两个玩具归置到藤篮中，移动时不要碰茶几。", "完成客厅玩具收纳：鸭子、足球都要稳稳留在篮内。"]
+        "train": ["Go around the coffee table, pick up the rubber duck and mini football in sequence, and place them in the wicker storage basket.", "Put the rubber duck and small football from the floor into the living-room wicker basket, avoiding the coffee table.", "Tidy the living room: pick up the duck toy and mini football in sequence and place them in the storage basket.", "Put both toys into the basket beside the sofa."],
+        "evaluation": ["Clear the living-room floor and put both the duck and football in the woven basket.", "Place the two scattered toys in the wicker basket without touching the coffee table while moving.", "Finish storing the living-room toys: the duck and football must remain securely inside the basket."]
       },
       "max_steps": 6000,
       "initial_base": {"x": [-0.10, 0.10], "y": [-2.15, -1.95], "z": [0.22, 0.22], "yaw": [-0.10, 0.10]},
@@ -52,10 +52,10 @@
     {
       "task_id": "clear_dining_table_3d/v1",
       "scene_id": "dining_room_3d/v1",
-      "instruction": "清理餐桌，将茶杯放入蓝色杯托，将木盘放入橙色盘托。",
+      "instruction": "Clear the dining table, placing the teacup in the blue cup holder and the wooden plate in the orange plate holder.",
       "instruction_variants": {
-        "train": ["清理餐桌，将茶杯放入蓝色杯托，将木盘放入橙色盘托。", "把杯子和木盘从餐桌上收好，分别放到蓝色杯托和橙色盘托。", "整理餐桌：茶杯归蓝色位置，木盘归橙色位置。", "请把桌上的杯盘分别放进对应颜色的托架。"],
-        "evaluation": ["收拾餐桌，让杯子落在蓝托中、盘子落在橙托中。", "将茶杯与木盘放到各自对应的彩色收纳位。", "完成杯盘归位，杯托是蓝色，盘托是橙色。"]
+        "train": ["Clear the dining table, placing the teacup in the blue cup holder and the wooden plate in the orange plate holder.", "Put the cup and wooden plate away from the dining table, placing them in the blue cup holder and orange plate holder respectively.", "Tidy the dining table: place the teacup in the blue position and the wooden plate in the orange position.", "Put the cup and plate from the table into the holders of the corresponding colors."],
+        "evaluation": ["Tidy the dining table, leaving the cup in the blue holder and the plate in the orange holder.", "Place the teacup and wooden plate in their respective colored storage positions.", "Finish putting away the cup and plate; the cup holder is blue and the plate holder is orange."]
       },
       "max_steps": 6000,
       "initial_base": {"x": [-1.90, -1.72], "y": [-1.45, -1.25], "z": [0.22, 0.22], "yaw": [-0.10, 0.10]},
@@ -67,10 +67,10 @@
     {
       "task_id": "store_kitchen_items_3d/v1",
       "scene_id": "kitchen_3d/v1",
-      "instruction": "先拉开木质抽屉，再将黄色和粉色清洁剂分别放入抽屉左右分仓。",
+      "instruction": "First pull open the wooden drawer, then place the yellow and pink cleaners in the drawer's left and right compartments respectively.",
       "instruction_variants": {
-        "train": ["先拉开木质抽屉，再将黄色和粉色清洁剂分别放入抽屉左右分仓。", "打开厨房抽屉，把黄瓶和粉瓶清洁剂分别收进左右隔间。", "先把抽屉拉开，然后将两瓶不同颜色的清洁剂分仓放好。", "整理清洁用品：开抽屉，黄色放左边，粉色放右边。"],
-        "evaluation": ["收纳两瓶清洁剂，先开启抽屉，再按黄左粉右放入。", "把黄色与粉色清洁瓶分别归入抽屉的左右格。", "完成厨房清洁剂入柜：抽屉需打开，两瓶要分开放稳。"]
+        "train": ["First pull open the wooden drawer, then place the yellow and pink cleaners in the drawer's left and right compartments respectively.", "Open the kitchen drawer and put the yellow-bottled and pink-bottled cleaners into the left and right compartments respectively.", "First pull open the drawer, then store the two differently colored cleaners in separate compartments.", "Tidy the cleaning supplies: open the drawer, put the yellow one on the left, and the pink one on the right."],
+        "evaluation": ["Store the two cleaners: open the drawer first, then place the yellow one on the left and the pink one on the right.", "Place the yellow and pink cleaning bottles in the drawer's left and right compartments respectively.", "Finish storing the kitchen cleaners: the drawer must be open, and the two bottles must remain stable in separate compartments."]
       },
       "max_steps": 8000,
       "initial_base": {"x": [-0.10, 0.10], "y": [-1.80, -1.60], "z": [0.22, 0.22], "yaw": [1.47, 1.67]},

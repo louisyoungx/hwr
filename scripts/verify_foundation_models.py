@@ -51,9 +51,13 @@ def _vision_report(provider: Any) -> dict[str, Any]:
 
 
 def _language_report(provider: Any) -> dict[str, Any]:
-    first = provider.encode_language("双手稳定搬运托盘", "zh-CN")
-    paraphrase = provider.encode_language("请用两只手平稳地移动餐盘", "zh-CN")
-    different = provider.encode_language("打开抽屉并放入物品", "zh-CN")
+    first = provider.encode_language("Carry a tray steadily with both hands", "zh-CN")
+    paraphrase = provider.encode_language(
+        "Please move the dining tray smoothly with both hands", "zh-CN"
+    )
+    different = provider.encode_language(
+        "Open the drawer and put the item inside", "zh-CN"
+    )
     return {
         "feature_shape": list(first.values.shape),
         "feature_norm": float(np.linalg.norm(first.values)),

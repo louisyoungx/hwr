@@ -1,50 +1,65 @@
-# R0019 实验
+# R0019 Experiment
 
-## 主假设
+## Main Hypothesis
 
-`carry_living_room_basket/v1` 在不改变正常 MuJoCo 物理、任务成功状态机和独立安全层的前提下，
-可由读取 simulator-private state 的闭环 teacher 稳定完成。teacher 使用显式任务状态机和
-当前几何计算动作，不依赖 generic candidate 或 B0–B7 的有限时域。
+`carry_living_room_basket/v1` can be completed reliably by a closed-loop teacher that reads
+simulator-private state without changing normal MuJoCo physics, the task success state machine,
+or the independent safety layer. The teacher uses an explicit task state machine and computes
+actions from the current geometry; it does not depend on the generic candidate or the limited
+horizon of B0–B7.
 
-## 对照
+## Comparisons
 
-- baseline：现有 generic B0–B7 primitive，以任务 payload 几何构造唯一 candidate，
-  走正式 16 维动作、MuJoCo physics、任务 tracker 和安全层。
-- teacher：任务专用 privileged feedback controller，复用同一动作/物理/安全/成功路径。
-- paired 条件：同一 seed、task config、randomization、physics、安全阈值和 Episode horizon。
-- teacher 必须实际覆盖
-  `approach/acquire/secure/lift/target_transport/place/release/stabilize`；缺少任何成功
-  状态机主要阶段都属于实现偏离，不能进入 confirmation。
+- baseline: the existing generic B0–B7 primitive, which constructs a unique candidate from the
+  task payload geometry and uses the formal 16-dimensional action interface, MuJoCo physics,
+  the task tracker, and the safety layer.
+- teacher: a task-specific privileged feedback controller that reuses the same
+  action/physics/safety/success path.
+- Paired conditions: the same seed, task config, randomization, physics, safety thresholds, and
+  Episode horizon.
+- The teacher must actually cover
+  `approach/acquire/secure/lift/target_transport/place/release/stabilize`; omitting any major
+  stage of the success state machine constitutes implementation deviation and disqualifies it
+  from confirmation.
 
-## 开发阶段
+## Development Phase
 
-1. 先运行 baseline Episode，记录最早失败阶段、动作、接触、安全干预和终止原因。
-2. 优先复用 backend 的 Cartesian twist + Jacobian DLS；teacher 直接从当前 handle、payload、
-   target 和 tool 位姿计算闭环目标。
-3. 先通过单 seed physics smoke；若失败，只修复最早稳定阻塞，不创建额外资格门。
-4. development seed domain：`0 <= seed < 1_000_000`；不得进入 confirmation。
+1. Run a baseline Episode first, recording the earliest failure stage, actions, contacts, safety
+   interventions, and termination reason.
+2. Prefer reusing the backend's Cartesian twist + Jacobian DLS; the teacher directly computes
+   closed-loop targets from the current handle, payload, target, and tool poses.
+3. First pass a single-seed physics smoke; if it fails, fix only the earliest stable blocker and
+   do not create an additional qualification gate.
+4. Development seed domain: `0 <= seed < 1_000_000`; these seeds must not enter confirmation.
 
-## 冻结确认设计
+## Frozen Confirmation Design
 
-以下设计在任何 confirmation 结果可见前冻结：
+The following design is frozen before any confirmation result becomes visible:
 
-- controller：`GenericBasketPrimitiveBaseline` 与
+- controllers: `GenericBasketPrimitiveBaseline` and
   `PrivilegedBasketTeacher`；
-- seed domain：`91_900_001 + 104_729 * index`，`index=0..99`；
-- Episode：每个 controller 100 个，按相同 seed paired；
-- teacher success `>=80/100`；
-- actual severe collision `=0`；
-- 只允许从干净、已提交的 worktree 启动；runner 在执行首个 Episode 前拒绝脏树；
-- 必须提供同一源码 commit 和 source-file hash 下的干净 development 资格报告；该报告必须
-  完整结束、teacher 至少成功 1 个 Episode、confirmation 状态为 `not_run`；
-- confirmation 输出路径必须不存在，防止覆盖已查看的确认结果；
-- 安全守护：`DualArmSafetySupervisor`、两步 predictive collision、`220N` severe
-  threshold 均保持默认值；
-- 每个 Episode 最多 1,200 step，整次运行 wall time 最多 1,800 秒；
-- 单个失败或安全拒绝只记为该 Episode 结果，不中断 cohort；
-- 完整报告 baseline/teacher 每个 Episode、全部失败、安全干预、双臂接触和终止原因；
-- 判定器严格验证冻结 seed domain 以及每个 seed 恰有一条 baseline 和一条 teacher 结果；
-- 唯一命令：
+- seed domain: `91_900_001 + 104_729 * index`, `index=0..99`;
+- Episodes: 100 per controller, paired by the same seed;
+- teacher success `>=80/100`;
+- actual severe collision `=0`;
+- Startup is allowed only from a clean, committed worktree; the runner rejects a dirty tree
+  before executing the first Episode;
+- A clean development qualification report under the same source commit and source-file hash
+  must be provided; the report must finish completely, contain at least 1 successful teacher
+  Episode, and have confirmation status `not_run`;
+- The confirmation output path must not exist, preventing overwriting of viewed confirmation
+  results;
+- Safety guards: `DualArmSafetySupervisor`, two-step predictive collision, and the `220N`
+  severe threshold all remain at their default values;
+- Each Episode has at most 1,200 steps, and the entire run has a maximum wall time of 1,800
+  seconds;
+- An individual failure or safety rejection is recorded only as that Episode's result and does
+  not interrupt the cohort;
+- The complete report covers every baseline/teacher Episode, all failures, safety
+  interventions, bimanual contacts, and termination reasons;
+- The evaluator strictly verifies the frozen seed domain and exactly one baseline and one teacher
+  result for each seed;
+- Sole command:
 
 ```bash
 MUJOCO_GL=glfw .venv/bin/python -m hwr.apps.evaluate_bimanual_teacher \
@@ -54,17 +69,22 @@ MUJOCO_GL=glfw .venv/bin/python -m hwr.apps.evaluate_bimanual_teacher \
   --output runs/research-loop/0019/confirmation/paired-100.json
 ```
 
-若 development 资源实测表明 100 paired Episode 明显不合理，只能在首次 confirmation 运行前
-调整并记录理由，不能查看 confirmation 结果后改门。
+If measured development resources show that 100 paired Episodes are clearly unreasonable, the
+design may be adjusted and the reason recorded only before the first confirmation run; the
+gates cannot be changed after viewing confirmation results.
 
-实际 candidate 仅实现 `approach/acquire/secure/transport_probe`，缺少
-`lift/target_transport/place/release/stabilize`；同时 development teacher 为 `0/6`
-success。因此本轮 candidate 不满足实现合同或最小扩大条件，不启动上述 confirmation
-命令；这不是调整 seed、Episode 数或成功门。
+The actual candidate implements only `approach/acquire/secure/transport_probe` and lacks
+`lift/target_transport/place/release/stabilize`; the development teacher also achieved `0/6`
+success. Therefore, this round's candidate does not satisfy the implementation contract or the
+minimum expansion conditions, and the confirmation command above is not started; this is not an
+adjustment to the seed, Episode count, or success gate.
 
-## 结论
+## Conclusion
 
-- 达门：`validated_development`。允许声明任务与控制链存在可行 teacher ceiling；不允许声明
-  可部署状态/视觉策略、泛化或硬件能力。
-- 本轮实际结论：`invalid`，因为 candidate 未实现预先声明的完整 teacher 状态机。允许保留
-  已实现子目标的物理观察；不允许用端到端 `0/6` 定位完整任务、机器人或技术路线的瓶颈。
+- Gate result: `validated_development`. It is permissible to state that the task and control
+  chain have a feasible teacher ceiling; it is not permissible to claim deployable state/vision
+  policies, generalization, or hardware capability.
+- Actual conclusion for this round: `invalid`, because the candidate did not implement the
+  complete teacher state machine declared in advance. The physical observations from the
+  implemented subgoals may be retained; the end-to-end `0/6` result must not be used to locate
+  the bottleneck of the complete task, robot, or technical route.

@@ -1,146 +1,156 @@
-# 家务具身智能平台训练与拟真环境方案
+# Training and Simulation-Environment Plan for a Household Embodied-Intelligence Platform
 
-> 版本：V0.1  
-> 日期：2026-08-09  
-> 前置方案：[万元内家务具身智能训练平台方案](./low-cost-platform-proposal.md)
+> Version: V0.1
+> Date: 2026-08-09
+> Prerequisite proposal: [Household Embodied-Intelligence Training Platform Proposal Under RMB 10,000](./low-cost-platform-proposal.md)
 
-## 1. 目标
+## 1. Objectives
 
-本方案定义从拟真环境、数据生成、策略训练到真机回流的完整闭环。当前阶段不绑定具体机械臂、机器人套件、仿真引擎或外部机器人学习框架。
+This plan defines the complete loop from the simulation environment, data generation, and policy
+training to real-robot feedback. At this stage it does not bind the project to a specific arm,
+robot kit, simulation engine, or external robot-learning framework.
 
-平台需要做到：
+The platform must:
 
-1. 在没有真实硬件的情况下开发和验证任务、数据及策略接口；
-2. 使用同一套 Observation、Action、Episode 和 Policy 定义连接仿真与真机；
-3. 在本机完成数据生成、训练、评测、模型注册和回放；
-4. 用真实测量逐步校准拟真环境，而不是追求纯视觉上的“像”；
-5. 允许替换物理引擎、机械臂、底盘和算法，而不修改核心数据与任务定义；
-6. 将安全监督、任务编排与学习策略解耦。
+1. Develop and validate task, data, and policy interfaces without real hardware;
+2. Connect simulation and the real robot with one shared definition of Observation, Action, Episode, and Policy;
+3. Complete data generation, training, evaluation, model registration, and replay locally;
+4. Calibrate the simulation environment progressively with real measurements rather than pursuing visual “likeness” alone;
+5. Allow the physics engine, arm, base, and algorithm to be replaced without changing core data or task definitions;
+6. Decouple safety supervision and task orchestration from learned policies.
 
-## 2. 核心原则
+## 2. Core Principles
 
-### 2.1 自有规范是唯一事实来源
+### 2.1 Project-Owned Specifications Are the Single Source of Truth
 
-项目自己定义：
+The project defines:
 
-- 机器人能力和坐标系；
-- 观测与动作空间；
-- Episode 数据格式；
-- 场景与任务描述；
-- 随机化参数；
-- 策略接口；
-- 训练运行、模型和评测结果；
-- 仿真与真机的生命周期。
+- Robot capabilities and coordinate frames;
+- Observation and action spaces;
+- Episode data format;
+- Scene and task descriptions;
+- Randomization parameters;
+- Policy interfaces;
+- Training runs, models, and evaluation results;
+- Simulation and real-robot lifecycles.
 
-第三方物理引擎、训练库、模型实现和数据格式只能通过适配器接入。
+Third-party physics engines, training libraries, model implementations, and data formats may
+enter only through adapters.
 
-### 2.2 仿真与真机使用同一任务接口
+### 2.2 Simulation and the Real Robot Use the Same Task Interface
 
-任务代码不能通过条件分支分别实现“仿真版本”和“真机版本”。二者都必须暴露统一的：
+Task code must not implement separate “simulation” and “real-robot” versions through conditional
+branches. Both must expose:
 
-- `reset()`：准备一个新 Episode；
-- `observe()`：返回统一观测；
-- `apply(action)`：提交带有效期的动作；
-- `events()`：返回碰撞、超时、接管等事件；
-- `result()`：返回任务结果和指标；
-- `close()`：安全释放资源。
+- `reset()`: prepare a new Episode;
+- `observe()`: return the unified observation;
+- `apply(action)`: submit an action with a validity period;
+- `events()`: return events such as collisions, timeouts, and takeovers;
+- `result()`: return task results and metrics;
+- `close()`: release resources safely.
 
-### 2.3 先保证因果一致，再提升画面真实度
+### 2.3 Ensure Causal Consistency Before Visual Realism
 
-拟真建设顺序是：
+Build simulation fidelity in this order:
 
-1. 坐标、单位和时间一致；
-2. 运动学和动作语义一致；
-3. 控制频率、延迟、死区和限位一致；
-4. 接触、摩擦和物体动力学一致；
-5. 相机成像与视觉外观接近；
-6. 扩展场景多样性。
+1. Consistent coordinates, units, and time;
+2. Consistent kinematics and action semantics;
+3. Consistent control frequency, latency, dead zones, and limits;
+4. Consistent contact, friction, and object dynamics;
+5. Similar camera imaging and visual appearance;
+6. Expanded scene diversity.
 
-如果仿真中的动作含义与真机不同，再真实的画面也不能缩小 Sim-to-Real 差距。
+If an action means something different in simulation and on the real robot, even highly realistic
+visuals cannot narrow the Sim-to-Real gap.
 
-## 3. 总体训练架构
+## 3. Overall Training Architecture
 
 ```mermaid
 flowchart LR
     A[RobotSpec / SceneSpec / TaskSpec] --> B[Simulation Runtime]
     A --> C[Real Robot Runtime]
-    B --> D[统一 Observation / Action]
+    B --> D[Unified Observation / Action]
     C --> D
     D --> E[Episode Recorder]
     E --> F[Dataset Registry]
     F --> G[Trainer]
     G --> H[Model Registry]
     H --> I[Simulation Evaluator]
-    I --> J{达到准入门槛?}
-    J -->|否| F
-    J -->|是| K[Shadow / Guarded Rollout]
-    K --> L[真机评测与人工接管]
+    I --> J{Admission threshold met?}
+    J -->|No| F
+    J -->|Yes| K[Shadow / Guarded Rollout]
+    K --> L[Real-robot evaluation and human takeover]
     L --> E
-    L --> M[系统辨识与拟真参数更新]
+    L --> M[System identification and realism-parameter update]
     M --> B
 ```
 
-训练平台分为八个自有模块：
+The training platform consists of eight project-owned modules:
 
-| 模块 | 职责 |
+| Module | Responsibility |
 |---|---|
-| `hwr-spec` | Robot、Scene、Task、Sensor、Action 的版本化规范 |
-| `hwr-runtime` | 生命周期、时钟、观测聚合、动作下发和故障传播 |
-| `hwr-sim` | `SimBackend` 接口、拟真参数和仿真适配器 |
-| `hwr-data` | Episode 录制、校验、索引、切分和版本迁移 |
-| `hwr-policy` | 策略协议、预处理、后处理和模型插件 |
-| `hwr-train` | 训练循环、检查点、实验记录和本机加速后端 |
-| `hwr-eval` | 离线、仿真、影子和真机评测 |
-| `hwr-safety` | 动作过滤、限位、看门狗、急停和安全事件 |
+| `hwr-spec` | Versioned specifications for Robot, Scene, Task, Sensor, and Action |
+| `hwr-runtime` | Lifecycle, clock, observation aggregation, action dispatch, and fault propagation |
+| `hwr-sim` | `SimBackend` interface, fidelity parameters, and simulation adapters |
+| `hwr-data` | Episode recording, validation, indexing, splitting, and version migration |
+| `hwr-policy` | Policy protocol, preprocessing, postprocessing, and model plugins |
+| `hwr-train` | Training loop, checkpoints, experiment records, and local acceleration backends |
+| `hwr-eval` | Offline, simulation, shadow, and real-robot evaluation |
+| `hwr-safety` | Action filtering, limits, watchdog, emergency stop, and safety events |
 
-## 4. 自有技术栈
+## 4. Project-Owned Technology Stack
 
-### 4.1 核心语言与格式
+### 4.1 Core Languages and Formats
 
-- Python：任务、仿真编排、数据处理、训练和评测；
-- C/C++：未来的 MCU 控制、安全看门狗和高频电机环；
-- Protobuf：在线 Observation、Action、Event 和 Capability 消息；
-- gRPC 双向流：本机、仿真进程与机器人运行时之间的控制通信；
-- JSON：可读配置、manifest 和标定元数据；
-- Parquet：低维时序状态、动作和 Episode 索引；
-- MP4：相机视频；
-- SHA-256：资产、数据集、配置和模型内容校验。
+- Python: tasks, simulation orchestration, data processing, training, and evaluation;
+- C/C++: future MCU control, safety watchdog, and high-frequency motor loop;
+- Protobuf: online Observation, Action, Event, and Capability messages;
+- Bidirectional gRPC streams: control communication among the local machine, simulation process, and robot runtime;
+- JSON: human-readable configuration, manifests, and calibration metadata;
+- Parquet: low-dimensional temporal state, action, and Episode indices;
+- MP4: camera video;
+- SHA-256: content validation for assets, datasets, configuration, and models.
 
-### 4.2 训练后端
+### 4.2 Training Backend
 
-首版提供一个基于张量计算库的参考训练器，并在现有 Mac 上使用本机 GPU 加速。核心 `Policy` 和 `Trainer` 协议不暴露具体计算设备，模型插件通过 `cpu`、`local_gpu` 等逻辑设备名申请资源。
+The first version provides a reference trainer based on a tensor-computation library and uses
+local GPU acceleration on the existing Mac. The core `Policy` and `Trainer` protocols do not
+expose a concrete compute device; model plugins request resources through logical device names
+such as `cpu` and `local_gpu`.
 
-训练产物必须包含：
+Training artifacts must include:
 
-- 模型权重；
-- `PolicySpec`；
-- 预处理和后处理参数；
-- 数据集版本；
-- 训练配置；
-- 源代码提交 ID；
-- 随机种子；
-- 离线及仿真评测结果。
+- Model weights;
+- `PolicySpec`;
+- Preprocessing and postprocessing parameters;
+- Dataset version;
+- Training configuration;
+- Source-code commit ID;
+- Random seed;
+- Offline and simulation evaluation results.
 
-### 4.3 仿真后端
+### 4.3 Simulation Backend
 
-项目定义 `SimBackend`，物理引擎只是其实现细节。参考后端必须满足：
+The project defines `SimBackend`; the physics engine is only an implementation detail. The
+reference backend must:
 
-- 支持 macOS 本机运行；
-- 支持无界面批量运行；
-- 支持刚体、关节、接触、摩擦和相机；
-- 支持固定随机种子的可重复 reset；
-- 能读取接触、关节、物体位姿和碰撞事件；
-- 能注入控制延迟、传感器噪声和参数随机化；
-- 资产和场景可由项目规范生成；
-- 许可证允许长期使用和修改适配器。
+- Run locally on macOS;
+- Support headless batch execution;
+- Support rigid bodies, joints, contact, friction, and cameras;
+- Support repeatable reset with a fixed random seed;
+- Read contact, joint, object-pose, and collision events;
+- Inject control latency, sensor noise, and parameter randomization;
+- Generate assets and scenes from project specifications;
+- Use a license that permits long-term use and adapter modification.
 
-具体物理引擎在 PoC 基准测试后通过架构决策记录确定，不进入核心对象命名和数据 schema。
+The concrete physics engine is selected through an architecture decision record after PoC
+benchmarks and does not enter core object naming or data schema.
 
-## 5. 核心协议
+## 5. Core Protocols
 
 ### 5.1 RobotSpec
 
-`RobotSpec` 描述机器人能力，不描述某个厂商 SDK：
+`RobotSpec` describes robot capabilities, not a particular vendor SDK:
 
 ```yaml
 schema_version: hwr.robot/v1
@@ -162,19 +172,19 @@ control_modes:
 safety_limits: {}
 ```
 
-机器人规格还需要记录：
+The robot specification must also record:
 
-- 关节类型、轴向、范围和零位；
-- 执行器控制频率、最大速度和最大加速度；
-- 碰撞几何和视觉几何资产；
-- 传感器内外参及采样频率；
-- 底盘运动学；
-- 可用控制模式；
-- 安全边界。
+- Joint types, axes, ranges, and zero positions;
+- Actuator control frequency, maximum velocity, and maximum acceleration;
+- Collision geometry and visual-geometry assets;
+- Sensor intrinsics, extrinsics, and sampling frequency;
+- Base kinematics;
+- Available control modes;
+- Safety boundaries.
 
 ### 5.2 SceneSpec
 
-`SceneSpec` 描述场景组成：
+`SceneSpec` describes scene composition:
 
 ```yaml
 schema_version: hwr.scene/v1
@@ -188,11 +198,12 @@ materials: []
 markers: []
 ```
 
-场景中的每个实体必须有稳定 ID、坐标系、资产版本、语义类别、碰撞属性和可随机化参数。
+Every scene entity must have a stable ID, coordinate frame, asset version, semantic category,
+collision properties, and randomizable parameters.
 
 ### 5.3 TaskSpec
 
-`TaskSpec` 将任务从策略代码中分离：
+`TaskSpec` separates the task from policy code:
 
 ```yaml
 schema_version: hwr.task/v1
@@ -209,49 +220,52 @@ curriculum: []
 randomization_profile: train_v0
 ```
 
-任务成功与失败必须用可计算条件定义，不能依赖操作员主观判断。例如：
+Task success and failure must be defined by computable conditions rather than operator judgment.
+For example:
 
-- 目标物最终中心位于收纳区域内；
-- 目标物在区域内稳定超过 1 秒；
-- 机器人无禁区碰撞；
-- 任务在时间上限内完成；
-- 未触发急停或人工接管。
+- The final center of the target object lies inside the storage region;
+- The target object remains stable in the region for more than 1 second;
+- The robot has no collision with a restricted zone;
+- The task completes within the time limit;
+- No emergency stop or human takeover is triggered.
 
 ### 5.4 Observation
 
-统一观测包含：
+The unified observation contains:
 
-- `timestamp_ns`：单调纳秒时钟；
-- `sequence_id`：连续帧编号；
-- `images`：相机 ID 到图像帧的映射；
-- `joint_state`：位置、速度、可选电流或力矩；
-- `gripper_state`；
-- `base_state`：轮速、里程计和底盘速度；
-- `imu_state`；
-- `task_instruction`：Actor 可见的原始自然语言指令；
-- `safety_state`；
-- `quality`：丢帧、时间同步和传感器健康度。
+- `timestamp_ns`: Monotonic nanosecond clock;
+- `sequence_id`: Sequential frame number;
+- `images`: Mapping from camera ID to image frame;
+- `joint_state`: Position, velocity, and optional current or torque;
+- `gripper_state`;
+- `base_state`: Wheel speed, odometry, and base velocity;
+- `imu_state`;
+- `task_instruction`: Raw natural-language instruction visible to the Actor;
+- `safety_state`;
+- `quality`: Dropped frames, time synchronization, and sensor health.
 
-成功标志、奖励、环境目标、任务进度和仿真真值存放在训练期 `PrivilegedTransition`，不得进入 ActorObservation。
+Success flags, rewards, environment goals, task progress, and simulation ground truth are stored
+in training-time `PrivilegedTransition` and must not enter ActorObservation.
 
 ### 5.5 Action
 
-统一动作包含：
+The unified action contains:
 
-- `created_at_ns`；
-- `valid_from_ns` 和 `valid_until_ns`；
-- `source`：策略、安全模块或仅调试使用的人工接管；
-- `base_twist`；
-- 左右 `arm_joint_target` 或左右 `end_effector_delta_pose`；
-- 左右 `gripper_target`；
-- `confidence`；
-- `policy_version`。
+- `created_at_ns`;
+- `valid_from_ns` and `valid_until_ns`;
+- `source`: policy, safety module, or human takeover for debugging only;
+- `base_twist`;
+- left/right `arm_joint_target` or left/right `end_effector_delta_pose`;
+- left/right `gripper_target`;
+- `confidence`;
+- `policy_version`.
 
-每次下发同时保存“策略原始动作”“安全过滤后动作”和“执行器实际状态”，便于定位策略、控制和硬件之间的误差。
+Every dispatch also stores the “raw policy action,” “safety-filtered action,” and “actual
+actuator state” to help localize discrepancies among policy, control, and hardware.
 
 ### 5.6 Policy
 
-策略协议：
+Policy protocol:
 
 ```python
 class Policy:
@@ -261,280 +275,318 @@ class Policy:
     def close(self) -> None: ...
 ```
 
-`ActionChunk` 包含未来若干控制步以及每一步的目标执行时间。安全模块有权裁剪、拒绝或终止任何策略动作。
+`ActionChunk` contains several future control steps and a target execution time for each step.
+The safety module may clip, reject, or terminate any policy action.
 
-## 6. 拟真环境建设
+## 6. Simulation-Environment Construction
 
-### 6.1 首个环境范围
+### 6.1 Initial Environment Scope
 
-首个拟真环境只覆盖一个 3 m × 4 m 的受控房间：
+The first simulation environment covers only one controlled 3 m × 4 m room:
 
-- 平整地面；
-- 一个固定高度工作台或低柜；
-- 一个收纳篮；
-- 3～5 种小型、低风险目标物；
-- 起点区域；
-- 工作位对准标记；
-- 墙体、桌腿和禁入区；
-- 两路机器人相机；
-- 可调整的光源和背景材质。
+- Flat floor;
+- A fixed-height workbench or low cabinet;
+- A storage basket;
+- 3–5 small, low-risk target objects;
+- Starting area;
+- Work-position alignment markers;
+- Walls, table legs, and restricted zones;
+- Two robot cameras;
+- Adjustable lighting and background materials.
 
-首版不建完整住宅，也不加入开门、楼梯、地毯、液体和柔性衣物。先把单个移动抓放任务的运动、接触、数据和评测闭环做可靠。
+The first version does not model a complete home and does not include doors, stairs, carpets,
+liquids, or flexible clothing. First make the motion, contact, data, and evaluation loop for a
+single mobile pick-and-place task reliable.
 
-### 6.2 拟真分级
+### 6.2 Fidelity Levels
 
-| 等级 | 内容 | 用途 |
+| Level | Contents | Use |
 |---|---|---|
-| S0 接口环境 | 假时钟、假传感器、预定义状态转移 | 验证协议、录制和回放 |
-| S1 运动学环境 | 关节和底盘运动学，无真实接触 | 验证坐标、动作和任务逻辑 |
-| S2 刚体环境 | 重力、碰撞、摩擦、夹取和掉落 | 训练与评测操作策略 |
-| S3 传感器环境 | 相机模型、延迟、噪声、丢帧 | 训练视觉策略 |
-| S4 随机化环境 | 外观、动力学、布局和时序随机化 | 提升 Sim-to-Real 鲁棒性 |
-| S5 校准环境 | 使用真机测量更新参数分布 | 缩小仿真与真机差距 |
+| S0 Interface environment | Fake clock, fake sensors, predefined state transitions | Validate protocols, recording, and replay |
+| S1 Kinematic environment | Joint and base kinematics without real contact | Validate coordinates, actions, and task logic |
+| S2 Rigid-body environment | Gravity, collisions, friction, grasping, and drops | Train and evaluate manipulation policies |
+| S3 Sensor environment | Camera model, latency, noise, and dropped frames | Train visual policies |
+| S4 Randomized environment | Appearance, dynamics, layout, and temporal randomization | Improve Sim-to-Real robustness |
+| S5 Calibrated environment | Update parameter distributions using real-robot measurements | Narrow the simulation-to-real gap |
+
+Each level must pass acceptance before complexity is added; complex scenes must not conceal basic
+coordinate or control errors.
+
+### 6.3 Robot Digital Twin
+
+The digital twin must include:
+
+- Base dimensions, wheel diameter, wheel track, and mass distribution;
+- Arm joint chain, limits, mass, and inertia;
+- Gripper geometry, opening range, and contact surfaces;
+- Visual mesh and simplified collision mesh;
+- Motor velocity, acceleration, dead zone, backlash, and response latency;
+- Camera intrinsics, distortion, mounting pose, and exposure parameters;
+- Control and sensor frequencies;
+- Network latency and jitter.
+
+Before real hardware is selected, the digital twin uses a parameterized placeholder robot. The
+placeholder model covers the target capability in joint count, control modes, and sensor
+interfaces, but its dimensions, mass, and dynamics are for development only and are not final
+training parameters.
+
+### 6.4 Asset Workflow
+
+Each asset contains:
 
-每一级都必须通过验收后再增加复杂度，不能用复杂场景掩盖基础坐标或控制错误。
+- `asset.json`: ID, version, units, origin, and semantics;
+- Renderable mesh;
+- Simplified collision mesh;
+- Mass, inertia, and material parameters;
+- Graspable or restricted regions;
+- Texture set;
+- Content checksum.
+
+Before an asset enters the training set, automatically check:
+
+- Whether units are meters;
+- Whether axes and origin follow the specification;
+- Whether the mesh is closed or contains anomalous faces;
+- Whether collision-mesh complexity exceeds the limit;
+- Whether the inertia matrix is valid;
+- Whether the difference between visual and collision bounding boxes is reasonable.
 
-### 6.3 机器人数字孪生
+### 6.5 Camera Fidelity
 
-数字孪生需要包含：
+The camera model must simulate at least:
 
-- 底盘尺寸、轮径、轮距和质量分布；
-- 机械臂关节链、限位、质量和惯量；
-- 夹爪几何、开合范围和接触面；
-- 视觉网格与简化碰撞网格；
-- 电机速度、加速度、死区、回差和响应延迟；
-- 相机内参、畸变、安装位姿和曝光参数；
-- 控制和传感器频率；
-- 网络延迟及抖动。
+- Resolution, frame rate, and field of view;
+- Radial and tangential distortion;
+- Exposure, white balance, brightness, and contrast;
+- Gaussian noise, compression artifacts, and motion blur;
+- Random dropped frames and timestamp jitter;
+- Small extrinsic drift;
+- Changes in occlusion, reflections, and shadows.
 
-真实硬件确定前，数字孪生使用参数化占位机器人。占位模型的关节数、控制模式和传感器接口覆盖目标能力，但尺寸、质量和动力学只用于开发，不作为最终训练参数。
+Training data stores raw simulated-fidelity frames; cropping, resizing, and normalization are
+performed by policy preprocessing configuration and must not be hard-coded into the environment.
 
-### 6.4 资产流程
-
-每个资产包含：
-
-- `asset.json`：ID、版本、单位、原点和语义；
-- 可渲染网格；
-- 简化碰撞网格；
-- 质量、惯量和材料参数；
-- 抓取区域或禁抓区域；
-- 纹理集合；
-- 内容校验值。
-
-资产进入训练集前需要自动检查：
-
-- 单位是否为米；
-- 坐标轴和原点是否符合规范；
-- 网格是否封闭或存在异常面；
-- 碰撞网格复杂度是否超限；
-- 惯量矩阵是否有效；
-- 视觉和碰撞包围盒差异是否合理。
-
-### 6.5 相机拟真
-
-相机模型至少模拟：
-
-- 分辨率、帧率和视场角；
-- 径向与切向畸变；
-- 曝光、白平衡、亮度和对比度；
-- 高斯噪声、压缩伪影和运动模糊；
-- 随机丢帧和时间戳抖动；
-- 相机外参小幅漂移；
-- 遮挡、反光和阴影变化。
-
-训练数据保存原始拟真帧；裁剪、缩放和归一化由策略预处理配置完成，不能固化在环境中。
-
-### 6.6 动力学随机化
-
-初始随机化范围只做保守扰动：
-
-- 物体质量：标称值 ±10%；
-- 接触摩擦：标称值 ±20%；
-- 轮径和轮距：标称值 ±2%；
-- 关节零点：小范围偏移；
-- 电机响应和动作延迟：在测得范围内采样；
-- 相机外参：位置和角度小范围扰动；
-- 控制频率：注入少量抖动；
-- 物体初始位姿、光照、纹理和背景变化。
-
-真实硬件接入后，所有范围用系统辨识数据更新。随机化不是越大越好；过宽会使策略学习过度保守或忽略有效视觉特征。
-
-### 6.7 系统辨识
-
-真机接入后的基础测量包括：
-
-- 轮速阶跃响应和直线/原地旋转轨迹；
-- 关节位置阶跃、最大速度、回差和静态偏置；
-- 动作下发到状态变化的端到端延迟；
-- 相机采集延迟、帧间隔和曝光变化；
-- 常见物体的滑动、滚动和夹持结果；
-- 机械臂伸出时的底盘姿态和振动。
-
-每次辨识生成版本化 `CalibrationProfile`。训练运行必须记录使用的 profile，禁止直接修改仿真默认值而不留版本。
-
-## 7. 数据生成方案
-
-### 7.1 数据来源
-
-正式训练数据全部来自当前 Actor 与环境的闭环交互，不从规则专家、人工遥操作、教师策略或动作标签启动：
-
-1. 在线探索：当前双臂 Actor 在程序化仿真任务中执行并产生 transition；
-2. 经验回放：保留成功、失败、恢复、碰撞和超时 Episode；
-3. 分层复用：仅按任务无关的新颖度、TD error、奖励改善和安全/失败结果重采样真实 transition；
-4. 合法增强：环境声明合法变换，算法只在抽样时做通用增强，不保存变换副本；
-5. 隐藏评测：只用于准入和失败分析，不回流到训练集。
-
-历史专家和行为克隆数据必须标记为 `legacy` 并由训练谱系检查拒绝。未来真机遥操作只可用于安全调试、系统辨识或紧急接管审计，不是正式策略训练的必需数据源。
-
-### 7.2 数据阶段
-
-训练预算以环境步数、墙钟时间和闭环成功率管理，而不是以人工示范条数管理：
-
-- 先用低分辨率视觉和简化随机化验证奖励、replay 与更新链路；
-- 使用多环境并行持续产生在线 transition；
-- 成功率达到课程目标区间后自动扩大布局、物理和视觉随机化；
-- 稀有成功、失败和新颖状态按优先级回放；
-- 仅按状态新颖度、TD error、局部奖励改善速度和环境终止失败边界维护自动 frontier，并持续混合完整任务 reset；
-- 独立评测集至少覆盖每个任务 20 个隔离种子和未见语言表达。
-
-环境步数本身不是训练成功证据；是否继续训练由隐藏闭环成功率、双臂消融和安全指标决定。
-
-### 7.3 数据质量门槛
-
-Episode 进入训练集前必须通过：
-
-- 所有必需模态存在；
-- 时间戳严格单调；
-- 图像与状态同步误差低于配置门槛；
-- 动作有效期完整；
-- 无未标记的急停、通信中断或人工接管；
-- RobotSpec、TaskSpec 和 CalibrationProfile 可追溯；
-- 结果标签和终止原因完整；
-- 内容校验值正确。
-
-失败 Episode 不删除，而是进入独立失败集，供恢复策略、难例采样和诊断使用。
-
-### 7.4 数据切分
-
-训练、验证和测试按 Episode、场景种子、物体实例和布局切分，禁止随机拆分单帧。测试集至少包含：
-
-- 未参与训练的物体位置；
-- 未参与训练的纹理和光照；
-- 参数分布边缘值；
-- 轻度遮挡和延迟；
-- 恢复场景。
-
-## 8. 策略训练方案
-
-训练架构已重建为[基础模型感知、世界模型与想象强化学习范式](./foundation-world-model-training-paradigm.md)，该文档是当前唯一口径。本节旧摘要只解释历史设计，不得用于启动新训练。
-
-- Actor 从预处理后的多相机视觉、原始自然语言指令编码和本体状态直接预测底盘与双臂动作块；
-- 不构造对象 token、目标 token、人工技能名称、任务阶段或符号动作计划；
-- 视觉预处理先完成同步、标定、RGB-D 对齐、深度清理、坐标统一、归一化和历史组合，再由可学习视觉前端提取特征；
-- 不加载专家轨迹、人工示范、教师 checkpoint 或行为克隆初始化，Actor 直接通过非对称 Actor-Critic 学习；
-- Critic 和奖励可以在训练期使用仿真真值，但 Critic 不输出动作，Actor 从训练到部署始终只看可由真机复现的输入；
-- 失败轨迹原样进入 replay buffer，通过任务无关难例采样继续利用；不执行目标重标记，也不合成奖励或终止；
-- 左右臂、左右夹爪和底盘属于统一 16 维动作，场景代码不得固定一侧手臂或指定左右分工；
-- 课程只改变初始状态和随机化分布，不向策略提供步骤、阶段或技能提示；
-- frontier 课程只恢复自主访问过的完整瞬时动力学状态（位置、速度、执行器载荷和不透明求解器状态），不保存未来动作标签；超时或截断不是失败边界，Episode 总回报不得复制为逐状态标签；评测禁用 frontier reset；
-- 自然语言先验来自本地预训练文本编码器，场景语义通过指令、视觉、动作和奖励的配对获得；
-- 部署 checkpoint 不包含 Critic、奖励器、任务控制脚本或仿真特权字段，并必须从磁盘重载后通过隔离种子闭环评测。
-
-## 9. 本机闭环流程
-
-### 9.1 训练前
-
-1. 校验 RobotSpec、SceneSpec 和 TaskSpec 版本；
-2. 校验数据集完整性和切分泄漏；
-3. 生成不可变训练 manifest；
-4. 记录代码版本、配置、种子和本机环境；
-5. 估算磁盘空间和训练内存。
-
-### 9.2 训练中
-
-- 周期保存检查点和优化器状态；
-- 记录训练/验证损失、吞吐和内存；
-- 定期执行小规模闭环仿真；
-- 出现 NaN、数据中断或 schema 不匹配时立即失败；
-- 不自动覆盖已有模型版本。
-
-### 9.3 训练后
-
-1. 在冻结测试集上离线评测；
-2. 在固定仿真场景集上闭环评测；
-3. 在随机化压力场景上评测；
-4. 生成模型卡和失败聚类报告；
-5. 达到准入门槛后进入影子执行；
-6. 通过影子执行后才能进行低速真机评测。
-
-## 10. 评测体系
-
-### 10.1 离线指标
-
-- 动作位置误差；
-- 夹爪状态准确率；
-- 动作平滑度；
-- 多步动作漂移；
-- 推理延迟和抖动；
-- 越界动作比例。
-
-离线动作误差只能用于诊断，不能代替闭环成功率。
-
-### 10.2 仿真闭环指标
-
-- 任务成功率；
-- 抓取成功率和放置成功率；
-- 平均完成时间；
-- 目标物掉落率；
-- 机器人和环境碰撞次数；
-- 关节/速度限位触发次数；
-- 恢复成功率；
-- 在随机化参数上的最差分位表现。
-
-### 10.3 Sim-to-Real 指标
-
-- 相同动作下的关节轨迹误差；
-- 底盘轨迹误差；
-- 相机重投影误差；
-- 动作端到端延迟差；
-- 物体运动结果差异；
-- 仿真与真机任务成功率差值。
-
-### 10.4 模型准入门槛
-
-模型进入真机前必须满足：
-
-- 固定仿真测试集成功率不低于 85%；
-- 随机化测试集成功率不低于 70%；
-- 禁区碰撞率为 0；
-- 动作越界经安全过滤前低于 0.1%；
-- 单次推理延迟满足控制周期；
-- 所有模型文件、配置和数据版本可追溯。
-
-真机首轮以低速、软物体、空载夹爪和人员可触达急停为前提。
-
-## 11. 拟真验收门槛
-
-### 硬件确定前
-
-- 坐标变换测试全部通过；
-- 固定种子能够确定性重放任务初始状态；
-- 同一 Action 在 S0～S3 中具有相同语义；
-- Episode 可以在仿真运行时和回放器间无损往返；
-- 任务成功、失败和终止条件有单元测试；
-- 仿真后端可以被替换而不修改 TaskSpec。
-
-### 硬件接入后
-
-- 相机标定重投影误差达到项目门槛；
-- 关节和底盘阶跃响应误差进入辨识目标范围；
-- 仿真和真机动作延迟分布接近；
-- 常见物体的滑动和夹持结果落入同一统计区间；
-- 仿真与真机成功率差值逐轮缩小。
-
-具体数值在硬件测量后写入 `CalibrationProfile` 和验收配置，避免在缺少测量时伪造精度。
-
-## 12. 建议仓库结构
+### 6.6 Dynamics Randomization
+
+Initial randomization ranges use conservative perturbations only:
+
+- Object mass: ±10% of nominal;
+- Contact friction: ±20% of nominal;
+- Wheel diameter and track: ±2% of nominal;
+- Joint zero points: small offsets;
+- Motor response and action latency: sample within measured ranges;
+- Camera extrinsics: small perturbations in position and angle;
+- Control frequency: inject small jitter;
+- Variation in initial object pose, lighting, texture, and background.
+
+After real hardware is connected, update all ranges with system-identification data.
+Randomization is not better when larger; overly broad ranges can make the policy excessively
+conservative or cause it to ignore useful visual features.
+
+### 6.7 System Identification
+
+Basic measurements after connecting the real robot include:
+
+- Wheel-speed step response and straight-line/in-place rotation trajectories;
+- Joint-position step response, maximum velocity, backlash, and static bias;
+- End-to-end latency from action dispatch to state change;
+- Camera-capture latency, frame interval, and exposure variation;
+- Sliding, rolling, and grasping outcomes for common objects;
+- Base pose and vibration when the arm is extended.
+
+Each identification run generates a versioned `CalibrationProfile`. Training runs must record
+the profile used; directly changing simulation defaults without leaving a version is prohibited.
+
+## 7. Data-Generation Plan
+
+### 7.1 Data Sources
+
+Formal training data comes entirely from closed-loop interaction between the current Actor and
+the environment. It does not start from rule-based experts, human teleoperation, teacher
+policies, or action labels:
+
+1. Online exploration: the current bimanual Actor executes programmatic simulation tasks and produces transitions;
+2. Experience replay: retain successful, failed, recovery, collision, and timeout Episodes;
+3. Stratified reuse: resample real transitions only by task-agnostic novelty, TD error, reward improvement, and safety/failure outcomes;
+4. Legal augmentation: the environment declares legal transformations, and the algorithm applies generic augmentation only at sampling time without storing transformed copies;
+5. Hidden evaluation: use only for admission and failure analysis, never feeding it back into the training set.
+
+Historical expert and behavior-cloning data must be marked `legacy` and rejected by training
+lineage checks. Future real-robot teleoperation may be used only for safety debugging, system
+identification, or emergency-takeover audits; it is not a required source for formal policy training.
+
+### 7.2 Data Stages
+
+Manage the training budget by environment steps, wall-clock time, and closed-loop success rate,
+not by the number of human demonstrations:
+
+- First validate the reward, replay, and update paths with low-resolution vision and simplified randomization;
+- Continuously produce online transitions with parallel environments;
+- Automatically expand layout, physical, and visual randomization after success enters the curriculum target range;
+- Replay rare successes, failures, and novel states by priority;
+- Maintain an automatic frontier using only state novelty, TD error, local reward-improvement speed, and environment terminal-failure boundaries, while continuing to mix full-task resets;
+- Ensure the independent evaluation set covers at least 20 isolated seeds and unseen language expressions per task.
+
+Environment steps alone are not evidence of training success; hidden closed-loop success rate,
+bimanual ablations, and safety metrics determine whether training continues.
+
+### 7.3 Data-Quality Gate
+
+Before an Episode enters the training set, it must pass:
+
+- Presence of all required modalities;
+- Strictly monotonic timestamps;
+- Image/state synchronization error below the configured threshold;
+- Complete action validity periods;
+- No unmarked emergency stop, communication interruption, or human takeover;
+- Traceability of RobotSpec, TaskSpec, and CalibrationProfile;
+- Complete outcome labels and termination reasons;
+- Correct content checksums.
+
+Failed Episodes are not deleted; they enter an independent failure set for recovery policies,
+hard-example sampling, and diagnostics.
+
+### 7.4 Data Splits
+
+Split training, validation, and test by Episode, scene seed, object instance, and layout; random
+single-frame splitting is prohibited. The test set must include at least:
+
+- Object positions not used in training;
+- Textures and lighting not used in training;
+- Edge values of parameter distributions;
+- Mild occlusion and latency;
+- Recovery scenes.
+
+## 8. Policy-Training Plan
+
+The training architecture has been rebuilt as the [Foundation Model Perception, World Model,
+and Imagination Reinforcement Learning Paradigm](./foundation-world-model-training-paradigm.md),
+which is the sole current source of truth. This legacy summary explains historical design only
+and must not be used to start new training.
+
+- The Actor directly predicts base and bimanual action chunks from preprocessed multi-camera
+  vision, encoded raw natural-language commands, and proprioception;
+- Do not construct object tokens, target tokens, human-defined skill names, task stages, or
+  symbolic action plans;
+- Vision preprocessing first performs synchronization, calibration, RGB-D alignment, depth
+  cleanup, coordinate unification, normalization, and history assembly, after which a learnable
+  vision front end extracts features;
+- Do not load expert trajectories, human demonstrations, teacher checkpoints, or behavior-cloning
+  initialization; the Actor learns directly through asymmetric Actor-Critic;
+- The Critic and reward may use simulation ground truth during training, but the Critic does not
+  output actions and the Actor sees only real-robot-reproducible inputs from training through deployment;
+- Failed trajectories enter the replay buffer unchanged and continue to be used through
+  task-agnostic hard-example sampling; do not perform goal relabeling or synthesize rewards or termination;
+- Left/right arms, left/right grippers, and the base form one unified 16-dimensional action; scene
+  code must not fix one arm or specify left/right roles;
+- The curriculum changes only initial-state and randomization distributions and gives the policy
+  no step, stage, or skill hints;
+- The frontier curriculum restores only complete instantaneous dynamics states autonomously visited
+  by the policy (position, velocity, actuator load, and opaque solver state), stores no future
+  action labels, treats timeout or truncation as no failure boundary, and must not copy total
+  Episode return into per-state labels; evaluation disables frontier reset;
+- The natural-language prior comes from a local pretrained text encoder, and scene semantics are
+  grounded through paired commands, vision, actions, and rewards;
+- The deployment checkpoint contains no Critic, rewarder, task-control script, or simulation
+  privileged field and must be reloaded from disk before closed-loop evaluation on isolated seeds.
+
+## 9. Local Closed-Loop Procedure
+
+### 9.1 Before Training
+
+1. Validate RobotSpec, SceneSpec, and TaskSpec versions;
+2. Validate dataset integrity and split leakage;
+3. Generate an immutable training manifest;
+4. Record code version, configuration, seed, and local environment;
+5. Estimate disk space and training memory.
+
+### 9.2 During Training
+
+- Periodically save checkpoints and optimizer state;
+- Record training/validation loss, throughput, and memory;
+- Run small-scale closed-loop simulation periodically;
+- Fail immediately on NaN, data interruption, or schema mismatch;
+- Never overwrite existing model versions automatically.
+
+### 9.3 After Training
+
+1. Evaluate offline on the frozen test set;
+2. Run closed-loop evaluation on a fixed simulation-scene set;
+3. Evaluate on randomized stress scenes;
+4. Generate a model card and failure-cluster report;
+5. Enter shadow execution after meeting the admission threshold;
+6. Run low-speed real-robot evaluation only after passing shadow execution.
+
+## 10. Evaluation System
+
+### 10.1 Offline Metrics
+
+- Action-position error;
+- Gripper-state accuracy;
+- Action smoothness;
+- Multi-step action drift;
+- Inference latency and jitter;
+- Out-of-bounds action ratio.
+
+Offline action error is diagnostic only and cannot replace closed-loop success rate.
+
+### 10.2 Simulation Closed-Loop Metrics
+
+- Task success rate;
+- Grasp and placement success rates;
+- Mean completion time;
+- Target-object drop rate;
+- Robot/environment collision count;
+- Joint/velocity-limit trigger count;
+- Recovery success rate;
+- Worst-quantile performance across randomized parameters.
+
+### 10.3 Sim-to-Real Metrics
+
+- Joint-trajectory error under the same action;
+- Base-trajectory error;
+- Camera reprojection error;
+- Difference in end-to-end action latency;
+- Difference in object-motion outcomes;
+- Difference between simulation and real-robot task success rates.
+
+### 10.4 Model Admission Threshold
+
+Before a model enters the real robot, it must satisfy:
+
+- Success rate of at least 85% on the fixed simulation test set;
+- Success rate of at least 70% on the randomized test set;
+- Restricted-zone collision rate of 0;
+- Out-of-bounds actions below 0.1% before safety filtering;
+- Single-inference latency within the control period;
+- Traceable versions for all model files, configuration, and data.
+
+The first real-robot run assumes low speed, soft objects, unloaded grippers, and an emergency
+stop reachable by a person.
+
+## 11. Simulation-Fidelity Acceptance Threshold
+
+### Before Hardware Selection
+
+- All coordinate-transform tests pass;
+- Fixed seeds deterministically replay task initial states;
+- The same Action has the same semantics in S0–S3;
+- Episodes can round-trip losslessly between the simulation runtime and replay tool;
+- Task success, failure, and termination conditions have unit tests;
+- The simulation backend can be replaced without changing TaskSpec.
+
+### After Hardware Integration
+
+- Camera-calibration reprojection error reaches the project threshold;
+- Joint and base step-response errors fall within the identification target range;
+- Simulation and real-robot action-latency distributions are close;
+- Sliding and grasping outcomes for common objects fall within the same statistical range;
+- The simulation/real-robot success-rate gap decreases each round.
+
+Write concrete values into `CalibrationProfile` and acceptance configuration after hardware
+measurements, avoiding fabricated precision in the absence of measurements.
+
+## 12. Suggested Repository Structure
 
 ```text
 50-housework-robot/
@@ -570,114 +622,120 @@ Episode 进入训练集前必须通过：
 └── tests/
 ```
 
-大型数据、视频、模型和生成资产不提交到 Git；仓库只保存 schema、manifest、配置、代码和小型测试样本。
+Do not commit large data, videos, models, or generated assets to Git; the repository stores only
+schemas, manifests, configuration, code, and small test samples.
 
-### 训练完成通知
+### Training-Completion Notification
 
-飞书消息发送统一由 `scripts/send_lark_agent_message.sh` 封装。它固定使用机器人（agent）身份，默认接收人为本项目发起人，并负责幂等键和失败重试；如需临时改发其他人，可设置 `HWR_LARK_RECIPIENT_OPEN_ID`。直接发送消息只需：
+Lark message delivery is wrapped by `scripts/send_lark_agent_message.sh`. It always uses the
+bot (agent) identity, defaults to the project initiator as recipient, and handles idempotency
+keys and retries. To temporarily send to another person, set `HWR_LARK_RECIPIENT_OPEN_ID`. Send
+a message directly with:
 
 ```bash
-scripts/send_lark_agent_message.sh "消息内容"
+scripts/send_lark_agent_message.sh "Message content"
 ```
 
-长时间训练统一通过包装器启动，调用方不再传飞书身份或接收人：
+Start long-running training through the wrapper; callers no longer pass a Lark identity or recipient:
 
 ```bash
 scripts/run_training_with_lark_notify.sh RUN_ID LOG_PATH COMMAND [ARG ...]
 ```
 
-包装器会保留训练退出码，汇总 Episode 数、checkpoint 哈希、源码提交和产物路径，再调用统一消息脚本通知。
-默认运行根目录为 `runs/bimanual-rl`；其他训练谱系通过 `HWR_TRAINING_RUN_ROOT` 指定。包装器
-会优先读取 run 的 `latest.json`，解析版本化 checkpoint 并计算实际 `training-state.pt` 哈希。
+The wrapper preserves the training exit code, summarizes Episode count, checkpoint hash, source
+commit, and artifact paths, then calls the unified message script. The default run root is
+`runs/bimanual-rl`; other training lineages use `HWR_TRAINING_RUN_ROOT`. The wrapper first reads
+the run's `latest.json`, resolves the versioned checkpoint, and computes the actual
+`training-state.pt` hash.
 
-## 13. 实施阶段
+## 13. Implementation Phases
 
-### T0：规范冻结（第 1 周）
+### T0: Specification Freeze (Week 1)
 
-- 冻结 Observation、Action、Episode V1；
-- 冻结 RobotSpec、SceneSpec、TaskSpec V1；
-- 定义错误码、事件和版本迁移原则；
-- 建立 schema 验证与兼容性测试。
+- Freeze Observation, Action, and Episode V1;
+- Freeze RobotSpec, SceneSpec, and TaskSpec V1;
+- Define error codes, events, and version-migration principles;
+- Establish schema validation and compatibility tests.
 
-交付物：schema、接口文档、测试样例。
+Deliverables: schemas, interface documentation, and test examples.
 
-### T1：S0/S1 环境（第 2～3 周）
+### T1: S0/S1 Environment (Weeks 2–3)
 
-- 实现假设备和确定性时钟；
-- 实现参数化占位机器人；
-- 实现移动抓放任务状态机；
-- 打通 Episode 录制、回放和结果计算。
+- Implement fake devices and a deterministic clock;
+- Implement a parameterized placeholder robot;
+- Implement the mobile pick-and-place task state machine;
+- Connect Episode recording, replay, and result computation.
 
-交付物：可重复的无物理闭环和运动学闭环。
+Deliverables: repeatable physics-free and kinematic closed loops.
 
-### T2：S2/S3 拟真（第 4～5 周）
+### T2: S2/S3 Fidelity (Weeks 4–5)
 
-- 接入参考刚体物理后端；
-- 构建房间、工作台、收纳篮和小物体资产；
-- 加入碰撞、摩擦、夹取、掉落、头部 RGB-D 和左右腕部 RGB 相机；
-- 加入延迟、噪声和丢帧模型。
+- Integrate the reference rigid-body physics backend;
+- Build room, workbench, storage-basket, and small-object assets;
+- Add collisions, friction, grasping, drops, head RGB-D, and left/right wrist RGB cameras;
+- Add latency, noise, and dropped-frame models.
 
-交付物：可以批量生成视觉移动抓放 Episode 的环境。
+Deliverables: an environment that can batch-generate visual mobile pick-and-place Episodes.
 
-### T3：训练基线（第 6～7 周）
+### T3: Training Baseline (Weeks 6–7)
 
-- 实现 16 维双臂动作块 Actor 和训练期特权 Critic；
-- 实现无专家的在线采样、仅保存自主 transition 的经验回放和自动课程；
-- 实现训练、断点检查点和模型注册；
-- 建立固定测试场景与随机化压力测试；
-- 在本机完成第一轮视觉策略训练。
+- Implement the 16-dimensional bimanual action-chunk Actor and training-time privileged Critic;
+- Implement expert-free online sampling, replay that stores only autonomous transitions, and an automatic curriculum;
+- Implement training, resumable checkpoints, and model registration;
+- Establish fixed test scenes and randomized stress tests;
+- Complete the first visual-policy training run locally.
 
-交付物：仿真闭环成功率报告和可回放模型。
+Deliverables: a simulation closed-loop success-rate report and replayable model.
 
-### T4：硬件适配与校准（硬件确定后）
+### T4: Hardware Adaptation and Calibration (After Hardware Selection)
 
-- 按能力接口选择机械臂、底盘和相机；
-- 实现硬件适配器；
-- 完成相机、关节、底盘和延迟系统辨识；
-- 生成第一版 CalibrationProfile；
-- 更新仿真参数分布。
+- Select the arm, base, and cameras according to capability interfaces;
+- Implement hardware adapters;
+- Complete camera, joint, base, and latency system identification;
+- Generate the first `CalibrationProfile`;
+- Update simulation-parameter distributions.
 
-交付物：同一 TaskSpec 在仿真与真机运行。
+Deliverables: the same TaskSpec running in simulation and on the real robot.
 
-### T5：真机闭环
+### T5: Real-Robot Closed Loop
 
-- 采集真机系统辨识、视觉统计和策略执行日志，不采集专家动作标签；
-- 使用仿真随机化与真机无动作标签视觉数据缩小域差距；
-- 影子执行、低速执行和人工接管；
-- 失败聚类、仿真分布修正和安全约束更新；
-- 生成 Sim-to-Real 差距报告。
+- Collect real-robot system-identification data, visual statistics, and policy-execution logs without expert action labels;
+- Use simulation randomization and real-robot action-label-free visual data to narrow the domain gap;
+- Shadow execution, low-speed execution, and human takeover;
+- Failure clustering, simulation-distribution correction, and safety-constraint updates;
+- Generate a Sim-to-Real gap report.
 
-交付物：受控场景移动抓放真机成功率报告。
+Deliverables: a real-robot success-rate report for mobile pick-and-place in a controlled scene.
 
-## 14. 主要风险
+## 14. Main Risks
 
-| 风险 | 应对方式 |
+| Risk | Mitigation |
 |---|---|
-| 过度追求画面真实 | 先验收坐标、时序、动作和接触一致性 |
-| 仿真策略真机失效 | 系统辨识、保守随机化、真机微调、接管回流 |
-| 仿真引擎反向污染架构 | 所有调用限制在 `SimBackend` 适配层 |
-| 硬件选型改变动作空间 | 通过 Capability 和 PolicySpec 协商，不修改 Episode 核心 |
-| 仿真视觉分布偏离真机 | 系统辨识、视觉随机化和无动作标签真机表征适配 |
-| 训练和渲染争抢本机资源 | 数据生成与训练分时运行，缓存已生成视频 |
-| 时间同步问题被误认为模型问题 | 对采集、接收、推理、下发、执行分别打时间戳 |
-| 稀疏结果奖励导致探索困难 | 自动课程、任务无关优先回放和特权 Critic，不引入专家动作或合成目标 |
-| 双臂策略退化为单臂 | 镜像采样、物理必需双臂任务和锁定单臂消融 |
+| Excessive pursuit of visual realism | Accept coordinate, temporal, action, and contact consistency first |
+| Simulation policy fails on the real robot | System identification, conservative randomization, real-robot fine-tuning, and takeover feedback |
+| Physics engine contaminates the architecture | Restrict all calls to the `SimBackend` adapter layer |
+| Hardware selection changes the action space | Negotiate through Capability and PolicySpec without changing the Episode core |
+| Simulation visual distribution differs from the real robot | System identification, visual randomization, and action-label-free real-robot representation adaptation |
+| Training competes with rendering for local resources | Run data generation and training at separate times and cache generated video |
+| Time synchronization is mistaken for a model problem | Timestamp acquisition, receipt, inference, dispatch, and execution separately |
+| Sparse outcome rewards make exploration difficult | Automatic curriculum, task-agnostic prioritized replay, and privileged Critic without expert actions or synthetic goals |
+| Bimanual policy collapses to one arm | Mirrored sampling, physically bimanual-required tasks, and locked-arm ablations |
 
-## 15. 当前阶段决策
+## 15. Current-Stage Decision
 
-当前立即推进：
+Proceed immediately with:
 
-1. 自有 schema 和核心协议；
-2. S0/S1 假设备与运动学环境；
-3. 参数化占位机器人；
-4. 移动抓放 TaskSpec；
-5. Episode 录制和确定性回放；
-6. 仿真后端 PoC 与选型基准。
+1. Project-owned schemas and core protocols;
+2. S0/S1 fake devices and kinematic environment;
+3. Parameterized placeholder robot;
+4. Mobile pick-and-place TaskSpec;
+5. Episode recording and deterministic replay;
+6. Simulation-backend PoC and selection benchmarks.
 
-当前明确不推进：
+Explicitly do not proceed with:
 
-- 具体机械臂型号；
-- 机械臂采购和组装；
-- 针对某个外部训练框架的数据格式；
-- 完整住宅建模；
-- 大模型或全屋端到端策略。
+- A specific arm model;
+- Arm procurement and assembly;
+- A data format tied to a particular external training framework;
+- Complete-home modeling;
+- Large models or an end-to-end whole-home policy.

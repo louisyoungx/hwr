@@ -1,19 +1,22 @@
-# R0020 结果
+# R0020 Results
 
-状态：结束。
+Status: concluded.
 
-## 运行总账
+## Run Ledger
 
-固定 development seed `19001` 共运行 3 个完整 physics Episode，达到预注册 candidate
-预算。三次均经正式 16 维动作接口、正常 MuJoCo 物理、`DualArmSafetySupervisor` 与两步
-predictive collision filter 执行。
+The fixed development seed `19001` ran 3 complete physics Episodes, reaching the preregistered
+candidate budget. All three ran through the formal 16-dimensional action interface, normal MuJoCo
+physics, `DualArmSafetySupervisor`, and the two-step predictive collision filter.
 
-依据 `f7b27a3` 后的新规则，以上“达到预注册 candidate 预算”的旧判读已撤销：attempt 1～3
-分别发生在实现修改之后，现统一归类为 implementation iteration 1～3。它们保留原文件名、
-原始 artifact、hash 与历史文字，不覆盖、不重命名；三次都未达到 2026-08-31 重开后冻结的
-behavior entry，因此不是三次独立重复证据，也不构成联合规划路线的可判别失败。
+Under the new rules following `f7b27a3`, the preceding interpretation that the preregistered
+candidate budget had been reached is withdrawn: attempts 1–3 occurred after implementation
+changes and are now uniformly classified as implementation iterations 1–3. Their original
+filenames, raw artifacts, hashes, and historical text are retained without overwriting or
+renaming; none reached the behavior entry frozen after the 2026-08-31 reopening, so they are
+neither three independent replication results nor a discriminating failure of the joint-planning
+route.
 
-共同命令形式：
+Common command form:
 
 ```bash
 MUJOCO_GL=glfw .venv/bin/python -m hwr.apps.evaluate_joint_basket_teacher \
@@ -21,119 +24,135 @@ MUJOCO_GL=glfw .venv/bin/python -m hwr.apps.evaluate_joint_basket_teacher \
   --output runs/research-loop/0020/development/seed-19001-attempt-<N>.json
 ```
 
-| attempt | success | stages reached | failure | 双臂接触 | 最大抬升 | safety | severe |
+| attempt | success | stages reached | failure | bimanual contact | maximum lift | safety | severe |
 |---|---:|---|---|---:|---:|---:|---:|
 | 1 | 0 | `approach/acquire/failed_hold` | `acquire_timeout` | 0 step | `0.060549m` | 0 | 0 |
 | 2 | 0 | `approach/acquire/failed_hold` | `acquire_timeout` | 0 step | `0m` | 0 | 0 |
 | 3 | 0 | `approach/acquire/failed_hold` | `acquire_timeout` | 0 step | `0m` | 0 | 0 |
 
-三次均执行满 `1200` step，并以 `bimanual_task_timeout` 结束。三次最大 forbidden force
-分别为 `25.329396N`、`22.219264N`、`0N`，均低于 `220N` severe 门。
+All three ran the full `1200` steps and ended with `bimanual_task_timeout`. The maximum forbidden
+forces were `25.329396N`, `22.219264N`, and `0N`, respectively, all below the `220N` severe
+threshold.
 
-attempt 1 的 planner 在 reset 后、篮子完全落稳前求解；执行中篮子被非任务有效接触扰动，
-出现 `0.060549m` 高度变化，但 tracker 没有记录左右任一完整双 pad 接触，
-`maximum_controlled_target_progress=0`。该高度变化不是抓取或抬升成功。
+Attempt 1's planner solved after reset and before the basket had fully settled; during execution,
+the basket was disturbed by a non-task-valid contact, producing a height change of `0.060549m`,
+but the tracker recorded no complete dual-pad contact on either side, and
+`maximum_controlled_target_progress=0`. This height change was not a successful grasp or lift.
 
-attempt 2 改为底盘到位、篮子落稳后重规划；静态末态预测的 maximum pad signed distance 为
-`0.000582m`，但动态执行在进入最后 waypoint 时仍有约 `0.074rad` 关节误差并提前闭爪。
-一次用于定位该控制时序的短诊断未保留独立 artifact，记为“未归档观察”，不支撑最终结论；
-最终结论只使用三个完整 Episode。
+Attempt 2 replanned after the base was in position and the basket had settled; the predicted static
+terminal maximum pad signed distance was `0.000582m`, but dynamic execution still had approximately
+`0.074rad` of joint error on entering the final waypoint and closed the grippers prematurely. A
+short diagnostic used to localize this control timing was not retained as an independent artifact
+and is recorded as an "unarchived observation"; it does not support the final conclusion. The final
+conclusion uses only the three complete Episodes.
 
-attempt 3 在重规划收敛后才进入 acquire，并要求最终 waypoint 误差低于 `0.018rad` 才锁存
-闭爪。静态末态 maximum pad signed distance 为 `0.000747m`，但正式动态执行仍为左右
-`0/0` contact step，未进入 `secure`。这表明当前 joint-space waypoint tracker 没有把静态
-接触解转化为动态可闭合抓取；本轮不能进一步归因 `lift/transport/place/release/stabilize`。
+Attempt 3 entered `acquire` only after replanning converged and latched gripper closure only when
+the final waypoint error was below `0.018rad`. The static terminal maximum pad signed distance was
+`0.000747m`, but formal dynamic execution still recorded `0/0` contact steps on the left and
+right, and did not enter `secure`. This shows that the current joint-space waypoint tracker did
+not convert the static contact solution into a dynamically closable grasp; this round cannot
+further attribute failure to `lift/transport/place/release/stabilize`.
 
-## 升级与停止
+## Promotion and Stopping
 
-- 单 seed 升级门未通过：`0/3` 完整成功。
-- 小型 development cohort `19001`～`19004`：`not_run`。
-- confirmation：`not_run`，`valid=null`。
-- sealed final：`not_run`，`valid=null`。
-- 已达到预注册 3-Episode candidate 预算，停止该 candidate；不调换 seed、不扩 cohort、
-  不自动启动另一技术路线。
+- Single-seed promotion gate not met: `0/3` complete successes.
+- Small development cohort `19001`–`19004`: `not_run`.
+- confirmation: `not_run`, `valid=null`.
+- sealed final: `not_run`, `valid=null`.
+- The preregistered 3-Episode candidate budget was reached, so this candidate was stopped; do not
+  switch seeds, expand the cohort, or automatically start another technical route.
 
-上述停止决定属于旧规则下的历史记录。R0020 已于 2026-08-31 重新打开；新 debug 与候选判别
-预算以 `01-experiment.md` 的重开修订为准。历史 attempt 1～3 不计入新 `24` smoke 上限。
+The stopping decision above is a historical record under the old rules. R0020 was reopened on
+2026-08-31; the new debugging and candidate-discrimination budgets are governed by the reopening
+revisions in `01-experiment.md`. Historical attempts 1–3 do not count toward the new `24`-smoke
+limit.
 
-## 原始产物
+## Raw Artifacts
 
-- attempt 1：
-  `runs/research-loop/0020/development/seed-19001-attempt-1.json`，
-  SHA-256 `2bd0f644194c8c30a2c83a298dbd797e1cbdd0f8cf1ef84a29742c6b0d009839`，
-  `5,221` bytes，Episode wall time `6.5328s`。
-- attempt 2：
-  `runs/research-loop/0020/development/seed-19001-attempt-2.json`，
-  SHA-256 `1694886ec73874529bc5d3470bea5f11e85bb472fecc297f8763c90eabc034d3`，
-  `5,178` bytes，Episode wall time `6.6917s`。
-- attempt 3：
-  `runs/research-loop/0020/development/seed-19001-attempt-3.json`，
-  SHA-256 `7fcb863c1d88bfdec6c21cf607f9bc78b21924e138f34835eb1258e441898a30`，
-  `5,177` bytes，Episode wall time `7.8084s`。
-- 每个 JSON 均有同目录 `.sha256` sidecar；`runs/` 受 `.gitignore` 管理。
+- attempt 1:
+  `runs/research-loop/0020/development/seed-19001-attempt-1.json`,
+  SHA-256 `2bd0f644194c8c30a2c83a298dbd797e1cbdd0f8cf1ef84a29742c6b0d009839`,
+  `5,221` bytes, Episode wall time `6.5328s`.
+- attempt 2:
+  `runs/research-loop/0020/development/seed-19001-attempt-2.json`,
+  SHA-256 `1694886ec73874529bc5d3470bea5f11e85bb472fecc297f8763c90eabc034d3`,
+  `5,178` bytes, Episode wall time `6.6917s`.
+- attempt 3:
+  `runs/research-loop/0020/development/seed-19001-attempt-3.json`,
+  SHA-256 `7fcb863c1d88bfdec6c21cf607f9bc78b21924e138f34835eb1258e441898a30`,
+  `5,177` bytes, Episode wall time `7.8084s`.
+- Each JSON has a `.sha256` sidecar in the same directory; `runs/` is managed by `.gitignore`.
 
-## 实现与验证
+## Implementation and Verification
 
-- 新实现由 `joint_basket_planner.py` 的联合 13 维抓取构型搜索、插值路径检查，以及
-  `joint_basket_teacher.py` 的关键帧跟踪与完整阶段状态机构成。
-- planner 在复制的 `MjData` 上运行，focused test 验证其不修改权威 `qpos/qvel/ctrl`。
-- 以下初次收尾验证保留为历史记录：focused tests `4 passed`、bimanual 回归
-  `50 passed`、Python 尺寸检查 `465` 个文件通过、architecture check 通过。
+- The new implementation consists of the joint 13-dimensional grasp-configuration search and
+  interpolated-path check in `joint_basket_planner.py`, together with keyframe tracking and the
+  complete stage state machine in `joint_basket_teacher.py`.
+- The planner runs on a copied `MjData`; a focused test verifies that it does not modify the
+  authoritative `qpos/qvel/ctrl`.
+- The following initial closeout checks are retained as historical records: focused tests
+  `4 passed`, bimanual regression `50 passed`, the Python size check passed for `465` files, and
+  the architecture check passed.
 
-## 2026-08-31 重开调试
+## 2026-08-31 Reopening Debug
 
-重开后共运行 11 个有原始记录的 seed 19001 短程 physics smoke，未达到 `24` smoke 上限；
-artifact 内 wall time 合计 `72.1399s`，从 smoke 001 到 smoke 011 的本地时间跨度约 20 分钟，
-未达到 2 小时主动调试上限。所有 smoke 都使用正式 16 维动作接口、正常 MuJoCo physics 与
-原安全层。
+After reopening, 11 short physics smokes with raw records were run on seed 19001, without reaching
+the `24`-smoke limit; the total wall time recorded in the artifacts was `72.1399s`, and the local
+time span from smoke 001 to smoke 011 was approximately 20 minutes, below the 2-hour active
+debugging limit. All smokes used the formal 16-dimensional action interface, normal MuJoCo physics,
+and the original safety layer.
 
-| smoke | 关键实现变化 | steps | 最大连续双臂接触 | 最终阶段 | entry | safety / severe |
+| smoke | key implementation change | steps | maximum consecutive bimanual contact | final stage | entry | safety / severe |
 |---|---|---:|---:|---|---|---|
-| 001 | 重开基线 | 406 | 0 | `failed_hold` | 否 | 0 / 0 |
-| 002 | 在线 pad/handle 目标 | 406 | 0 | `failed_hold` | 否 | 0 / 0 |
-| 003 | 未对中时主动张开 | 406 | 0 | `failed_hold` | 否 | 0 / 0 |
-| 004 | 在线闭环提前接管 | 406 | 0 | `failed_hold` | 否 | 0 / 0 |
-| 005 | 终端碰撞约束初版 | 50 | 0 | `approach` | 否 | 0 / 0 |
-| 006 | 路径感知联合 planner | 390 | 0 | `failed_hold` | 否 | 0 / 0 |
-| 007 | 对中后继续闭爪 | 390 | 0 | `failed_hold` | 否 | 0 / 0 |
-| 008 | 轻微负 signed-distance 目标 | 390 | 0 | `failed_hold` | 否 | 0 / 0 |
-| 009 | 正式 gripper 上限与固定 acquire 时域 | 550 | 2 | `failed_hold` | 否 | 0 / 0 |
-| 010 | 在线双 pad 距离平衡 | 550 | 2 | `failed_hold` | 否 | 0 / 0 |
-| 011 | 双 pad 接触后维持闭爪预载 | 204 | 11 | `secure` | 是 | 0 / 0 |
+| 001 | reopening baseline | 406 | 0 | `failed_hold` | no | 0 / 0 |
+| 002 | online pad/handle target | 406 | 0 | `failed_hold` | no | 0 / 0 |
+| 003 | proactively open when misaligned | 406 | 0 | `failed_hold` | no | 0 / 0 |
+| 004 | early online closed-loop takeover | 406 | 0 | `failed_hold` | no | 0 / 0 |
+| 005 | initial terminal collision constraint | 50 | 0 | `approach` | no | 0 / 0 |
+| 006 | path-aware joint planner | 390 | 0 | `failed_hold` | no | 0 / 0 |
+| 007 | continue closing after alignment | 390 | 0 | `failed_hold` | no | 0 / 0 |
+| 008 | slightly negative signed-distance target | 390 | 0 | `failed_hold` | no | 0 / 0 |
+| 009 | formal gripper limit and fixed acquire horizon | 550 | 2 | `failed_hold` | no | 0 / 0 |
+| 010 | online dual-pad distance balancing | 550 | 2 | `failed_hold` | no | 0 / 0 |
+| 011 | maintain gripper preload after dual-pad contact | 204 | 11 | `secure` | yes | 0 / 0 |
 
-关键修复链：
+Key repair chain:
 
-1. 旧 planner 把所有篮子 geoms 视为允许 robot contact，静态四 pad 解同时包含最大约
-   `45mm` palm/wall 穿透；重开实现只允许四个 pad–对应 handle 接触，并把四点插值路径穿透
-   加入联合搜索的精英选择。
-2. joint path 只运行到无接触近场；之后由实时 pad 中点、handle pose、两 pad signed
-   distance 与接触对控制两臂目标和闭爪。
-3. 在线闭爪在未对中时主动张开；对中后渐进闭合；两 pad 距离不平衡时施加最大 `3mm`
-   横向修正；形成双 pad 接触后维持 gripper target `1.0`。
+1. The old planner treated all basket geoms as allowing robot contact; the static four-pad solution
+   included approximately `45mm` of palm/wall penetration at most. The reopened implementation
+   allows only the four pad–corresponding handle contacts and adds four-point interpolated-path
+   penetration to the elite selection in the joint search.
+2. The joint path runs only to the near field without contact; thereafter, the real-time pad
+   midpoint, handle pose, two-pad signed distance, and contact pair control the two-arm targets
+   and gripper closure.
+3. Online gripper closure actively opens when misaligned and closes progressively after alignment;
+   when the two-pad distances are imbalanced, it applies a maximum `3mm` lateral correction; after
+   dual-pad contact forms, it maintains gripper target `1.0`.
 
-smoke 011 达到冻结 behavior entry：
+Smoke 011 reached the frozen behavior entry:
 
-- seed `19001`；
-- 进入 `secure`；
-- `maximum_concurrent_steps=11`；
-- 四个 pad 均产生真实 handle contact；
-- `0` safety intervention；
-- `0` actual severe collision；
-- artifact：
-  `runs/research-loop/0020/debug/smoke-011-contact-preload.json`；
-- SHA-256：
-  `a2cc719233ae95dd8137dfe41a785ddcc73bd1a151ce63358d1b977044a3a053`。
+- seed `19001`;
+- entered `secure`;
+- `maximum_concurrent_steps=11`;
+- all four pads produced real handle contact;
+- `0` safety intervention;
+- `0` actual severe collision;
+- artifact:
+  `runs/research-loop/0020/debug/smoke-011-contact-preload.json`;
+- SHA-256:
+  `a2cc719233ae95dd8137dfe41a785ddcc73bd1a151ce63358d1b977044a3a053`.
 
-冻结 manifest：
+Frozen manifest:
 
-- `runs/research-loop/0020/debug/behavior-entry-freeze.json`；
-- SHA-256：
-  `2a59912d914d35655a454448505a1f9fd12b0ec8f9c228d3fbe3c92e68d6dea7`；
-- 冻结的三个 controller 文件 hash 在完整 Episode 后复核一致。
+- `runs/research-loop/0020/debug/behavior-entry-freeze.json`;
+- SHA-256:
+  `2a59912d914d35655a454448505a1f9fd12b0ec8f9c228d3fbe3c92e68d6dea7`;
+- The hashes of the three frozen controller files were reverified after the complete Episode and
+  matched.
 
-## 重开候选判别
+## Reopened Candidate Discrimination
 
-behavior entry 后运行且只运行一个完整 seed 19001 Episode：
+After behavior entry, exactly one complete seed 19001 Episode was run:
 
 ```bash
 MUJOCO_GL=glfw .venv/bin/python -m hwr.apps.evaluate_joint_basket_teacher \
@@ -141,105 +160,114 @@ MUJOCO_GL=glfw .venv/bin/python -m hwr.apps.evaluate_joint_basket_teacher \
   --output runs/research-loop/0020/development/reopened-candidate-seed-19001.json
 ```
 
-结果：
+Results:
 
-- `0/1` success；
-- 执行 `1200` step，以 `bimanual_task_timeout` 结束；
-- stages reached：
-  `approach/acquire/secure/failed_hold`；
-- `maximum_concurrent_steps=11`，确认差异化 acquire 机制在判别 Episode 中实际执行；
-- `left_contact_steps=11`、`right_contact_steps=17`、`simultaneous_contact_steps=11`；
-- 进入 `secure` 后接触丢失，`teacher_failure_stage=secure_timeout`；
-- `maximum_lift_m=0`、`maximum_controlled_target_progress=0`；
-- `0` safety intervention、`0` actual severe collision、最大 forbidden force `0N`；
-- artifact：
-  `runs/research-loop/0020/development/reopened-candidate-seed-19001.json`；
-- SHA-256：
-  `870321f7c935b84dc8899fb8bec34b7ae2405e38a58bba3b77e65004d733c170`；
-  `5,671` bytes。
+- `0/1` success;
+- ran `1200` steps and ended with `bimanual_task_timeout`;
+- stages reached:
+  `approach/acquire/secure/failed_hold`;
+- `maximum_concurrent_steps=11`, confirming that the differentiating acquire mechanism was actually
+  executed in the discrimination Episode;
+- `left_contact_steps=11`, `right_contact_steps=17`, `simultaneous_contact_steps=11`;
+- contact was lost after entering `secure`, with `teacher_failure_stage=secure_timeout`;
+- `maximum_lift_m=0`, `maximum_controlled_target_progress=0`;
+- `0` safety intervention, `0` actual severe collision, maximum forbidden force `0N`;
+- artifact:
+  `runs/research-loop/0020/development/reopened-candidate-seed-19001.json`;
+- SHA-256:
+  `870321f7c935b84dc8899fb8bec34b7ae2405e38a58bba3b77e65004d733c170`;
+  `5,671` bytes.
 
-完整 seed 19001 未端到端成功，因此不满足 cohort 升级条件。development cohort
-`19001`～`19004`、confirmation 和 sealed final 均为 `not_run`。
+The complete seed 19001 Episode did not succeed end to end, so the cohort promotion condition was
+not met. The development cohort `19001`–`19004`, confirmation, and sealed final were all
+`not_run`.
 
-## 第二次重开前的证据重分类
+## Evidence Reclassification Before the Second Reopening
 
-提交 `fc8938c` 后，smoke 011、旧 freeze manifest 与
-`reopened-candidate-seed-19001.json` 保留原文件、名称和 hash，但结论边界修订如下：
+After commit `fc8938c`, smoke 011, the old freeze manifest, and
+`reopened-candidate-seed-19001.json` retained their original files, names, and hashes, but the
+conclusion boundaries were revised as follows:
 
-- smoke 011 只证明 acquire 子目标达到 `11` step 双臂接触并进入 `secure`；
-- 旧 `behavior-entry-freeze.json` 冻结的是过早 entry 定义，现视为历史 pre-entry manifest；
-- 完整 Episode 的 `secure` stage 从 step 203 开始，但立即切回静态 joint target 和
-  `GRASP_GRIPPER`；接触随后丢失并 `secure_timeout`；
-- 该 Episode 的 `maximum_lift_m=0`、`maximum_controlled_target_progress=0`，没有执行任何
-  payload-relative lift action；
-- 因此它重新归类为 pre-entry implementation result，不是冻结候选判别结果，不计为路线失败
-  或无进展轮次。
+- smoke 011 proves only that the `acquire` subgoal reached `11` steps of bimanual contact and
+  entered `secure`;
+- the old `behavior-entry-freeze.json` froze an entry definition that was too early and is now
+  treated as a historical pre-entry manifest;
+- the complete Episode's `secure` stage began at step 203, but immediately switched back to a
+  static joint target and `GRASP_GRIPPER`; contact was then lost and `secure_timeout` occurred;
+- that Episode had `maximum_lift_m=0` and `maximum_controlled_target_progress=0`, and executed no
+  payload-relative lift action;
+- it is therefore reclassified as a pre-entry implementation result, not a frozen candidate
+  discrimination result, and does not count as route failure or a no-progress round.
 
-R0020 已第二次重新打开；后续 smoke 从 `012` 开始，沿用剩余 `13` smoke / 约 `100` 分钟
-debug 预算。修正后的 behavior entry 与候选判别合同见 `01-experiment.md`。
+R0020 was reopened for a second time; subsequent smokes start at `012` and carry forward the
+remaining `13` smokes / approximately `100` minutes of debugging budget. The corrected behavior
+entry and candidate-discrimination contract are in `01-experiment.md`.
 
-## 第一次重开收尾验证
+## First Reopening Closeout Verification
 
-- R0020 focused tests：`9 passed`。
-- bimanual 相关回归：`55 passed in 48.70s`。
-- Python 尺寸检查：`466` 个文件通过，文件不超过 800 行、函数不超过 200 行。
-- architecture check：通过。
-- `git diff --check`：通过。
+- R0020 focused tests: `9 passed`.
+- Bimanual-related regression: `55 passed in 48.70s`.
+- Python size check: `466` files passed; no file exceeded 800 lines and no function exceeded 200
+  lines.
+- architecture check: passed.
+- `git diff --check`: passed.
 
-## 第二次重开结果
+## Second Reopening Results
 
-第二次重开只修改 `acquire → secure` 控制连续性：
+The second reopening changed only `acquire → secure` control continuity:
 
-- `secure` 延续 acquire 已成功的在线 pad/handle 几何、signed-distance、contact feedback
-  和 gripper target，不再切回静态 joint target；
-- 现有 payload-relative lift tracker 的 gripper target 从 `GRASP_GRIPPER` 改为 `1.0`，
-  保持 acquire/secure 已建立的夹持预载；
-- 未修改 transport、place、release 或 stabilize。
+- `secure` carries forward the successful online pad/handle geometry, signed distance, contact
+  feedback, and gripper target from `acquire` instead of switching back to a static joint target;
+- the gripper target of the existing payload-relative lift tracker was changed from
+  `GRASP_GRIPPER` to `1.0`, preserving the grasp preload established by `acquire/secure`;
+- `transport`, `place`, `release`, and `stabilize` were not modified.
 
 ### Smoke 012
 
-命令：
+Command:
 
 ```bash
 MUJOCO_GL=glfw .venv/bin/python - <<'PY'
 # bounded R0020 secure-handoff smoke, seed=19001, max_steps=420
-# 完整逐步记录写入下述 artifact
+# Full step-by-step records are written to the artifact below
 PY
 ```
 
-结果：
+Results:
 
-- `219` control step；
-- acquire 后在 `secure` 保持连续接触，`maximum_concurrent_steps=26`；
-- controller 实际进入 `lift`；
-- step 218 生成并经正式接口执行一个 payload-relative lift action：
-  左右臂归一化 `vz=0.3166666667`，左右 gripper target 均为 `1.0`；
-- action 未被安全层修改；
-- action 后继 observation 中左右双 pad contact 均保持；
-- `0` safety intervention、`0` actual severe collision；
-- 修正后的 behavior entry：达到；
-- artifact：
-  `runs/research-loop/0020/debug/smoke-012-secure-continuity.json`；
-- SHA-256：
-  `1dbdf6d665c93ac34b632087f5a37da0d1543af7feedb86bcd8a2199d5afbbc3`。
+- `219` control steps;
+- after `acquire`, continuous contact was maintained in `secure`, with
+  `maximum_concurrent_steps=26`;
+- the controller actually entered `lift`;
+- at step 218, one payload-relative lift action was generated and executed through the formal
+  interface: normalized `vz=0.3166666667` for both arms, with both gripper targets equal to `1.0`;
+- the action was not modified by the safety layer;
+- both dual-pad contacts remained in the observation following the action;
+- `0` safety intervention, `0` actual severe collision;
+- corrected behavior entry: reached;
+- artifact:
+  `runs/research-loop/0020/debug/smoke-012-secure-continuity.json`;
+- SHA-256:
+  `1dbdf6d665c93ac34b632087f5a37da0d1543af7feedb86bcd8a2199d5afbbc3`.
 
-第二次重开只使用 smoke 012，未超过剩余 13-smoke / 约 100 分钟 debug 预算。
+The second reopening used only smoke 012 and did not exceed the remaining 13-smoke /
+approximately 100-minute debugging budget.
 
 ### Freeze v2
 
-- manifest：
-  `runs/research-loop/0020/debug/behavior-entry-freeze-v2.json`；
-- SHA-256：
-  `87c54df07a71a2b6ed6ad4a666ad1670783834fd83526962d7fb8f47962ab8b8`；
-- 冻结源码：
-  `joint_basket_acquire.py`、
-  `joint_basket_planner.py`、
-  `joint_basket_teacher.py`；
-- 完整 Episode 后复核三个源码 hash 均与 manifest 一致。
+- manifest:
+  `runs/research-loop/0020/debug/behavior-entry-freeze-v2.json`;
+- SHA-256:
+  `87c54df07a71a2b6ed6ad4a666ad1670783834fd83526962d7fb8f47962ab8b8`;
+- Frozen source:
+  `joint_basket_acquire.py`,
+  `joint_basket_planner.py`,
+  `joint_basket_teacher.py`;
+- All three source hashes were reverified after the complete Episode and matched the manifest.
 
-### 冻结候选判别 v2
+### Frozen Candidate Discrimination v2
 
-达到修正后的 entry 后运行且只运行一个完整 seed 19001 Episode：
+After reaching the corrected entry, exactly one complete seed 19001 Episode was run:
 
 ```bash
 MUJOCO_GL=glfw .venv/bin/python -m hwr.apps.evaluate_joint_basket_teacher \
@@ -247,24 +275,24 @@ MUJOCO_GL=glfw .venv/bin/python -m hwr.apps.evaluate_joint_basket_teacher \
   --output runs/research-loop/0020/development/reopened-v2-candidate-seed-19001.json
 ```
 
-结果：
+Results:
 
-- `0/1` success；
-- `1200` step，`bimanual_task_timeout`；
-- stages reached：
-  `approach/acquire/secure/lift/failed_hold`；
-- `maximum_concurrent_steps=26`；
-- `left_contact_steps=26`、`right_contact_steps=32`、
-  `simultaneous_contact_steps=26`；
-- payload-relative lift tracker 在 step 218～226 共执行 `9` 个 control step，随后双臂接触
-  丢失，`teacher_failure_stage=lift_contact_lost`；
-- `maximum_lift_m=0`、`maximum_controlled_target_progress=0`；
-- `0` safety intervention、`0` actual severe collision、最大 forbidden force `0N`；
-- artifact：
-  `runs/research-loop/0020/development/reopened-v2-candidate-seed-19001.json`；
-- SHA-256：
-  `f933c511ce56faec806c23005015caebc9d896ab9934e34567384b10c4cc1689`；
-  `6,161` bytes。
+- `0/1` success;
+- `1200` steps, `bimanual_task_timeout`;
+- stages reached:
+  `approach/acquire/secure/lift/failed_hold`;
+- `maximum_concurrent_steps=26`;
+- `left_contact_steps=26`, `right_contact_steps=32`,
+  `simultaneous_contact_steps=26`;
+- the payload-relative lift tracker executed `9` control steps from step 218–226, after which
+  bimanual contact was lost, with `teacher_failure_stage=lift_contact_lost`;
+- `maximum_lift_m=0`, `maximum_controlled_target_progress=0`;
+- `0` safety intervention, `0` actual severe collision, maximum forbidden force `0N`;
+- artifact:
+  `runs/research-loop/0020/development/reopened-v2-candidate-seed-19001.json`;
+- SHA-256:
+  `f933c511ce56faec806c23005015caebc9d896ab9934e34567384b10c4cc1689`;
+  `6,161` bytes.
 
-完整 seed 19001 没有端到端成功，因此不运行 `19001`～`19004` development cohort。
-confirmation 与 sealed final 继续为 `not_run`。
+The complete seed 19001 Episode did not succeed end to end, so the `19001`–`19004` development
+cohort was not run. confirmation and sealed final remain `not_run`.

@@ -1,40 +1,48 @@
-# R0020 上下文
+# R0020 Context
 
-## 起点
+## Starting Point
 
-- 用户于 2026-08-31 明确授权启动 R0020。
-- 起始提交：`2ed7edd13b3edb003ba9fd53e04a1b693485eda8`。
-- 分支：`feat/research-loop`；启动时 worktree 干净，本地领先远端 4 个提交。
-- 当前能力等级：`L0 未通过`。
-- 唯一目标：为 `carry_living_room_basket/v1` 建立完整 privileged teacher/oracle
-  ceiling。
+- The user explicitly authorized starting R0020 on 2026-08-31.
+- Starting commit: `2ed7edd13b3edb003ba9fd53e04a1b693485eda8`.
+- Branch: `feat/research-loop`; the worktree was clean at startup, and the local branch was 4
+  commits ahead of the remote.
+- Current capability level: `L0 not passed`.
+- Sole objective: establish a complete privileged teacher/oracle ceiling for
+  `carry_living_room_basket/v1`.
 
-## R0019 边界
+## R0019 Boundary
 
-- R0019 已结束且结论为 `invalid`；本轮不修改或续写 `docs/research-loop/0019/`。
-- R0019 的独立逐臂 CEM 只优化抓取末态，后续使用固定 transport twist；它只在
-  development seed 19001 形成过双臂接触，随后失去接触，未实现完整成功状态机。
-- 本轮不复制 R0019 runner 的 source hash、clean-worktree、qualification report 或
-  confirmation provenance 门禁。
-- R0019 的接触观察可作为开发线索，但不能作为 R0020 成功或能力证据。
+- R0019 is closed with the conclusion `invalid`; this round does not modify or continue
+  `docs/research-loop/0019/`.
+- R0019's independent per-arm CEM optimized only the grasp terminal state and then used a fixed
+  transport twist; it formed bimanual contact only on development seed 19001, subsequently lost
+  contact, and did not implement the complete success state machine.
+- This round does not copy R0019 runner's source hash, clean-worktree, qualification report, or
+  confirmation provenance gates.
+- R0019's contact observations may serve as development clues, but not as R0020 success or
+  capability evidence.
 
-## 当前最短板与证据边界
+## Current Shortest Board and Evidence Boundary
 
-- 最短板仍是最简单正式任务没有完整 L0 oracle ceiling。
-- 本轮只做 `development`：允许读取 simulator-private 的机器人、篮子、把手、目标和接触
-  状态。
-- teacher 必须经正式 16 维动作接口、原始 MuJoCo 物理、`DualArmSafetySupervisor` 和两步
-  predictive collision filter 执行；不得 teleport、直接改写权威 `MjData`、绕过安全层、
-  修改任务成功条件或改变物理参数。
-- confirmation 与 sealed final 均为 `not_run`；本轮不会开启。
+- The shortest board remains that the simplest formal task has no complete L0 oracle ceiling.
+- This round is `development` only: reading simulator-private robot, basket, handle, target, and
+  contact states is allowed.
+- The teacher must execute through the formal 16-dimensional action interface, original MuJoCo
+  physics, `DualArmSafetySupervisor`, and the two-step predictive collision filter; it must not
+  teleport, directly rewrite the authoritative `MjData`, bypass the safety layer, modify task
+  success conditions, or change physics parameters.
+- Both confirmation and sealed final are `not_run`; this round will not start them.
 
-## 2026-08-31 重开
+## Reopened on 2026-08-31
 
-- 用户在提交 `f7b27a38b1b2ccbbeba8a8f3783c7feed646b203` 后明确授权重新打开 R0020；
-  主假设不变，不创建 R0021。
-- `f7b27a3` 明确 attempt 1～3 是代码变化后的 implementation iteration，未达到
-  behavior entry，不是独立重复证据，也不足以判定联合规划路线失败。
-- 撤销“R0018～R0020 连续三轮无能力进展”的判断：R0018 是旧机制归档，R0019 为
-  `invalid`，旧 R0020 尚未 behavior-ready。
-- 重开阶段只处理 `acquire`：联合 planner 生成无非法 robot–basket 穿透的可执行近场路径，
-  在线 tracker 使用 pad/handle 几何和真实接触反馈完成对中与闭爪。
+- After commit `f7b27a38b1b2ccbbeba8a8f3783c7feed646b203`, the user explicitly authorized
+  reopening R0020; the main hypothesis is unchanged, and R0021 is not created.
+- `f7b27a3` explicitly classifies attempts 1–3 as implementation iterations after code changes;
+  they did not reach behavior entry, are not independent repeated evidence, and are insufficient
+  to determine that the joint-planning route failed.
+- Revoke the judgment that there were “three consecutive rounds without capability progress from
+  R0018 to R0020”: R0018 is an archive of an old mechanism, R0019 is `invalid`, and the old R0020
+  was not yet behavior-ready.
+- The reopened phase addresses `acquire` only: the joint planner generates an executable
+  near-field path without illegal robot–basket penetration, and the online tracker uses pad/handle
+  geometry and actual contact feedback to complete alignment and close the grippers.

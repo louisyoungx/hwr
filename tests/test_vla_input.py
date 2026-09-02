@@ -26,7 +26,7 @@ def _processed_vision():
         timestamp_ns=0,
         sequence_id=0,
         task_id="housework/v1",
-        instruction=NaturalLanguageInstruction("双手搬运托盘"),
+        instruction=NaturalLanguageInstruction("Carry a tray with both hands"),
         proprioception=DualArmProprioception(
             (0.0,) * 6,
             (0.0,) * 6,

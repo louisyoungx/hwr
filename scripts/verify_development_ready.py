@@ -45,9 +45,9 @@ FORBIDDEN_TASK_LITERALS = (
     "basket",
     "tray",
     "drawer",
-    "收纳篮",
-    "托盘",
-    "抽屉",
+    "storage basket",
+    "tray",
+    "drawer",
 )
 FOUNDATION_ALGORITHM_PATTERNS = (
     "src/hwr/adapters/foundation/*.py",

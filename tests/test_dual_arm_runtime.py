@@ -79,7 +79,7 @@ def test_observation_exposes_both_arms_and_four_deployable_cameras() -> None:
         observation.camera_calibrations[2].robot_from_camera,
         observation.camera_calibrations[3].robot_from_camera,
     )
-    assert observation.instruction.text == "同时控制左右机械臂完成任务"
+    assert observation.instruction.text == "Control both robotic arms simultaneously to complete the task"
     assert not hasattr(observation, "features")
     assert not hasattr(observation, "task_stage")
     assert not hasattr(observation, "reward")

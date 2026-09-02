@@ -1,262 +1,183 @@
-# 家务机器人能力优先研究规则
+# Housework Robot Capability-First Research Rules
 
-## 1. 北极星目标
+## 1. North Star Objective
 
-项目目标是持续提高家务机器人的闭环物理能力，最终关注任务、物体、布局、语言、动力学和
-硬件迁移上的泛化，以及成功率、安全性、数据效率和计算效率。
+The project aims to continuously improve the closed-loop physical capabilities of the housework robot, with ultimate focus on generalization across tasks, objects, layouts, language, dynamics, and hardware transfer, as well as success rate, safety, data efficiency, and compute efficiency.
 
-研究循环首先优化“到下一个可观察能力里程碑的距离”，而不是文档数量、门禁数量、测试
-数量、artifact 完备度或 `accepted` 条目数量。基础设施和测量工作只有在直接解锁行为实验、
-排除高价值路线或保护最终结论时才有价值。
+The research loop first optimizes “distance to the next observable capability milestone,” not the number of documents, gates, tests, artifact completeness, or `accepted` entries. Infrastructure and measurement work is valuable only when it directly unlocks a behavior experiment, rules out a high-value route, or protects a final conclusion.
 
-现有世界模型、强化学习、candidate generator、B0–B7 primitive、评测合同和文档都只是
-可修改的历史基线，不是必须维护的架构。世界模型路线必须和更简单的行为克隆、状态策略、
-视觉策略或其他可复现基线公平比较，不能因历史投入而自动保留主线地位。
+The existing world model, reinforcement learning, candidate generator, B0–B7 primitives, evaluation contract, and documents are all modifiable historical baselines, not architecture that must be preserved. The world-model route must be fairly compared with simpler behavior cloning, state policies, visual policies, or other reproducible baselines; prior investment cannot automatically keep it as the mainline.
 
-## 2. 最终结论与开发证据分层
+## 2. Final Claims and Development-Evidence Tiers
 
-必须区分三类证据，不能用最高等级的要求阻塞低成本开发，也不能用低等级证据冒充能力：
+Three evidence tiers must be distinguished. The requirements of the highest tier must not block low-cost development, and low-tier evidence must not be presented as capability:
 
-1. `development`：定位系统可解性和瓶颈。
-   - 允许使用 simulator-private state、脚本或规划 teacher、人工阶段、固定任务、固定布局、
-     见过的 seed、稠密诊断指标和短程 smoke。
-   - 允许用 teacher 生成训练数据。
-   - 结果只能称为开发证据或可行性上界，不进入能力基线。
-2. `capability`：验证可部署策略在冻结分布上的闭环行为改善。
-   - 策略只能使用声明的部署观测；评测保持真实物理、成功状态机和独立安全层。
-   - 使用结果前冻结的 paired seed、预算、主要指标和守护指标。
-   - 只有这一层可以产生 `accepted_capability` 并推进 `L2` 及以后的能力阶梯；`L0`、`L1`
-     的开发里程碑按第 3 节处理。
-3. `claim`：验证未见分布泛化或硬件迁移。
-   - 模型、阈值和源码提交冻结后才生成或开启密封评测。
-   - 报告全部 seed、失败、安全事件、计算成本和置信区间。
-   - 只有这一层可以产生对外的泛化或硬件能力结论。
+1. `development`: Locate system solvability and bottlenecks.
+   - `simulator-private state`, scripted or planned teachers, manual stages, fixed tasks, fixed layouts, seen seeds, dense diagnostic metrics, and short smokes are allowed.
+   - Teachers may be used to generate training data.
+   - Results may only be called development evidence or a feasibility upper bound and do not enter the capability baseline.
+2. `capability`: Verify closed-loop behavioral improvement by a deployable policy on a frozen distribution.
+   - The policy may use only declared deployment observations; evaluation retains real physics, the success state machine, and an independent safety layer.
+   - Paired seeds, budget, primary metrics, and guard metrics are frozen before results are used.
+   - Only this tier can produce `accepted_capability` and advance the capability ladder at `L2` and beyond; development milestones at `L0` and `L1` follow Section 3.
+3. `claim`: Verify generalization to unseen distributions or hardware transfer.
+   - Sealed evaluation is generated or opened only after the model, thresholds, and source commit are frozen.
+   - Report all seeds, failures, safety events, compute cost, and confidence intervals.
+   - Only this tier can produce an external generalization or hardware-capability claim.
 
-任何脚本动作、特权状态或 teacher 进入 `capability`/`claim` policy 输入、动作或评测决策，
-都属于无效实验。反之，不得以“最终策略不能使用 teacher”为由禁止 `development` 阶段建立
-oracle ceiling、采集演示或定位控制缺陷。
+Any scripted action, privileged state, or teacher entering `capability`/`claim` policy inputs, actions, or evaluation decisions makes the experiment invalid. Conversely, the fact that the final policy cannot use a teacher must not prohibit establishing an oracle ceiling, collecting demonstrations, or locating control defects during `development`.
 
-## 3. 当前能力阶梯
+## 3. Current Capability Ladder
 
-研究必须按以下阶梯推进；原则上一次最多跨越一级：
+Research must advance along the following ladder; in principle, it may cross at most one level at a time:
 
-| 等级 | 目标 | 最低证据 |
+| Level | Goal | Minimum evidence |
 |---|---|---|
-| `L0` | 任务与控制链可解 | 特权 teacher 在正常物理和安全层下稳定成功 |
-| `L1` | 状态策略可学 | 使用结构化仿真状态、但不使用脚本动作的学习策略闭环成功 |
-| `L2` | 视觉策略可学 | RGB-D/语言/本体策略在单任务未见 seed 上成功 |
-| `L3` | 单任务域泛化 | 对位置、外观、质量、摩擦或延迟逐项泛化 |
-| `L4` | 多任务能力 | 多个任务分别达到冻结成功门，不以平均值掩盖失败任务 |
-| `L5` | 组合与未见分布泛化 | 新物体、布局、语言或动力学上的密封闭环评测 |
-| `L6` | 硬件迁移 | 真机闭环成功与独立安全证据 |
+| `L0` | Task and control chain are solvable | A privileged teacher succeeds consistently under normal physics and the safety layer |
+| `L1` | A state policy is learnable | A learning policy using structured simulation state but no scripted actions succeeds in closed loop |
+| `L2` | A visual policy is learnable | An RGB-D/language/proprioception policy succeeds on unseen seeds for a single task |
+| `L3` | Single-task domain generalization | Generalization across position, appearance, mass, friction, or latency individually |
+| `L4` | Multi-task capability | Multiple tasks each meet the frozen success gate, without hiding failures behind an average |
+| `L5` | Compositional and unseen-distribution generalization | Sealed closed-loop evaluation on new objects, layouts, language, or dynamics |
+| `L6` | Hardware transfer | Closed-loop success on the real robot with independent safety evidence |
 
-`L0` 和 `L1` 是开发里程碑，不代表可部署视觉能力；它们可以用 `validated_development` 推进。
-`L2` 以后只有满足对应冻结评测的 `accepted_capability` 才能推进。
+`L0` and `L1` are development milestones, not deployable visual capability; they may advance with `validated_development`. From `L2` onward, only `accepted_capability` under the corresponding frozen evaluation can advance the ladder.
 
-当前项目研究阶梯为 `L0 未通过`：最新完整三维世界模型基线只有 24 Episode、1,600 update、
-0 success，Actor 未解锁。R0019 的 paired development cohort 中，generic baseline 与
-privileged teacher 均为 `0/6` success；teacher 只在 `1/6` seed 形成真实双臂接触，最长
-`83` step，尚未建立完整的抓取、抬升、搬运、放置、释放和稳定闭环，也没有启动 confirmation。
-R0020 的三个 seed 19001 运行发生在三次代码修改之后，只到达 `approach/acquire`，没有执行其
-声称区别于 R0019 的 payload-relative lift/transport 机制；它们属于实现迭代，不是三次独立
-重复，也不足以把联合规划路线计为一个可判别失败。R0018 属于旧机制归档，R0019 为
-`invalid`，因此不得用 R0018～R0020 触发“三轮无进展”停止。
-R0020 重开后已用在线 pad/handle feedback 达到 11-step 双臂接触并进入 `secure`；冻结实现的
-完整 Episode 随即在 `secure` 丢失接触，未执行任何 `lift` 或 payload-relative action。该结果
-验证了 acquire 子目标并淘汰当前 acquire→secure 交接实现，但仍未执行主假设的差异化
-payload-relative 机制，不能作为路线失败或可计数无进展轮次。
-`docs/research-loop/0001/`～`0018/` 为旧机制档案；其测量证据可以复用，但不能把任何
-`accepted as ... contract/evidence` 当作能力进展。
+The project's current research ladder is `L0 not passed`: the latest complete 3D world-model baseline has only 24 Episodes, 1,600 updates, and 0 success; the Actor is not unlocked. In R0019's paired development cohort, both the generic baseline and privileged teacher achieved `0/6` success; the teacher formed real bimanual contact on only `1/6` seeds, lasting at most `83` steps, and did not establish a complete grasp, lift, transport, place, release, and stable closed loop; confirmation was not started. The three R0020 runs on seed 19001 occurred after three code changes, reached only `approach/acquire`, and did not execute the payload-relative lift/transport mechanism claimed as the distinction from R0019; they are implementation iterations, not three independent repetitions, and are insufficient to count the joint-planning route as a discriminating failure. R0018 is archived under the old mechanism, and R0019 is `invalid`, so R0018–R0020 must not trigger the “three rounds without progress” stop.
+After R0020 was reopened, online pad/handle feedback reached 11-step bimanual contact and entered `secure`; the frozen implementation then lost contact in the complete Episode at `secure`, without executing any `lift` or payload-relative action. This result validates the acquire subgoal and eliminates the current acquire→secure handoff implementation, but the differentiated payload-relative mechanism of the main hypothesis was still not executed, so this cannot count as route failure or as a countable no-progress round.
+`docs/research-loop/0001/`–`0018/` are archives of the old mechanism. Their measurement evidence may be reused, but no `accepted as ... contract/evidence` entry may be treated as capability progress.
 
-下一轮默认优先建立最简单正式任务的 `L0` oracle ceiling。若 `L0` 未通过，禁止把主要资源
-投入世界模型、Actor、开放世界泛化或更深的 evaluator provenance。
+By default, the next round should first establish the `L0` oracle ceiling for the simplest formal task. If `L0` has not passed, do not devote primary resources to the world model, Actor, open-world generalization, or deeper evaluator provenance.
 
-## 4. 开发集、确认集和最终评测隔离
+## 4. Development, Confirmation, and Final-Evaluation Isolation
 
-- `development set`：允许反复查看和调试，必须明确标记，不能用于确认性结论。
-- `confirmation set`：候选和阈值冻结后运行，用于 `capability` 判定；看过结果后即转为开发集。
-- `sealed final set`：只用于 `claim`；模型与代码冻结后由独立 seed domain 生成或开启。
-- 未运行或不适用的 evidence 必须明确记为 `not_run` 或 `not_applicable`；不得以
-  `valid: true`、`passed` 或等价状态表示未执行的 confirmation/final evidence。
-- R0001–R0018 反复使用且 outcome 已暴露的 24-Episode bank 只可作为 development set。
-- 不得为了补齐 cell、提高功效或满足门槛而挑换 seed、删除失败 Episode 或重命名已见样本。
+- `development set`: May be inspected and debugged repeatedly, but must be explicitly labeled and cannot support confirmation claims.
+- `confirmation set`: Run after the candidate and thresholds are frozen to determine `capability`; once its results have been viewed, it becomes a development set.
+- `sealed final set`: Used only for `claim`; generated or opened from an independent seed domain after the model and code are frozen.
+- Evidence that was not run or is not applicable must be explicitly marked `not_run` or `not_applicable`; `valid: true`, `passed`, or equivalent states must not represent unrun confirmation/final evidence.
+- The 24-Episode bank repeatedly used in R0001–R0018, whose outcomes are exposed, may only be used as a development set.
+- Do not swap seeds, delete failed Episodes, or rename seen samples to fill cells, increase power, or meet a threshold.
 
-一次安全拒绝、候选为空或普通任务失败，应作为该 Episode 的失败结果进入总账；除非发生
-基础设施损坏、数据污染或评测泄露，否则不得让单个失败自动作废并停止整个 cohort。
-最终评测和硬件执行不得削弱安全约束；仿真开发可以使用独立诊断配置，但必须与最终安全
-配置分账，且不能据此宣称能力改善。
+A safety rejection, empty candidate set, or ordinary task failure must enter the ledger as a failure for that Episode. Unless infrastructure damage, data contamination, or evaluation leakage occurs, one failure must not automatically invalidate the Episode or stop the entire cohort. Final evaluation and hardware execution must not weaken safety constraints; simulation development may use a separate diagnostic configuration, but it must be accounted for separately from the final safety configuration and cannot support a claim of capability improvement.
 
-## 5. 防止研究死循环的硬规则
+## 5. Hard Rules Against Research Loops
 
-1. 一个能力假设最多允许一层新增前置诊断。
-   - 如果诊断本身还需要新的 oracle、contract、lineage 或资格门，必须合并成一次最小验证，
-     或放弃该路线；不得继续生成 P79→P80→P83→P87→P88 式依赖链。
-2. 不允许连续两个纯诊断轮次。
-   - 每轮原则上必须包含至少一次真实 physics behavior run：动作、接触、任务或学习策略闭环。
-   - 例外只限明确的基础设施阻塞；阻塞修复必须留在同一轮，不能另开新轮制造进展感。
-3. 资源目标为：至少 70% 用于行为/训练实验，至多 20% 用于诊断，至多 10% 用于评测基础设施。
-   若本轮偏离，`03-summary.md` 必须说明原因和恢复计划。
-4. 同一瓶颈连续两个**可判别候选**失败后，必须比较另一条技术路线；不得只在同一 artifact、
-   阈值、mask、hash 或 evaluator 上继续细化。可判别候选必须在正常 physics 中实际执行至少
-   一次预先声明的差异化机制；在进入该机制前失败，只是实现就绪失败，不计为路线比较。
-5. 连续三个**可计数轮次**没有能力阶梯进展时，研究循环强制停止。轮次只有在候选的差异化
-   机制已实际进入 physics behavior、结果足以支持预先声明的路线判断时才计数：
-   - 旧规则下的归档轮次、`invalid`、纯基础设施/纯诊断轮次不计数；
-   - `abandoned` 只有在差异化机制已被实际执行且预算足以产生路线证据时才计数；
-   - 同一 seed 上每次运行前代码发生变化的多次运行属于 implementation iteration，不是多个
-     独立候选、重复证据或多个轮次。
-   - 若当轮“不允许声明”明确禁止用结果判断或否定所研究路线，则该轮不具备路线级证据，
-     不得同时把它计为无进展轮次。
-   达到三个可计数轮次后，必须向用户报告：
-   - 已尝试路线；
-   - 失败证据；
-   - 是否应缩小任务、引入演示/预训练、改变架构或终止项目。
-   未经用户明确决定，不得自动创建第四轮。
-6. 每轮结束后不得自动启动下一会话。下一轮必须由用户明确启动。
-7. `validated_infrastructure`、`accepted_measurement`、测试通过、loss 下降和轨迹更好看都不
-   等于能力提升，不能推进能力阶梯。
+1. A capability hypothesis may add at most one layer of prerequisite diagnosis.
+   - If the diagnosis itself requires a new oracle, contract, lineage, or qualification gate, combine it into one minimal validation or abandon the route; do not continue a dependency chain like P79→P80→P83→P87→P88.
+2. Two consecutive purely diagnostic rounds are not allowed.
+   - In principle, every round must include at least one real `physics behavior run`: an action, contact event, task, or learning-policy closed loop.
+   - The only exception is an explicit infrastructure blocker; its repair must remain in the same round and must not create a new round merely to give an impression of progress.
+3. The resource target is at least 70% for behavior/training experiments, at most 20% for diagnosis, and at most 10% for evaluation infrastructure. If a round deviates, `03-summary.md` must explain why and provide a recovery plan.
+4. After two consecutive **discriminating candidates** fail on the same bottleneck, compare another technical route; do not keep refining the same artifact, threshold, mask, hash, or evaluator. A discriminating candidate must actually execute at least one predeclared differentiated mechanism in normal `physics`; failure before reaching that mechanism is only implementation-readiness failure and does not count as route comparison.
+5. The research loop must stop after three consecutive **countable rounds** without capability-ladder progress. A round is countable only when the candidate's differentiated mechanism has entered physics behavior and the result is sufficient for the predeclared route judgment:
+   - Archived rounds under the old rules, `invalid` rounds, and purely infrastructural/diagnostic rounds are not counted;
+   - `abandoned` is counted only when the differentiated mechanism was actually executed and the budget was sufficient to produce route evidence;
+   - Multiple runs on the same seed after code changes are implementation iterations, not independent candidates, repeated evidence, or multiple rounds;
+   - If the round explicitly says that no claim may be made and forbids using the result to judge or reject the route, it has no route-level evidence and must not simultaneously be counted as a no-progress round.
+   After three countable rounds, report to the user:
+   - the routes attempted;
+   - the failure evidence;
+   - whether to narrow the task, introduce demonstrations/pretraining, change the architecture, or terminate the project.
+   Do not automatically create a fourth round without the user's explicit decision.
+6. Do not automatically start the next session after a round ends. The next round must be explicitly started by the user.
+7. `validated_infrastructure`, `accepted_measurement`, passing tests, lower loss, and better-looking trajectories are not capability improvement and cannot advance the capability ladder.
 
-## 6. 提案和实验选择
+## 6. Proposal and Experiment Selection
 
-主 Agent 在每轮只选择一个主要能力瓶颈。候选优先级按以下顺序判断，而不是机械求和：
+The main Agent selects only one primary capability bottleneck per round. Rank candidates in the following order rather than by mechanical summation:
 
-1. 是否直接改变下一个能力等级的成功概率；
-2. 是否能用一次实验区分两条重要路线；
-3. 是否有更简单、更强的对照基线；
-4. 是否在当前数据和计算预算内可执行；
-5. 失败后是否仍能显著缩小决策空间。
+1. Does it directly change the probability of success at the next capability level?
+2. Can one experiment distinguish two important routes?
+3. Is there a simpler and stronger control baseline?
+4. Is it executable within the current data and compute budget?
+5. Will failure still substantially narrow the decision space?
 
-用端到端失败否定一条路线或定位系统瓶颈前，候选必须实际实现并尝试成功状态机所需的主要
-阶段。若候选只覆盖抓取、接触、搬运等子阶段，实验必须预先标为子目标，结论只能覆盖该子
-目标，不得把尚未实现的后续阶段归因于环境、机器人或整条技术路线。该规则不限制
-`development` teacher 的形式；脚本、规划、人工动作、遥操作、演示和探索性调参仍然允许。
+Before using an end-to-end failure to reject a route or locate a system bottleneck, a candidate must implement and attempt the major stages required by the success state machine. If a candidate covers only sub-stages such as grasping, contact, or transport, the experiment must be predeclared as a subgoal and its conclusion may cover only that subgoal; do not attribute unimplemented later stages to the environment, robot, or entire technical route. This rule does not restrict the form of a `development` teacher; scripts, planning, manual actions, teleoperation, demonstrations, and exploratory tuning remain allowed.
 
-`01-experiment.md` 必须同时写明候选的“差异化机制”和它开始发挥作用所需的最小 behavior
-entry condition。类字段、状态机分支、未到达的代码和静态几何解都不算机制已执行；必须有
-真实动作、动力学、接触或策略闭环记录。若在 entry condition 之前失败，结论只适用于当前
-实现，不能据此否定主假设、切换整条路线或累计无进展轮次。
+`01-experiment.md` must state both the candidate's “differentiated mechanism” and the minimum behavior entry condition required for it to begin operating. Class fields, state-machine branches, unreached code, and static geometric solutions do not count as mechanism execution; there must be a record of a real action, dynamics, contact, or policy closed loop. If the run fails before the entry condition, the conclusion applies only to the current implementation and cannot be used to reject the main hypothesis, switch the entire route, or accumulate a no-progress round.
 
-behavior entry 必须包含差异化机制生成的至少一个动作已经通过正式接口进入 physics，并观察
-到该动作之后的状态；仅满足前置接触门、刚切换到某个 stage、声明实现了后续分支或在切换后
-立即丢失前置条件，都不算差异化机制已执行。若差异化机制位于 `lift/transport`，entry 不能
-只定义为进入 `secure`；若本轮只准备检验 acquire 子目标，则必须把差异化机制和结论明确缩小
-到 acquire，不能同时用它累计完整路线的无进展轮次。
+Behavior entry must include at least one action generated by the differentiated mechanism entering `physics` through the formal interface, with the post-action state observed. Merely satisfying a prerequisite contact gate, switching to a stage, declaring a later branch implemented, or immediately losing the prerequisite after the switch does not count as execution of the differentiated mechanism. If the differentiated mechanism is in `lift/transport`, entry cannot be defined only as entering `secure`; if the round tests only an acquire subgoal, explicitly narrow the mechanism and conclusion to acquire and do not use it simultaneously to accumulate a no-progress round for the full route.
 
-当能力基线为 0 success 时：
+When the capability baseline is 0 success:
 
-- 先建立特权 oracle/teacher ceiling，证明环境、机器人、控制时域和安全合同可解；
-- 再建立 state-policy，隔离动作表达、优化和控制问题；
-- 再引入视觉、语言、多任务和 OOD；
-- 允许单任务、固定布局、课程、演示、行为克隆和预训练作为开发或训练方案；
-- 任何“从随机动作直接学习长时双臂稀疏奖励任务”的路线都必须和上述简单基线比较，
-  不能作为唯一正式路线。
+- First establish a privileged oracle/teacher ceiling to show that the environment, robot, control horizon, and safety contract are solvable;
+- then establish a state policy to isolate action representation, optimization, and control problems;
+- then introduce vision, language, multitask settings, and OOD;
+- single tasks, fixed layouts, curricula, demonstrations, behavior cloning, and pretraining are allowed as development or training methods;
+- any route that “learns a long-horizon bimanual sparse-reward task directly from random actions” must be compared with the simple baselines above and cannot be the only formal route.
 
-评测修复与能力改进不得放在同一个因果对比中，但评测修复不应自动占用一个新研究轮次。
-与主要指标无关的 source hash、AST 完备性、加密 fixture 或 whole-program provenance，只有在
-存在具体泄露路径且会改变实验结论时才能成为硬门。
+Evaluation repair and capability improvement must not be placed in the same causal comparison, but evaluation repair should not automatically consume a new research round. Source hashes, AST completeness, encrypted fixtures, or whole-program provenance unrelated to the primary metric may become hard gates only when a concrete leakage path exists and would change the experimental conclusion.
 
-## 7. Agent 组织
+## 7. Agent Organization
 
-- 主 Agent：维护能力阶梯、当前基线、实验选择、实现集成、运行与最终决策。
-- 创新 Agent：仅在存在两条以上可信路线时启用，默认 1–2 个；独立提出可执行假设。
-- 红队 Agent：对会改变行为或承载确认性结论的实验启用 1 个；重点检查泄露、不可归因改动、
-  safety 绕过和统计错误。
-- 实施 Agent：每个候选唯一负责人，明确文件所有权；不得扩展到未批准的第二主变量。
-- 不再为每个小修复固定启动 3 个创新 Agent、2 个筛选 Agent和清理 Agent。多 Agent 数量必须
-  与决策价值相称，不能让协调成本超过实验本身。
+- Main Agent: Maintains the capability ladder, current baseline, experiment selection, implementation integration, runs, and final decisions.
+- Innovation Agent: Enabled only when there are at least two credible routes, normally 1–2 agents; independently proposes executable hypotheses.
+- Red-team Agent: One agent is enabled for experiments that change behavior or carry confirmation claims; it focuses on leakage, unattributable changes, safety bypasses, and statistical errors.
+- Implementation Agent: The sole owner for each candidate, with explicit file ownership; it must not expand to an unapproved second primary variable.
+- Do not routinely launch 3 Innovation Agents, 2 screening Agents, and a cleanup Agent for every small fix. The number of agents must match decision value and must not make coordination cost exceed the experiment itself.
 
-主 Agent 必须亲自核对关键证据、最终 diff、运行命令和结果；不能只拼接子 Agent 结论。
+The main Agent must personally verify key evidence, the final diff, run commands, and results; it must not merely concatenate sub-Agent conclusions.
 
-## 8. 每轮文档与历史归档
+## 8. Per-Round Documents and Historical Archives
 
-新轮次使用四位递增目录：`docs/research-loop/<NNNN>/`。只有新的能力假设或用户明确要求
-启动新轮时才创建目录；同一假设的诊断、修复和复跑留在同一轮。
+New rounds use four-digit incrementing directories: `docs/research-loop/<NNNN>/`. Create a directory only for a new capability hypothesis or when the user explicitly requests a new round; keep diagnosis, repairs, and reruns for the same hypothesis in the same round.
 
-若用户明确要求继续一个被过早结束、但主假设没有变化的轮次，应重新打开原目录，在
-`01-experiment.md` 记录带理由的新预算/停止条件修订，并保留已有结果不改写；不得仅因目录
-曾标为“结束”就创建新编号。
+If the user explicitly requests continuation of a prematurely ended round whose main hypothesis has not changed, reopen the original directory, record the reasoned budget or stopping-condition revision in `01-experiment.md`, and preserve existing results without rewriting them; do not create a new number merely because the directory was marked “finished.”
 
-每轮只要求四份短文档：
+Each round requires only four short documents:
 
-- `00-context.md`：起始提交、当前能力等级、最短板、开发/确认/最终数据边界；
-- `01-experiment.md`：单一主假设、对照、指标、守护、seed、预算、停止条件和命令；
-- `02-results.md`：全部运行、失败、异常、资源和原始产物索引；
-- `03-summary.md`：能力等级是否变化、结论、保留/回退项和是否允许下一轮。
+- `00-context.md`: Starting commit, current capability level, shortest board, and development/confirmation/final data boundaries;
+- `01-experiment.md`: One main hypothesis, controls, metrics, guards, seeds, budget, stopping conditions, and commands;
+- `02-results.md`: All runs, failures, anomalies, resources, and an index of raw artifacts;
+- `03-summary.md`: Whether the capability level changed, conclusion, retained/reverted items, and whether the next round is allowed.
 
-凡是进入 `03-summary.md`、影响瓶颈判断或改变路线决策的补充探针，`02-results.md` 都必须
-记录其命令、seed、关键配置和原始产物索引。无法保留最小复核记录的探索，只能标为
-“未归档观察”，不得用于支撑正式结论。
+For every supplemental probe that enters `03-summary.md`, affects bottleneck judgment, or changes a route decision, `02-results.md` must record its command, seed, key configuration, and raw-artifact index. Exploration that cannot preserve a minimal review record may only be labeled an “unarchived observation” and cannot support a formal conclusion.
 
-可选的提案或审查材料放入 `notes/`，不强制生成固定篇数。文档优先中文，使用稳定 ID，
-但不得为已经结束的旧观点持续增加无限后缀来代替新的能力假设。
+Optional proposals or review materials go in `notes/`; no fixed number is required. Documents should preferably be in Chinese and use stable IDs, but do not keep adding infinite suffixes to finished old ideas instead of creating a new capability hypothesis.
 
-`docs/research-loop/0001/`～`0018/` 原位归档、保持路径和字节稳定，因为历史评测绑定了
-这些 Git tree。归档索引见 `docs/research-loop/archive/legacy-evidence-loop-0001-0018.md`。
-新轮不得修改这些目录，也不得把它们的格式继续复制成强制模板。
+`docs/research-loop/0001/`–`0018/` are archived in place with paths and bytes kept stable because historical evaluations are bound to these Git trees. See `docs/research-loop/archive/legacy-evidence-loop-0001-0018.md` for the archive index. New rounds must not modify these directories or continue copying their format as a mandatory template.
 
-## 9. 实施、训练与运行
+## 9. Implementation, Training, and Runs
 
-- 行为变化必须有与风险相称的测试；不要求为纯文档或一次性分析制造大规模框架。
-- 候选与基线使用相同 seed、任务定义、物理、安全配置和可比交互/计算预算。
-- 训练前记录源码提交、命令、配置、随机种子、数据来源和输出目录；确认性运行从干净、已提交
-  的 commit 启动。
-- 多阶段新控制器应按最早未通过阶段增量实现和验证；在抓取/接触等前序 behavior entry
-  condition 尚未达到时，不应把主要实现资源投入不会被执行的后续状态机。
-- 从 debug 冻结为候选前，behavior entry 必须覆盖相关阶段交接的控制连续性：至少执行一次
-  差异化机制动作并记录其后继 observation。若只在最后一个 smoke 的终止 step 达到 stage
-  标签，或完整 Episode 在首个后续动作前立即退回/失去接触，应继续算 implementation
-  readiness 问题，而不是启动或结束候选判别预算。
-- 每个新候选先有一个有界的 implementation/debug 预算，再有候选判别预算。debug 预算应按
-  墙钟时间、计算量和最大 probe 数共同约束，允许短程 physics smoke；不得只用几个运行仅数秒
-  的完整 Episode 代替实现就绪。候选判别预算从差异化机制首次满足 behavior entry condition
-  后开始。快速获得充分证据可以立即结束，不设最低研究时长。
-- 同一 seed 在代码变化后的复跑必须标为 implementation iteration。影响结论的关键版本需保留
-  commit、patch 或最小源码 hash；未保留版本的中间运行只能作为未归档调试观察，不能冒充
-  独立重复证据。
-- 先跑最小判别性实验；只有达到预设升级条件才扩大数据和计算预算。
-- 长时训练可以使用 tmux/宿主调度与看门狗；看门狗只负责同一 run 的存活和状态检查，
-  不得自动创建新研究轮、修改门槛或启动不同候选。
-- 训练失控、指标明显无望或超过冻结预算时停止并保留失败证据，不重复启动同一 run。
-- 不追求“让所有本机算力始终占满”；算力利用率服从实验价值和可归因性。
+- Behavioral changes must have tests proportionate to their risk; do not build a large framework for pure documentation or one-off analysis.
+- Candidates and baselines use the same seeds, task definition, physics, safety configuration, and comparable interaction/compute budget.
+- Record the source commit, command, configuration, random seeds, data source, and output directory before training; confirmation runs start from a clean, committed commit.
+- Implement and validate a new multistage controller incrementally from the earliest failed stage; do not spend primary implementation resources on later state-machine stages that cannot execute before the grasp/contact behavior entry condition is met.
+- Before freezing a debug implementation as a candidate, behavior entry must cover control continuity at the relevant stage handoff: execute at least one differentiated-mechanism action and record its successor observation. If a stage label is reached only at the terminal step of the last smoke, or a complete Episode immediately returns or loses contact before its first subsequent action, continue to treat this as an implementation-readiness issue rather than starting or ending the candidate-discrimination budget.
+- Every new candidate first receives a bounded implementation/debug budget and then a candidate-discrimination budget. Bound the debug budget jointly by wall-clock time, compute, and maximum probe count; short `physics` smokes are allowed, but a few full Episodes lasting only seconds must not substitute for implementation readiness. Candidate-discrimination budget starts when the differentiated mechanism first meets its behavior entry condition. It may end immediately once sufficient evidence is obtained; there is no minimum research duration.
+- A rerun on the same seed after code changes must be labeled an implementation iteration. Preserve a commit, patch, or minimal source hash for versions that affect the conclusion; unversioned intermediate runs are only unarchived debugging observations and cannot pose as independent repeated evidence.
+- Run the smallest discriminating experiment first; expand data and compute only after the preset escalation condition is met.
+- Long training may use tmux/host scheduling and a watchdog; the watchdog only keeps the same run alive and checks its state. It must not automatically create a new research round, change thresholds, or start a different candidate.
+- Stop and retain failure evidence when training diverges, metrics are clearly hopeless, or the frozen budget is exceeded; do not restart the same run.
+- Do not aim to keep all local compute permanently busy; utilization follows experiment value and attribution.
 
-推荐的基础对照顺序：privileged teacher → state BC → visual BC/序列策略 → world-model/RL
-challenger。更复杂方法只有在相同数据和计算预算下超过简单基线时才升级为主线。
+The recommended baseline order is: privileged teacher → state BC → visual BC/sequence policy → world-model/RL challenger. More complex methods become the mainline only after outperforming simpler baselines under the same data and compute budget.
 
-## 10. 结论词汇
+## 10. Conclusion Vocabulary
 
-每个候选只能使用以下之一：
+Each candidate may use only one of the following:
 
-- `accepted_capability`：冻结闭环主要指标改善，守护指标无不可接受回归，推进能力阶梯；
-- `rejected_capability`：能力假设被否定或净收益为负；
-- `inconclusive_capability`：`capability` 实验因功效或基础设施问题不足以判定，不用于纯
-  `development` 实验；
-- `validated_development`：预先声明的开发/测量/基础设施证据成立；只有完整满足 `L0` 或
-  `L1` 的预设最低证据时才能推进对应开发里程碑，不能成为可部署能力基线；
-- `invalid`：泄露、合同错误、数据污染、不可归因或实现偏离使实验无效；
-- `abandoned`：因价值不足、依赖递归或路线切换主动终止。
+- `accepted_capability`: Frozen closed-loop primary metrics improve with no unacceptable guard-metric regression, advancing the capability ladder;
+- `rejected_capability`: The capability hypothesis is rejected or its net benefit is negative;
+- `inconclusive_capability`: The `capability` experiment is insufficient to decide because of power or infrastructure problems; not used for pure `development` experiments;
+- `validated_development`: The predeclared development/measurement/infrastructure evidence holds; the corresponding development milestone advances only when all preset minimum evidence for `L0` or `L1` is met, and it cannot become a deployable capability baseline;
+- `invalid`: Leakage, contract errors, data contamination, lack of attribution, or implementation deviation invalidates the experiment;
+- `abandoned`: The candidate is actively terminated because of insufficient value, recursive dependencies, or a route change.
 
-只有 `accepted_capability` 可以成为新的可部署能力基线；`validated_development` 只能按上述
-条件推进 `L0`、`L1` 开发里程碑。任何结论都必须同时写明“允许声明”和“不允许声明”。
+Only `accepted_capability` can become a new deployable capability baseline; `validated_development` can advance `L0` and `L1` development milestones only under the conditions above. Every conclusion must state both “allowed claims” and “disallowed claims.”
 
-## 11. 收尾与停止
+## 11. Wrap-Up and Stopping
 
-轮次结束时：
+At the end of a round:
 
-1. 更新四份当轮文档和 `docs/research-loop/README.md` 的当前状态；
-2. 提交实现、配置和结果索引；大型可重建 artifact 不应仅为审计方便全部写入 Git；
-3. 保留当前基线、唯一原始数据、不可重建结果、最新可恢复 checkpoint 和确认性评测证据；
-4. 报告能力阶梯是否推进，以及下一项建议，但不自动执行下一轮；
-5. 若本轮没有 physics behavior run，或按第 5 节定义已连续三个可计数轮次无能力进展，必须
-   停止并请求用户决策。
+1. Update the four round documents and the current status in `docs/research-loop/README.md`;
+2. Commit the implementation, configuration, and result index; large reconstructible artifacts should not all be added to Git merely for audit convenience;
+3. Retain the current baseline, unique raw data, irreproducible results, the latest recoverable checkpoint, and confirmation-evaluation evidence;
+4. Report whether the capability ladder advanced and the next recommendation, but do not execute the next round automatically;
+5. If the round had no `physics behavior run`, or if three countable rounds have had no capability progress under Section 5, stop and request the user's decision.
 
-## 12. 新会话执行连续性
+## 12. New-Session Continuity
 
-收到“阅读 AGENTS.md 并启动新一轮”后，必须在同一回合实际检查工作区和归档索引，并开始
-可验证工作，不能只回复计划。但新 Agent 也必须先确认用户明确指定了新轮；不得由旧会话
-自行派生下一会话。
+After receiving “read AGENTS.md and start a new round,” the Agent must inspect the workspace and archive index in the same turn and begin verifiable work; it must not merely reply with a plan. However, a new Agent must first confirm that the user explicitly specified a new round; an old session must not derive a new session on its own.
 
-启动时必须先读取 `docs/research-loop/README.md` 和最新一轮总结，并枚举已有四位数目录；新
-目录取现有最大编号的下一号，不在长期规则中硬编码轮次编号。单一目标由当前能力阶梯和最新
-失败证据决定。只要当前仍为 `L0 未通过`，默认继续寻找最短的完整 privileged
-teacher/oracle ceiling，但不得把未覆盖完整成功状态机的子目标结果当作 L0 通过，也不得原样
-重复已经失败的候选。
+At startup, first read `docs/research-loop/README.md` and the latest round summary, and enumerate existing four-digit directories; the new directory is the next number after the current maximum, with no round number hard-coded in the long-term rules. Choose one objective from the current capability ladder and latest failure evidence. As long as the current status remains `L0 not passed`, by default continue seeking the shortest complete privileged teacher/oracle ceiling, but do not treat a subgoal result that does not cover the complete success state machine as an `L0` pass, and do not repeat an already failed candidate unchanged.

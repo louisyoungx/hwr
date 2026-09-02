@@ -1,168 +1,215 @@
-# 本机训练进度
+# Local Training Progress
 
-本文只记录可复查的训练事实和历史调整，不替代[当前训练范式](./foundation-world-model-training-paradigm.md)与最终验收门槛。P076～P080 已冻结为失败基线；统一开发门禁完成前不再启动策略训练。
+This document records only reviewable training facts and historical changes. It does not replace
+the [current training paradigm](./foundation-world-model-training-paradigm.md) or the final
+acceptance threshold. P076–P080 are frozen as the failed baseline; policy training will not
+restart until the unified development gate is complete.
 
-## 2026-08-14 “玩具闭环”阻断项修复完成，正式训练仍未启动
+## 2026-08-14 “Toy Loop” Blockers Fixed; Formal Training Still Not Started
 
-最新外部复核指出两条新的 P0：策略实际消费的跨相机/时序融合表示没有梯度，以及每个
-Episode 只保留首尾两个窗口导致交互片段从未进入 Replay。两项均按可训练性缺陷修复，没有
-通过降低因果、安全或成功门槛规避。
+The latest external review identified two new P0 issues: the cross-camera/temporal fused
+representation actually consumed by the policy had no gradient, and retaining only the first and
+last windows of each Episode meant interaction segments never entered Replay. Both were fixed as
+trainability defects, without avoiding them by lowering causality, safety, or success thresholds.
 
-视觉目标新增部署表示对齐，梯度必须穿过 `camera_fusion`、`temporal_fusion`、
-`temporal_position` 和 `output_norm`。新 `development-ready/v3` 不再只相信测试集合：它
-会在隔离提交上执行真实优化步，要求四部分的梯度非零且参数实际变化，任何回归都锁死训练。
+Vision objectives now include deployment-representation alignment; gradients must pass through
+`camera_fusion`, `temporal_fusion`, `temporal_position`, and `output_norm`. The new
+`development-ready/v3` no longer trusts the test suite alone: it performs a real optimization
+step on an isolated commit and requires nonzero gradients and actual parameter changes in all
+four components. Any regression locks training.
 
-普通 Replay 现在对每个自主 Episode 最多保留 7 个互不重叠的 16-transition 窗口，物理
-显著窗口优先，边界与均匀窗口补足。交互 trace 在切片时按 retained transition 重算，Actor
-准入不再读取已经被丢弃的 Episode 汇总证据。120 Episode 可保留 13,440 个 dynamics
-transition；其中每 Episode 只有 2 个窗口生成 DINOv3/SigLIP2 教师特征，控制视觉缓存成本。
+Ordinary Replay now retains at most 7 non-overlapping 16-transition windows per autonomous
+Episode, prioritizing physically salient windows and filling the remainder with boundary and
+uniform coverage. The interaction trace is recomputed from retained transitions when slicing,
+and Actor admission no longer reads discarded Episode summary evidence. A 120-Episode run can
+retain 13,440 dynamics transitions; only 2 windows per Episode generate DINOv3/SigLIP2 teacher
+features, controlling visual-cache cost.
 
-独立留出库仍与优化器物理隔离：启动时每任务采集 8 个 128-transition 系统辨识 Episode；
-另采集每任务 8+8 个安全动作干预正负 Episode，验证干预召回、PR-AUC、Brier、执行动作
-误差、未干预恒等误差与越界率；探索 Actor 解锁后再补采每任务 8+8 个严重碰撞正负 Episode。
-三类留出数据都不生成教师特征。当前未压缩资源上界约 `28.41 GiB`，超过 `30 GiB` 配置
-上限或空闲空间不足 `35 GiB` 时拒绝启动。
+The independent holdout remains physically isolated from optimizers: at startup, collect 8
+128-transition system-identification Episodes per task. Also collect 8+8 positive/negative
+safety-action-intervention Episodes per task to validate intervention recall, PR-AUC, Brier,
+executed-action error, non-intervention identity error, and out-of-bounds rate. After the
+exploration Actor unlocks, collect an additional 8+8 positive/negative severe-collision
+Episodes per task. None of the three holdout datasets generates teacher features. The current
+uncompressed resource upper bound is approximately `28.41 GiB`; startup is rejected above the
+`30 GiB` configuration limit or below `35 GiB` free space.
 
-动作可辨识 probe 改为预测关节速度、夹爪位置和底盘速度在 1/4/8/16 步后的变化，并按
-原始 Episode 聚类 bootstrap；物理动作因果门只约束视觉潜变量和本体动力学。奖励、终止、
-安全等稀疏头仍保存诊断，但不再被错误地要求使用同一个 `1.05` 动作打乱比率。碰撞头验证
-改为逐 transition 的终点召回、PR-AUC、Brier、误报率、碰撞时序对齐，以及固定后验状态
-下的动作打乱敏感性，禁止用 16 步窗口最大值掩盖错误告警时刻。
+The action-identifiability probe now predicts changes in joint velocity, gripper position, and
+base velocity 1/4/8/16 steps ahead, with bootstrap clustered by original Episode. The physical
+action-causality gate constrains only visual latents and proprioceptive dynamics. Sparse reward,
+termination, and safety heads remain diagnostic, but are no longer incorrectly required to use
+the same `1.05` action-shuffling ratio. Collision-head validation now uses per-transition
+endpoint recall, PR-AUC, Brier, false-positive rate, collision temporal alignment, and
+action-shuffling sensitivity at fixed posterior states; a 16-step window maximum may not conceal
+the wrong alert time.
 
-世界模型的通用“当前潜状态 + Actor 提议动作 -> 安全层实际执行动作”残差模型现在逐维
-受正式动作合同约束，监督
-来自 Replay 中真实的提议/执行动作对。任务 Actor 与内在探索 Actor 的想象轨迹都使用预测
-执行动作推进 RSSM，同时惩罚安全干预概率、动作改写幅度和严重碰撞；部署运行时的硬安全
-过滤器仍独立于学习模型。安全动作留出门不通过时两个 Actor 都不能训练或采集。
+The world model's generic “current latent state + Actor proposed action -> safety-layer executed
+action” residual model is now constrained dimension by dimension by the formal action contract,
+with supervision from real proposal/executed-action pairs in Replay. Imagined trajectories for
+both the task Actor and intrinsic exploration Actor advance the RSSM with predicted executed
+actions while penalizing safety-intervention probability, action-rewrite magnitude, and severe
+collisions. The hard safety filter in deployment remains independent of the learned model. When
+the safety-action holdout gate fails, neither Actor may train or collect data.
 
-训练与最终评测入口已从 `bimanual_household_v1` 代理任务迁移到三个正式多物体家庭场景：
-客厅收纳鸭子与足球、餐桌杯盘分别归位、厨房打开抽屉并收纳两瓶清洁剂。每个任务有 4 条
-训练指令和 3 条不重叠评测改写；评测使用更宽且部分分布外的质量、摩擦、光照、材质、RGB/
-depth 噪声、相机安装位姿/焦距、执行器比例、动作延迟和观测延迟。成功还要求左右臂分别
-接触并至少并发 0.5 秒。它使下一条谱系不再以代理基准冒充家庭任务，但代码完成仍不等于
-模型已有能力；在全量门禁及后续训练/评测通过前，项目只声明“严肃实验平台已实现，能力
-尚未证明”。
+The training and final-evaluation entry points have migrated from the `bimanual_household_v1`
+proxy task to three formal multi-object household scenes: storing a duck and a soccer ball in
+the living room, placing tableware into separate dining-table locations, and opening a kitchen
+drawer and storing two cleaning-product bottles. Each task has 4 training commands and 3
+non-overlapping evaluation paraphrases. Evaluation uses broader and partly out-of-distribution
+mass, friction, lighting, material, RGB/depth noise, camera mounting pose/focal length, actuator
+scale, action latency, and observation latency. Success also requires separate left/right arm
+contact and at least 0.5 seconds of concurrent contact. This prevents the next lineage from
+presenting a proxy benchmark as a household task, but code completion still does not imply model
+capability; until the full gate and subsequent training/evaluation pass, the project claims only
+that “a serious experimental platform has been implemented; capability is not yet proven.”
 
-## 2026-08-14 `foundation-wm-007` 停止、裁剪与下一谱系统计修复
+## 2026-08-14 `foundation-wm-007` Stopped, Pruned, and Follow-Up Lineage Statistics Fixed
 
-`foundation-wm-007` 的最后完整 checkpoint 是 111 个 Episode、7,400 次更新；随后一次周期
-在 7,490 次更新处中断。三个任务成功均为 0，动作
-probe 约 `1.002`，多步动作因果比约 `0.995`，探索 Actor 从未解锁。它绑定旧提交
-`bb8f743`，不能用当前 HEAD 恢复，也不进入后续 checkpoint 谱系。`foundation-wm-006/007`
-均无 deployment；两者的可重建特征缓存、replay、不可部署 checkpoint 与留出缓存已经删除，
-只保留 manifest、逐周期指标、因果诊断和失败说明。`runs/foundation-world-model` 因此从约
-73GB 降至 3.1MB，释放约 73GiB。
+The last complete checkpoint of `foundation-wm-007` contained 111 Episodes and 7,400 updates;
+the following cycle was interrupted at 7,490 updates. All three task success counts were 0, the
+action probe was approximately `1.002`, the multi-step action-causality ratio approximately
+`0.995`, and the exploration Actor never unlocked. It is bound to the old commit `bb8f743`,
+cannot resume from the current HEAD, and does not enter subsequent checkpoint lineage.
+`foundation-wm-006/007` have no deployment. Their rebuildable feature caches, replay,
+non-deployable checkpoints, and holdout caches were deleted, retaining only manifests,
+per-cycle metrics, causality diagnostics, and failure notes. `runs/foundation-world-model`
+therefore fell from approximately 73GB to 3.1MB, releasing approximately 73GiB.
 
-以下记录的是本次训练可达性修复之前的阶段性设计，已经由本文顶部的新合同取代。下一新 run
-当时计划把 data-action probe 改为逐任务独立拟合，所有任务均须过线；bootstrap 单位
-从相关 transition 改为 Episode。动作因果留出 collector 升为 v3，每任务固定 16 个独立
-Episode，并按严重碰撞结果平衡为 8 个正例、8 个负例；每任务审计 64 个窗口。碰撞 batch
-优先跨独立 Episode 采样，长度不足 16 transition 的 Episode 不再计入交互覆盖。碰撞头还需
-在独立留出集上通过召回率、PR-AUC 和 Brier score，不能只证明“见过一条正例”。
+The following records the staged design before the current training-accessibility fixes; it has
+been superseded by the new contract at the top of this document. At the time, the next run was
+planned to fit the data-action probe independently per task, with every task required to pass;
+the bootstrap unit changed from correlated transitions to Episode. The action-causality holdout
+collector was upgraded to v3, with 16 independent Episodes per task balanced by severe-collision
+outcome into 8 positives and 8 negatives; each task audited 64 windows. Collision batches
+prioritized sampling across independent Episodes, and Episodes shorter than 16 transitions no
+longer counted toward interaction coverage. The collision head also had to pass recall, PR-AUC,
+and Brier score on an independent holdout, rather than merely proving that it had “seen one
+positive example.”
 
-Actor 准入已经拆成两级：动作覆盖、逐任务 probe 和单步物理因果只解锁通用内在探索 Actor；
-接触、受控运动、碰撞头验证和完整多步因果只约束任务 Actor。24 Episode 的随机校准停止也
-只检查第一级证据，不再要求随机策略先完成探索 Actor 应负责的接触发现。
+Actor admission was split into two levels: action coverage, per-task probes, and one-step
+physical causality unlock only the generic intrinsic exploration Actor; contact, controlled
+motion, collision-head validation, and complete multi-step causality constrain only the task
+Actor. The 24-Episode random-calibration stop also checks only first-level evidence and no longer
+requires the random policy to complete contact discovery that the exploration Actor is responsible for.
 
-固定一次 Actor warm-up 已删除。新 Actor 至少更新 200 次，并以最近三个 50-update 窗口
-检查梯度、运动/夹爪熵和想象回报稳定性；最多 1,000 次仍不通过即终止。单 run 最终评测
-schema 升为 `hwr.foundation-evaluation-run/v3`，只允许产生 `per_seed_passed`，不能产生
-正式 `passed=true`。新增多 run 聚合入口，只有三个不同训练 seed、相同不可变配置、互斥
-训练/留出种子和三份逐 seed 通过结果同时成立时，才写出正式通过。
+The fixed one-time Actor warm-up was removed. A new Actor must update at least 200 times and
+check gradients, motion/gripper entropy, and imagined-return stability over the latest three
+50-update windows; terminate after at most 1,000 updates if it still fails. The single-run final
+evaluation schema was raised to `hwr.foundation-evaluation-run/v3`, which may produce only
+`per_seed_passed` and may not produce formal `passed=true`. A multi-run aggregation entry was
+added; formal pass is written only when three different training seeds, identical immutable
+configuration, disjoint training/holdout seeds, and three per-seed passing results all hold.
 
-run manifest 升为 `hwr.foundation-online-run/v4` 并记录实际设备、nice 和 MPS 水位。正式
-验收默认每任务 40 个未见 seed，成功率用 95% Wilson 下界、单臂消融用 Wilson 上界判定；
-候选配置需要至少 3 个独立训练 seed，单 seed 结果只用于校准。
+The run manifest was raised to `hwr.foundation-online-run/v4` and records the actual device,
+nice value, and MPS watermarks. Formal acceptance defaults to 40 unseen seeds per task, uses the
+95% Wilson lower bound for success rate and the Wilson upper bound for single-arm ablations, and
+requires at least 3 independent training seeds per candidate configuration; a single-seed result
+is for calibration only.
 
-## 2026-08-13 `foundation-wm-006` 失败基线与训练重构
+## 2026-08-13 `foundation-wm-006` Failed Baseline and Training Refactor
 
-`foundation-wm-006` 已主动停止，不恢复、不能作为后续 checkpoint 的父级。最近完整提交点
-只有 9 个训练 Episode 和 600 次更新，三个任务成功均为 0，也没有 deployment 或未见种子
-评测。世界模型总预测误差从 `4.383` 降到 `3.681`，但动作打乱/真实动作误差比在 200、400、
-600 update 分别为 `0.99993`、`0.99989`、`0.99999`，远低于 `1.05`。这说明模型主要利用
-状态与视频连续性，没有学到可供策略想象的动作因果。该 run 只保留为负对照。
+`foundation-wm-006` was stopped intentionally, will not resume, and cannot be the parent of a
+later checkpoint. Its last complete point had only 9 training Episodes and 600 updates; all
+three task success counts were 0, with no deployment or unseen-seed evaluation. World-model
+total prediction error fell from `4.383` to `3.681`, but the shuffled/real action-error ratios
+at 200, 400, and 600 updates were `0.99993`, `0.99989`, and `0.99999`, far below `1.05`. This
+shows that the model mainly used state and video continuity and did not learn action causality
+usable for policy imagination. The run is retained only as a negative control.
 
-原 runner 在 6 个随机 Episode 后仅按 Episode 数切换到当前 Actor，与因果证据无关；这是
-设计缺陷，不再允许通过增加训练时长规避。当前三个 `carry/hold` 任务明确降级为“双臂
-预训练与动作因果基准”，不等于 `tidy_living_room_3d`、`clear_dining_table_3d`、
-`store_kitchen_items_3d` 正式家庭场景验收。
+The original runner switched to the current Actor after 6 random Episodes based only on Episode
+count, independently of causality evidence. This was a design defect and may no longer be
+avoided by adding training time. The three current `carry/hold` tasks are explicitly downgraded
+to a “bimanual pretraining and action-causality benchmark”; they are not formal acceptance of
+`tidy_living_room_3d`, `clear_dining_table_3d`, or `store_kitchen_items_3d` household scenes.
 
-重构遵循“全部开发完成后再训练”：先落盘完整损失、梯度、动作覆盖、环境结果和阶段耗时，
-提供不读取大文件的本机只读面板；随后把 Actor 训练与采集改为由物理动作因果、数据可辨识性
-和实际动作覆盖共同解锁，并接入只使用状态新颖度、TD error、奖励改善速度和失败边界的
-任务无关课程。完成因果统计校准、内在 RL 探索和 replay I/O 优化前，不启动下一 run。
+The refactor follows “complete all development before training”: first persist complete losses,
+gradients, action coverage, environment outcomes, and stage durations, and provide a local
+read-only dashboard that does not read large files. Then unlock Actor training and collection
+jointly through physical action causality, data identifiability, and actual action coverage, and
+connect a task-agnostic curriculum using only state novelty, TD error, reward-improvement speed,
+and failure boundaries. Do not start the next run until causality-statistics calibration,
+intrinsic RL exploration, and replay I/O optimization are complete.
 
-可观测性与第一版准入门已完成。runner 不再读取 `initial_random_episodes`：准入前任务 Actor
-和 Value 不更新、采集也不使用 Actor；准入状态随 checkpoint 原子恢复。因果报告升级为
-`hwr.foundation-action-causality/v5`，增加固定真实后验状态的单步视觉/本体动作利用诊断，
-每次审计执行 5 个独立置换并保存原始结果，要求每次通过且误差比 5% 分位数过线。另用
-state-only/state+实际动作的独立岭回归 probe 判断 replay 是否具有动作可辨识性；动作覆盖、
-有效秩、probe bootstrap 下界和至少 12 个 replay Episode 连续两次通过后才解锁 Actor。
-恢复 schema 先同步升为 `hwr.foundation-runner-recovery/v4`。`foundation-wm-006` 的 v4 因果
-报告和 v3 恢复状态不能进入这条新谱系。
+Observability and the first admission gate are complete. The runner no longer reads
+`initial_random_episodes`: before admission, the task Actor and Value are not updated and the
+Actor is not used for collection; admission state is restored atomically with the checkpoint.
+The causality report was upgraded to `hwr.foundation-action-causality/v5`, adding one-step
+visual/proprioceptive action-utilization diagnostics at fixed real posterior states. Each audit
+performs 5 independent permutations and saves raw results; every permutation must pass and the
+5th-percentile error ratio must clear the threshold. An independent ridge-regression probe using
+state-only/state+executed-action also checks whether replay has action identifiability. The Actor
+unlocks only after action coverage, effective rank, the probe bootstrap lower bound, and at least
+12 replay Episodes pass twice consecutively. The recovery schema was raised in sync to
+`hwr.foundation-runner-recovery/v4`. The v4 causality report and v3 recovery state from
+`foundation-wm-006` cannot enter this new lineage.
 
-物理因果准入与任务 Actor 准入进一步拆分。单步物理因果、数据 probe 和动作覆盖连续通过
-后，先训练独立的 `intrinsic_rl_actor`；它只最大化世界模型 ensemble 不确定性、潜状态
-新颖度和策略熵，并扣除预测安全干预，不使用环境奖励、任务对象、距离或阶段。只有完整
-多步五头因果也连续通过后，才训练/采集任务 `rl_actor`。探索 Actor、探索 Value、慢 Value
-和优化器只存在于训练 checkpoint，不进入 deployment。自主轨迹 schema 升为
-`hwr.autonomous-trajectory/v4`，no-expert lineage 明确允许随机探索、内在 RL 探索与任务 RL
-三种动作来源；三者都不含专家、示范、教师动作或搜索器。
+Physical-causality admission and task-Actor admission were split further. After one-step
+physical causality, the data probe, and action coverage pass consecutively, first train the
+independent `intrinsic_rl_actor`. It maximizes only world-model ensemble uncertainty, latent
+state novelty, and policy entropy, subtracting predicted safety intervention and using no
+environment reward, task object, distance, or stage. Train and collect with the task `rl_actor`
+only after complete multi-step five-head causality also passes consecutively. The exploration
+Actor, exploration Value, slow Value, and optimizer exist only in training checkpoints and do
+not enter deployment. The autonomous-trajectory schema was raised to
+`hwr.autonomous-trajectory/v4`; no-expert lineage explicitly allows three action sources:
+random exploration, intrinsic RL exploration, and task RL. None contains expert, demonstration,
+teacher-action, or searcher data.
 
-任务无关物理状态前沿现已接入统一 runner。随机冷启动阶段只从真实自主 transition 保存
-完整仿真状态候选，不执行前沿 reset；只有物理动作可辨识性门通过后，才以默认 `0.20`
-概率混合前沿起点。候选只来自每个 Episode 的世界模型后验状态、一步 TD error、局部奖励
-改善速度和环境终止失败边界，终止/截断后的状态与安全干预状态不能进入候选池。恢复前同时
-校验后端指纹、位置、速度、加速度、执行器控制、求解器和运行时状态；失败即回到普通 reset。
-候选池、独立随机流、选择次数和逐 Episode 来源随 checkpoint 原子恢复，恢复 schema 因此
-升级为 `hwr.foundation-runner-recovery/v5`。前沿快照不写入 replay，也不进入视觉学生、
-世界模型或 Actor 输入。
+The task-agnostic physical-state frontier is now integrated into the unified runner. During
+random cold start, save complete simulation-state candidates only from real autonomous
+transitions and do not perform frontier reset; after the physical action-identifiability gate
+passes, mix frontier starts at the default probability `0.20`. Candidates come only from each
+Episode's world-model posterior states, one-step TD error, local reward-improvement speed, and
+environment terminal-failure boundaries. States after termination/truncation and states with
+safety intervention cannot enter the candidate pool. Before restoration, validate the backend
+fingerprint, position, velocity, acceleration, actuator control, solver, and runtime state
+together; failure returns to ordinary reset. The candidate pool, independent random streams,
+selection count, and per-Episode source are atomically restored with the checkpoint, raising
+the recovery schema to `hwr.foundation-runner-recovery/v5`. Frontier snapshots do not enter
+replay, the vision student, the world model, or Actor input.
 
-本机吞吐和统一内存优化也已进入正式配置。一个训练 batch 仍按所有 replay window 等概率
-抽样，但 batch 内窗口固定来自同一 Episode shard，避免一批内反复解压大文件；两套冻结
-视觉特征先按内容哈希去重，同一历史帧每个 encoder 只读取一次，并只保留 16 条只读内存
-LRU。世界模型仍每个 update 更新，视觉学生固定每 4 个 update 更新一次；其余 update 只用
-8-observation 无梯度微批编码，不构建跨相机对应关系，也不读取或搬运 DINOv3/SigLIP 教师
-target。视觉 loss 只对实际视觉更新求平均，`trainer/visual_updated` 单独记录更新占比。该
-调度只读取全局 update count，不读取任务、奖励、对象、接触或阶段。
+Local throughput and unified-memory optimizations are now in formal configuration. A training
+batch still samples all replay windows with equal probability, but windows within a batch come
+from one Episode shard to avoid repeatedly decompressing large files. The two frozen visual
+feature sets are deduplicated by content hash first; each encoder reads a historical frame only
+once, retaining at most 16 read-only LRU entries. The world model still updates every update,
+while the vision student updates every fixed 4 updates. Other updates encode only gradient-free
+microbatches of 8 observations, build no cross-camera correspondences, and do not read or move
+DINOv3/SigLIP teacher targets. Vision loss is averaged only over actual vision updates, with
+`trainer/visual_updated` recording the update ratio separately. This scheduling reads only the
+global update count, not task, reward, object, contact, or stage.
 
-## 2026-08-12 基础模型—世界模型主线重建
+## 2026-08-12 Foundation-Model/World-Model Mainline Rebuild
 
-P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为无效开发运行；它们
-不能解释为模型已经获得家务能力，也不能作为下一条正式谱系的父模型。
+The old P081 number was not continued. `foundation-wm-001`–`003` were archived as invalid
+development runs; they cannot be interpreted as evidence that the model acquired household
+capability and cannot serve as parent models for the next formal lineage.
 
-已经接通的单一路径为：
+The single connected path is:
 
 ```text
-四相机原始 RGB-D + 动态内外参
-  -> SigLIP2 / DINOv3 ViT-S/16 / Qwen3-Embedding 离线连续特征缓存
-  -> 24.4M 参数高分辨率视觉学生
-  -> 13.0M 参数动作条件 categorical RSSM
-  -> 想象空间 Actor-Critic
-  -> 同一个 16 维 Actor
-  -> 独立安全层
-  -> 三任务 MuJoCo / 未来真机 RuntimeBackend
+Raw RGB-D from four cameras + dynamic extrinsics and intrinsics
+  -> SigLIP2 / DINOv3 ViT-S/16 / Qwen3-Embedding offline continuous-feature cache
+  -> 24.4M-parameter high-resolution visual student
+  -> 13.0M-parameter action-conditioned categorical RSSM
+  -> Imagination-space Actor-Critic
+  -> The same 16-dimensional Actor
+  -> Independent safety layer
+  -> Three-task MuJoCo / future real-robot RuntimeBackend
 ```
 
-关键实现事实：
+Key implementation facts:
 
-- 基础模型 revision、连续表示规范、许可证与预期文件 SHA-256 已锁定；正式控制回路
-  不加载教师。DINOv3 官方权重仍需由已接受 Meta 条款的 Hugging Face 账户下载，缺失时
-  开发门禁保持锁定；
-- 自主轨迹只接受 `random_rl_exploration` 和 `rl_actor` 两种动作来源，同时记录 Actor
-  提案与安全层实际执行动作；
-- RSSM transition 和想象 rollout 使用与真实回放相同的物理动作单位；
-- 三个任务共享一个采集器、缓存、batch loader、Trainer、Actor 和 checkpoint 谱系；
-- 当时的动作因果门禁使用每任务两个固定随机 RL Episode 的独立留出库；该历史配置已被
-  顶部的 8-Episode 系统辨识集与延迟碰撞校准集取代；
-- 横向反射只能由环境声明，通用增强器变换视觉、动态标定、本体、动作和连续教师特征；
-- 部署导出只含视觉学生、RSSM posterior state filter 和 Actor，不含基础教师、Critic、
-  reward/continue/safety 预测头或训练优化器；
-- 评测固定为每任务至少 40 个未见种子，同时运行正常、锁左臂、锁右臂三种条件，正常
-  Episode 同步录制第三人称、头部、左腕和右腕视频；每个任务至少保留一个成功 Episode，
-  帧数必须严格等于控制步数加初始帧，否则整次验收不能通过。
+- Foundation-model revisions, continuous-representation specification, licenses, and expected-file SHA-256 values are locked; formal control loops do not load teachers. Official DINOv3 weights still require download by a Hugging Face account that has accepted Meta's terms; when absent, the development gate remains locked;
+- Autonomous trajectories accept only `random_rl_exploration` and `rl_actor` as action sources, while recording both Actor proposals and actions actually executed by the safety layer;
+- RSSM transitions and imagined rollouts use the same physical action units as real replay;
+- All three tasks share one collector, cache, batch loader, Trainer, Actor, and checkpoint lineage;
+- The action-causality gate at that time used an independent holdout of two fixed random-RL Episodes per task; this historical configuration was replaced by the 8-Episode system-identification set and delayed-collision calibration set at the top;
+- Lateral reflection may be declared only by the environment; the generic augmenter transforms vision, dynamic calibration, proprioception, actions, and continuous teacher features;
+- Deployment export contains only the vision student, RSSM posterior state filter, and Actor—not foundation teachers, Critic, reward/continue/safety prediction heads, or training optimizers;
+- Evaluation is fixed at at least 40 unseen seeds per task, running normal, left-arm-locked, and right-arm-locked conditions. Normal Episodes synchronously record third-person, head, left-wrist, and right-wrist video; each task must retain at least one successful Episode, and frame count must equal control steps plus the initial frame exactly or the entire acceptance fails.
 
-开发门禁命令为：
+The development-gate command is:
 
 ```bash
 .venv/bin/python scripts/verify_development_ready.py \
@@ -170,226 +217,297 @@ P081 旧编号没有继续使用。`foundation-wm-001`～`003` 都已封存为�
   --output artifacts/development-ready.json
 ```
 
-它会检查受保护源码已提交，并在当前提交的隔离快照中检查全仓 Python 尺寸、架构边界、全量测试，再检查基础权重哈希、三个
-冻结模型的真实 fixture 推理、三任务统一配置、动作单位一致性和部署剥离。正式训练入口
-没有跳过门禁的参数，且会再次核对源码提交、配置哈希和受保护源码树哈希。
+It checks that protected source is committed and, in an isolated snapshot of the current commit,
+checks whole-repository Python sizes, architecture boundaries, and the full test suite. It then
+checks foundation-weight hashes, real fixture inference for the three frozen models, unified
+three-task configuration, action-unit consistency, and deployment stripping. The formal training
+entry point has no gate-bypass parameter and checks the source commit, configuration hash, and
+protected-source tree hash again.
 
-开发完成度复核发现，旧 `hwr.foundation-development-ready/v1` 校验只要求“报告中已经出现
-的检查均为通过”，没有要求十项检查齐全；一个只保留测试和架构两项的手工残缺报告也能
-解锁训练。同时，旧 AST 审计只覆盖部分 runner 文件，未覆盖视觉学生、轨迹数据、Actor、
-世界模型、基础模型适配器和部署评测。当前 readiness schema 升为 v2，要求检查集合与十项
-强制证据精确相等，并将隔离快照的提交号绑定到架构、尺寸和全量测试三项。算法审计改为按
-整条 foundation 模块模式自动发现文件，当前覆盖 53 个 Python 文件；正式配置还必须精确
-装配三个目标任务且不存在专家、示范、动作标签、航点、技能阶段、对象 token、目标 token
-或旧 checkpoint 等谱系键。旧 v1 报告无法再用于启动训练。
+The development-completion review found that the old `hwr.foundation-development-ready/v1`
+check required only that checks appearing in the report passed; it did not require all ten
+checks. A manually incomplete report containing only tests and architecture checks could
+therefore unlock training. The old AST audit also covered only some runner files and omitted the
+vision student, trajectory data, Actor, world model, foundation adapters, and deployment
+evaluation. The readiness schema is now v2: the check set must exactly equal the ten mandatory
+pieces of evidence, and the isolated-snapshot commit must bind to architecture, size, and full
+test checks. Algorithm auditing now discovers files automatically by the full foundation-module
+pattern, currently covering 53 Python files. Formal configuration must also assemble exactly the
+three target tasks and contain no lineage keys for experts, demonstrations, action labels,
+waypoints, skill stages, object tokens, target tokens, or old checkpoints. Old v1 reports can no
+longer start training.
 
-运行谱系复核还发现，旧最终评测只从 checkpoint lineage 读取 `source_commit`，不核对
-专家、示范、行为克隆、教师动作、动作搜索和旧 checkpoint 声明；run manifest 本身也缺少
-后三项。现在保存、恢复、checkpoint 加载和最终评测共用同一个精确 no-expert lineage，任何
-字段缺失、多余、变为非空或来源提交不一致都会失败。run manifest schema 升为
-`hwr.foundation-online-run/v2`，旧 v1 运行不能静默进入当前正式验收。
+Runtime-lineage review also found that old final evaluation read only `source_commit` from
+checkpoint lineage and did not check expert, demonstration, behavior-cloning, teacher-action,
+action-search, or old-checkpoint declarations; the run manifest itself also lacked the last
+three. Saving, resuming, checkpoint loading, and final evaluation now share one exact no-expert
+lineage. Any missing field, extra field, non-empty value, or source-commit mismatch fails.
+The run-manifest schema was raised to `hwr.foundation-online-run/v2`; old v1 runs cannot silently
+enter current formal acceptance.
 
-开发门禁与训练产物之间的追溯审计又发现，训练入口虽然读取 readiness 报告，却只把其中的
-`source_commit` 传给 runner；报告本身没有复制进 run，也没有任何哈希进入 run manifest。
-最终评测因此无法证明模型是在通过哪次 DINOv3 权重、真实推理和全量测试门禁后启动的。
-当前训练入口会原子复制 `development-ready.json` 到新 run，manifest 记录其 schema、固定
-路径和 SHA-256；恢复要求外部报告与 run 内副本完全相同，最终评测重验副本的完整十项证据
-和隔离提交绑定，并把它纳入最终 artifact manifest。该阶段 run manifest 升为
-`hwr.foundation-online-run/v3`，旧 v1/v2 不能进入该阶段的正式验收；2026-08-14 的资源
-留痕修复再升为本文开头所述 v4。
+The traceability audit between the development gate and training artifacts found that the
+training entry read the readiness report but passed only its `source_commit` to the runner; the
+report itself was not copied into the run, and no hash entered the run manifest. Final evaluation
+therefore could not prove which DINOv3 weights, real inference, and full-test gate had preceded
+startup. The current training entry atomically copies `development-ready.json` into the new run,
+and the manifest records its schema, fixed path, and SHA-256. Resume requires the external report
+and in-run copy to be identical; final evaluation rechecks all ten pieces of evidence, binds them
+to the isolated commit, and includes the copy in the final artifact manifest. The run-manifest
+schema for this stage was raised to `hwr.foundation-online-run/v3`; old v1/v2 cannot enter formal
+acceptance for this stage, and the 2026-08-14 resource-trace fix raised it again to v4 described
+at the top of this document.
 
-readiness 追溯接入后，在线 runner 一度增至 803 行，超过项目的 800 行硬限制。run manifest
-的创建、原子发布与恢复一致性校验现已拆入 `hwr.train.foundation_run_manifest`；后续准入
-统计也拆入独立模块，runner 保持在 800 行限制内。这是按职责拆分，不是合并语句规避尺寸检查。
+After readiness traceability was integrated, the online runner briefly grew to 803 lines,
+exceeding the project's hard limit of 800. Creation, atomic publication, and resume-consistency
+validation for the run manifest were moved into `hwr.train.foundation_run_manifest`; subsequent
+admission statistics were also split into a separate module, keeping the runner within 800
+lines. This is a separation of responsibilities, not a way to evade the size check by merging
+statements.
 
-最终证据 manifest 同期升为 `hwr.foundation-evaluation-run/v2`。它不再只哈希评测 JSON、
-动作因果报告和视频，而是直接绑定 readiness、run/latest、全部训练 Episode 记录、训练
-replay manifest、因果留出 manifest、训练 checkpoint manifest/权重、部署 manifest/权重、
-逐 Episode 评测、验收结果及每路未剪辑视频，确保数据、模型、代码、配置和结果能沿同一
-哈希链复核。
+The final-evidence manifest was raised at the same time to
+`hwr.foundation-evaluation-run/v2`. It no longer hashes only evaluation JSON, the action-causality
+report, and videos; it directly binds readiness, run/latest, all training Episode records,
+training replay manifest, causality-holdout manifest, training checkpoint manifest/weights,
+deployment manifest/weights, per-Episode evaluation, acceptance results, and every unedited video
+stream, so data, models, code, configuration, and results can be checked along one hash chain.
 
-旧的特权专家完成率测试不再属于正式验收：当前提交中的该专家在 11 个固定回归种子上
-全部失败，这也再次验证了废弃专家路线的决定。它不进入采集、replay、Actor 或世界模型；
-门禁继续通过 AST 审计禁止新训练源码导入专家。
+The old privileged-expert completion-rate test is no longer part of formal acceptance: the
+expert in the current commit failed on all 11 fixed regression seeds, again validating the
+decision to abandon the expert path. It does not enter collection, replay, Actor, or world model;
+the gate continues to prohibit new training-source imports of the expert through AST auditing.
 
-启动前容量审计发现，若对 120 个长回合永久保存两套三视角 dense grid，理论缓存会超过
-400 GB，而本机当时可用空间约 130 GB。正式配置因此加入任务公平的滚动 replay：最多
-18,000 个 transition，并只保留最近 3 组 checkpoint/deployment；淘汰只按任务标识、时间
-和固定容量执行，不读取场景语义、距离阈值或动作内容。容量修复后必须重新运行总门禁，
-此前生成的报告不再用于解锁训练。
+A pre-start capacity audit found that permanently retaining two three-view dense grids for 120
+long Episodes would exceed 400 GB in theory, while the machine then had approximately 130 GB
+available. Formal configuration therefore added task-fair rolling replay capped at 18,000
+transitions and retained only the latest 3 checkpoint/deployment sets. Eviction uses only task
+identity, time, and fixed capacity; it does not read scene semantics, distance thresholds, or
+action content. After the capacity fix, the overall gate must be rerun, and previously generated
+reports can no longer unlock training.
 
-第一次启动的 `foundation-wm-001` 已作废并停止。它只采集了三个随机探索 Episode，分别
-来自三个任务，共 4,000 条 transition；进程停止在基础视觉特征物化期间，尚未发生第一次
-梯度更新，也没有 `latest.json`、训练 checkpoint 或部署模型。目录保留用于审计，不会恢复
-或并入正式 run。停止原因不是训练失败，而是启动后审计发现动作打乱诊断虽有计算函数，
-却没有作为发布强制条件持久化，也没有验证打乱动作误差必须高于真实动作误差。
+The first launch of `foundation-wm-001` was invalidated and stopped. It collected only three
+random-exploration Episodes, one from each task, for 4,000 transitions total. The process
+stopped during foundation-vision feature materialization, before the first gradient update, and
+produced no `latest.json`, training checkpoint, or deployment model. The directory is retained
+for audit and will not be resumed or merged into a formal run. The reason was not training
+failure: a post-start audit found that action-shuffling diagnostics had computation functions
+but were not persisted as a mandatory publication condition, and did not verify that shuffled
+action error must exceed real-action error.
 
-修正后的强制条件为：反事实误差同时覆盖未来视觉潜变量、本体、奖励、终止和安全结果；
-动作只能来自 replay 中的安全层实际执行动作；打乱动作误差比至少 `1.05`，至少 `60%` 的
-horizon 恶化。每次更新的报告绑定源码、数据 manifest 与 checkpoint 哈希。失败更新只保留
-训练 checkpoint，不能导出部署模型；固定种子评测会再次校验训练 checkpoint、部署 manifest
-和报告三者的哈希一致性。因果审计后来进一步从“最后一个训练 batch”迁移到按任务均衡、
-与优化器物理分离的固定留出库，消除了样本泄漏、两序列小样本和强任务掩盖弱任务的问题。
-正式 batch 由 4 调整为 2，以适配 48 GB MPS 的视觉反向传播峰值，
-模型、总更新次数、三任务范围和最终 180 Episode 验收均不减少。
+The corrected mandatory conditions are: counterfactual error covers future visual latents,
+proprioception, reward, termination, and safety outcomes; actions come only from actions
+actually executed by the safety layer in replay; the shuffled-action error ratio is at least
+`1.05`, with at least `60%` of horizons degrading. Each update report binds source, data
+manifest, and checkpoint hashes. Failed updates retain a training checkpoint only and cannot
+export a deployment model; fixed-seed evaluation rechecks hash consistency among the training
+checkpoint, deployment manifest, and report. Causality auditing later moved from the “last
+training batch” to a task-balanced holdout physically isolated from optimizers, eliminating
+sample leakage, two-sequence small-sample effects, and strong-task masking of weak tasks.
+The formal batch was reduced from 4 to 2 to fit the 48 GB MPS visual-backpropagation peak;
+model, total update count, three-task scope, and final 180-Episode acceptance were not reduced.
 
-`foundation-wm-002` 在提交 `e6edf67` 上完成三任务各一个随机探索 Episode，共 4,000 条
-transition，并完成 SigLIP2、DINOv2 与三条语言指令的全部特征物化。为了避免重复计算，
-其中 5,894 个以原始观测、模型 lock 和预处理 SHA-256 寻址的教师特征从 `foundation-wm-001`
-以硬链接复用；复用前新 run 已生成的 1,469 个键全部存在于旧缓存，抽样 12 个文件的字节
-哈希零差异。没有复用 replay、Episode、动作、模型或优化器，操作记录保存在 run 内的
-`cache-reuse.json`。
+`foundation-wm-002` completed one random-exploration Episode per task on commit `e6edf67`, for
+4,000 transitions total, and materialized all SigLIP2, DINOv2, and three-language-command
+features. To avoid duplicate computation, 5,894 teacher features addressed by raw observation,
+model lock, and preprocessing SHA-256 were reused from `foundation-wm-001` through hard links.
+Before reuse, all 1,469 keys generated by the new run existed in the old cache; byte hashes for
+12 sampled files were identical. Replay, Episodes, actions, models, and optimizers were not
+reused. The operation is recorded in the run's `cache-reuse.json`.
 
-该 run 在第一次联合更新中依次完成视觉学生和世界模型更新，进入想象 Actor-Critic 时异常
-退出：主 Value 已在 MPS，而初始化后才创建的 slow target Value 仍在 CPU。因为进程没有
-完成一次 `train_step`，`update_count` 仍为 0，且没有 `latest.json`、checkpoint、部署模型或
-动作因果报告，因此 `foundation-wm-002` 也不能作为训练结果。修复改为从主 Value 深拷贝
-slow target，使设备、dtype 和网络结构完全一致；同时用 `try/finally` 保证想象更新异常时
-恢复世界模型原有梯度状态。
+During its first joint update, the run completed vision-student and world-model updates in
+sequence, then exited abnormally on entering imagined Actor-Critic: the main Value was on MPS,
+while the slow target Value created after initialization remained on CPU. Because the process
+did not complete one `train_step`, `update_count` remained 0 and there was no `latest.json`,
+checkpoint, deployment model, or action-causality report; `foundation-wm-002` therefore cannot
+count as a training result. The fix deep-copies the slow target from the main Value so device,
+dtype, and network structure match exactly, and uses `try/finally` to restore the world model's
+original gradient state when imagination updates fail.
 
-修复后的正式规模本机 smoke test 直接读取该 run 的真实四相机序列和教师特征，以 MPS、
-batch 2、16 transition 完整执行四个优化器。一次 update 用时约 4.98 秒，视觉总损失
-约 2.894、世界模型总损失约 12.273、Actor 损失约 2.020、Value 损失约 5.727；PyTorch
-报告 MPS tensor 占用约 1.88 GB、driver 总分配约 30.46 GB，证明 48 GB 机器有可用余量。
-完整门禁重新通过后曾启动 `foundation-wm-003`，不恢复任何未落盘参数。
+The fixed formal-scale local smoke test directly reads the run's real four-camera sequence and
+teacher features, and fully executes four optimizers on MPS with batch 2 and 16 transitions.
+One update takes approximately 4.98 seconds; total vision loss is approximately 2.894, total
+world-model loss approximately 12.273, Actor loss approximately 2.020, and Value loss
+approximately 5.727. PyTorch reports approximately 1.88 GB of MPS tensor usage and 30.46 GB of
+total driver allocation, showing usable headroom on the 48 GB machine. After the full gate
+passed again, `foundation-wm-003` was started without restoring any unpersisted parameters.
 
-`foundation-wm-003` 在提交 `4ae381f` 上采集了 6 个 Episode、8,000 条 transition，并
-发布 `update-000000200` 训练 checkpoint。该更新的动作打乱误差比为 `0.9973`，低于
-`1.05`，且只有 `50%` horizon 恶化，因果门正确拒绝了 deployment。随后静态方案审查
-发现正式实现仍使用 DINOv2-Small，和已经批准的 DINOv3 感知方案不一致，因此在第二轮
-更新完成前主动停止。该 run 的 replay、checkpoint 和失败因果报告保留审计，但其特征
-缓存、参数与优化器一律不得进入 DINOv3 新谱系。
+`foundation-wm-003` collected 6 Episodes and 8,000 transitions on commit `4ae381f` and
+published training checkpoint `update-000000200`. Its shuffled-action error ratio was `0.9973`,
+below `1.05`, and only `50%` of horizons degraded, so the causality gate correctly rejected
+deployment. A subsequent static design review found that the formal implementation still used
+DINOv2-Small, inconsistent with the approved DINOv3 perception plan, so the run was stopped
+intentionally before the second update completed. Its replay, checkpoint, and failed-causality
+report are retained for audit, but its feature caches, parameters, and optimizer must not enter
+the new DINOv3 lineage.
 
-新的密集教师固定为官方 `facebook/dinov3-vits16-pretrain-lvd1689m` revision
-`114c1379950215c8b35dfcd4e90a5c251dde0d32`。核心训练模块同时从模型品牌名改为
-`vision_language` / `dense_vision` 角色名，模型锁新增连续表示规范，使具体输出层变化
-必然改变缓存键。下一条 run 只能在官方权重、真实 CPU/MPS 推理和全量开发门禁重新
-通过后创建。
+The new dense teacher is fixed to the official `facebook/dinov3-vits16-pretrain-lvd1689m`
+revision `114c1379950215c8b35dfcd4e90a5c251dde0d32`. Core training modules also changed from
+model brand names to the roles `vision_language` / `dense_vision`; the model lock added a
+continuous-representation specification so any concrete output-layer change necessarily changes
+the cache key. The next run may be created only after official weights, real CPU/MPS inference,
+and the full development gate pass again.
 
-训练前 Actor 静态审查又发现，旧初始化的夹爪随机动作只落在约 `0.42～0.59`，两万个
-样本没有一个接近全开或全闭，无法形成有效抓取探索；熵奖励还错误使用未经过
-`tanh/sigmoid` 的高斯熵。现已改为变换后动作分布的采样熵，并把熵奖励放入 imagined
-reward 后再计算 λ-return，使它能沿想象 horizon 传播。新的通用随机初始化在固定审计
-中约 `9.3%` 夹爪样本低于 `0.1`、约 `9.2%` 高于 `0.9`；它不读取观测、任务或场景，
-也不包含抓取动作模板。
+Pre-training static Actor review also found that old-initialization random gripper actions
+fell only around `0.42～0.59`; none of 20,000 samples approached fully open or fully closed,
+so effective grasp exploration was impossible. Entropy reward also incorrectly used untransformed
+`tanh/sigmoid` Gaussian entropy. It now uses the sampling entropy of the transformed action
+distribution and adds entropy reward to imagined reward before computing λ-return, allowing it
+to propagate across the imagined horizon. In fixed audits, the new generic random initialization
+has approximately `9.3%` of gripper samples below `0.1` and `9.2%` above `0.9`; it reads no
+observation, task, or scene and contains no grasp-action template.
 
-异常恢复链路也完成重构。旧 `--resume` 只加载模型和根目录 runner state，若进程在 replay
-追加或容量裁剪后、checkpoint 发布前退出，可能重复种子或引用已删除分片。现在每个
-checkpoint 内含 runner、Episode、训练 replay 和因果留出四份哈希快照；待裁剪分片先进入
-恢复暂存区，只有新的 `latest.json` 原子发布后才清理。固定回归已模拟“旧分片被裁剪、
-新分片未进 checkpoint”的崩溃点，恢复会找回旧分片、丢弃未提交分片并还原确切记录数。
+The crash-recovery path was also refactored. Old `--resume` loaded only the model and root
+runner state; if the process exited after replay append or capacity trimming but before
+checkpoint publication, it could reuse seeds or reference deleted shards. Each checkpoint now
+contains four hash snapshots for runner, Episodes, training replay, and causality holdout. Shards
+pending trimming first enter a recovery staging area and are cleaned only after the new
+`latest.json` is published atomically. Fixed regression simulated the crash point where old
+shards were trimmed and new shards were not in the checkpoint; recovery restores old shards,
+discards uncommitted shards, and restores exact record counts.
 
-基础模型真实推理门禁从“只记录指标”改为“指标不合格即失败”。本机 MPS 已重新验证现有
-两套官方权重：Qwen3 的中文改写/不同意图余弦为 `0.6280/0.3851`；SigLIP2 为
-`0.8428/0.7977`，视觉输出为 `3×14×14×768`，平均 patch 变化 `0.0220`、两幅有效
-fixture 图像平均差异 `0.0131`。两者通过非退化门；DINOv3 仍等待官方账户授权后执行
-同一真实门禁。
+The foundation-model real-inference gate changed from “record metrics only” to “fail when
+metrics do not qualify.” Existing official weights were revalidated on local MPS: Qwen3
+Chinese paraphrase/different-intent cosine scores were `0.6280/0.3851`; SigLIP2 scores were
+`0.8428/0.7977`; visual output was `3×14×14×768`, with mean patch change `0.0220` and mean
+difference `0.0131` between two valid fixture images. Both passed the non-degeneracy gate;
+DINOv3 still awaits official-account authorization for the same real gate.
 
-最终评测种子隔离也补齐：生成器现在联合排除完整训练 Episode 记录和动作因果留出库，
-而不是只依赖默认种子偏移“碰巧不重叠”；显式传入 `--seed-start` 也不能复用诊断数据。
+Final-evaluation seed isolation was also completed: the generator now jointly excludes complete
+training-Episode records and the action-causality holdout instead of relying only on a default
+seed offset to “happen to be disjoint.” Explicit `--seed-start` also cannot reuse diagnostic data.
 
-训练前任务接口审计发现旧成功判定只要求历史上出现过双臂同步接触和最终稳定到位，存在
-“先双臂碰一下、释放后再推到位”的终局奖励漏洞。现在搬运成功必须有从 Episode 初始距离
-到目标容差的连续双臂接触运动证据；抽屉开度必须有连续左臂接触运动证据。合法放下会保留
-证据，物体离开目标容差则撤销。固定回归分别覆盖了未受控推入和受控到位后移走再推回，
-两者都不能成功。
+The pre-training task-interface audit found that the old success criterion required only historical
+bilateral synchronized contact and final stable placement, leaving a terminal-reward loophole:
+“touch with both arms first, release, then push into place.” Transport success now requires
+continuous bimanual-contact motion evidence from the Episode's initial distance to the target
+tolerance; drawer opening requires continuous left-arm contact motion evidence. Valid placement
+retains evidence, while leaving the target tolerance revokes it. Fixed regressions cover both
+uncontrolled pushing into place and moving an object away after controlled placement and pushing
+it back; neither can succeed.
 
-自主采集审计还发现旧随机源每 50 ms 独立重抽所有动作，夹爪也逐步随机开闭，物理轨迹
-主要是不可用的高频抖动。新随机源改为全局统一的任务盲随机过程：运动相关系数 `0.96`，
-每个夹爪每步独立翻转概率 `0.05`。固定 512 步回归中，相邻运动相关性高于 `0.90`，夹爪
-实际翻转率位于 `2%～8%`；来源仍不读取观察、任务或场景，且每个 Episode 记录确切过程
-配置。动作因果留出集使用同一过程但保持独立种子与独立存储。
+The autonomous-collection audit also found that the old random source independently redrew every
+action every 50 ms, with grippers randomly opening and closing step by step, so physical
+trajectories were mostly unusable high-frequency jitter. The new source is one global,
+task-blind random process: motion correlation is `0.96`, and each gripper has an independent
+per-step flip probability of `0.05`. In fixed 512-step regressions, adjacent-motion correlation
+exceeded `0.90`, and actual gripper flip rate was `2%～8%`. The source still reads no
+observation, task, or scene, and each Episode records the exact process configuration. The
+action-causality holdout uses the same process with independent seeds and storage.
 
-任务采样课程的静态审计发现，旧实现把每个训练周期的全局 imagined uncertainty 和全局
-TD error 复制到该周期所有 Episode，导致这两个字段无法提供任务间学习压力。现在每个
-Episode 从自身轨迹最多取 4 个均匀、互不重叠的窗口，分别计算世界模型后验的归一化状态
-变化和基于真实环境奖励的一步 TD error；数值连同奖励改善、失败边界写入 Episode 记录和
-恢复快照。课程 schema 升为 `hwr.task-agnostic-learning-sampling/v4`，旧的伪区分历史不会
-被新谱系恢复。
+Static audit of the task-sampling curriculum found that the old implementation copied global
+imagined uncertainty and global TD error from each training cycle to every Episode in that cycle,
+so those fields could not express learning pressure across tasks. Each Episode now contributes at
+most 4 uniform, non-overlapping windows from its own trajectory, computing normalized
+world-model-posterior state change and one-step TD error based on real environment reward.
+Values, along with reward improvement and failure boundaries, are written to Episode records and
+recovery snapshots. The curriculum schema was raised to
+`hwr.task-agnostic-learning-sampling/v4`; old pseudo-distinguishing history will not be restored
+by the new lineage.
 
-多相机几何审计发现，机器人头部 RGB 与深度镜头在模型中有 9 cm 基线，但旧高分辨率
-预处理直接按同像素融合，并在腕部对应中用深度相机位姿解释头部 RGB patch。现在每帧按
-动态内外参执行深度相机反投影、机器人坐标变换、头部 RGB 重投影和最近深度 z-buffer，
-对应生成也改用对齐后的头部 RGB 几何。预处理 schema 升为
-`hwr.high-resolution-vision/v2`，DINOv2 旧运行的全部视觉缓存无法被新谱系复用。三个真实
-MuJoCo 场景的固定帧 smoke test 测得镜头基线均为 `0.090 m`，对齐后有效深度覆盖率为
-`27.43%～39.83%`，保留原始量程内有效深度的 `74.8%～80.6%`，深度范围
-`0.150～3.590 m`。
+Multi-camera geometry audit found a 9 cm baseline between the robot head RGB and depth lenses in
+the model, while old high-resolution preprocessing fused by identical pixels and used the depth
+camera pose to interpret head-RGB patches for wrist correspondence. Each frame now performs
+depth-camera back-projection, robot-coordinate transformation, head-RGB reprojection, and
+nearest-depth z-buffering with dynamic intrinsics/extrinsics; correspondence generation also
+uses aligned head-RGB geometry. The preprocessing schema was raised to
+`hwr.high-resolution-vision/v2`, and all visual caches from old DINOv2 runs are unusable in the
+new lineage. Fixed-frame smoke tests in three real MuJoCo scenes measured a `0.090 m` camera
+baseline in each; aligned valid-depth coverage was `27.43%～39.83%`, retained valid depth within
+the original range was `74.8%～80.6%`, and depth range was `0.150～3.590 m`.
 
-DINOv3 适配器的依赖审计发现，当前 Transformers 只提供
-`DINOv3ViTImageProcessorFast`，旧代码却显式请求 `use_fast=False`，且环境没有安装它所需
-的 torchvision；即使获得官方权重也会在加载前失败。正式 foundation 依赖现锁定 Torch
-`2.13.x` / torchvision `0.28.x` 配套版本，适配器改为显式 Fast，开发门禁会在权重审计前
-实例化处理器并记录三个运行库版本。
+Dependency audit of the DINOv3 adapter found that current Transformers provides only
+`DINOv3ViTImageProcessorFast`, while old code explicitly requested `use_fast=False` and the
+environment lacked the required torchvision; even with official weights, loading would fail.
+Formal foundation dependencies now lock the matching Torch `2.13.x` / torchvision `0.28.x`
+versions. The adapter explicitly uses Fast, and the development gate instantiates the processor
+and records all three runtime-library versions before weight audit.
 
-恢复链路的随机性审计又发现，新 runner 的旧快照只保存 NumPy 状态，RSSM categorical
-采样和 imagined rollout 使用的 Torch 随机流没有进入 checkpoint；同时自主采集 Actor
-忽略了 Episode seed。现在正式模型栈在构造参数前由训练配置 seed 初始化，随机 Actor 使用
-Episode 私有设备生成器，恢复 schema 升为 `hwr.foundation-runner-recovery/v2` 并原子保存
-CPU 及实际训练设备的 Torch RNG。固定回归已验证 CPU 快照恢复后的下一段随机数完全一致，
-真实 MPS smoke test 也验证了 `cpu+mps` 双状态可以逐位恢复。
+Randomness audit of the recovery path found that old runner snapshots saved only NumPy state;
+the Torch random streams used by RSSM categorical sampling and imagined rollouts were absent
+from checkpoints, and the autonomous-collection Actor ignored the Episode seed. The formal model
+stack now initializes from the training-config seed before constructing parameters; the random
+Actor uses an Episode-private device generator; and the recovery schema was raised to
+`hwr.foundation-runner-recovery/v2`, atomically saving CPU and actual-training-device Torch RNG.
+Fixed regression verified exact equality of the next random sequence after CPU snapshot restore,
+and a real MPS smoke test verified bitwise restoration of the `cpu+mps` pair.
 
-动作因果门禁的完成度审计发现，v2 报告虽然声明了视觉潜变量、本体、奖励、终止和安全
-五项，却把误差相加后只检查一个总比率；一个依赖动作的强预测头可以掩盖其余完全忽略
-动作的预测头。v3 现在为五项分别保存真实/打乱误差、比率和逐 horizon 序列，并要求总项、
-每个分量、全局汇总及三个任务分区全部通过。部署评测会从原始序列重算 assessment，同时
-校验总误差等于分量之和；仅篡改 `passed` 或汇总数字不能通过。旧 v2 因果报告不进入新谱系。
+Completion audit of the action-causality gate found that although the v2 report declared five
+components—visual latents, proprioception, reward, termination, and safety—it added errors and
+checked only one total ratio; one strongly action-dependent head could mask heads that ignored
+action completely. v3 now stores real/shuffled errors, ratios, and per-horizon sequences for
+each component, and requires the total, every component, global aggregate, and all three task
+partitions to pass. Deployment evaluation recomputes the assessment from raw sequences and
+checks that total error equals the component sum; changing only `passed` or aggregate numbers
+cannot pass. Old v2 causality reports do not enter the new lineage.
 
-随后又发现安全标签与动作条件存在更基础的错位：replay 同时保存 Actor 提案和安全层修正
-后的实际动作，但旧安全头只看实际动作，却尝试预测“提案是否被修改”。过滤后的动作已经
-丢掉导致干预的信息，这个目标原则上不可辨识。当前实现把世界动力学和安全预测拆开：RSSM
-只接收实际执行动作；安全头接收当前 latent 与 Actor 提案，并只预测独立安全层的干预标签，
-不再混入严重碰撞。想象 RL 对 Actor 提案的预测干预概率施加代价，实际安全过滤器仍保持
-独立。反事实审计把每步的提案—执行动作作为一对做全局无固定点置换，既不破坏安全层配对
-又能打破状态—动作因果。轨迹、课程、动作因果和恢复 schema 分别升为
-`hwr.autonomous-trajectory/v3`、`hwr.task-agnostic-learning-sampling/v5`、
-`hwr.foundation-action-causality/v4` 和 `hwr.foundation-runner-recovery/v3`；旧运行不得
-静默恢复到这一语义不同的新谱系。
+It was then found that safety labels and action conditioning were more fundamentally misaligned:
+replay stored both Actor proposals and safety-layer-corrected executed actions, but the old
+safety head saw only executed actions while trying to predict “whether the proposal was modified.”
+The filtered action had already discarded the information causing intervention, making the target
+unidentifiable in principle. The implementation now separates world dynamics and safety
+prediction: RSSM receives only executed actions; the safety head receives current latent and Actor
+proposal and predicts only the independent safety-layer intervention label, without mixing in
+severe collision. Imagination RL penalizes the predicted intervention probability for Actor
+proposals, while the actual safety filter remains independent. Counterfactual auditing treats each
+proposal/executed-action pair as one unit for a global derangement, preserving safety-layer
+pairing while breaking state-action causality. Trajectory, curriculum, action-causality, and
+recovery schemas were raised to `hwr.autonomous-trajectory/v3`,
+`hwr.task-agnostic-learning-sampling/v5`, `hwr.foundation-action-causality/v4`, and
+`hwr.foundation-runner-recovery/v3`; old runs must not silently resume under this semantically
+different lineage.
 
-门禁通过后才允许执行：
+Execution is allowed only after the gate passes:
 
 ```bash
 scripts/start_foundation_training_tmux.sh foundation-wm-004
 ```
 
-启动器在独立 tmux session 中运行正式训练，并通过现有通知包装器在完成或异常退出后用
-飞书机器人身份发送 run、日志、Episode 数、checkpoint 路径和 SHA-256；无需在训练期间
-保持当前 Codex 会话占用。
+The launcher runs formal training in an independent tmux session and uses the existing notification
+wrapper to send the run, log, Episode count, checkpoint path, and SHA-256 with the Lark bot identity
+after completion or abnormal exit; the current Codex session need not remain occupied during training.
 
-`foundation-wm-004` 于 2026-08-13 首次启动后暴露出本机资源门禁缺口：冻结教师特征已在
-16:01 完成，但首个 200-step 更新周期运行三十余分钟仍未落盘 checkpoint。MPS/Metal 统一
-内存 footprint 达到约 34 GiB、峰值约 36 GiB，系统 swap 使用量约 22 GiB，桌面交互明显
-卡顿。该进程在确认没有 `latest.json`、checkpoint、部署或逐 Episode 结果后被主动中止；
-它没有可恢复的学习参数，也不能作为训练或评测证据。小型 run manifest、特征索引、replay
-manifest、留出集 manifest 和有界日志已封存到
-`artifacts/retired-foundation-runs/foundation-wm-004-memory-abort-audit-metadata.tar.gz`，SHA-256
-为 `89ee8796784479b50d7c5ccdde5d83a0711d0d6d5ec9a96d597ee2a5a425d67e`；约 13 GiB 可重建
-缓存和未形成 checkpoint 的轨迹随后删除。
+The first launch of `foundation-wm-004` on 2026-08-13 exposed a local resource-gate gap:
+frozen teacher features finished at 16:01, but the first 200-step update cycle still had not
+written a checkpoint after more than thirty minutes. MPS/Metal unified-memory footprint reached
+approximately 34 GiB, peaking at approximately 36 GiB, with system swap around 22 GiB and
+noticeable desktop lag. The process was intentionally aborted after confirming no `latest.json`,
+checkpoint, deployment, or per-Episode result; it has no recoverable learning parameters and
+cannot serve as training or evaluation evidence. Small run manifest, feature index, replay
+manifest, holdout manifest, and bounded logs were archived at
+`artifacts/retired-foundation-runs/foundation-wm-004-memory-abort-audit-metadata.tar.gz`, with
+SHA-256 `89ee8796784479b50d7c5ccdde5d83a0711d0d6d5ec9a96d597ee2a5a425d67e`; approximately 13 GiB
+of rebuildable caches and trajectories without checkpoints were subsequently deleted.
 
-后续正式 run 使用训练范式文档 9.2 节的 MPS 资源策略：推荐工作集的 0.65 硬水位、0.50
-软水位、每 10 个优化 step 回收空闲 accelerator cache，并以 `nice 10` 运行。该修改只处理
-任务无关的资源使用，不改变无专家谱系、策略动作来源、任务采样或成功条件。
+Subsequent formal runs use the MPS resource policy in Section 9.2 of the training-paradigm
+document: a 0.65 hard watermark and 0.50 soft watermark of the recommended working set, idle
+accelerator-cache reclamation every 10 optimization steps, and `nice 10`. This change handles
+task-agnostic resource use only and does not change no-expert lineage, policy action sources,
+task sampling, or success conditions.
 
-`foundation-wm-005` 验证了水位确实生效，但也暴露了视觉反向传播本身的活跃 tensor 峰值：
-首轮冻结特征完成后，第一批视觉学生 backward 已分配 23.71 GiB MPS 内存，另有约
-0.55 GiB driver 分配；申请额外 117.14 MiB 时被 24.34 GiB 硬上限拒绝。该 run 因而异常
-退出，飞书机器人通知发送成功。检查确认它仍没有 `latest.json`、checkpoint、deployment、
-动作因果报告或逐 Episode 训练结果，不能恢复，也没有可进入评测的模型。
-小型审计材料已封存为
-`artifacts/retired-foundation-runs/foundation-wm-005-mps-oom-audit-metadata.tar.gz`，SHA-256
-为 `320d8c8dfdd0218954731bb6339c7f93b0e702386372746b2d4ab9855fbecb1e`；13 GiB 可重建
-feature cache 和无 checkpoint 轨迹不再保留。
+`foundation-wm-005` verified that the watermarks took effect but also exposed the active-tensor
+peak from visual backpropagation itself: after the first frozen-feature pass, the first vision
+student backward had allocated 23.71 GiB of MPS memory plus approximately 0.55 GiB of driver
+allocation; a request for another 117.14 MiB was rejected by the 24.34 GiB hard limit. The run
+therefore exited abnormally, and the Lark bot notification was sent successfully. Inspection
+confirmed that it still had no `latest.json`, checkpoint, deployment, action-causality report,
+or per-Episode training result; it cannot resume and has no model eligible for evaluation.
+Small audit materials were archived at
+`artifacts/retired-foundation-runs/foundation-wm-005-mps-oom-audit-metadata.tar.gz`, with SHA-256
+`320d8c8dfdd0218954731bb6339c7f93b0e702386372746b2d4ab9855fbecb1e`; 13 GiB of rebuildable
+feature cache and trajectories without checkpoints are no longer retained.
 
-根因不是有效 batch 或 16-step 世界模型窗口本身，而是视觉 loader 把 batch 中 34 个
-observation 的四帧三相机历史一次性送进 ConvNeXt，并为约 408 张图同时保留反向激活。
-修复在统一 trainer 内进行任务无关的视觉梯度累积：有效 batch=2、序列长度=16 均不变，
-每个视觉微批最多处理 4 个 observation，完成全部微批后只执行一次视觉 optimizer step。
-来自原 run replay 的真实 MPS smoke 覆盖完整视觉、世界模型和想象 RL 更新，共 9 个视觉
-微批；微批回收点 driver allocation 稳定在 3.29～3.31 GiB，完整 train step 结束为
-3.47 GiB，`trainer/update_count=1`，不再触碰硬水位。该调整不认识任务或对象，也不改变
-无专家动作谱系。
+The root cause was not the effective batch or 16-step world-model window itself, but that the
+vision loader sent the four-frame, three-camera history of 34 observations in a batch through
+ConvNeXt at once and retained backward activations for approximately 408 images. The fix adds
+task-agnostic visual gradient accumulation inside the unified trainer: effective batch=2 and
+sequence length=16 remain unchanged; each visual microbatch processes at most 4 observations,
+with one visual optimizer step after all microbatches finish. A real MPS smoke test from the
+original run's replay covers complete vision, world-model, and imagination-RL updates with 9
+visual microbatches; driver allocation at microbatch reclamation stayed at 3.29–3.31 GiB, and
+the complete train step ended at 3.47 GiB with `trainer/update_count=1`, no longer touching the
+hard watermark. This change does not recognize tasks or objects and does not alter no-expert
+action lineage.
 
-训练完成后的固定评测命令为：
+The fixed evaluation command after training completes is:
 
 ```bash
 hwr-evaluate-foundation-world-model \
@@ -397,118 +515,118 @@ hwr-evaluate-foundation-world-model \
   --seed-count 40 --video-seed-count 1
 ```
 
-## `pilot-074` 检查结论
+## `pilot-074` Check Conclusion
 
-- 父 run：`pilot-073`；源码提交：`cd57dbd77a396d6d6bd2090a905dc8240b8d3ac6`。
-- 训练累计 500 个 Episode，`pilot-074` 新增 70 个；replay 12,000 条，累计 153,314 次更新，三个任务成功数仍为 0。
-- 新增 Episode 分配为托盘 20、收纳篮 35、抽屉 15。末期托盘和收纳篮的最佳双侧最差到达距离分别改善到约 7.3 cm 和 8.5 cm，但都没有同时接触；抽屉场景从上一阶段已有左右接触退化为 15 个 Episode 全部无接触。
-- 视觉/本体横向反射后的确定性 Actor 动作，按动作量程归一化的平均绝对不一致为：托盘 14.45%，收纳篮 9.62%。一致性训练有效但尚不足以消除单臂塌缩。
-- 训练产物、checkpoint 和模型哈希完整；完成通知已由飞书机器人身份发送。该 run 只能证明训练闭环完整，不能作为任务成功证据。
+- Parent run: `pilot-073`; source commit: `cd57dbd77a396d6d6bd2090a905dc8240b8d3ac6`.
+- Training reached 500 Episodes; `pilot-074` added 70; replay contained 12,000 entries, with 153,314 cumulative updates, and all three task success counts remained 0.
+- New Episode allocation was tray 20, storage basket 35, and drawer 15. By the end, the best bilateral worst-reach distances for tray and basket improved to approximately 7.3 cm and 8.5 cm, but neither achieved simultaneous contact; the drawer scene regressed from bilateral contact in the previous stage to no contact in all 15 Episodes.
+- Deterministic Actor action mean absolute inconsistency after visual/proprioceptive lateral reflection, normalized by action range, was 14.45% for the tray and 9.62% for the basket. Consistency training was effective but insufficient to eliminate single-arm collapse.
+- Training artifacts, checkpoint, and model hashes were complete; the completion notification was sent by the Lark bot identity. This run proves only that the training loop completed, not task success.
 
-## 根因
+## Root Cause
 
-`pilot-074` 暴露的是通用课程算法缺陷，不是某个场景缺少专属动作逻辑：
+`pilot-074` exposed a generic curriculum-algorithm defect, not missing scene-specific action logic:
 
-1. 所有未成功 Episode，包括正常达到时间上限的轨迹，都被记为失败边界；
-2. Episode 总回报相对历史的改善值被复制给该 Episode 的每个状态；
-3. 长时轨迹末端的远离任务状态因新颖度和 TD error 较高，又继承整段回报改善和超时边界，因而占满 frontier；
-4. 指标相同时用任务 ID 的稳定排序产生伪秩次，任务采样概率一度集中到收纳篮约 74.8%。
+1. Every unsuccessful Episode, including trajectories that normally reached the time limit, was marked as a failure boundary;
+2. The Episode's total-return improvement over history was copied to every state in that Episode;
+3. Remote-from-task states at the ends of long trajectories had high novelty and TD error, inherited the improvement for the whole Episode and the timeout boundary, and consequently filled the frontier;
+4. Stable task-ID sorting created artificial ranks on ties, and task-sampling probability temporarily concentrated at approximately 74.8% for the storage basket.
 
-检查点中排名最高的托盘、收纳篮和抽屉 frontier 状态，双侧最差到达距离分别漂移到约 1.08 m、1.46 m 和 1.67 m。这解释了回报数字改善而物理任务进度退化的现象。
+The highest-ranked tray, basket, and drawer frontier states in the checkpoint drifted to bilateral worst-reach distances of approximately 1.08 m, 1.46 m, and 1.67 m. This explains why return numbers improved while physical task progress degraded.
 
-## 下一阶段调整
+## Next-Stage Adjustments
 
-- frontier schema 升级：旧的 48 个当前候选连同历史迁移计数一起丢弃，普通 replay、Actor、Critic 和 500 条 Episode 历史保留；累计丢弃候选计数为 71。
-- 逐状态奖励改善改为相对 Episode 内指数基线的局部改善速度；不再复制 Episode 总回报。
-- 失败边界只接受环境明确的失败终止，超时与截断不产生边界。
-- 当前 Episode 使用并列百分位排名，并按四类信号保留多样候选；frontier 容量保留已出现信号签名。
-- 任务采样 schema 升级：旧历史迁移后累计丢弃 72 条，三任务从严格等概率重新开始；默认温度为 `0.75`，任一任务概率上限为 `0.55`。
-- 下一 run 降低 frontier reset 混合概率，增强仿真声明的横向反射一致性和任务无关的双臂反射耦合探索。策略动作仍只来自随机探索或当前 RL Actor。
+- Frontier schema upgrade: discard the old 48 current candidates and historical migration count while retaining ordinary replay, Actor, Critic, and 500 Episodes of history; cumulative discarded-candidate count is 71.
+- Change per-state reward improvement to local improvement speed relative to the within-Episode exponential baseline; no longer copy total Episode return.
+- Accept only environment-declared failure termination as a failure boundary; timeouts and truncations produce no boundary.
+- Use tied-percentile ranking for the current Episode and retain diverse candidates by four signal types; frontier capacity retains every signal signature that has appeared.
+- Task-sampling schema upgrade: cumulative discard after old-history migration is 72; restart the three tasks at strict equal probability, with default temperature `0.75` and per-task probability cap `0.55`.
+- Lower frontier-reset mixing probability in the next run, strengthen simulation-declared lateral-reflection consistency, and use task-agnostic coupled bimanual-reflection exploration. Policy actions still come only from random exploration or the current RL Actor.
 
-## `pilot-075` 检查结论
+## `pilot-075` Check Conclusion
 
-- 父 run：`pilot-074`；源码提交：`68a9889f7ee660ae18ccc7721bc12a6c07b13ec8`。
-- 训练累计 570 个 Episode，`pilot-075` 新增 70 个；累计 176,341 次更新，三个任务成功数仍为 0。新 Episode 分配为托盘 22、收纳篮 20、抽屉 28。
-- 托盘出现左接触 7 个 Episode、右接触 6 个 Episode、同一时刻双接触 1 个 Episode（8 步）；收纳篮为左接触 5、右接触 14、同时接触 0；抽屉为左接触 2、右接触 6、同时接触 0。后三十五个 Episode 中，托盘只剩左/右各 2 个接触 Episode，收纳篮和抽屉均无左接触，说明后期再次向单臂策略塌缩。
-- 托盘横向反射不一致从 `pilot-074` 的 14.45% 降至 5.57%，但收纳篮从 9.62% 升至 11.11%。旧的一致性损失使用 EMA Actor 作为目标，仍可能把旧策略偏差固定下来。
-- 19 次 frontier reset 中没有一次产生左臂接触；完整 reset 则在托盘、收纳篮和抽屉分别产生 7/16、5/16、2/19 个左接触 Episode。frontier 内状态的双侧最差到达距离中位数仍约为 0.79 m、0.70 m、0.43 m，因此本阶段 frontier reset 对探索是负贡献。
-- P075 的 replay 每任务主容量只有 4,000。带合法横向反射的一个 1,200 步 Episode 会依次写入原始、hindsight、反射原始和反射 hindsight 共 4,800 行，单个 Episode 就会覆盖之前的稀有接触。最终托盘主 replay 已没有接触 transition；发现/奖励改善分层也没有保住托盘接触。
-- 训练产物及哈希完整；完成通知已由飞书机器人身份发送。该 run 只证明 RL 闭环继续执行，不满足家务任务验收。
+- Parent run: `pilot-074`; source commit: `68a9889f7ee660ae18ccc7721bc12a6c07b13ec8`.
+- Training reached 570 Episodes; `pilot-075` added 70; cumulative updates were 176,341, all three task success counts remained 0, and the new Episode allocation was tray 22, storage basket 20, and drawer 28.
+- The tray had 7 left-contact Episodes, 6 right-contact Episodes, and 1 simultaneous-contact Episode (8 steps); the basket had left contact 5, right contact 14, and simultaneous contact 0; the drawer had left contact 2, right contact 6, and simultaneous contact 0. In the final 35 Episodes, the tray had only 2 left-contact and 2 right-contact Episodes, while the basket and drawer had no left contact, indicating a later collapse back toward a single-arm policy.
+- Tray lateral-reflection inconsistency fell from 14.45% in `pilot-074` to 5.57%, but basket inconsistency rose from 9.62% to 11.11%. The old consistency loss used the EMA Actor as its target and could still lock in old-policy bias.
+- None of 19 frontier resets produced left-arm contact; full reset produced left-contact Episodes of 7/16, 5/16, and 2/19 for tray, basket, and drawer. Median bilateral worst-reach distances inside the frontier remained approximately 0.79 m, 0.70 m, and 0.43 m, so frontier reset contributed negatively to exploration in this stage.
+- P075 replay had only 4,000 primary entries per task. One 1,200-step Episode with legal lateral reflection wrote raw, hindsight, reflected-raw, and reflected-hindsight data in sequence, totaling 4,800 rows; a single Episode could overwrite earlier rare contacts. The final tray primary replay had no contact transitions, and novelty/reward-improvement strata did not preserve tray contact.
+- Training artifacts and hashes were complete; the completion notification was sent by the Lark bot identity. This run proves only that the RL loop continued, not household-task acceptance.
 
-## `pilot-076` 调整
+## `pilot-076` Adjustments
 
-- Replay 存储语义改为“一个物理自主 transition 占一个主容量位置”。不再运行 hindsight goal relabeling，也不预先保存环境变换副本；合法变换由环境声明，算法在抽样时以固定概率做通用增强。
-- 同构一致性改为同一个 Actor 的直接群等变约束 `Actor(T(o)) = T(Actor(o))`，原观察和变换观察两侧共同反向传播，不再使用 EMA Actor 充当动作目标。
-- P075 旧格式无法可靠区分原始 transition 和预先反射副本。P076 显式丢弃旧 replay，只继承 Actor、Critic、优化器、570 条历史 Episode 与任务无关采样历史；lineage 记录各任务丢弃数量，不把合成副本冒充自主经验。
-- 主 replay 总容量提高到 24,000，即每任务 8,000 个自主 transition；frontier reset 概率设为 `0`，在证明其有效前不再从候选状态开局。
-- 任务采样温度从 `0.75` 调整为 `1.0`，单任务概率上限从 `0.55` 收紧为 `0.45`；P075 历史在新参数下对应托盘约 25.1%、收纳篮约 29.9%、抽屉 45.0%，避免抽屉长期占用过半采集预算。
-- 环境接口边界保持不变：新场景只能提供观测、动作、奖励、终止和合法环境变换；训练算法不新增场景分支，不生成动作、目标、奖励或任务阶段。
+- Replay storage semantics changed to “one physical autonomous transition occupies one primary capacity slot.” Hindsight goal relabeling no longer runs, and environment-transformation copies are not stored in advance; the environment declares legal transformations, and the algorithm applies generic augmentation at a fixed probability during sampling.
+- Symmetry consistency changed to direct group equivariance of the same Actor, `Actor(T(o)) = T(Actor(o))`, with both original and transformed observations backpropagated; the EMA Actor is no longer used as an action target.
+- The old P075 format could not reliably distinguish raw transitions from pre-reflected copies. P076 explicitly discarded old replay and inherited only the Actor, Critic, optimizer, 570 historical Episodes, and task-agnostic sampling history; lineage records per-task discard counts and does not present synthetic copies as autonomous experience.
+- Primary replay capacity increased to 24,000, or 8,000 autonomous transitions per task; frontier-reset probability was set to `0`, so candidate states were no longer used as starting points until their value was proven.
+- Task-sampling temperature changed from `0.75` to `1.0`, and the per-task probability cap tightened from `0.55` to `0.45`. Under the new parameters, P075 history corresponded to approximately 25.1% tray, 29.9% basket, and 45.0% drawer, preventing the drawer from occupying more than half of the collection budget long term.
+- The environment-interface boundary was unchanged: a new scene may provide only observations, actions, rewards, termination, and legal environment transformations; training adds no scene branch and generates no action, goal, reward, or task stage.
 
-## `pilot-076` 检查结论
+## `pilot-076` Check Conclusion
 
-- 源码提交：`a330a90c713c596d119cad1788cae24bbff51332`。训练累计 640 个 Episode，新增 70 个；新增 21,726 次更新，三个任务成功数仍为 0。Checkpoint SHA-256 为 `1146c83633122cb8250dc955565072a0d772b27024fed10706a6985279040463`，Actor SHA-256 为 `21dd08c3942aea6c9c022e7e166aca778c1729431e26c1f18c8494b3308b2140`。
-- 新增 Episode 分配为托盘 22、收纳篮 25、抽屉 23。收纳篮出现左接触 19 个、右接触 15 个、同时接触 11 个 Episode，累计同时接触 413 步，并首次产生 1.48 cm 的受控目标搬运进度。P075 的收纳篮同时接触为 0，因此自主 replay 与完整 reset 确实恢复了一部分双臂学习信号。
-- 托盘出现左接触 7 个、右接触 8 个 Episode，但同时接触只有 1 个 Episode、1 步；后半段 11 个托盘 Episode 有 4 个左接触而右接触为 0。抽屉出现左接触 4 个、右接触 16 个 Episode，没有同时接触，受控抽屉开度仍接近 0。单臂塌缩没有消失，只是收纳篮场景取得局部突破。
-- 70 个 Episode 中 61 个正常到达时间上限、9 个因严重碰撞终止；共记录 211 次安全干预。收纳篮后半段仍保留 4 个双接触 Episode和 194 个双接触步，进步不是只发生在训练开头。
-- 最终普通 replay 每任务 8,000 条且全部为 Actor 自主 transition，`actor_weight=0` 的行数为 0。收纳篮普通 replay 保留 96 条双接触 transition，奖励改善分层保留 116 条；托盘的普通 replay 因最近轨迹偏左已没有右接触，但新颖度/奖励改善分层仍分别保留 130/116 条右接触。分层容量解决了 P075 中稀有经验被合成副本立即覆盖的问题。
-- 同一组 10 个初始状态诊断中，P076 相对 P075 的横向反射动作不一致继续下降：托盘从约 22.4% 降至 13.9%，收纳篮从约 19.9% 降至 10.0%。该诊断口径与早期单 Episode 记录不同，只用于同组 checkpoint 间对比。
-- 训练完成通知已由飞书机器人身份成功发送，消息 ID 为 `om_x100b689be4373ca0c3673bcdea2e094`。P076 证明策略已能自主发现较长双臂接触，但尚未把接触稳定转化为搬运或抽屉操作，不能进入正式成功率验收。
+- Source commit: `a330a90c713c596d119cad1788cae24bbff51332`. Training reached 640 Episodes, added 70, and added 21,726 updates; all three task success counts remained 0. Checkpoint SHA-256 was `1146c83633122cb8250dc955565072a0d772b27024fed10706a6985279040463`, and Actor SHA-256 was `21dd08c3942aea6c9c022e7e166aca778c1729431e26c1f18c8494b3308b2140`.
+- New Episode allocation was tray 22, basket 25, and drawer 23. The basket produced 19 left-contact Episodes, 15 right-contact Episodes, and 11 simultaneous-contact Episodes, totaling 413 simultaneous-contact steps and producing the first 1.48 cm of controlled target-transport progress. P075 had zero basket simultaneous contact, so autonomous replay and full reset recovered part of the bimanual learning signal.
+- The tray produced 7 left-contact and 8 right-contact Episodes but only 1 simultaneous-contact Episode lasting 1 step; in the latter 11 tray Episodes, 4 had left contact and none had right contact. The drawer produced 4 left-contact and 16 right-contact Episodes with no simultaneous contact, and controlled drawer opening remained near 0. Single-arm collapse did not disappear; only the basket scene achieved a local breakthrough.
+- Of 70 Episodes, 61 normally reached the time limit and 9 terminated from severe collisions; 211 safety interventions were recorded. Four basket Episodes and 194 simultaneous-contact steps remained in the latter half, so progress was not confined to the beginning of training.
+- Final ordinary replay had 8,000 entries per task, all Actor-autonomous transitions, with zero rows having `actor_weight=0`. Basket ordinary replay retained 96 simultaneous-contact transitions and the reward-improvement stratum retained 116; recent left-biased tray trajectories removed right contact from ordinary replay, but novelty/reward-improvement strata retained 130/116 right-contact transitions. Stratified capacity solved the P075 issue where rare experience was immediately overwritten by synthetic copies.
+- In the same 10-initial-state diagnostic, P076 further reduced lateral-reflection action inconsistency relative to P075: tray from approximately 22.4% to 13.9%, basket from approximately 19.9% to 10.0%. This diagnostic convention differs from early single-Episode records and is only for comparison among checkpoints in the same group.
+- The completion notification was successfully sent by the Lark bot identity, with message ID `om_x100b689be4373ca0c3673bcdea2e094`. P076 proves that the policy can autonomously discover longer bimanual contact, but has not converted stable contact into transport or drawer operation and cannot enter formal success-rate acceptance.
 
-## `pilot-077` 调整
+## `pilot-077` Adjustments
 
-- 继承 P076 的 Actor、Critic、优化器和兼容的自主 replay，不清空已经验证有效的双臂接触 transition。
-- 主 replay 总容量从 24,000 提高到 36,000，即每任务 12,000 条，使普通分层从约 6 个完整 Episode 的时间跨度扩展到约 10 个；新颖度、奖励改善和安全子分层容量同步从每任务 1,000 提高到 1,500。
-- 所有 70 个 P076 Episode 都失败，因此失败 replay 与普通 replay 当前同分布；失败配额从 `0.25` 降为 `0.10`。安全分层只有 220 条却在新增 21,726 次更新中被高频重复，安全配额从 `0.20` 降为 `0.10`。
-- 释放的批次预算只转给任务无关指标：状态新颖度从 `0.25` 提高到 `0.30`，环境奖励改善从 `0.20` 提高到 `0.30`。普通样本仍占 20%，失败、发现、改善、安全四类合计 80%。这些比例不读取对象、接触类型、距离或任务阶段。
-- frontier reset 继续保持 `0`；任务采样温度 `1.0`、单任务上限 `0.45` 和同 Actor 等变权重 `0.5` 保持不变，以便单独检验 replay 时间跨度与通用优先采样的影响。
-- P077 训练目标为累计 710 个 Episode，即新增 70 个；核心观察量是收纳篮受控搬运进度是否超过 P076 的 1.48 cm，以及托盘/抽屉的双臂并发是否恢复。观察量只用于阶段诊断，不参与动作生成或训练分支。
+- Inherit P076's Actor, Critic, optimizer, and compatible autonomous replay without clearing verified bimanual-contact transitions.
+- Increase primary replay capacity from 24,000 to 36,000, or 12,000 per task, extending the ordinary stratum from approximately 6 full Episodes to approximately 10; novelty, reward-improvement, and safety sub-strata also increase from 1,000 to 1,500 per task.
+- All 70 P076 Episodes failed, so failed and ordinary replay currently share the same distribution; lower the failure quota from `0.25` to `0.10`. The safety stratum has only 220 entries but was repeatedly sampled during 21,726 new updates, so lower the safety quota from `0.20` to `0.10`.
+- Give the released batch budget only to task-agnostic metrics: raise state novelty from `0.25` to `0.30` and environment reward improvement from `0.20` to `0.30`. Ordinary samples remain 20%, while failure, discovery, improvement, and safety total 80%. These ratios read no object, contact type, distance, or task stage.
+- Keep frontier reset at `0`; keep task-sampling temperature `1.0`, per-task cap `0.45`, and same-Actor equivariance weight `0.5` unchanged to isolate replay time span and generic prioritized sampling.
+- P077 targets 710 cumulative Episodes, adding 70; the key observation is whether basket controlled transport exceeds P076's 1.48 cm and whether bimanual concurrency returns for tray/drawer. These observations are for stage diagnostics only and do not affect action generation or training branches.
 
-## `pilot-077` 检查结论
+## `pilot-077` Check Conclusion
 
-- 源码提交：`603655b5617cad95ae52665a15b30939bc44adcc`。训练累计 710 个 Episode，新增 70 个；累计 219,289 次更新，新增 21,222 次，三个任务成功数仍为 0。Checkpoint SHA-256 为 `06129f8f8e2068feb2910424c58331a5e0e7f634946ad0361780902d15045295`，Actor SHA-256 为 `7f7d8a40250b3a068bcb330f92971f82ed9e9eb7a015812b86de6686435f0874`。
-- 新增 Episode 分配为托盘 25、收纳篮 22、抽屉 23。托盘有 1 个 Episode 形成 260 步持续双接触，并产生 0.108 cm 受控搬运进度；这是托盘首次出现长时双接触，但仍基本停留在原地。收纳篮双接触从 P076 的 11 个 Episode、413 步退化为 6 个 Episode、81 步，最大受控进度从 1.48 cm 降至 0.058 cm；后半段只剩 1 个 Episode、7 步双接触。抽屉左臂接触从 4/23 提高到 16/23 个 Episode，但受控开度只有约 `3e-7 m`，尚未形成有效拉动。
-- 全部新 Episode 合计 8 个出现同时接触、累计 350 步，低于 P076 的 12 个、414 步。严重碰撞仍为 9 次；安全干预从 211 次下降到 131 次。P077 因此证明扩大 replay 能保住托盘长接触并降低干预，但没有稳定保留收纳篮突破，也没有把接触转成显著任务进展。
-- 主 replay 已达到每任务 12,000 条。检查派生分层发现，代码和 manifest 中的“奖励改善”实际是按绝对环境奖励排序：每个 Episode 选取高奖励 transition，却不判断奖励是否相对自身历史继续上升。最终每任务 1,500 条该分层中，托盘和收纳篮分别只有 5 和 35 条正向受控目标位移 transition。高奖励接触平台可以被持续复用，但它没有提供离开平台的通用优先信号。
-- 完成通知已由飞书机器人身份成功发送，消息 ID 为 `om_x100b688551d9c8a8dd26498f6887ea4`。P077 仍只属于自主训练诊断阶段，不能进入正式成功率验收。
+- Source commit: `603655b5617cad95ae52665a15b30939bc44adcc`. Training reached 710 Episodes, added 70, and reached 219,289 cumulative updates with 21,222 new updates; all three task success counts remained 0. Checkpoint SHA-256 was `06129f8f8e2068feb2910424c58331a5e0e7f634946ad0361780902d15045295`, and Actor SHA-256 was `7f7d8a40250b3a068bcb330f92971f82ed9e9eb7a015812b86de6686435f0874`.
+- New Episode allocation was tray 25, basket 22, and drawer 23. One tray Episode formed 260 steps of continuous bimanual contact and produced 0.108 cm controlled-transport progress—the first long tray bimanual contact—but it mostly stayed in place. Basket simultaneous contact regressed from P076's 11 Episodes/413 steps to 6 Episodes/81 steps, with maximum controlled progress falling from 1.48 cm to 0.058 cm; only 1 Episode/7 simultaneous-contact steps remained in the latter half. Drawer left contact rose from 4/23 to 16/23 Episodes, but controlled opening was only approximately `3e-7 m`, not effective pulling.
+- Across all new Episodes, 8 had simultaneous contact for 350 steps, below P076's 12 and 414 steps. Severe collisions remained at 9; safety interventions fell from 211 to 131. P077 therefore shows that larger replay can preserve long tray contact and reduce interventions, but did not stably preserve the basket breakthrough or convert contact into significant task progress.
+- Primary replay reached 12,000 entries per task. Inspection of derived strata found that “reward improvement” in code and manifest was actually sorted by absolute environment reward: each Episode selected high-reward transitions without checking whether reward continued to rise relative to its own history. Of the final 1,500 entries per task in this stratum, tray and basket had only 5 and 35 positive controlled-target-displacement transitions. A high-reward contact plateau can be reused repeatedly, but it provides no generic signal for leaving the plateau.
+- The completion notification was successfully sent by the Lark bot identity, with message ID `om_x100b688551d9c8a8dd26498f6887ea4`. P077 remains only an autonomous-training diagnostic and cannot enter formal success-rate acceptance.
 
-## `pilot-078` 调整
+## `pilot-078` Adjustments
 
-- 奖励优先 replay 改为真正的 Episode 内局部奖励改善速度：逐步环境奖励相对指数历史基线的正向上升量参与排序，零改善或负改善 transition 不进入该派生分层。算法只读取环境奖励序列，不读取任务 ID 语义、对象、距离、接触、目标或动作答案。
-- 派生优先 schema 升级为 `hwr.task-agnostic-reward-improvement-speed/v4`。P077 的 4,500 条旧绝对奖励索引被审计为废弃，并从 36,000 条按时间排序的自主主 replay 重建 4,500 条局部改善索引；主 replay、失败/新颖度/安全分层、Actor、Critic、优化器、710 条历史记录和随机状态全部保留。Lineage 记录每任务废弃、重建和保留数量。
-- Replay 总容量保持 36,000。所有历史 Episode 仍失败，失败分层与普通分层同分布，因此失败配额从 `0.10` 降至 `0.05`；状态新颖度从 `0.30` 降至 `0.25`；局部奖励改善速度从 `0.30` 提高到 `0.40`；安全保持 `0.10`，普通样本仍占 `0.20`。这些比例仍只依赖任务无关信号。
-- 恢复概率 `0.005`、持续 6 步的全动作空间随机 burst。Burst 不读观察、任务、目标、接触或奖励，夹爪保持 Actor 当前输出，只在统一动作边界内采样左右反射耦合的短时运动，用于扩展 Actor 已到达局部邻域后的真实自主经验。其余噪声、左右反射、frontier reset=`0`、任务采样和一致性权重不变。
-- P078 目标为累计 780 个 Episode，即新增 70 个。阶段判断仍看三任务的成功、并发接触、受控进度与安全结果，但这些物理量只用于离线诊断，不进入 replay 分类、课程或动作生成。
+- Reward-prioritized replay now uses true within-Episode local reward-improvement speed: positive stepwise environment-reward increases relative to the exponential historical baseline are ranked, while zero- or negative-improvement transitions do not enter the derived stratum. The algorithm reads only the environment-reward sequence, not task-ID semantics, objects, distance, contact, targets, or action answers.
+- The derived-priority schema was raised to `hwr.task-agnostic-reward-improvement-speed/v4`. P077's 4,500 old absolute-reward indices were audited as obsolete and 4,500 local-improvement indices were rebuilt from 36,000 time-ordered autonomous primary-replay entries; primary replay, failure/novelty/safety strata, Actor, Critic, optimizer, 710 historical records, and random state were retained. Lineage records discarded, rebuilt, and retained counts per task.
+- Replay capacity remains 36,000. All historical Episodes still failed and failed/ordinary strata share the same distribution, so failure quota falls from `0.10` to `0.05`; state novelty from `0.30` to `0.25`; local reward-improvement speed rises from `0.30` to `0.40`; safety remains `0.10`, and ordinary samples remain `0.20`. These ratios still depend only on task-agnostic signals.
+- Use recovery probability `0.005` and a 6-step random burst across the full action space. The burst reads no observation, task, target, contact, or reward; grippers hold the Actor's current output and sample only short lateral-reflection-coupled motion within common action bounds to expand real autonomous experience around the Actor's local neighborhood. Other noise, lateral reflection, `frontier reset=0`, task sampling, and consistency weight remain unchanged.
+- P078 targets 780 cumulative Episodes, adding 70. Stage judgment still observes success, simultaneous contact, controlled progress, and safety outcomes across the three tasks, but these physical quantities are offline diagnostics only and do not enter replay classification, curriculum, or action generation.
 
-## `pilot-078` 检查结论
+## `pilot-078` Check Conclusion
 
-- 源码提交：`52b30637ecfd6285a78aa29466119a4f77e9d14e`。训练累计 780 个 Episode，新增 70 个；累计 241,068 次更新，新增 21,779 次，三个任务成功数仍为 0。Checkpoint SHA-256 为 `898ec4fca0fcfeafdf60984bcfbaf4518f0a01c08539bbaa278982cd49408bbe`，Actor SHA-256 为 `e6e9ef4ab3cf9d3c612afd357942699c738de0d2d78afb593fa3495310035d68`。
-- 新增 Episode 分配为托盘 30、收纳篮 17、抽屉 23。三个任务均没有出现同时双臂接触，也没有受控目标搬运；抽屉最大受控开度仍只有约 `3.85e-7 m`。P077 同口径为 8 个并发接触 Episode、350 步，因此 P078 发生明确退化。
-- 收纳篮右臂接触从 P077 的 13/22 个 Episode 降到 1/17，且只有 4 步；后半程 9 个收纳篮 Episode 全部没有右臂接触。托盘最佳双侧最差到达距离从 2.09 cm 退化到 5.81 cm。抽屉虽有左接触 20/23、右接触 12/23，但左右没有同时接触，仍未形成协作操作。
-- 70 个 Episode 仍有 9 次严重碰撞，但安全干预从 P077 的 131 次升到 229 次；其中托盘达到 158 次。新增的全动作随机 burst 没有产生可验证进展，并扩大了干预负担，下一阶段停用。
-- 奖励改善分层暴露出两个通用实现缺陷。第一，代码只在单个 Episode 内排序，跨 Episode 仍按 FIFO 覆盖；最终收纳篮改善分层只剩 14 条左接触、0 条右接触。第二，旧主 replay 保存的是 8-step 回报目标而非原始逐步奖励，P078 却用它重建逐步改善速度，迁移前后信号量纲不一致。该分层不能继续作为可靠训练输入。
-- 产物校验通过，完成通知消息 ID 为 `om_x100b68800678aca0b2948da7cf80adc`。P078 作为失败分支保留审计，但其 Actor、Critic 和优化器不进入下一阶段。
+- Source commit: `52b30637ecfd6285a78aa29466119a4f77e9d14e`. Training reached 780 Episodes, added 70, and reached 241,068 cumulative updates with 21,779 new updates; all three task success counts remained 0. Checkpoint SHA-256 was `898ec4fca0fcfeafdf60984bcfbaf4518f0a01c08539bbaa278982cd49408bbe`, and Actor SHA-256 was `e6e9ef4ab3cf9d3c612afd357942699c738de0d2d78afb593fa3495310035d68`.
+- New Episode allocation was tray 30, basket 17, and drawer 23. None of the three tasks produced simultaneous bimanual contact or controlled target transport; maximum controlled drawer opening remained approximately `3.85e-7 m`. P077 had 8 simultaneous-contact Episodes and 350 steps under the same convention, so P078 clearly regressed.
+- Basket right-arm contact fell from P077's 13/22 Episodes to 1/17, lasting only 4 steps; all 9 basket Episodes in the latter half had no right-arm contact. Tray best bilateral worst-reach distance regressed from 2.09 cm to 5.81 cm. The drawer had left contact in 20/23 and right contact in 12/23, but never simultaneous contact and still formed no cooperative operation.
+- The 70 Episodes still had 9 severe collisions, while safety interventions rose from P077's 131 to 229, including 158 for the tray. The new full-action random burst produced no verifiable progress and increased intervention burden, so it was disabled next stage.
+- The reward-improvement stratum exposed two generic implementation defects. First, code ranked only within each Episode and still overwrote across Episodes by FIFO; the final basket improvement stratum had only 14 left-contact and 0 right-contact entries. Second, old primary replay stored 8-step return targets rather than raw stepwise rewards, but P078 used it to rebuild stepwise improvement speed, so signal units differed before and after migration. This stratum cannot remain a reliable training input.
+- Artifact validation passed, with completion-notification message ID `om_x100b68800678aca0b2948da7cf80adc`. P078 is retained as a failed branch for audit, but its Actor, Critic, and optimizer do not enter the next stage.
 
-## `pilot-079` 调整
+## `pilot-079` Adjustments
 
-- 从目前物理表现最好的 `pilot-076` 分叉，而不是继承 P078 已塌缩的参数。继承 P076 的 Actor、Critic、优化器、24,000 条自主主 replay、状态新颖度/安全分层和 640 条历史记录；不引入专家、示范、动作标签或场景动作逻辑。
-- 改善分层 schema 升级为 `hwr.task-agnostic-reward-improvement-speed/v5`。每个 Episode 仍只按原始环境奖励计算局部改善速度，但分层在所有后续 Episode 之间保留全局最高的有界 Top-K，并将对齐的分数写入 checkpoint，低分新样本不再 FIFO 覆盖历史高分样本。
-- P076 的 2,448 条旧改善分层全部审计丢弃且不从主 replay 重建，因为主 replay 的 n-step 目标无法还原原始逐步奖励。其余自主 replay 保留；新改善分层只由 P079 真实执行产生的原始奖励填充。
-- Replay 总容量扩展到 36,000。失败配额从 P076 的 `0.25` 降到 `0.05`，状态新颖度保持 `0.25`，全局改善 Top-K 使用 `0.25`，安全从 `0.20` 降到 `0.10`，普通自主 replay 提高到 `0.35`。任务无关随机 burst 恢复为 `0`；frontier reset 继续为 `0`，其余视觉预处理、反射增强、探索噪声和任务采样保持 P076 配置。
-- P079 目标为从 640 累计到 710 个 Episode，即新增 70 个独立训练 Episode。阶段判断重点是能否保住 P076 收纳篮的双臂并发与受控搬运，同时不增加托盘安全干预；这些指标只用于离线检查，不参与训练动作或优先级定义。
+- Fork from the physically best-performing `pilot-076` rather than inheriting P078's collapsed parameters. Inherit P076's Actor, Critic, optimizer, 24,000 autonomous primary-replay entries, state-novelty/safety strata, and 640 historical records; introduce no experts, demonstrations, action labels, or scene action logic.
+- Raise the improvement-stratum schema to `hwr.task-agnostic-reward-improvement-speed/v5`. Each Episode still computes local improvement speed only from raw environment reward, but the stratum retains the globally highest bounded Top-K across all later Episodes and writes aligned scores to the checkpoint, so low-scoring new samples no longer FIFO-overwrite historical high-scoring samples.
+- Audit-discard all 2,448 old P076 improvement-stratum entries without rebuilding them from primary replay, because primary replay's n-step targets cannot recover raw stepwise rewards. Retain the remaining autonomous replay; populate the new improvement stratum only from raw rewards actually executed by P079.
+- Expand replay capacity to 36,000. Lower failure quota from P076's `0.25` to `0.05`, keep state novelty at `0.25`, use `0.25` for global improvement Top-K, lower safety from `0.20` to `0.10`, and raise ordinary autonomous replay to `0.35`. Restore task-agnostic random burst to `0`; keep frontier reset at `0`, with all other visual preprocessing, reflection augmentation, exploration noise, and task sampling at P076 settings.
+- P079 targets 710 cumulative Episodes from 640, adding 70 independent training Episodes. Stage judgment focuses on preserving P076 basket bimanual concurrency and controlled transport without increasing tray safety interventions; these metrics are offline checks only and do not define training actions or priority.
 
-## `pilot-079` 检查结论
+## `pilot-079` Check Conclusion
 
-- 源码提交：`db3ef1510d03604a72665d1f621895a9db6c8a05`。训练累计 710 个 Episode，新增 70 个；累计 218,869 次更新，新增 20,802 次，三个任务成功数仍为 0。Checkpoint SHA-256 为 `fd6e09887136d5780ae503b36b3074b7723c06124639dbce1227b1f7dc261f5e`，Actor SHA-256 为 `6dcff3f8b251054ab56b3ea531ce94d6ab3bdd0e76a7a4e2fea210c955e6d8d8`。
-- 新增 Episode 分配为托盘 25、收纳篮 19、抽屉 26。收纳篮出现 7 个并发接触 Episode、245 步；后半程 9 个收纳篮 Episode 中有 5 个并发接触、193 步，说明从 P076 继承的双臂能力没有在后期消失。最佳双侧最差到达距离从 P076 的 3.53 cm 改善到 1.86 cm。
-- 但三个任务仍没有产生受控目标搬运，托盘仍无并发接触；抽屉受控开度最高只有约 `2.41e-7 m`。全局奖励改善 Top-K 正确跨 Episode 保留了 1,715 条真实局部改善 transition，却没有收纳篮并发接触 transition，证明局部奖励上升与接触后的关键动作后果不是同一信号。
-- 严重碰撞从 P076 的 9 次升到 14 次，安全干预从 211 次升到 229 次。收纳篮后半程的 182 次干预集中在一个 Episode，其他后半程收纳篮轨迹仍保持长时接触，因此不把单次干预峰值解释为整体能力消失；安全分层与独立运行时过滤继续保留。
-- 当前收纳篮普通 replay 的 244 条并发接触 transition，平均 TD error 为 `1.256`，而均匀普通样本只有 `0.319`。现有算法虽计算 TD error，却只把它用于任务采样和已禁用的 frontier reset，没有 TD-error replay 配额。P079 已到达但未学会利用的双臂状态因此没有获得与其 Bellman 误差相称的更新频率。
-- 产物和无监督 lineage 校验通过；完成通知消息 ID 为 `om_x100b6881c18540a8b21982c190d2940`。P079 证明全局奖励改善保留修复有效，但单靠奖励改善不足以跨过接触后的学习瓶颈。
+- Source commit: `db3ef1510d03604a72665d1f621895a9db6c8a05`. Training reached 710 Episodes, added 70, and reached 218,869 cumulative updates with 20,802 new updates; all three task success counts remained 0. Checkpoint SHA-256 was `fd6e09887136d5780ae503b36b3074b7723c06124639dbce1227b1f7dc261f5e`, and Actor SHA-256 was `6dcff3f8b251054ab56b3ea531ce94d6ab3bdd0e76a7a4e2fea210c955e6d8d8`.
+- New Episode allocation was tray 25, basket 19, and drawer 26. The basket produced 7 simultaneous-contact Episodes and 245 steps; among the latter 9 basket Episodes, 5 had simultaneous contact for 193 steps, showing that inherited P076 bimanual ability did not disappear later. Best bilateral worst-reach distance improved from P076's 3.53 cm to 1.86 cm.
+- Yet none of the three tasks produced controlled target transport, the tray still had no simultaneous contact, and maximum controlled drawer opening was only approximately `2.41e-7 m`. Global reward-improvement Top-K correctly retained 1,715 real local-improvement transitions across Episodes but no basket simultaneous-contact transitions, showing that local reward increase and the key post-contact consequence are not the same signal.
+- Severe collisions rose from P076's 9 to 14, and safety interventions rose from 211 to 229. The 182 latter-half basket interventions were concentrated in one Episode; other latter-half basket trajectories maintained long contact, so a single intervention peak is not interpreted as overall capability loss. Safety stratification and independent runtime filtering remain.
+- The current basket ordinary replay has 244 simultaneous-contact transitions with mean TD error `1.256`, while uniform ordinary samples have only `0.319`. The existing algorithm computes TD error but uses it only for task sampling and the disabled frontier reset; it has no TD-error replay quota. Bimanual states reached but not learned by P079 therefore did not receive update frequency proportional to their Bellman error.
+- Artifact and unsupervised-lineage validation passed, with completion-notification message ID `om_x100b6881c18540a8b21982c190d2940`. P079 proves that global reward-improvement retention works, but reward improvement alone cannot cross the post-contact learning bottleneck.
 
-## `pilot-080` 调整
+## `pilot-080` Adjustments
 
-- 新增独立的任务无关 TD-error Top-K replay，schema 为 `hwr.task-agnostic-td-error/v1`。算法只使用当前 Actor-Critic 对自主 transition 计算的 Bellman error，不读取任务语义、物体类型、接触、距离、阶段或动作答案；新场景无需增加训练分支。每个 Episode 更新结束后重新计算已保留行的 TD error，使非平稳优先级不会永久锁死在旧 Critic 误差上。
-- 从 P079 分叉，保留其 Actor、Critic、优化器、36,000 条自主主 replay、状态新颖度/奖励改善/安全分层和 710 条历史。首次加载时从自主主 replay 与状态新颖度分层重新计算 TD error，每任务保留全局最高 1,500 条并把分数写入 checkpoint；这是可由当前模型和 n-step transition 正确重算的信号。
-- 干跑审计得到 4,500 条 TD-error transition。收纳篮分层包含 209 条并发接触和 7 条历史受控搬运 transition；这些物理字段只用于离线确认迁移结果，选择过程没有读取它们。
-- 所有历史 Episode 都失败，失败 replay 与普通 replay 完全重复，因此失败配额从 `0.05` 降到 `0`。状态新颖度从 `0.25` 调到 `0.20`，奖励改善从 `0.25` 调到 `0.15`，TD error 使用 `0.25`，安全保持 `0.10`，普通自主样本占 `0.30`。总 replay 容量、视觉预处理、反射增强、探索噪声、frontier reset=`0` 和任务采样均保持 P079 配置。
-- P080 目标为累计 780 个 Episode，即新增 70 个。阶段判断首先看收纳篮的并发接触是否转化为受控搬运，其次看托盘并发接触和抽屉受控开度是否出现；这些指标继续只用于离线诊断。
+- Add an independent task-agnostic TD-error Top-K replay with schema `hwr.task-agnostic-td-error/v1`. The algorithm uses only Bellman error computed by the current Actor-Critic on autonomous transitions; it reads no task semantics, object type, contact, distance, stage, or action answer, and a new scene needs no training branch. Recompute retained-row TD error after each Episode update so nonstationary priorities do not remain permanently locked to old Critic error.
+- Fork from P079, retaining its Actor, Critic, optimizer, 36,000 autonomous primary-replay entries, state-novelty/reward-improvement/safety strata, and 710 historical records. On first load, recompute TD error from autonomous primary replay and the state-novelty stratum, retain the global top 1,500 per task, and write scores to the checkpoint; this signal can be correctly recomputed from the current model and n-step transitions.
+- Dry-run audit produced 4,500 TD-error transitions. The basket stratum contained 209 simultaneous-contact transitions and 7 historical controlled-transport transitions; these physical fields were used only to verify migration offline and were not read during selection.
+- All historical Episodes failed, and failed replay exactly duplicates ordinary replay, so failure quota falls from `0.05` to `0`. State novelty changes from `0.25` to `0.20`, reward improvement from `0.25` to `0.15`, TD error uses `0.25`, safety remains `0.10`, and ordinary autonomous samples occupy `0.30`. Total replay capacity, visual preprocessing, reflection augmentation, exploration noise, `frontier reset=0`, and task sampling remain at P079 settings.
+- P080 targets 780 cumulative Episodes, adding 70. Stage judgment first asks whether basket simultaneous contact converts into controlled transport, then whether tray simultaneous contact and controlled drawer opening appear; these metrics remain offline diagnostics only.

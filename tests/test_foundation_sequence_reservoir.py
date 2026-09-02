@@ -43,7 +43,7 @@ def _episode() -> AutonomousEpisode:
         "source-episode",
         "fixture/v1",
         7,
-        "移动",
+        "Move",
         "zh-CN",
         "fixture/v1",
         "a" * 40,
